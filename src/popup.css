@@ -6,51 +6,51 @@
  * Base typography styles
  */
 @layer base {
-	h1 {
-		font-size: 1.5rem;
-		font-weight: 500;
-		line-height: 1.5;
-	}
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 500;
+    line-height: 1.5;
+  }
 
-	h2 {
-		font-size: 1.25rem;
-		font-weight: 500;
-		line-height: 1.5;
-	}
+  h2 {
+    font-size: 1.25rem;
+    font-weight: 500;
+    line-height: 1.5;
+  }
 
-	h3 {
-		font-size: 1.125rem;
-		font-weight: 500;
-		line-height: 1.5;
-	}
+  h3 {
+    font-size: 1.125rem;
+    font-weight: 500;
+    line-height: 1.5;
+  }
 
-	h4 {
-		font-size: 1rem;
-		font-weight: 500;
-		line-height: 1.5;
-	}
+  h4 {
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.5;
+  }
 
-	p {
-		font-size: 1rem;
-		font-weight: 400;
-		line-height: 1.5;
-	}
+  p {
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.5;
+  }
 
-	label {
-		font-size: 1rem;
-		font-weight: 500;
-		line-height: 1.5;
-	}
+  label {
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.5;
+  }
 
-	button {
-		font-size: 1rem;
-		font-weight: 500;
-		line-height: 1.5;
-	}
+  button {
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.5;
+  }
 
-	input {
-		font-size: 1rem;
-		font-weight: 400;
-		line-height: 1.5;
-	}
+  input {
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.5;
+  }
 }

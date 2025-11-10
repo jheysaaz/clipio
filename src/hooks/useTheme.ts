@@ -6,7 +6,8 @@ export function useTheme() {
   useEffect(() => {
     // Load theme from localStorage or system preference
     const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
-    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
+      .matches
       ? "dark"
       : "light";
     const initialTheme = savedTheme || systemTheme;
@@ -16,7 +17,9 @@ export function useTheme() {
 
     // Listen for system theme changes
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleSystemThemeChange = (e: MediaQueryListEvent | MediaQueryList) => {
+    const handleSystemThemeChange = (
+      e: MediaQueryListEvent | MediaQueryList
+    ) => {
       // Only update if user hasn't manually set a preference
       if (!localStorage.getItem("theme")) {
         const newTheme = e.matches ? "dark" : "light";
@@ -45,7 +48,7 @@ export function useTheme() {
 
   const applyThemeToDOM = (newTheme: "light" | "dark") => {
     const root = document.documentElement;
-    
+
     if (newTheme === "dark") {
       root.classList.add("dark");
     } else {

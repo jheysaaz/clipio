@@ -6,10 +6,14 @@ import tailwindcss from "@tailwindcss/vite";
 function generateManifest() {
   const manifest = readJsonFile("src/manifest.json");
   const pkg = readJsonFile("package.json");
+  
+  // Remove beta/alpha/rc suffixes from version for Chrome Web Store compatibility
+  const sanitizedVersion = pkg.version.replace(/-.*$/, "");
+  
   return {
-    name: pkg.name,
+    name: pkg.displayName || pkg.name,
     description: pkg.description,
-    version: pkg.version,
+    version: sanitizedVersion,
     ...manifest,
   };
 }
