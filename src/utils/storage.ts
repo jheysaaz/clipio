@@ -86,7 +86,9 @@ export const saveRefreshToken = async (token: string): Promise<void> => {
 export const getRefreshToken = async (): Promise<string | null> => {
   try {
     if (isBrowserStorageAvailable()) {
-      const result = await browser.storage.local.get(STORAGE_KEYS.REFRESH_TOKEN);
+      const result = await browser.storage.local.get(
+        STORAGE_KEYS.REFRESH_TOKEN
+      );
       return result[STORAGE_KEYS.REFRESH_TOKEN] || null;
     }
     return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
@@ -177,7 +179,7 @@ export const saveAuthData = async (
 ): Promise<void> => {
   await saveAccessToken(accessToken);
   await saveUserInfo(user);
-  
+
   // Save refresh token if provided
   if (refreshToken) {
     await saveRefreshToken(refreshToken);

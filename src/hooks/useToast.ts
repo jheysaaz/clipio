@@ -14,16 +14,13 @@ export function useToast() {
     isVisible: false,
   });
 
-  const showToast = useCallback(
-    (message: string, type: ToastType = "info") => {
-      setToast({
-        message,
-        type,
-        isVisible: true,
-      });
-    },
-    []
-  );
+  const showToast = useCallback((message: string, type: ToastType = "info") => {
+    setToast({
+      message,
+      type,
+      isVisible: true,
+    });
+  }, []);
 
   const hideToast = useCallback(() => {
     setToast((prev) => ({ ...prev, isVisible: false }));

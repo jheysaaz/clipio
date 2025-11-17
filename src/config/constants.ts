@@ -2,7 +2,8 @@
  * Application constants
  */
 
-export const API_BASE_URL = import.meta.env.VITE_API_URI || "http://128.199.4.253:8080";
+export const API_BASE_URL =
+  import.meta.env.VITE_API_URI || "http://128.199.4.253:8080";
 
 export const API_ENDPOINTS = {
   LOGIN: "/api/v1/auth/login",
@@ -10,7 +11,7 @@ export const API_ENDPOINTS = {
   REFRESH: "/api/v1/auth/refresh",
   REGISTER: "/api/v1/auth/register",
   SNIPPETS: "/api/v1/snippets",
-  USER_SNIPPETS : `/api/v1/snippets`,
+  USER_SNIPPETS: `/api/v1/snippets`,
   SNIPPET_BY_ID: (id: string) => `/api/v1/snippets/${id}`,
 } as const;
 

@@ -28,7 +28,8 @@ dist-ssr
 .webextrc.*
 
 # Project files
-snippy.zip
+*.zip
+release/
 
 # Environment variables
 .env

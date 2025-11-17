@@ -1,5 +1,10 @@
 import browser from "webextension-polyfill";
-import { API_BASE_URL, API_ENDPOINTS, STORAGE_KEYS, TIMING } from "./config/constants";
+import {
+  API_BASE_URL,
+  API_ENDPOINTS,
+  STORAGE_KEYS,
+  TIMING,
+} from "./config/constants";
 import { incrementSnippetUsage } from "./utils/usageTracking";
 
 interface Snippet {
@@ -35,25 +40,32 @@ async function loadSnippets() {
     console.log("[Snippy] Extension context invalidated, stopping");
     return;
   }
-  
+
   try {
     // First, try to get cached snippets from storage
-    const cachedData = await browser.storage.local.get(STORAGE_KEYS.CACHED_SNIPPETS);
+    const cachedData = await browser.storage.local.get(
+      STORAGE_KEYS.CACHED_SNIPPETS
+    );
     if (cachedData[STORAGE_KEYS.CACHED_SNIPPETS]) {
       const parsedData = JSON.parse(cachedData[STORAGE_KEYS.CACHED_SNIPPETS]);
-      snippets = Array.isArray(parsedData) ? parsedData : (parsedData.items || []);
-      console.log(`[Snippy] Loaded ${snippets.length} cached snippets:`, snippets.map(s => s.shortcut));
+      snippets = Array.isArray(parsedData)
+        ? parsedData
+        : parsedData.items || [];
+      console.log(
+        `[Snippy] Loaded ${snippets.length} cached snippets:`,
+        snippets.map((s) => s.shortcut)
+      );
       return;
     }
-    
+
     // If no cache, try to fetch from API (will only work on HTTP pages or with HTTPS API)
     const result = await browser.storage.local.get([
       STORAGE_KEYS.USER_INFO,
-      STORAGE_KEYS.ACCESS_TOKEN
+      STORAGE_KEYS.ACCESS_TOKEN,
     ]);
-    
+
     console.log("[Snippy] No cached snippets, attempting to fetch from API...");
-    
+
     if (!result[STORAGE_KEYS.USER_INFO] || !result[STORAGE_KEYS.ACCESS_TOKEN]) {
       console.log("[Snippy] No user info or token found");
       return;
@@ -64,34 +76,42 @@ async function loadSnippets() {
     const accessToken = result[STORAGE_KEYS.ACCESS_TOKEN];
 
     // Fetch snippets from API
-    const response = await fetch(
-      API_BASE_URL + API_ENDPOINTS.USER_SNIPPETS,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
+    const response = await fetch(API_BASE_URL + API_ENDPOINTS.USER_SNIPPETS, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
 
     if (response.ok) {
       const data = await response.json();
       snippets = data.snippets || data || [];
-      console.log(`[Snippy] Loaded ${snippets.length} snippets from API:`, snippets.map(s => s.shortcut));
-      
+      console.log(
+        `[Snippy] Loaded ${snippets.length} snippets from API:`,
+        snippets.map((s) => s.shortcut)
+      );
+
       // Cache the snippets
       await browser.storage.local.set({
-        [STORAGE_KEYS.CACHED_SNIPPETS]: JSON.stringify(snippets)
+        [STORAGE_KEYS.CACHED_SNIPPETS]: JSON.stringify(snippets),
       });
     } else {
       console.error("[Snippy] Failed to fetch snippets:", response.status);
     }
   } catch (error) {
     // Check if error is due to invalid context
-    if (error instanceof Error && error.message.includes("Extension context invalidated")) {
+    if (
+      error instanceof Error &&
+      error.message.includes("Extension context invalidated")
+    ) {
       isExtensionValid = false;
       console.log("[Snippy] Extension reloaded, content script stopping");
-    } else if (error instanceof Error && error.message.includes("Failed to fetch")) {
-      console.error("[Snippy] Cannot fetch from API (likely mixed content blocking). Please refresh the extension popup to cache snippets.");
+    } else if (
+      error instanceof Error &&
+      error.message.includes("Failed to fetch")
+    ) {
+      console.error(
+        "[Snippy] Cannot fetch from API (likely mixed content blocking). Please refresh the extension popup to cache snippets."
+      );
     } else {
       console.error("[Snippy] Error loading snippets:", error);
     }
@@ -106,15 +126,15 @@ function findSnippetMatch(
   if (!text || snippets.length === 0) return null;
 
   const textBeforeCursor = text.substring(0, cursorPosition);
-  
+
   // Check each snippet's shortcut
   for (const snippet of snippets) {
     const shortcut = snippet.shortcut;
-    
+
     // Check if text before cursor ends with the shortcut
     if (textBeforeCursor.endsWith(shortcut)) {
       const startPos = cursorPosition - shortcut.length;
-      
+
       // Make sure shortcut is at word boundary (start of text or after space/newline)
       if (startPos === 0 || /[\s\n]/.test(text[startPos - 1])) {
         return {
@@ -125,17 +145,17 @@ function findSnippetMatch(
       }
     }
   }
-  
+
   return null;
 }
 // Replace shortcut with snippet content
 function expandSnippet(element: HTMLInputElement | HTMLTextAreaElement) {
   if (!isExtensionValid) return;
-  
+
   const cursorPosition = element.selectionStart || element.value.length;
-  
+
   const match = findSnippetMatch(element.value, cursorPosition);
-  
+
   if (!match) return;
 
   const { snippet, startPos, endPos } = match;
@@ -157,20 +177,20 @@ function expandSnippet(element: HTMLInputElement | HTMLTextAreaElement) {
   const changeEvent = new Event("change", { bubbles: true, cancelable: true });
   element.dispatchEvent(inputEvent);
   element.dispatchEvent(changeEvent);
-  
+
   // Focus the element
   element.focus();
 
   // Update usage count
-  incrementSnippetUsage(snippet.id).catch(err => {
+  incrementSnippetUsage(snippet.id).catch((err) => {
     console.error("Failed to increment snippet usage:", err);
-  }); 
+  });
 }
 
 // Handle input events with debounce
 function handleInput(event: Event) {
   if (!isExtensionValid) return;
-  
+
   const target = event.target as HTMLInputElement | HTMLTextAreaElement;
 
   if (!target || !target.value) return;
@@ -189,7 +209,7 @@ function handleInput(event: Event) {
 // Handle keydown to expand immediately on Space or Tab
 function handleKeyDown(event: KeyboardEvent) {
   if (!isExtensionValid) return;
-  
+
   const target = event.target as HTMLInputElement | HTMLTextAreaElement;
 
   // Check if Space or Tab was pressed
@@ -202,7 +222,7 @@ function handleKeyDown(event: KeyboardEvent) {
     // Check for snippet expansion immediately
     const cursorPosition = target.selectionStart || target.value.length;
     const match = findSnippetMatch(target.value, cursorPosition);
-    
+
     if (match) {
       event.preventDefault();
       expandSnippet(target);
@@ -244,7 +264,7 @@ async function initialize() {
   // Reload snippets when storage changes
   browser.storage.onChanged.addListener((changes, areaName) => {
     if (!checkExtensionContext()) return;
-    
+
     if (areaName === "local") {
       console.log("[Snippy] Storage changed, reloading snippets...");
       loadSnippets();
