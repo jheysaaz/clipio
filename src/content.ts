@@ -1,5 +1,6 @@
 import browser from "webextension-polyfill";
 import { API_BASE_URL, API_ENDPOINTS, STORAGE_KEYS, TIMING } from "./config/constants";
+import { incrementSnippetUsage } from "./utils/usageTracking";
 
 interface Snippet {
   id: string;
@@ -39,7 +40,8 @@ async function loadSnippets() {
     // First, try to get cached snippets from storage
     const cachedData = await browser.storage.local.get(STORAGE_KEYS.CACHED_SNIPPETS);
     if (cachedData[STORAGE_KEYS.CACHED_SNIPPETS]) {
-      snippets = JSON.parse(cachedData[STORAGE_KEYS.CACHED_SNIPPETS]);
+      const parsedData = JSON.parse(cachedData[STORAGE_KEYS.CACHED_SNIPPETS]);
+      snippets = Array.isArray(parsedData) ? parsedData : (parsedData.items || []);
       console.log(`[Snippy] Loaded ${snippets.length} cached snippets:`, snippets.map(s => s.shortcut));
       return;
     }
@@ -63,7 +65,7 @@ async function loadSnippets() {
 
     // Fetch snippets from API
     const response = await fetch(
-      API_BASE_URL + API_ENDPOINTS.USER_SNIPPETS(userId),
+      API_BASE_URL + API_ENDPOINTS.USER_SNIPPETS,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -72,7 +74,8 @@ async function loadSnippets() {
     );
 
     if (response.ok) {
-      snippets = await response.json();
+      const data = await response.json();
+      snippets = data.snippets || data || [];
       console.log(`[Snippy] Loaded ${snippets.length} snippets from API:`, snippets.map(s => s.shortcut));
       
       // Cache the snippets
@@ -136,8 +139,6 @@ function expandSnippet(element: HTMLInputElement | HTMLTextAreaElement) {
   if (!match) return;
 
   const { snippet, startPos, endPos } = match;
-  
-  console.log(`[Snippy] Expanding: ${snippet.shortcut} -> ${snippet.label}`);
 
   // Build new value
   const textBefore = element.value.substring(0, startPos);
@@ -159,6 +160,11 @@ function expandSnippet(element: HTMLInputElement | HTMLTextAreaElement) {
   
   // Focus the element
   element.focus();
+
+  // Update usage count
+  incrementSnippetUsage(snippet.id).catch(err => {
+    console.error("Failed to increment snippet usage:", err);
+  }); 
 }
 
 // Handle input events with debounce

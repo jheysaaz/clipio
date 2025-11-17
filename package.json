@@ -1,8 +1,7 @@
 {
   "name": "snippy",
-  "displayName": "Snippy",
-  "description": "🚀 A powerful browser extension for managing and inserting snippets with lightning speed and increase your productivity.",
-  "private": true,
+  "displayName": "Snippy: Snippets Manager",
+  "description": "A powerful browser extension for managing and inserting snippets with lightning speed and increase your productivity.",
   "version": "0.1.0",
   "type": "module",
   "scripts": {
@@ -10,7 +9,7 @@
     "build": "tsc && vite build",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,html}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,html}\"",
-    "package": "pnpm build && cd dist && zip -r ../snippy.zip ."
+    "package": "rm -rf ./dist &&pnpm build && cd dist && zip -r ../snippy.zip ."
   },
   "dependencies": {
     "lucide-react": "^0.553.0",

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus } from "lucide-react";
 import Header from "../components/Header";
 import Search from "../components/Search";
@@ -7,7 +7,8 @@ import AddSnippetModal from "../components/AddSnippetModal";
 import { authenticatedFetch } from "../utils/api";
 import { useToast } from "../hooks/useToast";
 import Toast from "../components/Toast";
-import { getUserInfo } from "../utils/storage";
+import { getUserInfo, getAccessToken } from "../utils/storage";
+import { useNavigate } from "react-router";
 import type { SnippetFormData } from "../types";
 import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
 
@@ -21,6 +22,17 @@ export default function Dashboard({ theme, onToggleTheme }: DashboardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const { toast, showToast, hideToast } = useToast();
+  const navigate = useNavigate();
+
+  // Guard: if no access token, redirect to cloud login
+  useEffect(() => {
+    (async () => {
+      const token = await getAccessToken();
+      if (!token) {
+        navigate("/cloud-login", { replace: true });
+      }
+    })();
+  }, [navigate]);
 
   const handleAddSnippet = () => {
     setIsModalOpen(true);

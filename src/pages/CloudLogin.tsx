@@ -1,11 +1,16 @@
 import { Mail, Lock } from "lucide-react";
-import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router";
 import Toast from "../components/Toast";
 import { useToast } from "../hooks/useToast";
 import { saveAuthData } from "../utils/storage";
 import type { LoginResponse } from "../types";
 import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
+
+type ToastState = {
+  message?: string;
+  type?: "success" | "error";
+} | null;
 
 interface CloudLoginProps {
   theme: "light" | "dark";
@@ -14,10 +19,19 @@ interface CloudLoginProps {
 
 export default function CloudLogin({ theme, onLogin }: CloudLoginProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [loadingLogin, setLoadingLogin] = useState(false);
   const { toast, showToast, hideToast } = useToast();
+
+  useEffect(() => {
+    const state = (location.state as ToastState) || null;
+    if (state?.message) {
+      showToast(state.message, state.type ?? "success");
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, navigate, showToast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,24 +43,22 @@ export default function CloudLogin({ theme, onLogin }: CloudLoginProps) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ login: login, password: password }),
+        body: JSON.stringify({ login, password }),
       });
 
       const data: LoginResponse = await res.json();
-      console.log(data);
       setLoadingLogin(false);
 
       if (res.status === 200) {
-        // Use storage utility to save auth data
         const expiresIn = data.expiresIn;
         saveAuthData(data.accessToken, data.user, expiresIn, data.refreshToken);
 
-        // Keep storageType in localStorage for compatibility
-        localStorage.setItem("storageType", "cloud");
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("storageType", "cloud");
+        }
 
         showToast("Login successful!", "success");
-        onLogin(login, password);
-        navigate("/dashboard");
+        navigate("/dashboard", { replace: true });
       } else {
         showToast(
           (data as any).error || "Login failed. Please try again.",
@@ -59,6 +71,7 @@ export default function CloudLogin({ theme, onLogin }: CloudLoginProps) {
       showToast("Network error. Please check your connection.", "error");
     }
   };
+
   return (
     <div className="flex flex-col h-full p-6">
       <div className="flex-1 flex flex-col justify-center">

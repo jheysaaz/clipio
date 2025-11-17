@@ -31,12 +31,12 @@
     "clipboardWrite"
   ],
   "{{chrome}}.host_permissions": [
-    "http://128.199.4.253:8080/*"
+    "http://snippy.jheysonsaavedra.com/*"
   ],
   "{{firefox}}.permissions": [
     "storage",
     "alarms",
     "clipboardWrite",
-    "http://128.199.4.253:8080/*"
+    "http://snippy.jheysonsaavedra.com/*"
   ]
 }

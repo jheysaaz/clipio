@@ -28,8 +28,7 @@
 
 @font-face {
   font-family: 'Fira Code';
-  src: url('./FiraCode-Bold.woff2') format('woff2'),
-    url("woff/FiraCode-Bold.woff") format("woff");
+  src: url('./FiraCode-Bold.woff2') format('woff2');
   font-weight: 700;
   font-style: normal;
 }

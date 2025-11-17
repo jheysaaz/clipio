@@ -197,12 +197,80 @@ export const saveAuthData = async (
 };
 
 /**
+ * Remove cached snippets
+ */
+export const removeCachedSnippets = async (): Promise<void> => {
+  try {
+    if (isBrowserStorageAvailable()) {
+      await browser.storage.local.remove(STORAGE_KEYS.CACHED_SNIPPETS);
+    }
+    localStorage.removeItem(STORAGE_KEYS.CACHED_SNIPPETS);
+  } catch (error) {
+    console.error("Failed to remove cached snippets:", error);
+    localStorage.removeItem(STORAGE_KEYS.CACHED_SNIPPETS);
+  }
+};
+
+/**
+ * Remove token expiration time
+ */
+export const removeTokenExpiresAt = async (): Promise<void> => {
+  try {
+    if (isBrowserStorageAvailable()) {
+      await browser.storage.local.remove(STORAGE_KEYS.TOKEN_EXPIRES_AT);
+    }
+    localStorage.removeItem(STORAGE_KEYS.TOKEN_EXPIRES_AT);
+  } catch (error) {
+    console.error("Failed to remove token expiration:", error);
+    localStorage.removeItem(STORAGE_KEYS.TOKEN_EXPIRES_AT);
+  }
+};
+
+/**
+ * Remove storage type preference
+ */
+export const removeStorageType = async (): Promise<void> => {
+  try {
+    if (isBrowserStorageAvailable()) {
+      await browser.storage.local.remove(STORAGE_KEYS.STORAGE_TYPE);
+    }
+    localStorage.removeItem(STORAGE_KEYS.STORAGE_TYPE);
+  } catch (error) {
+    console.error("Failed to remove storage type:", error);
+    localStorage.removeItem(STORAGE_KEYS.STORAGE_TYPE);
+  }
+};
+
+/**
+ * Cancel token refresh alarm
+ */
+export const cancelTokenRefresh = async (): Promise<void> => {
+  if (isBrowserStorageAvailable()) {
+    try {
+      // Fire-and-forget to avoid hanging when no listener responds
+      void browser.runtime.sendMessage({
+        type: "CANCEL_TOKEN_REFRESH",
+      });
+    } catch (error) {
+      console.error("Failed to cancel token refresh:", error);
+    }
+  }
+};
+
+/**
  * Clear all authentication data
  */
 export const clearAuthData = async (): Promise<void> => {
-  await removeAccessToken();
-  await removeRefreshToken();
-  await removeUserInfo();
+  await Promise.allSettled([
+    removeAccessToken(),
+    removeRefreshToken(),
+    removeUserInfo(),
+    removeCachedSnippets(),
+    removeTokenExpiresAt(),
+    removeStorageType(),
+  ]);
+  // Do not await to prevent potential hangs if background doesn't respond
+  void cancelTokenRefresh();
 };
 
 /**

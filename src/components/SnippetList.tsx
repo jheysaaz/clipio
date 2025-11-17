@@ -45,17 +45,8 @@ export default function SnippetList({
         return;
       }
 
-      const userId = user.id;
-
-      if (!userId) {
-        setError("Invalid user information. Please login again.");
-        setLoading(false);
-        navigate("/cloud-login");
-        return;
-      }
-
       const response = await authenticatedFetch(
-        API_BASE_URL + API_ENDPOINTS.USER_SNIPPETS(userId),
+        API_BASE_URL + API_ENDPOINTS.USER_SNIPPETS,
         {
           method: "GET",
         }
@@ -75,7 +66,7 @@ export default function SnippetList({
       }
 
       const data = await response.json();
-      setSnippets(data.snippets || data);
+      setSnippets(data.items || data);
       setRetryCount(0); // Reset retry count on success
 
       // Cache snippets for content script to use

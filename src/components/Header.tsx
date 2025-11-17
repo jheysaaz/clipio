@@ -16,57 +16,29 @@ export default function Header({
   onShowToast,
 }: HeaderProps) {
   const navigate = useNavigate();
+
   const onLogout = async () => {
     try {
       const refreshToken = await getRefreshToken();
-      console.log("Refresh token:", refreshToken);
-
       if (refreshToken) {
-        const response = await authenticatedFetch(
-          API_BASE_URL + API_ENDPOINTS.LOGOUT,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              refresh_token: refreshToken,
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          console.error("Logout API failed:", response.status);
-        }
+        await authenticatedFetch(API_BASE_URL + API_ENDPOINTS.LOGOUT, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ refreshToken }),
+        });
       }
-
-      // Always clear auth data and show success
-      if (onShowToast) {
-        onShowToast("Logged out successfully!", "success");
-      }
-
-      // Clear all auth data (both chrome.storage and localStorage)
-      await clearAuthData();
-      localStorage.clear(); // Clear any other localStorage data
-
-      // Small delay to show toast before navigation
-      setTimeout(() => {
-        navigate("/");
-      }, 500);
     } catch (error) {
-      console.error("Error during logout:", error);
-      if (onShowToast) {
-        onShowToast("Logged out successfully!", "success");
-      }
-
-      // Still clear data even if API call fails
-      await clearAuthData();
-      localStorage.clear();
-
-      setTimeout(() => {
-        navigate("/");
-      }, 500);
+      console.error("Logout API error (ignored):", error);
     }
+
+    clearAuthData();
+    onShowToast?.("Logged out successfully!", "success");
+
+    setTimeout(() => {
+      navigate("/cloud-login", { replace: true });
+    }, 500);
   };
 
   return (
