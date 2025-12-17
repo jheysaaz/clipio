@@ -21,11 +21,17 @@ browser.runtime.onStartup.addListener(() => {
 });
 
 // Listen for messages from popup
+interface TokenRefreshMessage {
+  type: "SCHEDULE_TOKEN_REFRESH" | "CANCEL_TOKEN_REFRESH";
+  payload?: { expiresIn: number };
+}
+
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "SCHEDULE_TOKEN_REFRESH") {
-    const { expiresIn } = message.payload;
+  const msg = message as TokenRefreshMessage;
+  if (msg.type === "SCHEDULE_TOKEN_REFRESH") {
+    const { expiresIn } = msg.payload!;
     scheduleTokenRefresh(expiresIn);
-  } else if (message.type === "CANCEL_TOKEN_REFRESH") {
+  } else if (msg.type === "CANCEL_TOKEN_REFRESH") {
     cancelTokenRefresh();
   }
   return true; // Keep the message channel open for async response
@@ -85,7 +91,7 @@ async function checkAndScheduleTokenRefresh() {
   ) {
     const now = Date.now();
     const timeUntilExpiry =
-      (result[STORAGE_KEYS.TOKEN_EXPIRES_AT] - now) / 1000; // in seconds
+      ((result[STORAGE_KEYS.TOKEN_EXPIRES_AT] as number) - now) / 1000; // in seconds
 
     console.log(`[Background] Time until expiry: ${timeUntilExpiry} seconds`);
 

@@ -47,7 +47,9 @@ async function loadSnippets() {
       STORAGE_KEYS.CACHED_SNIPPETS
     );
     if (cachedData[STORAGE_KEYS.CACHED_SNIPPETS]) {
-      const parsedData = JSON.parse(cachedData[STORAGE_KEYS.CACHED_SNIPPETS]);
+      const parsedData = JSON.parse(
+        cachedData[STORAGE_KEYS.CACHED_SNIPPETS] as string
+      );
       snippets = Array.isArray(parsedData)
         ? parsedData
         : parsedData.items || [];
@@ -71,9 +73,9 @@ async function loadSnippets() {
       return;
     }
 
-    const userInfo = JSON.parse(result[STORAGE_KEYS.USER_INFO]);
+    const userInfo = JSON.parse(result[STORAGE_KEYS.USER_INFO] as string);
     const userId = userInfo.id;
-    const accessToken = result[STORAGE_KEYS.ACCESS_TOKEN];
+    const accessToken = result[STORAGE_KEYS.ACCESS_TOKEN] as string;
 
     // Fetch snippets from API
     const response = await fetch(API_BASE_URL + API_ENDPOINTS.USER_SNIPPETS, {

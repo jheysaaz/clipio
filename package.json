@@ -11,23 +11,25 @@
     "format:check": "prettier --check \"./**/*.{ts,tsx,js,jsx,json,css,html}\""
   },
   "dependencies": {
-    "lucide-react": "^0.553.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router": "^7.9.5",
-    "tailwindcss": "^4.1.17"
+    "@reduxjs/toolkit": "^2.11.2",
+    "lucide-react": "^0.561.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-redux": "^9.2.0",
+    "react-router": "^7.10.1",
+    "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
-    "@crxjs/vite-plugin": "^2.2.1",
-    "@tailwindcss/vite": "^4.1.17",
-    "@types/react": "^18.0.26",
-    "@types/react-dom": "^18.0.9",
-    "@types/webextension-polyfill": "^0.10.0",
-    "@vitejs/plugin-react": "^4.2.1",
-    "prettier": "^3.6.2",
-    "typescript": "~5.6.3",
-    "vite": "^5.4.21",
+    "@crxjs/vite-plugin": "^2.3.0",
+    "@tailwindcss/vite": "^4.1.18",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@types/webextension-polyfill": "^0.12.4",
+    "@vitejs/plugin-react": "^5.1.2",
+    "prettier": "^3.7.4",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.0",
     "vite-plugin-zip-pack": "^1.2.4",
-    "webextension-polyfill": "^0.10.0"
+    "webextension-polyfill": "^0.12.0"
   }
 }

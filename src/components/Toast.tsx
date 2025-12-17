@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle, Info, X, AlertTriangle } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 export type ToastType = "success" | "error" | "warning" | "info";
 
@@ -16,15 +16,26 @@ export default function Toast({
   onClose,
   duration = 5000,
 }: ToastProps) {
+  const [closing, setClosing] = useState(false);
+  const ANIMATION_MS = 200;
+
+  const beginClose = useCallback(() => {
+    if (closing) return;
+    setClosing(true);
+    const timer = setTimeout(() => {
+      onClose();
+    }, ANIMATION_MS);
+    return () => clearTimeout(timer);
+  }, [closing, onClose]);
+
   useEffect(() => {
     if (duration > 0) {
       const timer = setTimeout(() => {
-        onClose();
+        beginClose();
       }, duration);
-
       return () => clearTimeout(timer);
     }
-  }, [duration, onClose]);
+  }, [duration, beginClose]);
 
   const getIcon = () => {
     switch (type) {
@@ -54,12 +65,12 @@ export default function Toast({
 
   return (
     <div
-      className={`fixed top-4 right-4 left-4 max-w-md mx-auto z-50 flex items-start gap-3 p-4 border rounded-lg shadow-lg animate-slide-in ${getStyles()}`}
+      className={`fixed top-4 right-4 left-4 max-w-md mx-auto z-50 flex items-start gap-3 p-4 border rounded-lg shadow-lg ${closing ? "animate-slide-out" : "animate-slide-in"} ${getStyles()}`}
     >
       <div className="shrink-0 mt-0.5">{getIcon()}</div>
       <p className="flex-1 text-sm font-medium">{message}</p>
       <button
-        onClick={onClose}
+        onClick={beginClose}
         className="shrink-0 hover:opacity-70 transition-opacity"
         aria-label="Close"
       >

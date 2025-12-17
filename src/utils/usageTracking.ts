@@ -29,7 +29,7 @@ export const getUsageCounts = async (): Promise<UsageData> => {
   try {
     if (isBrowserStorageAvailable()) {
       const result = await browser.storage.local.get(USAGE_KEY);
-      return result[USAGE_KEY] || {};
+      return (result[USAGE_KEY] as UsageData) || {};
     }
     const data = localStorage.getItem(USAGE_KEY);
     return data ? JSON.parse(data) : {};

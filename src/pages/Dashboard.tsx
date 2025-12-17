@@ -5,23 +5,18 @@ import Search from "../components/Search";
 import SnippetList from "../components/SnippetList";
 import AddSnippetModal from "../components/AddSnippetModal";
 import { authenticatedFetch } from "../utils/api";
-import { useToast } from "../hooks/useToast";
-import Toast from "../components/Toast";
+import { useAppDispatch } from "../store/hooks";
+import { showToast } from "../store/slices/toastSlice";
 import { getUserInfo, getAccessToken } from "../utils/storage";
 import { useNavigate } from "react-router";
 import type { SnippetFormData } from "../types";
 import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
 
-interface DashboardProps {
-  theme: "light" | "dark";
-  onToggleTheme: () => void;
-}
-
-export default function Dashboard({ theme, onToggleTheme }: DashboardProps) {
+export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const { toast, showToast, hideToast } = useToast();
+  const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
   // Guard: if no access token, redirect to cloud login
@@ -57,27 +52,35 @@ export default function Dashboard({ theme, onToggleTheme }: DashboardProps) {
       );
 
       if (response.ok) {
-        showToast("Snippet added successfully!", "success");
+        dispatch(
+          showToast({ message: "Snippet added successfully!", type: "success" })
+        );
         // Trigger refresh of snippet list
         setRefreshTrigger((prev) => prev + 1);
       } else {
         const error = await response.json();
-        showToast(error.message || "Failed to add snippet", "error");
+        dispatch(
+          showToast({
+            message: error.message || "Failed to add snippet",
+            type: "error",
+          })
+        );
       }
     } catch (error) {
       console.error("Failed to add snippet:", error);
-      showToast("Failed to add snippet. Please try again.", "error");
+      dispatch(
+        showToast({
+          message: "Failed to add snippet. Please try again.",
+          type: "error",
+        })
+      );
     }
   };
 
   return (
     <div className="flex flex-col h-full gap-3">
       {/* Header */}
-      <Header
-        theme={theme}
-        onToggleTheme={onToggleTheme}
-        onShowToast={showToast}
-      />
+      <Header />
       {/* Search Bar with Add Button */}
       <div className="flex items-center gap-3">
         <div className="flex-1">
@@ -98,7 +101,6 @@ export default function Dashboard({ theme, onToggleTheme }: DashboardProps) {
           <SnippetList
             searchQuery={searchQuery}
             refreshTrigger={refreshTrigger}
-            onShowToast={showToast}
           />
         </div>
       </div>
@@ -108,10 +110,6 @@ export default function Dashboard({ theme, onToggleTheme }: DashboardProps) {
         onClose={() => setIsModalOpen(false)}
         onSubmit={handleSubmitSnippet}
       />
-
-      {toast.isVisible && (
-        <Toast message={toast.message} type={toast.type} onClose={hideToast} />
-      )}
     </div>
   );
 }

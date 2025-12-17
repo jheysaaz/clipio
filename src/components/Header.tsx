@@ -3,19 +3,14 @@ import { authenticatedFetch } from "../utils/api";
 import { getRefreshToken, clearAuthData } from "../utils/storage";
 import { useNavigate } from "react-router";
 import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { toggleTheme } from "../store/slices/themeSlice";
+import { showToast } from "../store/slices/toastSlice";
 
-interface HeaderProps {
-  theme: "light" | "dark";
-  onToggleTheme: () => void;
-  onShowToast?: (message: string, type: "success" | "error") => void;
-}
-
-export default function Header({
-  theme,
-  onToggleTheme,
-  onShowToast,
-}: HeaderProps) {
+export default function Header() {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+  const theme = useAppSelector((state) => state.theme.current);
 
   const onLogout = async () => {
     try {
@@ -34,10 +29,12 @@ export default function Header({
     }
 
     clearAuthData();
-    onShowToast?.("Logged out successfully!", "success");
+    dispatch(
+      showToast({ message: "Logged out successfully!", type: "success" })
+    );
 
     setTimeout(() => {
-      navigate("/cloud-login", { replace: true });
+      navigate("/login", { replace: true });
     }, 500);
   };
 
@@ -47,7 +44,7 @@ export default function Header({
         <div className="mb-3">
           <div className="flex items-center gap-2 mb-1">
             <div className="p-1.5 bg-gray-500/10 dark:bg-gray-500/20 rounded-lg">
-              <Code2 className="h-4 w-4 text-gray-700 dark:text-gray-300" />
+              <Code2 className="h-4 w-4 text-gray-700 dark:text-gray-300 " />
             </div>
             <h1 className="text-zinc-900 dark:text-zinc-50">
               Snippy Dashboard
@@ -60,7 +57,7 @@ export default function Header({
 
         <div className="flex items-center gap-3">
           <button
-            onClick={onToggleTheme}
+            onClick={() => dispatch(toggleTheme())}
             className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
             aria-label="Toggle theme"
           >

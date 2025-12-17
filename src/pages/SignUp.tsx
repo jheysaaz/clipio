@@ -1,13 +1,9 @@
 import { Mail, Lock, User, UserCircle, ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import Toast from "../components/Toast";
-import { useToast } from "../hooks/useToast";
+import { useAppDispatch } from "../store/hooks";
+import { showToast } from "../store/slices/toastSlice";
 import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
-
-interface SignUpProps {
-  theme: "light" | "dark";
-}
 
 interface ValidationErrors {
   username?: string;
@@ -16,15 +12,15 @@ interface ValidationErrors {
   fullName?: string;
 }
 
-export default function SignUp({ theme }: SignUpProps) {
+export default function SignUp() {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [loadingSignUp, setLoadingSignUp] = useState(false);
   const [errors, setErrors] = useState<ValidationErrors>({});
-  const { toast, showToast, hideToast } = useToast();
 
   const validateUsername = (value: string): string | undefined => {
     if (!value) return "Username is required";
@@ -78,7 +74,12 @@ export default function SignUp({ theme }: SignUpProps) {
 
     // Check if there are any errors
     if (Object.values(validationErrors).some((error) => error !== undefined)) {
-      showToast("Please fix the validation errors", "error");
+      dispatch(
+        showToast({
+          message: "Please fix the validation errors",
+          type: "error",
+        })
+      );
       return;
     }
 
@@ -101,17 +102,32 @@ export default function SignUp({ theme }: SignUpProps) {
       setLoadingSignUp(false);
 
       if (res.status === 201 || res.status === 200) {
-        showToast("Account created successfully! Please sign in.", "success");
+        dispatch(
+          showToast({
+            message: "Account created successfully! Please sign in.",
+            type: "success",
+          })
+        );
         setTimeout(() => {
           navigate("/cloud-login");
         }, 1500);
       } else {
-        showToast(data.error || "Sign up failed. Please try again.", "error");
+        dispatch(
+          showToast({
+            message: data.error || "Sign up failed. Please try again.",
+            type: "error",
+          })
+        );
       }
     } catch (error) {
       console.error("Sign up failed", error);
       setLoadingSignUp(false);
-      showToast("Network error. Please check your connection.", "error");
+      dispatch(
+        showToast({
+          message: "Network error. Please check your connection.",
+          type: "error",
+        })
+      );
     }
   };
 
@@ -267,10 +283,6 @@ export default function SignUp({ theme }: SignUpProps) {
           </button>
         </form>
       </div>
-
-      {toast.isVisible && (
-        <Toast message={toast.message} type={toast.type} onClose={hideToast} />
-      )}
     </div>
   );
 }

@@ -10,20 +10,21 @@ import type { Snippet, SnippetFormData } from "../types";
 import ConfirmDialog from "./ConfirmDialog";
 import AddSnippetModal from "./AddSnippetModal";
 import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
+import { useAppDispatch } from "../store/hooks";
+import { showToast } from "../store/slices/toastSlice";
 
 interface SnippetCardProps {
   snippet: Snippet;
   onDelete?: () => void;
   onUpdate?: () => void;
-  onShowToast?: (message: string, type: "success" | "error") => void;
 }
 
 export default function SnippetCard({
   snippet,
   onDelete,
   onUpdate,
-  onShowToast,
 }: SnippetCardProps) {
+  const dispatch = useAppDispatch();
   const [copied, setCopied] = useState(false);
   const [usageCount, setUsageCount] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -91,27 +92,34 @@ export default function SnippetCard({
       );
 
       if (response.ok) {
-        if (onShowToast) {
-          onShowToast("Snippet updated successfully!", "success");
-        }
+        dispatch(
+          showToast({
+            message: "Snippet updated successfully!",
+            type: "success",
+          })
+        );
         if (onUpdate) {
           onUpdate();
         }
         setShowEditModal(false);
       } else {
         const error = await response.json();
-        if (onShowToast) {
-          onShowToast(
-            error.message || "Failed to update snippet. Please try again.",
-            "error"
-          );
-        }
+        dispatch(
+          showToast({
+            message:
+              error.message || "Failed to update snippet. Please try again.",
+            type: "error",
+          })
+        );
       }
     } catch (error) {
       console.error("Error updating snippet:", error);
-      if (onShowToast) {
-        onShowToast("Failed to update snippet. Please try again.", "error");
-      }
+      dispatch(
+        showToast({
+          message: "Failed to update snippet. Please try again.",
+          type: "error",
+        })
+      );
     }
   };
 
@@ -133,9 +141,12 @@ export default function SnippetCard({
 
       if (response.ok) {
         console.log("Snippet deleted successfully:", snippet.id);
-        if (onShowToast) {
-          onShowToast("Snippet deleted successfully!", "success");
-        }
+        dispatch(
+          showToast({
+            message: "Snippet deleted successfully!",
+            type: "success",
+          })
+        );
         // Call the onDelete callback to refresh the list
         if (onDelete) {
           onDelete();
@@ -143,18 +154,22 @@ export default function SnippetCard({
       } else {
         const error = await response.json();
         console.error("Failed to delete snippet:", error);
-        if (onShowToast) {
-          onShowToast(
-            error.message || "Failed to delete snippet. Please try again.",
-            "error"
-          );
-        }
+        dispatch(
+          showToast({
+            message:
+              error.message || "Failed to delete snippet. Please try again.",
+            type: "error",
+          })
+        );
       }
     } catch (error) {
       console.error("Error deleting snippet:", error);
-      if (onShowToast) {
-        onShowToast("Failed to delete snippet. Please try again.", "error");
-      }
+      dispatch(
+        showToast({
+          message: "Failed to delete snippet. Please try again.",
+          type: "error",
+        })
+      );
     } finally {
       setIsDeleting(false);
       setShowDeleteDialog(false);

@@ -1,68 +1,164 @@
-import { HardDrive, Cloud } from "lucide-react";
-import { useNavigate } from "react-router";
+import { Mail, Lock } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router";
+import { useAppDispatch } from "../store/hooks";
+import { showToast } from "../store/slices/toastSlice";
+import { saveAuthData } from "../utils/storage";
+import type { LoginResponse } from "../types";
+import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
 
-interface LoginProps {
-  theme: "light" | "dark";
-  onSelectStorage: (type: "local" | "cloud") => void;
-}
+type ToastState = {
+  message?: string;
+  type?: "success" | "error";
+} | null;
 
-export default function Login({ theme, onSelectStorage }: LoginProps) {
+export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const dispatch = useAppDispatch();
+  const [login, setLogin] = useState("");
+  const [password, setPassword] = useState("");
+  const [loadingLogin, setLoadingLogin] = useState(false);
 
-  const handleSelection = (type: "local" | "cloud") => {
-    if (type === "local") {
-      onSelectStorage(type);
-      navigate("/dashboard");
-    } else {
-      // Redirect to cloud login page
-      navigate("/cloud-login");
+  useEffect(() => {
+    const state = (location.state as ToastState) || null;
+    if (state?.message) {
+      dispatch(
+        showToast({ message: state.message, type: state.type ?? "success" })
+      );
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, navigate, dispatch]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    setLoadingLogin(true);
+    try {
+      const res = await fetch(API_BASE_URL + API_ENDPOINTS.LOGIN, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ login, password }),
+      });
+
+      const data: LoginResponse = await res.json();
+      setLoadingLogin(false);
+
+      if (res.status === 200) {
+        const expiresIn = data.expiresIn;
+        saveAuthData(data.accessToken, data.user, expiresIn, data.refreshToken);
+
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("storageType", "cloud");
+        }
+
+        dispatch(showToast({ message: "Login successful!", type: "success" }));
+        navigate("/dashboard", { replace: true });
+      } else {
+        dispatch(
+          showToast({
+            message: (data as any).error || "Login failed. Please try again.",
+            type: "error",
+          })
+        );
+      }
+    } catch (error) {
+      console.error("Login failed", error);
+      setLoadingLogin(false);
+      dispatch(
+        showToast({
+          message: "Network error. Please check your connection.",
+          type: "error",
+        })
+      );
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-full p-6">
-      <div className="text-center mb-8">
-        <h1 className="text-2xl font-semibold mb-2">Welcome to Snippy</h1>
-        <p className="text-zinc-600 dark:text-zinc-400">
-          Choose how you want to store your snippets
+    <div className="flex flex-col h-full p-6">
+      <div className="flex-1 flex flex-col justify-center">
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-semibold mb-2">Sign In</h1>
+          <p className="text-zinc-600 dark:text-zinc-400">
+            Sync your snippets across all devices
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 mb-6">
+          <div>
+            <label
+              htmlFor="login"
+              className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300"
+            >
+              Email or Username
+            </label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
+              <input
+                id="login"
+                type="text"
+                value={login}
+                onChange={(e) => setLogin(e.target.value)}
+                placeholder="your@email.com or username"
+                required
+                className="w-full pl-10 pr-4 py-2.5 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-600"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300"
+            >
+              Password
+            </label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                className="w-full pl-10 pr-4 py-2.5 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-600"
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loadingLogin}
+            className={`w-full py-2.5 font-medium rounded-lg transition-colors ${
+              loadingLogin
+                ? "bg-gray-400 text-white cursor-not-allowed"
+                : "bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900"
+            }`}
+          >
+            {loadingLogin ? (
+              <div className="flex items-center justify-center gap-2">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Signing In...
+              </div>
+            ) : (
+              "Sign In"
+            )}
+          </button>
+        </form>
+
+        <p className="text-xs text-center text-zinc-500 dark:text-zinc-500 mt-6">
+          Don't have an account?{" "}
+          <button
+            onClick={() => navigate("/sign-up")}
+            className="text-gray-700 dark:text-gray-300 hover:underline font-medium"
+          >
+            Sign up
+          </button>
         </p>
       </div>
-
-      <div className="flex flex-col gap-4 w-full max-w-sm">
-        <button
-          onClick={() => handleSelection("local")}
-          className="group relative flex flex-col items-center gap-3 p-6 border-2 border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-gray-500 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-950/20 transition-all"
-        >
-          <div className="p-3 bg-gray-500/10 dark:bg-gray-500/20 rounded-lg group-hover:bg-gray-500/20 dark:group-hover:bg-gray-500/30 transition-colors">
-            <HardDrive className="h-8 w-8 text-gray-600 dark:text-gray-400" />
-          </div>
-          <div className="text-center">
-            <h3 className="font-medium text-lg mb-1">Local Storage</h3>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              Store snippets on this device only
-            </p>
-          </div>
-        </button>
-
-        <button
-          onClick={() => handleSelection("cloud")}
-          className="group relative flex flex-col items-center gap-3 p-6 border-2 border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-purple-500 dark:hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-950/20 transition-all"
-        >
-          <div className="p-3 bg-purple-500/10 dark:bg-purple-500/20 rounded-lg group-hover:bg-purple-500/20 dark:group-hover:bg-purple-500/30 transition-colors">
-            <Cloud className="h-8 w-8 text-purple-600 dark:text-purple-400" />
-          </div>
-          <div className="text-center">
-            <h3 className="font-medium text-lg mb-1">Cloud Storage</h3>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              Sync snippets across all your devices
-            </p>
-          </div>
-        </button>
-      </div>
-
-      <p className="text-xs text-zinc-500 dark:text-zinc-500 mt-6 text-center">
-        You can change this setting later in preferences
-      </p>
     </div>
   );
 }

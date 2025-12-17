@@ -41,7 +41,7 @@ export const getAccessToken = async (): Promise<string | null> => {
   try {
     if (isBrowserStorageAvailable()) {
       const result = await browser.storage.local.get(STORAGE_KEYS.ACCESS_TOKEN);
-      return result[STORAGE_KEYS.ACCESS_TOKEN] || null;
+      return (result[STORAGE_KEYS.ACCESS_TOKEN] as string) || null;
     }
     return localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
   } catch (error) {
@@ -89,7 +89,7 @@ export const getRefreshToken = async (): Promise<string | null> => {
       const result = await browser.storage.local.get(
         STORAGE_KEYS.REFRESH_TOKEN
       );
-      return result[STORAGE_KEYS.REFRESH_TOKEN] || null;
+      return (result[STORAGE_KEYS.REFRESH_TOKEN] as string) || null;
     }
     return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
   } catch (error) {
@@ -138,7 +138,7 @@ export const getUserInfo = async (): Promise<User | null> => {
 
     if (isBrowserStorageAvailable()) {
       const result = await browser.storage.local.get(STORAGE_KEYS.USER_INFO);
-      userString = result[STORAGE_KEYS.USER_INFO] || null;
+      userString = (result[STORAGE_KEYS.USER_INFO] as string) || null;
     }
 
     if (!userString) {

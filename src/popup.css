@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "./assets/fonts/fira-code/fira_code.css";
 @import "./assets/fonts/inter/inter.css";
-@import "./assets/fonts/montserrat/montserrat.css";
 
 @variant dark (&:where(.dark, .dark *));
 
@@ -24,45 +23,25 @@
   pre {
     font-family: "Fira Code", monospace;
   }
-  h1 {
-    font-family: "MontserratVariable", "Montserrat", sans-serif;
-    font-size: 1.5rem;
-    font-weight: 500;
-    line-height: 1.5;
-  }
 
-  @supports (font-variation-settings: normal) {
     h1 {
-      font-family: "MontserratVariable", sans-serif;
-      font-optical-sizing: auto;
-    }
-  }
-  h2 {
-    font-family: "MontserratVariable", "Montserrat", sans-serif;
-    font-size: 1.25rem;
-    font-weight: 500;
+    font-size: 1.5rem;
+    font-weight: 600;
     line-height: 1.5;
   }
 
-  @supports (font-variation-settings: normal) {
     h2 {
-      font-family: "MontserratVariable", sans-serif;
-      font-optical-sizing: auto;
-    }
-  }
-  h3 {
-    font-family: "MontserratVariable", "Montserrat", sans-serif;
-    font-size: 1.125rem;
-    font-weight: 500;
+    font-size: 1.25rem;
+    font-weight: 600;
     line-height: 1.5;
   }
 
-  @supports (font-variation-settings: normal) {
     h3 {
-      font-family: "MontserratVariable", sans-serif;
-      font-optical-sizing: auto;
-    }
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.5;
   }
+
   h4 {
     font-size: 1rem;
     font-weight: 500;
@@ -94,6 +73,9 @@
   }
 }
 
+:root {
+  --accent-color: #6366f1;
+}
 @theme {
   --font-sans: "Inter", sans-serif;
   --font-mono: "Fira Code", monospace;
@@ -124,6 +106,24 @@
   animation: slide-in 0.3s ease-out;
 }
 
+/**
+ * Toast exit animation (slide up)
+ */
+@keyframes slide-out {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+}
+
+.animate-slide-out {
+  animation: slide-out 0.2s ease-in forwards;
+}
 /**
  * Popup animation
  */

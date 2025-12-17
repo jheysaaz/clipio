@@ -12,14 +12,12 @@ interface SnippetListProps {
   searchQuery: string;
   refreshTrigger?: number;
   selectedCategory?: string;
-  onShowToast?: (message: string, type: "success" | "error") => void;
 }
 
 export default function SnippetList({
   searchQuery,
   refreshTrigger,
   selectedCategory,
-  onShowToast,
 }: SnippetListProps) {
   const navigate = useNavigate();
   const [snippets, setSnippets] = useState<Snippet[]>([]);
@@ -158,7 +156,6 @@ export default function SnippetList({
           snippet={snippet}
           onDelete={fetchSnippets}
           onUpdate={fetchSnippets}
-          onShowToast={onShowToast}
         />
       ))}
     </div>
