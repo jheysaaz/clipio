@@ -66,7 +66,7 @@ const addLogToCache = async (
 
     await browser.storage.session.set({ [LOGS_CACHE_KEY]: logs });
   } catch (error) {
-    // Silently fail - don't interfere with actual logging
+    logger.error("Failed to cache log entry", { data: { error } });
   }
 };
 
