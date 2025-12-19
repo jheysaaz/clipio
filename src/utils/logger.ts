@@ -79,13 +79,22 @@ const log = (level: LogLevel, message: string, options: LogOptions = {}) => {
   if (data && Object.keys(data).length > 0) {
     // Format data as key=value pairs for clean inline display
     const formatted = Object.entries(data)
-      .map(([k, v]) => `✱ ${k} = ${typeof v === 'string' ? `"${v}"` : v}`)
-      .join('\n');
-    
+      .map(([k, v]) => `✱ ${k} = ${typeof v === "string" ? `"${v}"` : v}`)
+      .join("\n");
+
     if (time) {
-      console.log(`%c${time}%c ${prefix} ${message}\n%c${formatted}`, dimGray, "", "color: #6b7280");
+      console.log(
+        `%c${time}%c ${prefix} ${message}\n%c${formatted}`,
+        dimGray,
+        "",
+        "color: #6b7280"
+      );
     } else {
-      console.log(`%c${prefix} ${message}\n%c${formatted}`, dimGray, "color: #6b7280");
+      console.log(
+        `%c${prefix} ${message}\n%c${formatted}`,
+        dimGray,
+        "color: #6b7280"
+      );
     }
   } else {
     if (time) {
@@ -102,10 +111,14 @@ const log = (level: LogLevel, message: string, options: LogOptions = {}) => {
 };
 
 export const logger = {
-  info: (message: string, options?: LogOptions) => log("info", message, options),
-  success: (message: string, options?: LogOptions) => log("success", message, options),
-  warn: (message: string, options?: LogOptions) => log("warn", message, options),
-  error: (message: string, options?: LogOptions) => log("error", message, options),
+  info: (message: string, options?: LogOptions) =>
+    log("info", message, options),
+  success: (message: string, options?: LogOptions) =>
+    log("success", message, options),
+  warn: (message: string, options?: LogOptions) =>
+    log("warn", message, options),
+  error: (message: string, options?: LogOptions) =>
+    log("error", message, options),
 };
 
 /**

@@ -11,11 +11,11 @@ const ALARM_NAME = "token_refresh";
 
 // Listen for extension installation
 browser.runtime.onInstalled.addListener((details) => {
-  logger.info("Extension installed", { 
-    data: { 
-      reason: details.reason, 
-      previousVersion: details.previousVersion 
-    } 
+  logger.info("Extension installed", {
+    data: {
+      reason: details.reason,
+      previousVersion: details.previousVersion,
+    },
   });
   checkAndScheduleTokenRefresh();
 });
@@ -59,9 +59,7 @@ function scheduleTokenRefresh(expiresIn: number) {
     1
   );
 
-  logger.info(
-    `Scheduling token refresh in ${refreshTimeMinutes} minutes`
-  );
+  logger.info(`Scheduling token refresh in ${refreshTimeMinutes} minutes`);
 
   browser.alarms.create(ALARM_NAME, {
     delayInMinutes: refreshTimeMinutes,
@@ -137,7 +135,9 @@ async function refreshAccessToken() {
 
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error("Refresh failed", { data: { status: response.status, errorText } });
+      logger.error("Refresh failed", {
+        data: { status: response.status, errorText },
+      });
       throw new Error(`Token refresh failed: ${response.status}`);
     }
 
