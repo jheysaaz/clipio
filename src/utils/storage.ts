@@ -1,6 +1,7 @@
 import browser from "webextension-polyfill";
 import type { User, AuthTokens } from "../types";
 import { STORAGE_KEYS } from "../config/constants";
+import { logger } from "./logger";
 
 /**
  * Storage utility for managing Chrome extension storage and localStorage
@@ -28,7 +29,7 @@ export const saveAccessToken = async (token: string): Promise<void> => {
     }
     localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, token);
   } catch (error) {
-    console.error("Failed to save access token:", error);
+    logger.error("Failed to save access token", { data: { error } });
     // Fallback to localStorage only
     localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, token);
   }
@@ -45,7 +46,7 @@ export const getAccessToken = async (): Promise<string | null> => {
     }
     return localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
   } catch (error) {
-    console.error("Failed to get access token:", error);
+    logger.error("Failed to get access token", { data: { error } });
     return localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
   }
 };
@@ -60,7 +61,7 @@ export const removeAccessToken = async (): Promise<void> => {
     }
     localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
   } catch (error) {
-    console.error("Failed to remove access token:", error);
+    logger.error("Failed to remove access token", { data: { error } });
     localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
   }
 };
@@ -75,7 +76,7 @@ export const saveRefreshToken = async (token: string): Promise<void> => {
     }
     localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, token);
   } catch (error) {
-    console.error("Failed to save refresh token:", error);
+    logger.error("Failed to save refresh token", { data: { error } });
     localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, token);
   }
 };
@@ -93,7 +94,7 @@ export const getRefreshToken = async (): Promise<string | null> => {
     }
     return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
   } catch (error) {
-    console.error("Failed to get refresh token:", error);
+    logger.error("Failed to get refresh token", { data: { error } });
     return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
   }
 };

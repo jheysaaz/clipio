@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from "react-router";
 import { useAppDispatch } from "../store/hooks";
 import { showToast } from "../store/slices/toastSlice";
 import { saveAuthData } from "../utils/storage";
+import { logger } from "../utils/logger";
 import type { LoginResponse } from "../types";
 import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
 
@@ -54,7 +55,10 @@ export default function Login() {
           localStorage.setItem("storageType", "cloud");
         }
 
-        dispatch(showToast({ message: "Login successful!", type: "success" }));
+        logger.success("Login successful", {
+          data: { user: data.user.email, userId: data.user.id },
+          timestamp: true,
+        });
         navigate("/dashboard", { replace: true });
       } else {
         dispatch(
@@ -65,7 +69,7 @@ export default function Login() {
         );
       }
     } catch (error) {
-      console.error("Login failed", error);
+      logger.error("Login failed", { data: { error } });
       setLoadingLogin(false);
       dispatch(
         showToast({

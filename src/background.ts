@@ -5,18 +5,24 @@ import {
   STORAGE_KEYS,
   TIMING,
 } from "./config/constants";
+import { logger } from "./utils/logger";
 
 const ALARM_NAME = "token_refresh";
 
 // Listen for extension installation
 browser.runtime.onInstalled.addListener((details) => {
-  console.log("[Background] Extension installed:", details);
+  logger.info("Extension installed", { 
+    data: { 
+      reason: details.reason, 
+      previousVersion: details.previousVersion 
+    } 
+  });
   checkAndScheduleTokenRefresh();
 });
 
 // Listen for extension startup (browser restart)
 browser.runtime.onStartup.addListener(() => {
-  console.log("[Background] Extension started");
+  logger.info("Extension started");
   checkAndScheduleTokenRefresh();
 });
 
@@ -40,7 +46,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Listen for alarm
 browser.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === ALARM_NAME) {
-    console.log("[Background] Token refresh alarm triggered");
+    logger.info("Token refresh alarm triggered");
     await refreshAccessToken();
   }
 });
@@ -53,8 +59,8 @@ function scheduleTokenRefresh(expiresIn: number) {
     1
   );
 
-  console.log(
-    `[Background] Scheduling token refresh in ${refreshTimeMinutes} minutes (expires in ${expiresIn} seconds)`
+  logger.info(
+    `Scheduling token refresh in ${refreshTimeMinutes} minutes`
   );
 
   browser.alarms.create(ALARM_NAME, {
@@ -80,51 +86,46 @@ async function checkAndScheduleTokenRefresh() {
     STORAGE_KEYS.REFRESH_TOKEN,
   ]);
 
-  console.log("[Background] Checking token refresh status:", {
-    hasRefreshToken: !!result[STORAGE_KEYS.REFRESH_TOKEN],
-    hasExpiresAt: !!result[STORAGE_KEYS.TOKEN_EXPIRES_AT],
+  const now = Date.now();
+  logger.info("Checking token refresh status", {
+    data: {
+      refreshToken: result[STORAGE_KEYS.REFRESH_TOKEN],
+      expiresAt: result[STORAGE_KEYS.TOKEN_EXPIRES_AT],
+    },
   });
 
   if (
     result[STORAGE_KEYS.REFRESH_TOKEN] &&
     result[STORAGE_KEYS.TOKEN_EXPIRES_AT]
   ) {
-    const now = Date.now();
     const timeUntilExpiry =
       ((result[STORAGE_KEYS.TOKEN_EXPIRES_AT] as number) - now) / 1000; // in seconds
-
-    console.log(`[Background] Time until expiry: ${timeUntilExpiry} seconds`);
 
     if (timeUntilExpiry > 0) {
       // Token still valid, schedule refresh
       scheduleTokenRefresh(timeUntilExpiry);
     } else {
       // Token already expired, refresh immediately
-      console.log("[Background] Token expired, refreshing immediately");
+      logger.info("Token expired, refreshing immediately");
       await refreshAccessToken();
     }
   } else {
-    console.log("[Background] No refresh token or expiry time found");
+    logger.warn("No refresh token or expiry time found");
   }
 }
 
 // Refresh the access token
 async function refreshAccessToken() {
   try {
-    console.log("[Background] Starting token refresh...");
+    logger.info("Starting token refresh...");
 
     const result = await browser.storage.local.get(STORAGE_KEYS.REFRESH_TOKEN);
     const refreshToken = result[STORAGE_KEYS.REFRESH_TOKEN];
 
     if (!refreshToken) {
-      console.error("[Background] No refresh token found");
+      logger.error("No refresh token found");
       return false;
     }
-
-    console.log(
-      "[Background] Calling refresh API:",
-      API_BASE_URL + API_ENDPOINTS.REFRESH
-    );
 
     const response = await fetch(API_BASE_URL + API_ENDPOINTS.REFRESH, {
       method: "POST",
@@ -134,19 +135,13 @@ async function refreshAccessToken() {
       body: JSON.stringify({ refreshToken: refreshToken }),
     });
 
-    console.log("[Background] Refresh response status:", response.status);
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[Background] Refresh failed:", response.status, errorText);
+      logger.error("Refresh failed", { data: { status: response.status, errorText } });
       throw new Error(`Token refresh failed: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log("[Background] Refresh response:", {
-      hasAccessToken: !!data.accessToken,
-      hasRefreshToken: !!data.refreshToken,
-    });
 
     // Update the tokens in storage
     await browser.storage.local.set({
@@ -165,13 +160,13 @@ async function refreshAccessToken() {
       const expiresIn = data.expiresIn || data.expires_in;
       scheduleTokenRefresh(expiresIn);
     } else {
-      console.warn("[Background] No expiresIn in refresh response");
+      logger.warn("No expiresIn in refresh response");
     }
 
-    console.log("[Background] Token refreshed successfully");
+    logger.success("Token refreshed successfully");
     return true;
   } catch (error) {
-    console.error("[Background] Failed to refresh token:", error);
+    logger.error("Failed to refresh token", { data: { error } });
 
     // If refresh fails, clear all auth data
     await browser.storage.local.remove([...Object.values(STORAGE_KEYS)]);

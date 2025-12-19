@@ -8,6 +8,7 @@ import { authenticatedFetch } from "../utils/api";
 import { useAppDispatch } from "../store/hooks";
 import { showToast } from "../store/slices/toastSlice";
 import { getUserInfo, getAccessToken } from "../utils/storage";
+import { logger } from "../utils/logger";
 import { useNavigate } from "react-router";
 import type { SnippetFormData } from "../types";
 import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
@@ -34,8 +35,6 @@ export default function Dashboard() {
   };
 
   const handleSubmitSnippet = async (snippet: SnippetFormData) => {
-    console.log("Submitting snippet:", snippet);
-
     try {
       // Get user info for userId
       const user = await getUserInfo();

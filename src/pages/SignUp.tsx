@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useAppDispatch } from "../store/hooks";
 import { showToast } from "../store/slices/toastSlice";
+import { logger } from "../utils/logger";
 import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
 
 interface ValidationErrors {
@@ -120,7 +121,7 @@ export default function SignUp() {
         );
       }
     } catch (error) {
-      console.error("Sign up failed", error);
+      logger.error("Sign up failed", { data: { error } });
       setLoadingSignUp(false);
       dispatch(
         showToast({

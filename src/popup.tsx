@@ -9,6 +9,7 @@ import { useAppSelector } from "./store/hooks";
 import Toast from "./components/Toast";
 import { useAppDispatch } from "./store/hooks";
 import { hideToast } from "./store/slices/toastSlice";
+import { logger } from "./utils/logger";
 
 function AppContent() {
   const [isLoading, setIsLoading] = useState(true);
@@ -49,7 +50,7 @@ function AppContent() {
         localStorage.setItem("userInfo", userInfo);
       }
     } catch (error) {
-      console.error("Error loading user data:", error);
+      logger.error("Error loading user data", { data: { error } });
     } finally {
       setIsLoading(false);
     }

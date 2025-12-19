@@ -12,6 +12,7 @@ import AddSnippetModal from "./AddSnippetModal";
 import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
 import { useAppDispatch } from "../store/hooks";
 import { showToast } from "../store/slices/toastSlice";
+import { logger } from "../utils/logger";
 
 interface SnippetCardProps {
   snippet: Snippet;
@@ -140,7 +141,9 @@ export default function SnippetCard({
       );
 
       if (response.ok) {
-        console.log("Snippet deleted successfully:", snippet.id);
+        logger.success("Snippet deleted successfully", {
+          data: { snippetId: snippet.id },
+        });
         dispatch(
           showToast({
             message: "Snippet deleted successfully!",
@@ -153,7 +156,7 @@ export default function SnippetCard({
         }
       } else {
         const error = await response.json();
-        console.error("Failed to delete snippet:", error);
+        logger.error("Failed to delete snippet", { data: { error } });
         dispatch(
           showToast({
             message:
@@ -163,7 +166,7 @@ export default function SnippetCard({
         );
       }
     } catch (error) {
-      console.error("Error deleting snippet:", error);
+      logger.error("Error deleting snippet", { data: { error } });
       dispatch(
         showToast({
           message: "Failed to delete snippet. Please try again.",

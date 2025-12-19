@@ -6,6 +6,7 @@ import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { toggleTheme } from "../store/slices/themeSlice";
 import { showToast } from "../store/slices/toastSlice";
+import { logger } from "../utils/logger";
 
 export default function Header() {
   const navigate = useNavigate();

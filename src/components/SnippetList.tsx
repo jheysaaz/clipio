@@ -7,6 +7,7 @@ import SnippetCard from "./SnippetCard";
 import type { Snippet } from "../types";
 import browser from "webextension-polyfill";
 import { API_BASE_URL, API_ENDPOINTS, STORAGE_KEYS } from "../config/constants";
+import { logger } from "../utils/logger";
 
 interface SnippetListProps {
   searchQuery: string;
@@ -72,14 +73,14 @@ export default function SnippetList({
         await browser.storage.local.set({
           [STORAGE_KEYS.CACHED_SNIPPETS]: JSON.stringify(data.snippets || data),
         });
-        console.log("[Snippy] Snippets cached for content script");
+        logger.success("Snippets cached for content script");
       } catch (error) {
-        console.error("[Snippy] Failed to cache snippets:", error);
+        logger.error("Failed to cache snippets", { data: { error } });
       }
 
       setLoading(false);
     } catch (err) {
-      console.error("Error fetching snippets:", err);
+      logger.error("Error fetching snippets", { data: { error: err } });
 
       // Increment retry count only for network/fetch errors
       if (retryCount < 3) {
