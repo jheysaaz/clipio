@@ -40,7 +40,7 @@ export default function SnippetList({
       if (!user) {
         setError("No authentication found. Please login.");
         setLoading(false);
-        navigate("/cloud-login");
+        navigate("/login");
         return;
       }
 
@@ -54,7 +54,7 @@ export default function SnippetList({
       // If 401, redirect immediately to login
       if (response.status === 401) {
         await clearAuthData();
-        navigate("/cloud-login");
+        navigate("/login");
         return;
       }
 
@@ -91,7 +91,7 @@ export default function SnippetList({
           "Failed to load snippets after multiple attempts. Please check your connection and try again."
         );
         await clearAuthData();
-        navigate("/cloud-login");
+        navigate("/login");
       }
       setLoading(false);
     }

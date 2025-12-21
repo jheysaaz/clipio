@@ -110,7 +110,7 @@ export default function SignUp() {
           })
         );
         setTimeout(() => {
-          navigate("/cloud-login");
+          navigate("/login");
         }, 1500);
       } else {
         dispatch(
@@ -135,7 +135,7 @@ export default function SignUp() {
   return (
     <div className="flex flex-col h-full p-6">
       <button
-        onClick={() => navigate("/cloud-login")}
+        onClick={() => navigate("/login")}
         className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50 transition-colors mb-6"
       >
         <ArrowLeft className="h-4 w-4" />

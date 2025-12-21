@@ -25,7 +25,7 @@ export default function Dashboard() {
     (async () => {
       const token = await getAccessToken();
       if (!token) {
-        navigate("/cloud-login", { replace: true });
+        navigate("/login", { replace: true });
       }
     })();
   }, [navigate]);
