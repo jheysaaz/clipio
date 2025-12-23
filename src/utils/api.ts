@@ -1,4 +1,5 @@
 import { getAccessToken } from "./storage";
+import { fetchWithTimeout } from "./security";
 
 interface FetchOptions extends RequestInit {
   headers?: Record<string, string>;
@@ -6,7 +7,8 @@ interface FetchOptions extends RequestInit {
 
 export const authenticatedFetch = async (
   url: string,
-  options: FetchOptions = {}
+  options: FetchOptions = {},
+  timeoutMs: number = 30000
 ): Promise<Response> => {
   // Get access token using storage utility
   const accessToken = await getAccessToken();
@@ -22,11 +24,15 @@ export const authenticatedFetch = async (
     Authorization: `Bearer ${accessToken}`,
   };
 
-  // Make the request
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  // Make the request with timeout protection (no credentials: access token only in header)
+  const response = await fetchWithTimeout(
+    url,
+    {
+      ...options,
+      headers,
+    },
+    timeoutMs
+  );
 
   // If unauthorized (401), token will be refreshed by background script
   // Background script handles refresh automatically via alarms

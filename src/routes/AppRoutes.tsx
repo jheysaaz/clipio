@@ -4,25 +4,34 @@ import Dashboard from "../pages/Dashboard";
 import Login from "../pages/Login";
 import SignUp from "../pages/SignUp";
 import { STORAGE_KEYS } from "../config/constants";
+import { getAccessToken } from "../utils/storage";
 
 export default function AppRoutes() {
-  const [defaultRoute, setDefaultRoute] = useState<string>("/login");
+  const getInitialRoute = () => {
+    const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    return accessToken ? "/dashboard" : "/login";
+  };
+
+  const [defaultRoute, setDefaultRoute] = useState<string>(getInitialRoute());
 
   useEffect(() => {
-    const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-    const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+    const resolveRoute = async () => {
+      try {
+        const accessToken = await getAccessToken();
+        setDefaultRoute(accessToken ? "/dashboard" : "/login");
+      } catch {
+        setDefaultRoute("/login");
+      }
+    };
 
-    if (accessToken && refreshToken) {
-      setDefaultRoute("/dashboard");
-    } else {
-      setDefaultRoute("/login");
-    }
+    void resolveRoute();
   }, []);
 
   return (
     <Routes>
       <Route path="/" element={<Navigate to={defaultRoute} replace />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/sign-up" element={<SignUp />} />
       <Route path="/signup" element={<SignUp />} />
       <Route path="/dashboard" element={<Dashboard />} />
     </Routes>

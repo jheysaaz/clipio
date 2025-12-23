@@ -1,16 +1,30 @@
-import { Mail, Lock, User, UserCircle, ArrowLeft } from "lucide-react";
-import { useState } from "react";
+import {
+  Mail,
+  Lock,
+  User,
+  UserCircle,
+  ArrowLeft,
+  Check,
+  X,
+} from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useAppDispatch } from "../store/hooks";
 import { showToast } from "../store/slices/toastSlice";
 import { logger } from "../utils/logger";
 import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
+import { fetchWithTimeout } from "../utils/security";
 
 interface ValidationErrors {
   username?: string;
   email?: string;
   password?: string;
   fullName?: string;
+}
+
+interface AvailabilityStatus {
+  username?: boolean | null; // true=available, false=taken, null=checking
+  email?: boolean | null;
 }
 
 export default function SignUp() {
@@ -22,6 +36,15 @@ export default function SignUp() {
   const [fullName, setFullName] = useState("");
   const [loadingSignUp, setLoadingSignUp] = useState(false);
   const [errors, setErrors] = useState<ValidationErrors>({});
+  const [availability, setAvailability] = useState<AvailabilityStatus>({});
+
+  // Debounce timers for availability checks
+  const usernameDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  );
+  const emailDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  );
 
   const validateUsername = (value: string): string | undefined => {
     if (!value) return "Username is required";
@@ -45,20 +68,69 @@ export default function SignUp() {
     return undefined;
   };
 
-  const handleFieldBlur = (field: keyof ValidationErrors, value: string) => {
-    let error: string | undefined;
-    switch (field) {
-      case "username":
-        error = validateUsername(value);
-        break;
-      case "email":
-        error = validateEmail(value);
-        break;
-      case "password":
-        error = validatePassword(value);
-        break;
+  // Debounced availability check
+  const checkAvailability = async (
+    field: "username" | "email",
+    value: string
+  ) => {
+    if (field === "username") {
+      if (!value || validateUsername(value)) return; // Skip if validation fails
+    } else if (field === "email") {
+      if (!value || validateEmail(value)) return; // Skip if validation fails
     }
-    setErrors((prev) => ({ ...prev, [field]: error }));
+
+    const params = new URLSearchParams();
+    if (field === "username") params.append("username", value);
+    if (field === "email") params.append("email", value);
+
+    try {
+      setAvailability((prev) => ({ ...prev, [field]: null })); // Show checking state
+      const res = await fetchWithTimeout(
+        `${API_BASE_URL + API_ENDPOINTS.AVAILABILITY}?${params.toString()}`,
+        { method: "GET" }
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        if (field === "username") {
+          setAvailability((prev) => ({
+            ...prev,
+            username: data.usernameAvailable,
+          }));
+        } else if (field === "email") {
+          setAvailability((prev) => ({
+            ...prev,
+            email: data.emailAvailable,
+          }));
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to check ${field} availability:`, error);
+    }
+  };
+
+  const handleUsernameChange = (value: string) => {
+    setUsername(value);
+    // Clear previous timeout
+    if (usernameDebounceRef.current) {
+      clearTimeout(usernameDebounceRef.current);
+    }
+    // Set new debounced check (400ms)
+    usernameDebounceRef.current = setTimeout(() => {
+      checkAvailability("username", value);
+    }, 400);
+  };
+
+  const handleEmailChange = (value: string) => {
+    setEmail(value);
+    // Clear previous timeout
+    if (emailDebounceRef.current) {
+      clearTimeout(emailDebounceRef.current);
+    }
+    // Set new debounced check (400ms)
+    emailDebounceRef.current = setTimeout(() => {
+      checkAvailability("email", value);
+    }, 400);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -84,22 +156,58 @@ export default function SignUp() {
       return;
     }
 
+    // Check real-time availability status
+    if (availability.username === false || availability.email === false) {
+      dispatch(
+        showToast({
+          message:
+            availability.username === false
+              ? "Username is already taken"
+              : "Email is already in use",
+          type: "error",
+        })
+      );
+      return;
+    }
+
     setLoadingSignUp(true);
     try {
-      const res = await fetch(API_BASE_URL + API_ENDPOINTS.REGISTER, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          username,
-          email,
-          password,
-          fullName: fullName || undefined, // Send only if provided
-        }),
-      });
+      const res = await fetchWithTimeout(
+        API_BASE_URL + API_ENDPOINTS.REGISTER,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include", // needed to receive httpOnly refresh cookie
+          body: JSON.stringify({
+            username,
+            email,
+            password,
+            fullName: fullName || undefined, // Send only if provided
+          }),
+        }
+      );
 
-      const data = await res.json();
+      let data: any = null;
+
+      // Only parse JSON if we can, safely
+      try {
+        data = await res.json();
+      } catch (parseError) {
+        console.error("Failed to parse signup response:", parseError);
+        if (!res.ok) {
+          dispatch(
+            showToast({
+              message: "Sign up failed. Please try again.",
+              type: "error",
+            })
+          );
+          setLoadingSignUp(false);
+          return;
+        }
+      }
+
       setLoadingSignUp(false);
 
       if (res.status === 201 || res.status === 200) {
@@ -113,9 +221,14 @@ export default function SignUp() {
           navigate("/login");
         }, 1500);
       } else {
+        // Generic error message - don't expose server error directly
+        const errorMsg =
+          data && typeof data.error === "string"
+            ? data.error
+            : "Sign up failed. Please try again.";
         dispatch(
           showToast({
-            message: data.error || "Sign up failed. Please try again.",
+            message: errorMsg,
             type: "error",
           })
         );
@@ -164,8 +277,7 @@ export default function SignUp() {
                 id="username"
                 type="text"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                onBlur={(e) => handleFieldBlur("username", e.target.value)}
+                onChange={(e) => handleUsernameChange(e.target.value)}
                 placeholder="username_123"
                 required
                 className={`w-full pl-10 pr-4 py-2.5 border rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 ${
@@ -180,6 +292,34 @@ export default function SignUp() {
                 {errors.username}
               </p>
             )}
+            {!errors.username &&
+              username &&
+              availability.username !== undefined && (
+                <div className="mt-1 flex items-center gap-1 text-xs">
+                  {availability.username === null ? (
+                    <>
+                      <div className="w-3 h-3 rounded-full border-2 border-blue-400 border-t-transparent animate-spin" />
+                      <span className="text-blue-600 dark:text-blue-400">
+                        Checking availability...
+                      </span>
+                    </>
+                  ) : availability.username ? (
+                    <>
+                      <Check className="h-3 w-3 text-green-600 dark:text-green-400" />
+                      <span className="text-green-600 dark:text-green-400">
+                        Available
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <X className="h-3 w-3 text-red-600 dark:text-red-400" />
+                      <span className="text-red-600 dark:text-red-400">
+                        Already taken
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
           </div>
 
           <div>
@@ -215,8 +355,7 @@ export default function SignUp() {
                 id="email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onBlur={(e) => handleFieldBlur("email", e.target.value)}
+                onChange={(e) => handleEmailChange(e.target.value)}
                 placeholder="your@email.com"
                 required
                 className={`w-full pl-10 pr-4 py-2.5 border rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 ${
@@ -230,6 +369,32 @@ export default function SignUp() {
               <p className="mt-1 text-xs text-red-600 dark:text-red-400">
                 {errors.email}
               </p>
+            )}
+            {!errors.email && email && availability.email !== undefined && (
+              <div className="mt-1 flex items-center gap-1 text-xs">
+                {availability.email === null ? (
+                  <>
+                    <div className="w-3 h-3 rounded-full border-2 border-blue-400 border-t-transparent animate-spin" />
+                    <span className="text-blue-600 dark:text-blue-400">
+                      Checking availability...
+                    </span>
+                  </>
+                ) : availability.email ? (
+                  <>
+                    <Check className="h-3 w-3 text-green-600 dark:text-green-400" />
+                    <span className="text-green-600 dark:text-green-400">
+                      Available
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <X className="h-3 w-3 text-red-600 dark:text-red-400" />
+                    <span className="text-red-600 dark:text-red-400">
+                      Already in use
+                    </span>
+                  </>
+                )}
+              </div>
             )}
           </div>
 
@@ -247,7 +412,6 @@ export default function SignUp() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                onBlur={(e) => handleFieldBlur("password", e.target.value)}
                 placeholder="••••••••"
                 required
                 className={`w-full pl-10 pr-4 py-2.5 border rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 ${

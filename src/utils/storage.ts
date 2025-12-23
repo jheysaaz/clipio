@@ -1,7 +1,10 @@
 import browser from "webextension-polyfill";
-import type { User, AuthTokens } from "../types";
+import type { User, Snippet } from "../types";
 import { STORAGE_KEYS } from "../config/constants";
 import { logger } from "./logger";
+import { safeJsonParse, safeJsonParseWithValidation } from "./safe-parse";
+import type { QueuedOperation, SyncQueue } from "./queue";
+import { getEmptyQueue, isValidQueuedOperation } from "./queue";
 
 /**
  * Storage utility for managing Chrome extension storage and localStorage
@@ -66,42 +69,7 @@ export const removeAccessToken = async (): Promise<void> => {
   }
 };
 
-/**
- * Save refresh token
- */
-export const saveRefreshToken = async (token: string): Promise<void> => {
-  try {
-    if (isBrowserStorageAvailable()) {
-      await browser.storage.local.set({ [STORAGE_KEYS.REFRESH_TOKEN]: token });
-    }
-    localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, token);
-  } catch (error) {
-    logger.error("Failed to save refresh token", { data: { error } });
-    localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, token);
-  }
-};
-
-/**
- * Get refresh token
- */
-export const getRefreshToken = async (): Promise<string | null> => {
-  try {
-    if (isBrowserStorageAvailable()) {
-      const result = await browser.storage.local.get(
-        STORAGE_KEYS.REFRESH_TOKEN
-      );
-      return (result[STORAGE_KEYS.REFRESH_TOKEN] as string) || null;
-    }
-    return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
-  } catch (error) {
-    logger.error("Failed to get refresh token", { data: { error } });
-    return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
-  }
-};
-
-/**
- * Remove refresh token
- */
+// Legacy refresh token cleanup helpers (refresh is now cookie-based)
 export const removeRefreshToken = async (): Promise<void> => {
   try {
     if (isBrowserStorageAvailable()) {
@@ -146,11 +114,11 @@ export const getUserInfo = async (): Promise<User | null> => {
       userString = localStorage.getItem(STORAGE_KEYS.USER_INFO);
     }
 
-    return userString ? JSON.parse(userString) : null;
+    return safeJsonParse<User>(userString);
   } catch (error) {
     console.error("Failed to get user info:", error);
     const userString = localStorage.getItem(STORAGE_KEYS.USER_INFO);
-    return userString ? JSON.parse(userString) : null;
+    return safeJsonParse<User>(userString);
   }
 };
 
@@ -175,16 +143,10 @@ export const removeUserInfo = async (): Promise<void> => {
 export const saveAuthData = async (
   accessToken: string,
   user: User,
-  expiresIn?: number,
-  refreshToken?: string
+  expiresIn?: number
 ): Promise<void> => {
   await saveAccessToken(accessToken);
   await saveUserInfo(user);
-
-  // Save refresh token if provided
-  if (refreshToken) {
-    await saveRefreshToken(refreshToken);
-  }
 
   // Send message to background script to schedule token refresh
   if (expiresIn && isBrowserStorageAvailable()) {
@@ -215,6 +177,58 @@ export const removeCachedSnippets = async (): Promise<void> => {
 };
 
 /**
+ * Save cached snippets for a user
+ */
+export const saveCachedSnippets = async (
+  userId: string,
+  snippets: Snippet[]
+): Promise<void> => {
+  try {
+    const payload = JSON.stringify({ userId, snippets });
+    if (isBrowserStorageAvailable()) {
+      await browser.storage.local.set({ [STORAGE_KEYS.CACHED_SNIPPETS]: payload });
+    }
+    localStorage.setItem(STORAGE_KEYS.CACHED_SNIPPETS, payload);
+  } catch (error) {
+    console.error("Failed to save cached snippets:", error);
+    localStorage.setItem(
+      STORAGE_KEYS.CACHED_SNIPPETS,
+      JSON.stringify({ userId, snippets })
+    );
+  }
+};
+
+/**
+ * Get cached snippets for a user
+ */
+export const getCachedSnippets = async (
+  userId: string
+): Promise<Snippet[] | null> => {
+  try {
+    let payload: string | null = null;
+
+    if (isBrowserStorageAvailable()) {
+      const result = await browser.storage.local.get(STORAGE_KEYS.CACHED_SNIPPETS);
+      payload = (result[STORAGE_KEYS.CACHED_SNIPPETS] as string) || null;
+    }
+
+    if (!payload) {
+      payload = localStorage.getItem(STORAGE_KEYS.CACHED_SNIPPETS);
+    }
+
+    if (!payload) return null;
+
+    const parsed = safeJsonParse<{ userId: string; snippets: Snippet[] }>(payload);
+    if (!parsed || parsed.userId !== userId) return null;
+
+    return parsed.snippets;
+  } catch (error) {
+    console.error("Failed to get cached snippets:", error);
+    return null;
+  }
+};
+
+/**
  * Remove token expiration time
  */
 export const removeTokenExpiresAt = async (): Promise<void> => {
@@ -226,6 +240,77 @@ export const removeTokenExpiresAt = async (): Promise<void> => {
   } catch (error) {
     console.error("Failed to remove token expiration:", error);
     localStorage.removeItem(STORAGE_KEYS.TOKEN_EXPIRES_AT);
+  }
+};
+
+/**
+ * Save last sync timestamp and user for incremental sync
+ */
+export const saveLastSyncMeta = async (userId: string, isoTimestamp: string): Promise<void> => {
+  try {
+    if (isBrowserStorageAvailable()) {
+      await browser.storage.local.set({
+        [STORAGE_KEYS.LAST_SYNC_USER_ID]: userId,
+        [STORAGE_KEYS.LAST_SYNC_AT]: isoTimestamp,
+      });
+    }
+    localStorage.setItem(STORAGE_KEYS.LAST_SYNC_USER_ID, userId);
+    localStorage.setItem(STORAGE_KEYS.LAST_SYNC_AT, isoTimestamp);
+  } catch (error) {
+    console.error("Failed to save last sync meta:", error);
+    localStorage.setItem(STORAGE_KEYS.LAST_SYNC_USER_ID, userId);
+    localStorage.setItem(STORAGE_KEYS.LAST_SYNC_AT, isoTimestamp);
+  }
+};
+
+export const getLastSyncMeta = async (): Promise<{ userId: string; lastSyncAt: string } | null> => {
+  try {
+    let userId: string | null = null;
+    let lastSyncAt: string | null = null;
+
+    if (isBrowserStorageAvailable()) {
+      const result = await browser.storage.local.get([
+        STORAGE_KEYS.LAST_SYNC_USER_ID,
+        STORAGE_KEYS.LAST_SYNC_AT,
+      ]);
+      userId = (result[STORAGE_KEYS.LAST_SYNC_USER_ID] as string) || null;
+      lastSyncAt = (result[STORAGE_KEYS.LAST_SYNC_AT] as string) || null;
+    }
+
+    if (!userId || !lastSyncAt) {
+      userId = userId || localStorage.getItem(STORAGE_KEYS.LAST_SYNC_USER_ID);
+      lastSyncAt = lastSyncAt || localStorage.getItem(STORAGE_KEYS.LAST_SYNC_AT);
+    }
+
+    if (!userId || !lastSyncAt) return null;
+    return { userId, lastSyncAt };
+  } catch (error) {
+    console.error("Failed to get last sync meta:", error);
+    return null;
+  }
+};
+
+export const removeLastSyncAt = async (): Promise<void> => {
+  try {
+    if (isBrowserStorageAvailable()) {
+      await browser.storage.local.remove(STORAGE_KEYS.LAST_SYNC_AT);
+    }
+    localStorage.removeItem(STORAGE_KEYS.LAST_SYNC_AT);
+  } catch (error) {
+    console.error("Failed to remove last sync timestamp:", error);
+    localStorage.removeItem(STORAGE_KEYS.LAST_SYNC_AT);
+  }
+};
+
+export const removeLastSyncUser = async (): Promise<void> => {
+  try {
+    if (isBrowserStorageAvailable()) {
+      await browser.storage.local.remove(STORAGE_KEYS.LAST_SYNC_USER_ID);
+    }
+    localStorage.removeItem(STORAGE_KEYS.LAST_SYNC_USER_ID);
+  } catch (error) {
+    console.error("Failed to remove last sync user:", error);
+    localStorage.removeItem(STORAGE_KEYS.LAST_SYNC_USER_ID);
   }
 };
 
@@ -271,6 +356,8 @@ export const clearAuthData = async (): Promise<void> => {
     removeCachedSnippets(),
     removeTokenExpiresAt(),
     removeStorageType(),
+    removeLastSyncAt(),
+    removeLastSyncUser(),
   ]);
   // Do not await to prevent potential hangs if background doesn't respond
   void cancelTokenRefresh();
@@ -282,4 +369,110 @@ export const clearAuthData = async (): Promise<void> => {
 export const isAuthenticated = async (): Promise<boolean> => {
   const token = await getAccessToken();
   return !!token;
+};
+
+/**
+ * Save queued operation for offline sync
+ */
+export const saveQueuedOperation = async (operation: QueuedOperation): Promise<void> => {
+  try {
+    const queue = await getSyncQueue();
+    queue.operations.push(operation);
+
+    const queueString = JSON.stringify(queue);
+    if (isBrowserStorageAvailable()) {
+      await browser.storage.local.set({ [STORAGE_KEYS.SYNC_QUEUE]: queueString });
+    }
+    localStorage.setItem(STORAGE_KEYS.SYNC_QUEUE, queueString);
+    logger.info("Operation queued for offline sync", { data: { opId: operation.id } });
+  } catch (error) {
+    console.error("Failed to queue operation:", error);
+    // Fallback to localStorage
+    const queue = await getSyncQueue();
+    queue.operations.push(operation);
+    localStorage.setItem(STORAGE_KEYS.SYNC_QUEUE, JSON.stringify(queue));
+  }
+};
+
+/**
+ * Get all queued operations
+ */
+export const getSyncQueue = async (): Promise<SyncQueue> => {
+  try {
+    let queueString: string | null = null;
+
+    if (isBrowserStorageAvailable()) {
+      const result = await browser.storage.local.get(STORAGE_KEYS.SYNC_QUEUE);
+      queueString = (result[STORAGE_KEYS.SYNC_QUEUE] as string) || null;
+    }
+
+    if (!queueString) {
+      queueString = localStorage.getItem(STORAGE_KEYS.SYNC_QUEUE);
+    }
+
+    if (!queueString) return getEmptyQueue();
+
+    const queue = safeJsonParse<SyncQueue>(queueString);
+    if (!queue) return getEmptyQueue();
+
+    // Validate operations
+    queue.operations = (queue.operations || []).filter(isValidQueuedOperation);
+    queue.syncInProgress = queue.syncInProgress || false;
+
+    return queue;
+  } catch (error) {
+    console.error("Failed to get sync queue:", error);
+    return getEmptyQueue();
+  }
+};
+
+/**
+ * Remove queued operation after successful sync
+ */
+export const removeQueuedOperation = async (operationId: string): Promise<void> => {
+  try {
+    const queue = await getSyncQueue();
+    queue.operations = queue.operations.filter((op) => op.id !== operationId);
+
+    const queueString = JSON.stringify(queue);
+    if (isBrowserStorageAvailable()) {
+      await browser.storage.local.set({ [STORAGE_KEYS.SYNC_QUEUE]: queueString });
+    }
+    localStorage.setItem(STORAGE_KEYS.SYNC_QUEUE, queueString);
+  } catch (error) {
+    console.error("Failed to remove queued operation:", error);
+  }
+};
+
+/**
+ * Clear all queued operations
+ */
+export const clearSyncQueue = async (): Promise<void> => {
+  try {
+    if (isBrowserStorageAvailable()) {
+      await browser.storage.local.remove(STORAGE_KEYS.SYNC_QUEUE);
+    }
+    localStorage.removeItem(STORAGE_KEYS.SYNC_QUEUE);
+  } catch (error) {
+    console.error("Failed to clear sync queue:", error);
+  }
+};
+
+/**
+ * Update sync queue status
+ */
+export const setSyncInProgress = async (inProgress: boolean): Promise<void> => {
+  try {
+    const queue = await getSyncQueue();
+    queue.syncInProgress = inProgress;
+    queue.lastSyncAt = Date.now();
+
+    const queueString = JSON.stringify(queue);
+    if (isBrowserStorageAvailable()) {
+      await browser.storage.local.set({ [STORAGE_KEYS.SYNC_QUEUE]: queueString });
+    }
+    localStorage.setItem(STORAGE_KEYS.SYNC_QUEUE, queueString);
+  } catch (error) {
+    console.error("Failed to update sync status:", error);
+  }
 };

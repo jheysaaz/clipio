@@ -6,6 +6,7 @@ import {
   incrementSnippetUsage,
 } from "../utils/usageTracking";
 import { authenticatedFetch } from "../utils/api";
+import { saveQueuedOperation } from "../utils/storage";
 import type { Snippet, SnippetFormData } from "../types";
 import ConfirmDialog from "./ConfirmDialog";
 import AddSnippetModal from "./AddSnippetModal";
@@ -13,6 +14,8 @@ import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
 import { useAppDispatch } from "../store/hooks";
 import { showToast } from "../store/slices/toastSlice";
 import { logger } from "../utils/logger";
+import { getOnlineStatus } from "../utils/offline";
+import { generateOperationId } from "../utils/queue";
 
 interface SnippetCardProps {
   snippet: Snippet;
@@ -81,6 +84,34 @@ export default function SnippetCard({
 
   const handleEditSubmit = async (updatedSnippet: SnippetFormData) => {
     try {
+      // Check if offline
+      if (!getOnlineStatus()) {
+        // Queue the operation for later sync
+        const operationId = generateOperationId();
+        await saveQueuedOperation({
+          id: operationId,
+          type: "update",
+          snippetId: snippet.id,
+          data: updatedSnippet as unknown as Record<string, unknown>,
+          createdAt: Date.now(),
+          retries: 0,
+        });
+
+        dispatch(
+          showToast({
+            message:
+              "Snippet updated offline. Will sync when connection recovers.",
+            type: "success",
+          })
+        );
+        setShowEditModal(false);
+        // Call onUpdate to show optimistic update
+        if (onUpdate) {
+          onUpdate();
+        }
+        return;
+      }
+
       const response = await authenticatedFetch(
         API_BASE_URL + API_ENDPOINTS.SNIPPET_BY_ID(snippet.id),
         {
@@ -104,11 +135,18 @@ export default function SnippetCard({
         }
         setShowEditModal(false);
       } else {
-        const error = await response.json();
+        let errorMsg = "Failed to update snippet. Please try again.";
+        try {
+          const error = await response.json();
+          if (error && typeof error.message === "string") {
+            errorMsg = error.message;
+          }
+        } catch {
+          // If we can't parse error response, use default message
+        }
         dispatch(
           showToast({
-            message:
-              error.message || "Failed to update snippet. Please try again.",
+            message: errorMsg,
             type: "error",
           })
         );
@@ -133,6 +171,35 @@ export default function SnippetCard({
     setIsDeleting(true);
 
     try {
+      // Check if offline
+      if (!getOnlineStatus()) {
+        // Queue the operation for later sync
+        const operationId = generateOperationId();
+        await saveQueuedOperation({
+          id: operationId,
+          type: "delete",
+          snippetId: snippet.id,
+          data: {},
+          createdAt: Date.now(),
+          retries: 0,
+        });
+
+        dispatch(
+          showToast({
+            message:
+              "Snippet deleted offline. Will sync when connection recovers.",
+            type: "success",
+          })
+        );
+        setShowDeleteDialog(false);
+        setIsDeleting(false);
+        // Call onDelete to show optimistic update
+        if (onDelete) {
+          onDelete();
+        }
+        return;
+      }
+
       const response = await authenticatedFetch(
         API_BASE_URL + API_ENDPOINTS.SNIPPET_BY_ID(snippet.id),
         {
@@ -155,12 +222,19 @@ export default function SnippetCard({
           onDelete();
         }
       } else {
-        const error = await response.json();
-        logger.error("Failed to delete snippet", { data: { error } });
+        let errorMsg = "Failed to delete snippet. Please try again.";
+        try {
+          const error = await response.json();
+          if (error && typeof error.message === "string") {
+            errorMsg = error.message;
+          }
+          logger.error("Failed to delete snippet", { data: { error } });
+        } catch {
+          // If we can't parse error response, use default message
+        }
         dispatch(
           showToast({
-            message:
-              error.message || "Failed to delete snippet. Please try again.",
+            message: errorMsg,
             type: "error",
           })
         );

@@ -1,4 +1,5 @@
 import browser from "webextension-polyfill";
+import { safeJsonParse } from "./safe-parse";
 
 /**
  * Local usage tracking for snippets
@@ -8,7 +9,7 @@ import browser from "webextension-polyfill";
 const USAGE_KEY = "snippetUsageCount";
 
 interface UsageData {
-  [snippetId: string]: number;
+  [snippetId: number]: number; // Snippet ID is int64 from backend
 }
 
 /**
@@ -32,7 +33,7 @@ export const getUsageCounts = async (): Promise<UsageData> => {
       return (result[USAGE_KEY] as UsageData) || {};
     }
     const data = localStorage.getItem(USAGE_KEY);
-    return data ? JSON.parse(data) : {};
+    return data ? (safeJsonParse<UsageData>(data) || {}) : {};
   } catch (error) {
     console.error("Failed to get usage counts:", error);
     return {};
@@ -43,7 +44,7 @@ export const getUsageCounts = async (): Promise<UsageData> => {
  * Get usage count for a specific snippet
  */
 export const getSnippetUsageCount = async (
-  snippetId: string
+  snippetId: number
 ): Promise<number> => {
   const usageData = await getUsageCounts();
   return usageData[snippetId] || 0;
@@ -53,7 +54,7 @@ export const getSnippetUsageCount = async (
  * Increment usage count for a snippet
  */
 export const incrementSnippetUsage = async (
-  snippetId: string
+  snippetId: number
 ): Promise<number> => {
   try {
     const usageData = await getUsageCounts();

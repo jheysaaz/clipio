@@ -6,9 +6,11 @@ import {
   TIMING,
 } from "./config/constants";
 import { incrementSnippetUsage } from "./utils/usageTracking";
+import { safeJsonParse } from "./utils/safe-parse";
+import { fetchWithTimeout } from "./utils/security";
 
 interface Snippet {
-  id: string;
+  id: number; // int64 from backend
   shortcut: string;
   content: string;
   label: string;
@@ -47,17 +49,35 @@ async function loadSnippets() {
       STORAGE_KEYS.CACHED_SNIPPETS
     );
     if (cachedData[STORAGE_KEYS.CACHED_SNIPPETS]) {
-      const parsedData = JSON.parse(
+      const parsedData = safeJsonParse<any>(
         cachedData[STORAGE_KEYS.CACHED_SNIPPETS] as string
       );
-      snippets = Array.isArray(parsedData)
-        ? parsedData
-        : parsedData.items || [];
-      console.log(
-        `[Snippy] Loaded ${snippets.length} cached snippets:`,
-        snippets.map((s) => s.shortcut)
-      );
-      return;
+      if (!parsedData) {
+        console.error("[Snippy] Cached data is corrupted, will fetch from API");
+      } else if (Array.isArray(parsedData)) {
+        snippets = parsedData;
+        console.log(
+          `[Snippy] Loaded ${snippets.length} cached snippets:`,
+          snippets.map((s) => s.shortcut)
+        );
+        return;
+      } else if (Array.isArray(parsedData.snippets)) {
+        snippets = parsedData.snippets;
+        console.log(
+          `[Snippy] Loaded ${snippets.length} cached snippets:`,
+          snippets.map((s) => s.shortcut)
+        );
+        return;
+      } else if (parsedData.items && Array.isArray(parsedData.items)) {
+        snippets = parsedData.items;
+        console.log(
+          `[Snippy] Loaded ${snippets.length} cached snippets:`,
+          snippets.map((s) => s.shortcut)
+        );
+        return;
+      } else {
+        console.error("[Snippy] Cached data format is invalid, will fetch from API");
+      }
     }
 
     // If no cache, try to fetch from API (will only work on HTTP pages or with HTTPS API)
@@ -73,16 +93,23 @@ async function loadSnippets() {
       return;
     }
 
-    const userInfo = JSON.parse(result[STORAGE_KEYS.USER_INFO] as string);
+    const userInfo = safeJsonParse<any>(result[STORAGE_KEYS.USER_INFO] as string);
+    if (!userInfo || !userInfo.id) {
+      console.error("[Snippy] User info is corrupted or missing");
+      return;
+    }
     const userId = userInfo.id;
     const accessToken = result[STORAGE_KEYS.ACCESS_TOKEN] as string;
 
-    // Fetch snippets from API
-    const response = await fetch(API_BASE_URL + API_ENDPOINTS.USER_SNIPPETS, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+    // Fetch snippets from API with timeout protection
+    const response = await fetchWithTimeout(
+      API_BASE_URL + API_ENDPOINTS.USER_SNIPPETS,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
 
     if (response.ok) {
       const data = await response.json();
@@ -94,7 +121,10 @@ async function loadSnippets() {
 
       // Cache the snippets
       await browser.storage.local.set({
-        [STORAGE_KEYS.CACHED_SNIPPETS]: JSON.stringify(snippets),
+        [STORAGE_KEYS.CACHED_SNIPPETS]: JSON.stringify({
+          userId,
+          snippets,
+        }),
       });
     } else {
       console.error("[Snippy] Failed to fetch snippets:", response.status);

@@ -6,8 +6,14 @@ import {
   TIMING,
 } from "./config/constants";
 import { logger } from "./utils/logger";
+import { fetchWithTimeout } from "./utils/security";
+import { getOnlineStatus, onOnlineStatusChange } from "./utils/offline";
+import { processSyncQueue } from "./utils/sync-engine";
 
 const ALARM_NAME = "token_refresh";
+const TOKEN_RETRY_ALARM_NAME = "token_refresh_retry";
+let tokenRefreshRetries = 0;
+const MAX_TOKEN_REFRESH_RETRIES = 36; // 30 minutes with 50s intervals
 
 // Listen for extension installation
 browser.runtime.onInstalled.addListener((details) => {
@@ -48,6 +54,9 @@ browser.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === ALARM_NAME) {
     logger.info("Token refresh alarm triggered");
     await refreshAccessToken();
+  } else if (alarm.name === TOKEN_RETRY_ALARM_NAME) {
+    logger.info("Token refresh retry alarm triggered");
+    await refreshAccessTokenWithRetry();
   }
 });
 
@@ -81,21 +90,16 @@ function cancelTokenRefresh() {
 async function checkAndScheduleTokenRefresh() {
   const result = await browser.storage.local.get([
     STORAGE_KEYS.TOKEN_EXPIRES_AT,
-    STORAGE_KEYS.REFRESH_TOKEN,
   ]);
 
   const now = Date.now();
   logger.info("Checking token refresh status", {
     data: {
-      refreshToken: result[STORAGE_KEYS.REFRESH_TOKEN],
       expiresAt: result[STORAGE_KEYS.TOKEN_EXPIRES_AT],
     },
   });
 
-  if (
-    result[STORAGE_KEYS.REFRESH_TOKEN] &&
-    result[STORAGE_KEYS.TOKEN_EXPIRES_AT]
-  ) {
+  if (result[STORAGE_KEYS.TOKEN_EXPIRES_AT]) {
     const timeUntilExpiry =
       ((result[STORAGE_KEYS.TOKEN_EXPIRES_AT] as number) - now) / 1000; // in seconds
 
@@ -108,7 +112,7 @@ async function checkAndScheduleTokenRefresh() {
       await refreshAccessToken();
     }
   } else {
-    logger.warn("No refresh token or expiry time found");
+    logger.warn("No token expiry found; skipping refresh schedule");
   }
 }
 
@@ -117,21 +121,16 @@ async function refreshAccessToken() {
   try {
     logger.info("Starting token refresh...");
 
-    const result = await browser.storage.local.get(STORAGE_KEYS.REFRESH_TOKEN);
-    const refreshToken = result[STORAGE_KEYS.REFRESH_TOKEN];
-
-    if (!refreshToken) {
-      logger.error("No refresh token found");
-      return false;
-    }
-
-    const response = await fetch(API_BASE_URL + API_ENDPOINTS.REFRESH, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ refreshToken: refreshToken }),
-    });
+    const response = await fetchWithTimeout(
+      API_BASE_URL + API_ENDPOINTS.REFRESH,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include", // needed to send httpOnly refresh cookie
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -148,13 +147,6 @@ async function refreshAccessToken() {
       [STORAGE_KEYS.ACCESS_TOKEN]: data.accessToken,
     });
 
-    // Update refresh token if a new one is provided
-    if (data.refreshToken) {
-      await browser.storage.local.set({
-        [STORAGE_KEYS.REFRESH_TOKEN]: data.refreshToken,
-      });
-    }
-
     // Schedule the next refresh
     if (data.expiresIn || data.expires_in) {
       const expiresIn = data.expiresIn || data.expires_in;
@@ -164,14 +156,72 @@ async function refreshAccessToken() {
     }
 
     logger.success("Token refreshed successfully");
+    tokenRefreshRetries = 0; // Reset retry count on success
     return true;
   } catch (error) {
+    // Check if offline
+    if (!getOnlineStatus()) {
+      logger.warn("Network offline, will retry token refresh when online");
+      // Schedule retry when online
+      await scheduleTokenRefreshRetry();
+      return false;
+    }
+
     logger.error("Failed to refresh token", { data: { error } });
 
-    // If refresh fails, clear all auth data
+    // If refresh fails and we're online, clear all auth data
     await browser.storage.local.remove([...Object.values(STORAGE_KEYS)]);
     cancelTokenRefresh();
 
     return false;
   }
 }
+
+// Retry token refresh with exponential backoff
+async function refreshAccessTokenWithRetry() {
+  // Check if we're online now
+  if (!getOnlineStatus()) {
+    tokenRefreshRetries++;
+    if (tokenRefreshRetries < MAX_TOKEN_REFRESH_RETRIES) {
+      logger.warn("Still offline, scheduling another retry", {
+        data: { attempt: tokenRefreshRetries },
+      });
+      await scheduleTokenRefreshRetry();
+    } else {
+      logger.error("Max token refresh retries exceeded, clearing auth");
+      await browser.storage.local.remove([...Object.values(STORAGE_KEYS)]);
+      cancelTokenRefresh();
+      tokenRefreshRetries = 0;
+    }
+    return;
+  }
+
+  // We're online, try to refresh
+  const success = await refreshAccessToken();
+  if (success) {
+    tokenRefreshRetries = 0;
+  }
+}
+
+// Schedule token refresh retry (for offline scenarios)
+async function scheduleTokenRefreshRetry() {
+  // Clear any existing retry alarm
+  await browser.alarms.clear(TOKEN_RETRY_ALARM_NAME);
+
+  // Schedule retry in 50 seconds (will trigger up to 36 times = ~30 minutes)
+  browser.alarms.create(TOKEN_RETRY_ALARM_NAME, {
+    delayInMinutes: 50 / 60, // 50 seconds in minutes
+  });
+}
+
+// Listen for online status changes
+onOnlineStatusChange((isOnline) => {
+  if (isOnline) {
+    logger.info("Connection recovered, attempting token refresh and queue sync");
+    // Try to refresh token and process sync queue
+    void (async () => {
+      await refreshAccessToken();
+      await processSyncQueue();
+    })();
+  }
+});

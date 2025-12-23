@@ -7,11 +7,13 @@ import AddSnippetModal from "../components/AddSnippetModal";
 import { authenticatedFetch } from "../utils/api";
 import { useAppDispatch } from "../store/hooks";
 import { showToast } from "../store/slices/toastSlice";
-import { getUserInfo, getAccessToken } from "../utils/storage";
+import { getAccessToken, saveQueuedOperation } from "../utils/storage";
 import { logger } from "../utils/logger";
 import { useNavigate } from "react-router";
 import type { SnippetFormData } from "../types";
 import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
+import { getOnlineStatus } from "../utils/offline";
+import { generateOperationId } from "../utils/queue";
 
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -36,10 +38,39 @@ export default function Dashboard() {
 
   const handleSubmitSnippet = async (snippet: SnippetFormData) => {
     try {
-      // Get user info for userId
-      const user = await getUserInfo();
-      if (user) {
-        snippet.userId = user.id;
+      // Check if offline
+      if (!getOnlineStatus()) {
+        // Create optimistic snippet with temporary ID
+        const tempId = -Date.now(); // Negative ID to indicate it's temporary
+        const optimisticSnippet = {
+          ...snippet,
+          id: tempId,
+          tags: snippet.tags || [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        // Queue the operation for later sync
+        const operationId = generateOperationId();
+        await saveQueuedOperation({
+          id: operationId,
+          type: "create",
+          data: snippet as unknown as Record<string, unknown>,
+          createdAt: Date.now(),
+          retries: 0,
+        });
+
+        dispatch(
+          showToast({
+            message:
+              "Snippet created offline. Will sync when connection recovers.",
+            type: "success",
+          })
+        );
+        setIsModalOpen(false);
+        // Trigger refresh to show optimistic update
+        setRefreshTrigger((prev) => prev + 1);
+        return;
       }
 
       const response = await authenticatedFetch(
@@ -54,13 +85,22 @@ export default function Dashboard() {
         dispatch(
           showToast({ message: "Snippet added successfully!", type: "success" })
         );
+        setIsModalOpen(false);
         // Trigger refresh of snippet list
         setRefreshTrigger((prev) => prev + 1);
       } else {
-        const error = await response.json();
+        let errorMsg = "Failed to add snippet";
+        try {
+          const error = await response.json();
+          if (error && typeof error.message === "string") {
+            errorMsg = error.message;
+          }
+        } catch {
+          // If we can't parse error response, use default message
+        }
         dispatch(
           showToast({
-            message: error.message || "Failed to add snippet",
+            message: errorMsg,
             type: "error",
           })
         );

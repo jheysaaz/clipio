@@ -10,6 +10,7 @@ import Toast from "./components/Toast";
 import { useAppDispatch } from "./store/hooks";
 import { hideToast } from "./store/slices/toastSlice";
 import { logger } from "./utils/logger";
+import { setupOfflineDetection } from "./utils/offline";
 
 function AppContent() {
   const [isLoading, setIsLoading] = useState(true);
@@ -17,6 +18,8 @@ function AppContent() {
   const dispatch = useAppDispatch();
 
   useEffect(() => {
+    // Initialize offline detection
+    setupOfflineDetection();
     // Load user data from chrome.storage
     loadUserData();
   }, []);

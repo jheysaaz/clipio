@@ -3,10 +3,15 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { useAppDispatch } from "../store/hooks";
 import { showToast } from "../store/slices/toastSlice";
-import { saveAuthData } from "../utils/storage";
+import {
+  saveAuthData,
+  saveCachedSnippets,
+  saveLastSyncMeta,
+} from "../utils/storage";
 import { logger } from "../utils/logger";
 import type { LoginResponse } from "../types";
 import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
+import { fetchWithTimeout } from "../utils/security";
 
 type ToastState = {
   message?: string;
@@ -36,20 +41,81 @@ export default function Login() {
 
     setLoadingLogin(true);
     try {
-      const res = await fetch(API_BASE_URL + API_ENDPOINTS.LOGIN, {
+      const res = await fetchWithTimeout(API_BASE_URL + API_ENDPOINTS.LOGIN, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include", // needed to receive httpOnly refresh cookie
         body: JSON.stringify({ login, password }),
       });
 
-      const data: LoginResponse = await res.json();
+      let data: LoginResponse | undefined;
+
+      // Only parse JSON if response is valid
+      if (res.ok) {
+        try {
+          data = (await res.json()) as LoginResponse;
+        } catch (parseError) {
+          console.error("Failed to parse login response:", parseError);
+          dispatch(
+            showToast({
+              message: "Login failed. Invalid server response.",
+              type: "error",
+            })
+          );
+          setLoadingLogin(false);
+          return;
+        }
+      } else {
+        // For error responses, try to parse error message
+        try {
+          data = (await res.json()) as LoginResponse;
+        } catch {
+          // If we can't parse error response, use generic message
+          data = undefined;
+        }
+      }
+
       setLoadingLogin(false);
 
-      if (res.status === 200) {
+      if (res.status === 200 && data) {
         const expiresIn = data.expiresIn;
-        saveAuthData(data.accessToken, data.user, expiresIn, data.refreshToken);
+        await saveAuthData(data.accessToken, data.user, expiresIn);
+
+        // Kick off initial sync to hydrate cache after login
+        void (async () => {
+          try {
+            const since = "1970-01-01T00:00:00Z";
+            const syncRes = await fetchWithTimeout(
+              `${API_BASE_URL + API_ENDPOINTS.SNIPPETS_SYNC}?updated_since=${encodeURIComponent(
+                since
+              )}`,
+              {
+                method: "GET",
+                headers: {
+                  Authorization: `Bearer ${data.accessToken}`,
+                },
+              }
+            );
+
+            if (syncRes.ok) {
+              const syncData = await syncRes.json();
+              const items = syncData.items || syncData.snippets || syncData;
+              await saveCachedSnippets(data.user.id, items || []);
+              await saveLastSyncMeta(data.user.id, new Date().toISOString());
+              logger.success("Initial sync completed after login");
+            } else {
+              logger.warn("Initial sync failed after login", {
+                data: { status: syncRes.status },
+              });
+            }
+          } catch (syncError) {
+            logger.error("Initial sync error after login", {
+              data: { error: syncError },
+            });
+          }
+        })();
 
         if (typeof localStorage !== "undefined") {
           localStorage.setItem("storageType", "cloud");
@@ -61,9 +127,14 @@ export default function Login() {
         });
         navigate("/dashboard", { replace: true });
       } else {
+        // Generic error message - don't expose server error directly
+        const errorMsg =
+          data && "error" in data && typeof data.error === "string"
+            ? data.error
+            : "Login failed. Please check your credentials and try again.";
         dispatch(
           showToast({
-            message: (data as any).error || "Login failed. Please try again.",
+            message: errorMsg,
             type: "error",
           })
         );
