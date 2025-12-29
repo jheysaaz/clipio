@@ -146,7 +146,7 @@ export default function SignUp() {
         <div className="text-center mb-8">
           <h1 className="text-2xl font-semibold mb-2">Create Account</h1>
           <p className="text-zinc-600 dark:text-zinc-400">
-            Join Snippy and sync across devices
+            Join Clipio and sync across devices
           </p>
         </div>
 

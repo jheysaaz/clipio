@@ -37,7 +37,7 @@ function checkExtensionContext(): boolean {
 // Load snippets from storage
 async function loadSnippets() {
   if (!checkExtensionContext()) {
-    console.log("[Snippy] Extension context invalidated, stopping");
+    console.log("[Clipio] Extension context invalidated, stopping");
     return;
   }
 
@@ -54,7 +54,7 @@ async function loadSnippets() {
         ? parsedData
         : parsedData.items || [];
       console.log(
-        `[Snippy] Loaded ${snippets.length} cached snippets:`,
+        `[Clipio] Loaded ${snippets.length} cached snippets:`,
         snippets.map((s) => s.shortcut)
       );
       return;
@@ -66,10 +66,10 @@ async function loadSnippets() {
       STORAGE_KEYS.ACCESS_TOKEN,
     ]);
 
-    console.log("[Snippy] No cached snippets, attempting to fetch from API...");
+    console.log("[Clipio] No cached snippets, attempting to fetch from API...");
 
     if (!result[STORAGE_KEYS.USER_INFO] || !result[STORAGE_KEYS.ACCESS_TOKEN]) {
-      console.log("[Snippy] No user info or token found");
+      console.log("[Clipio] No user info or token found");
       return;
     }
 
@@ -88,7 +88,7 @@ async function loadSnippets() {
       const data = await response.json();
       snippets = data.snippets || data || [];
       console.log(
-        `[Snippy] Loaded ${snippets.length} snippets from API:`,
+        `[Clipio] Loaded ${snippets.length} snippets from API:`,
         snippets.map((s) => s.shortcut)
       );
 
@@ -97,7 +97,7 @@ async function loadSnippets() {
         [STORAGE_KEYS.CACHED_SNIPPETS]: JSON.stringify(snippets),
       });
     } else {
-      console.error("[Snippy] Failed to fetch snippets:", response.status);
+      console.error("[Clipio] Failed to fetch snippets:", response.status);
     }
   } catch (error) {
     // Check if error is due to invalid context
@@ -106,16 +106,16 @@ async function loadSnippets() {
       error.message.includes("Extension context invalidated")
     ) {
       isExtensionValid = false;
-      console.log("[Snippy] Extension reloaded, content script stopping");
+      console.log("[Clipio] Extension reloaded, content script stopping");
     } else if (
       error instanceof Error &&
       error.message.includes("Failed to fetch")
     ) {
       console.error(
-        "[Snippy] Cannot fetch from API (likely mixed content blocking). Please refresh the extension popup to cache snippets."
+        "[Clipio] Cannot fetch from API (likely mixed content blocking). Please refresh the extension popup to cache snippets."
       );
     } else {
-      console.error("[Snippy] Error loading snippets:", error);
+      console.error("[Clipio] Error loading snippets:", error);
     }
   }
 }
@@ -234,7 +234,7 @@ function handleKeyDown(event: KeyboardEvent) {
 
 // Initialize content script
 async function initialize() {
-  console.log("[Snippy] Content script initializing...");
+  console.log("[Clipio] Content script initializing...");
 
   // Load snippets
   await loadSnippets();
@@ -268,12 +268,12 @@ async function initialize() {
     if (!checkExtensionContext()) return;
 
     if (areaName === "local") {
-      console.log("[Snippy] Storage changed, reloading snippets...");
+      console.log("[Clipio] Storage changed, reloading snippets...");
       loadSnippets();
     }
   });
 
-  console.log("[Snippy] Content script initialized successfully");
+  console.log("[Clipio] Content script initialized successfully");
 }
 
 // Start the content script

@@ -13,7 +13,7 @@ export default defineConfig({
     crx({
       manifest,
     }),
-    zip({ outDir: "release", outFileName: "Snippy.zip" }),
+    zip({ outDir: "release", outFileName: "Clipio.zip" }),
   ],
   server: {
     cors: {

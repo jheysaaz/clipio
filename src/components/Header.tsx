@@ -48,7 +48,7 @@ export default function Header() {
               <Code2 className="h-4 w-4 text-gray-700 dark:text-gray-300 " />
             </div>
             <h1 className="text-zinc-900 dark:text-zinc-50">
-              Snippy Dashboard
+              Clipio Dashboard
             </h1>
           </div>
           <p className="text-zinc-600 dark:text-zinc-400">

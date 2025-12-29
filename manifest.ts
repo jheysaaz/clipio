@@ -23,9 +23,10 @@ export default defineManifest({
     "storage",
     "alarms",
     "clipboardWrite",
-    "http://snippy.jheysonsaavedra.com/*",
+    "http://prod.clipio.xyz/*",
+    "https://prod.clipio.xyz/*",
   ],
-  host_permissions: ["http://snippy.jheysonsaavedra.com/*"],
+  host_permissions: ["http://prod.clipio.xyz/*", "https://prod.clipio.xyz/*"],
   content_scripts: [
     {
       matches: ["<all_urls>"],

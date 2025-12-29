@@ -20,7 +20,7 @@ interface LogEntry {
 }
 
 const dimGray = "color: #888888";
-const LOGS_CACHE_KEY = "snippy_logs_cache";
+const LOGS_CACHE_KEY = "clipio_logs_cache";
 const MAX_LOGS = 100;
 
 /**
@@ -74,7 +74,7 @@ const log = (level: LogLevel, message: string, options: LogOptions = {}) => {
   const { data, timestamp = true } = options;
   const time = timestamp ? new Date().toLocaleTimeString() : "";
   const capitalizedLevel = level.charAt(0).toUpperCase() + level.slice(1);
-  const prefix = `[Snippy - ${capitalizedLevel}]:`;
+  const prefix = `[Clipio - ${capitalizedLevel}]:`;
 
   if (data && Object.keys(data).length > 0) {
     // Format data as key=value pairs for clean inline display

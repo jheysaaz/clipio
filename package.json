@@ -1,6 +1,6 @@
 {
-  "name": "snippy",
-  "displayName": "Snippy: Snippets Manager",
+  "name": "clipio",
+  "displayName": "Clipio: Snippets Manager",
   "description": "A powerful browser extension for managing and inserting snippets with lightning speed and increase your productivity.",
   "version": "0.1.0",
   "type": "module",

@@ -26,9 +26,9 @@
 
 Open the browser console (F12) to see debug messages:
 
-- `[Snippy] Content script initializing...` - Script loaded
-- `[Snippy] Loaded X snippets: [shortcuts]` - Snippets loaded successfully
-- `[Snippy] Expanding: shortcut -> title` - When expansion happens
+- `[Clipio] Content script initializing...` - Script loaded
+- `[Clipio] Loaded X snippets: [shortcuts]` - Snippets loaded successfully
+- `[Clipio] Expanding: shortcut -> title` - When expansion happens
 
 ## Common Issues:
 
