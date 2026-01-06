@@ -1,12 +1,14 @@
-import { Mail, Lock } from "lucide-react";
+import { Mail, Lock, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router";
-import { useAppDispatch } from "../store/hooks";
-import { showToast } from "../store/slices/toastSlice";
-import { saveAuthData } from "../utils/storage";
-import { logger } from "../utils/logger";
-import type { LoginResponse } from "../types";
-import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
+import { useToast } from "~/hooks/ToastContext";
+import { saveAuthData } from "~/utils/storage";
+import { logger } from "~/utils/logger";
+import type { LoginResponse } from "~/types";
+import { API_BASE_URL, API_ENDPOINTS } from "~/config/constants";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 
 type ToastState = {
   message?: string;
@@ -16,7 +18,7 @@ type ToastState = {
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const dispatch = useAppDispatch();
+  const { showToast } = useToast();
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [loadingLogin, setLoadingLogin] = useState(false);
@@ -24,12 +26,10 @@ export default function Login() {
   useEffect(() => {
     const state = (location.state as ToastState) || null;
     if (state?.message) {
-      dispatch(
-        showToast({ message: state.message, type: state.type ?? "success" })
-      );
+      showToast(state.message, state.type ?? "success");
       navigate(location.pathname, { replace: true, state: null });
     }
-  }, [location, navigate, dispatch]);
+  }, [location, navigate, showToast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,34 +49,33 @@ export default function Login() {
 
       if (res.status === 200) {
         const expiresIn = data.expiresIn;
-        saveAuthData(data.accessToken, data.user, expiresIn, data.refreshToken);
 
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem("storageType", "cloud");
-        }
+        // Save auth data and navigate in parallel
+        await Promise.all([
+          saveAuthData(data.accessToken, data.user, expiresIn),
+          (async () => {
+            if (typeof localStorage !== "undefined") {
+              localStorage.setItem("storageType", "cloud");
+            }
+          })(),
+        ]);
 
         logger.success("Login successful", {
           data: { user: data.user.email, userId: data.user.id },
           timestamp: true,
         });
+
         navigate("/dashboard", { replace: true });
       } else {
-        dispatch(
-          showToast({
-            message: (data as any).error || "Login failed. Please try again.",
-            type: "error",
-          })
+        showToast(
+          (data as any).error || "Login failed. Please try again.",
+          "error"
         );
       }
     } catch (error) {
       logger.error("Login failed", { data: { error } });
       setLoadingLogin(false);
-      dispatch(
-        showToast({
-          message: "Network error. Please check your connection.",
-          type: "error",
-        })
-      );
+      showToast("Network error. Please check your connection.", "error");
     }
   };
 
@@ -91,76 +90,59 @@ export default function Login() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 mb-6">
-          <div>
-            <label
-              htmlFor="login"
-              className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300"
-            >
-              Email or Username
-            </label>
+          <div className="space-y-2">
+            <Label htmlFor="login">Email or Username</Label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
-              <input
+              <Input
                 id="login"
                 type="text"
                 value={login}
                 onChange={(e) => setLogin(e.target.value)}
                 placeholder="your@email.com or username"
                 required
-                className="w-full pl-10 pr-4 py-2.5 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-600"
+                className="pl-10"
               />
             </div>
           </div>
 
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300"
-            >
-              Password
-            </label>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
-              <input
+              <Input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
-                className="w-full pl-10 pr-4 py-2.5 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-600"
+                className="pl-10"
               />
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loadingLogin}
-            className={`w-full py-2.5 font-medium rounded-lg transition-colors ${
-              loadingLogin
-                ? "bg-gray-400 text-white cursor-not-allowed"
-                : "bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900"
-            }`}
-          >
+          <Button type="submit" className="w-full" disabled={loadingLogin}>
             {loadingLogin ? (
-              <div className="flex items-center justify-center gap-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
                 Signing In...
-              </div>
+              </>
             ) : (
               "Sign In"
             )}
-          </button>
+          </Button>
         </form>
 
         <p className="text-xs text-center text-zinc-500 dark:text-zinc-500 mt-6">
           Don't have an account?{" "}
-          <button
+          <Button
+            variant="link"
+            className="p-0 h-auto text-xs font-medium"
             onClick={() => navigate("/sign-up")}
-            className="text-gray-700 dark:text-gray-300 hover:underline font-medium"
           >
             Sign up
-          </button>
+          </Button>
         </p>
       </div>
     </div>

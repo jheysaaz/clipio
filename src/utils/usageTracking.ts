@@ -1,5 +1,3 @@
-import browser from "webextension-polyfill";
-
 /**
  * Local usage tracking for snippets
  * Tracks how many times each snippet has been copied/used

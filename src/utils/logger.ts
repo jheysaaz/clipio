@@ -3,8 +3,6 @@
  * Logs are also cached in browser.storage.session for debugging purposes
  */
 
-import browser from "webextension-polyfill";
-
 type LogLevel = "info" | "success" | "warn" | "error";
 
 interface LogOptions {

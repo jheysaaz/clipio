@@ -1,10 +1,13 @@
-import { Mail, Lock, User, UserCircle, ArrowLeft } from "lucide-react";
+import { Mail, Lock, User, UserCircle, ArrowLeft, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { useAppDispatch } from "../store/hooks";
-import { showToast } from "../store/slices/toastSlice";
-import { logger } from "../utils/logger";
-import { API_BASE_URL, API_ENDPOINTS } from "../config/constants";
+import { useToast } from "~/hooks/ToastContext";
+import { logger } from "~/utils/logger";
+import { API_BASE_URL, API_ENDPOINTS } from "~/config/constants";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
+import { cn } from "~/lib/utils";
 
 interface ValidationErrors {
   username?: string;
@@ -15,7 +18,7 @@ interface ValidationErrors {
 
 export default function SignUp() {
   const navigate = useNavigate();
-  const dispatch = useAppDispatch();
+  const { showToast } = useToast();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -75,12 +78,7 @@ export default function SignUp() {
 
     // Check if there are any errors
     if (Object.values(validationErrors).some((error) => error !== undefined)) {
-      dispatch(
-        showToast({
-          message: "Please fix the validation errors",
-          type: "error",
-        })
-      );
+      showToast("Please fix the validation errors", "error");
       return;
     }
 
@@ -103,44 +101,30 @@ export default function SignUp() {
       setLoadingSignUp(false);
 
       if (res.status === 201 || res.status === 200) {
-        dispatch(
-          showToast({
-            message: "Account created successfully! Please sign in.",
-            type: "success",
-          })
-        );
+        showToast("Account created successfully! Please sign in.", "success");
         setTimeout(() => {
           navigate("/login");
         }, 1500);
       } else {
-        dispatch(
-          showToast({
-            message: data.error || "Sign up failed. Please try again.",
-            type: "error",
-          })
-        );
+        showToast(data.error || "Sign up failed. Please try again.", "error");
       }
     } catch (error) {
       logger.error("Sign up failed", { data: { error } });
       setLoadingSignUp(false);
-      dispatch(
-        showToast({
-          message: "Network error. Please check your connection.",
-          type: "error",
-        })
-      );
+      showToast("Network error. Please check your connection.", "error");
     }
   };
 
   return (
     <div className="flex flex-col h-full p-6">
-      <button
+      <Button
+        variant="ghost"
         onClick={() => navigate("/login")}
-        className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50 transition-colors mb-6"
+        className="w-fit gap-2 -ml-2 mb-4"
       >
         <ArrowLeft className="h-4 w-4" />
         <span className="text-sm">Back to Sign In</span>
-      </button>
+      </Button>
 
       <div className="flex-1 flex flex-col justify-center">
         <div className="text-center mb-8">
@@ -151,16 +135,11 @@ export default function SignUp() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 mb-6">
-          <div>
-            <label
-              htmlFor="username"
-              className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300"
-            >
-              Username *
-            </label>
+          <div className="space-y-2">
+            <Label htmlFor="username">Username *</Label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
-              <input
+              <Input
                 id="username"
                 type="text"
                 value={username}
@@ -168,50 +147,39 @@ export default function SignUp() {
                 onBlur={(e) => handleFieldBlur("username", e.target.value)}
                 placeholder="username_123"
                 required
-                className={`w-full pl-10 pr-4 py-2.5 border rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 ${
-                  errors.username
-                    ? "border-red-500 focus:ring-red-500"
-                    : "border-zinc-200 dark:border-zinc-800 focus:ring-gray-400 dark:focus:ring-gray-600"
-                }`}
+                className={cn(
+                  "pl-10",
+                  errors.username && "border-red-500 focus-visible:ring-red-500"
+                )}
               />
             </div>
             {errors.username && (
-              <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+              <p className="text-xs text-red-600 dark:text-red-400">
                 {errors.username}
               </p>
             )}
           </div>
 
-          <div>
-            <label
-              htmlFor="fullName"
-              className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300"
-            >
-              Full Name
-            </label>
+          <div className="space-y-2">
+            <Label htmlFor="fullName">Full Name</Label>
             <div className="relative">
               <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
-              <input
+              <Input
                 id="fullName"
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="John Doe"
-                className="w-full pl-10 pr-4 py-2.5 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-600"
+                className="pl-10"
               />
             </div>
           </div>
 
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300"
-            >
-              Email *
-            </label>
+          <div className="space-y-2">
+            <Label htmlFor="email">Email *</Label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
-              <input
+              <Input
                 id="email"
                 type="email"
                 value={email}
@@ -219,30 +187,24 @@ export default function SignUp() {
                 onBlur={(e) => handleFieldBlur("email", e.target.value)}
                 placeholder="your@email.com"
                 required
-                className={`w-full pl-10 pr-4 py-2.5 border rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 ${
-                  errors.email
-                    ? "border-red-500 focus:ring-red-500"
-                    : "border-zinc-200 dark:border-zinc-800 focus:ring-gray-400 dark:focus:ring-gray-600"
-                }`}
+                className={cn(
+                  "pl-10",
+                  errors.email && "border-red-500 focus-visible:ring-red-500"
+                )}
               />
             </div>
             {errors.email && (
-              <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+              <p className="text-xs text-red-600 dark:text-red-400">
                 {errors.email}
               </p>
             )}
           </div>
 
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300"
-            >
-              Password *
-            </label>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password *</Label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
-              <input
+              <Input
                 id="password"
                 type="password"
                 value={password}
@@ -250,38 +212,29 @@ export default function SignUp() {
                 onBlur={(e) => handleFieldBlur("password", e.target.value)}
                 placeholder="••••••••"
                 required
-                className={`w-full pl-10 pr-4 py-2.5 border rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 ${
-                  errors.password
-                    ? "border-red-500 focus:ring-red-500"
-                    : "border-zinc-200 dark:border-zinc-800 focus:ring-gray-400 dark:focus:ring-gray-600"
-                }`}
+                className={cn(
+                  "pl-10",
+                  errors.password && "border-red-500 focus-visible:ring-red-500"
+                )}
               />
             </div>
             {errors.password && (
-              <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+              <p className="text-xs text-red-600 dark:text-red-400">
                 {errors.password}
               </p>
             )}
           </div>
 
-          <button
-            type="submit"
-            disabled={loadingSignUp}
-            className={`w-full py-2.5 font-medium rounded-lg transition-colors ${
-              loadingSignUp
-                ? "bg-gray-400 dark:bg-gray-600 text-white cursor-not-allowed"
-                : "bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900"
-            }`}
-          >
+          <Button type="submit" className="w-full" disabled={loadingSignUp}>
             {loadingSignUp ? (
-              <div className="flex items-center justify-center gap-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
                 Creating Account...
-              </div>
+              </>
             ) : (
               "Create Account"
             )}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

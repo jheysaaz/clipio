@@ -1,6 +1,5 @@
-import browser from "webextension-polyfill";
-import type { User, AuthTokens } from "../types";
-import { STORAGE_KEYS } from "../config/constants";
+import type { User, AuthTokens } from "~/types";
+import { STORAGE_KEYS } from "~/config/constants";
 import { logger } from "./logger";
 
 /**
@@ -175,21 +174,16 @@ export const removeUserInfo = async (): Promise<void> => {
 export const saveAuthData = async (
   accessToken: string,
   user: User,
-  expiresIn?: number,
-  refreshToken?: string
+  expiresIn?: number
 ): Promise<void> => {
-  await saveAccessToken(accessToken);
-  await saveUserInfo(user);
-
-  // Save refresh token if provided
-  if (refreshToken) {
-    await saveRefreshToken(refreshToken);
-  }
+  // Save all data in parallel for better performance
+  await Promise.all([saveAccessToken(accessToken), saveUserInfo(user)]);
 
   // Send message to background script to schedule token refresh
   if (expiresIn && isBrowserStorageAvailable()) {
     try {
-      await browser.runtime.sendMessage({
+      // Don't await this - let it happen in background
+      browser.runtime.sendMessage({
         type: "SCHEDULE_TOKEN_REFRESH",
         payload: { expiresIn },
       });

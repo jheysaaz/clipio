@@ -30,6 +30,8 @@ dist-ssr
 # Project files
 *.zip
 release/
+.output
+.wxt
 
 # Environment variables
 .env
