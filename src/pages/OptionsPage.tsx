@@ -15,7 +15,8 @@ import { Progress } from "~/components/ui/progress";
 import { cn } from "~/lib/utils";
 import { useTheme } from "~/hooks/ThemeContext";
 import { useToast } from "~/hooks/ToastContext";
-import ImportWizard from "~/components/ImportWizard";
+import { lazy, Suspense } from "react";
+const ImportWizard = lazy(() => import("~/components/ImportWizard"));
 import { WarningBanner } from "~/components/ui/warning-banner";
 import { exportSnippets, getSnippets, getStorageStatus } from "~/storage";
 import { SYNC_QUOTA, FLAGS } from "~/config/constants";
@@ -361,14 +362,25 @@ function ImportExportSection() {
                 <span className="sr-only">Close</span>×
               </Button>
             </div>
-            <ImportWizard
-              onClose={() => setShowImportWizard(false)}
-              onImportComplete={(count) => {
-                setImportedCount(count);
-                setShowImportWizard(false);
-                showToast(i18n.t("options.toasts.imported", count), "success");
-              }}
-            />
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center py-12">
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600" />
+                </div>
+              }
+            >
+              <ImportWizard
+                onClose={() => setShowImportWizard(false)}
+                onImportComplete={(count) => {
+                  setImportedCount(count);
+                  setShowImportWizard(false);
+                  showToast(
+                    i18n.t("options.toasts.imported", count),
+                    "success"
+                  );
+                }}
+              />
+            </Suspense>
           </div>
         </div>
       )}

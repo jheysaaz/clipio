@@ -1,48 +1,5 @@
 import { defineConfig } from "wxt";
 import tailwindcss from "@tailwindcss/vite";
-import type { Plugin } from "vite";
-
-/**
- * Splits heavy vendor libraries into separate chunks for HTML entrypoints
- * (popup, options). Skips IIFE builds (background, content scripts) because
- * those use `inlineDynamicImports: true` which is incompatible with manualChunks.
- */
-function vendorChunksPlugin(): Plugin {
-  return {
-    name: "vendor-chunks",
-    apply: "build",
-    outputOptions(opts) {
-      if (opts.inlineDynamicImports) return;
-      opts.manualChunks = (id: string) => {
-        if (
-          id.includes("node_modules/react/") ||
-          id.includes("node_modules/react-dom/") ||
-          id.includes("node_modules/scheduler/")
-        ) {
-          return "vendor-react";
-        }
-        if (
-          id.includes("node_modules/platejs/") ||
-          id.includes("node_modules/@platejs/") ||
-          id.includes("node_modules/slate/") ||
-          id.includes("node_modules/slate-react/") ||
-          id.includes("node_modules/slate-dom/") ||
-          id.includes("node_modules/slate-history/") ||
-          id.includes("node_modules/slate-hyperscript/")
-        ) {
-          return "vendor-editor";
-        }
-        if (id.includes("node_modules/@radix-ui/")) {
-          return "vendor-radix";
-        }
-        if (id.includes("node_modules/lucide-react/")) {
-          return "vendor-icons";
-        }
-      };
-      return opts;
-    },
-  };
-}
 
 // https://wxt.dev/api/config.html
 export default defineConfig({
@@ -57,10 +14,20 @@ export default defineConfig({
       gecko: {
         id: "jhey@clipio.xyz",
         strict_min_version: "142.0",
-      },
+        data_collection_permissions: {
+          required: ["none"],
+        },
+      } as Record<string, unknown>,
     },
   },
   vite: () => ({
-    plugins: [tailwindcss(), vendorChunksPlugin()],
+    plugins: [tailwindcss()],
+    build: {
+      // Slate/Plate and Radix have internal circular dependencies that break
+      // when forced into manual chunks. Let Rollup split automatically —
+      // it resolves init order correctly. The popup chunk (~512KB) is still
+      // well within extension store limits.
+      chunkSizeWarningLimit: 600,
+    },
   }),
 });

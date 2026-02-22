@@ -14,13 +14,31 @@ export default defineContentScript({
       label: string;
     }
 
+    // Dedicated confetti canvas that sits above all page content
+    let confettiCanvas: HTMLCanvasElement | null = null;
+    let confettiInstance: confetti.CreateTypes | null = null;
+
+    function getConfettiInstance(): confetti.CreateTypes {
+      if (confettiInstance && confettiCanvas?.isConnected) {
+        return confettiInstance;
+      }
+      // (Re-)create a fixed full-viewport canvas above everything
+      if (confettiCanvas?.isConnected) confettiCanvas.remove();
+      confettiCanvas = document.createElement("canvas");
+      confettiCanvas.style.cssText =
+        "position:fixed;inset:0;width:100vw;height:100vh;z-index:2147483647;pointer-events:none;";
+      document.documentElement.appendChild(confettiCanvas);
+      confettiInstance = confetti.create(confettiCanvas, { resize: true });
+      return confettiInstance;
+    }
+
     // 🎉 Confetti effect when snippet is inserted
     function showConfetti(x: number, y: number) {
       // Convert screen coordinates to canvas coordinates (0-1 range)
       const originX = x / window.innerWidth;
       const originY = y / window.innerHeight;
 
-      confetti({
+      getConfettiInstance()({
         particleCount: 50,
         spread: 60,
         origin: { x: originX, y: originY },
@@ -403,15 +421,15 @@ export default defineContentScript({
       }
 
       if (asHtml) {
-        // For HTML mode: insert a marker element for cursor positioning
+        // Convert markdown → HTML first ({{cursor}} survives escaping intact)
+        processedContent = markdownToHtml(processedContent);
+        // Now replace the first {{cursor}} with a marker element for cursor positioning
         processedContent = processedContent.replace(
           /\{\{cursor\}\}/,
           '<span id="clipio-cursor-marker" data-clipio-cursor="true"></span>'
         );
         // Remove any remaining cursor placeholders
         processedContent = processedContent.replace(/\{\{cursor\}\}/g, "");
-        // Convert markdown → HTML
-        processedContent = markdownToHtml(processedContent);
       } else {
         // For plain text mode: strip markdown and handle cursor offset
         const cursorMatch = processedContent.match(/\{\{cursor\}\}/);

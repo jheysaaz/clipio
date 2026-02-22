@@ -1,17 +1,22 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import "~/app.css";
 import Dashboard from "~/pages/Dashboard";
-import { Toaster } from "~/components/ui/sonner";
 import { ToastProvider } from "~/hooks/ToastContext";
 import { ThemeProvider } from "~/hooks/ThemeContext";
+
+const Toaster = lazy(() =>
+  import("~/components/ui/sonner").then((m) => ({ default: m.Toaster }))
+);
 
 function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
         <Dashboard />
-        <Toaster />
+        <Suspense>
+          <Toaster />
+        </Suspense>
       </ToastProvider>
     </ThemeProvider>
   );

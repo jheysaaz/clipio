@@ -1,4 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  lazy,
+  Suspense,
+} from "react";
 import { i18n } from "#i18n";
 import {
   Plus,
@@ -12,8 +19,8 @@ import {
   Clipboard,
 } from "lucide-react";
 import SnippetListItem from "~/components/SnippetListItem";
-import SnippetDetailView from "~/components/SnippetDetailView";
-import NewSnippetView from "~/components/NewSnippetView";
+const SnippetDetailView = lazy(() => import("~/components/SnippetDetailView"));
+const NewSnippetView = lazy(() => import("~/components/NewSnippetView"));
 import { useToast } from "~/hooks/ToastContext";
 import { useTheme } from "~/hooks/ThemeContext";
 import type { Snippet, SnippetFormData } from "~/types";
@@ -500,24 +507,40 @@ export default function Dashboard() {
         {/* Right Content - Detail */}
         <div className="flex-1 flex flex-col bg-white dark:bg-zinc-950">
           {isCreating ? (
-            <NewSnippetView
-              draftSnippet={draftSnippet}
-              onDraftChange={setDraftSnippet}
-              onSave={handleSaveNewSnippet}
-              onCancel={handleCancelCreate}
-              isSaving={isSaving}
-              sidebarOpen={sidebarOpen}
-              onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-            />
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center flex-1">
+                  <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+                </div>
+              }
+            >
+              <NewSnippetView
+                draftSnippet={draftSnippet}
+                onDraftChange={setDraftSnippet}
+                onSave={handleSaveNewSnippet}
+                onCancel={handleCancelCreate}
+                isSaving={isSaving}
+                sidebarOpen={sidebarOpen}
+                onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+              />
+            </Suspense>
           ) : selectedSnippet ? (
-            <SnippetDetailView
-              key={selectedSnippet.id}
-              snippet={selectedSnippet}
-              onDelete={handleDeleteSnippet}
-              onUpdate={handleUpdateSnippet}
-              sidebarOpen={sidebarOpen}
-              onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-            />
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center flex-1">
+                  <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+                </div>
+              }
+            >
+              <SnippetDetailView
+                key={selectedSnippet.id}
+                snippet={selectedSnippet}
+                onDelete={handleDeleteSnippet}
+                onUpdate={handleUpdateSnippet}
+                sidebarOpen={sidebarOpen}
+                onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+              />
+            </Suspense>
           ) : snippets.length === 0 && !loading ? (
             /* Empty state when no snippets exist */
             <>
