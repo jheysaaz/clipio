@@ -42,10 +42,7 @@ export function detectFormat(raw: unknown): FormatId | null {
 
   // --- TextBlaze ---
   const obj = raw as Record<string, unknown>;
-  if (
-    typeof obj["version"] === "number" &&
-    Array.isArray(obj["folders"])
-  ) {
+  if (typeof obj["version"] === "number" && Array.isArray(obj["folders"])) {
     return "textblaze";
   }
 

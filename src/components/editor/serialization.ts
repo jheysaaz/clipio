@@ -178,7 +178,8 @@ function parseMarkdownInline(text: string): Descendant[] {
       nodes.push({
         type: LINK_ELEMENT,
         url: linkMatch[2],
-        children: linkChildren.length > 0 ? linkChildren : [{ text: linkMatch[1] }],
+        children:
+          linkChildren.length > 0 ? linkChildren : [{ text: linkMatch[1] }],
       } as TElement & { url: string });
       remaining = remaining.slice(linkMatch[0].length);
       continue;
@@ -357,7 +358,10 @@ function deserializeNodes(element: Node): Descendant[] {
         nodes.push({
           type: LINK_ELEMENT,
           url,
-          children: linkChildren.length > 0 ? linkChildren : [{ text: el.textContent || "" }],
+          children:
+            linkChildren.length > 0
+              ? linkChildren
+              : [{ text: el.textContent || "" }],
         } as TElement & { url: string });
         return;
       }

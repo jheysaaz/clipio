@@ -499,8 +499,10 @@ export default defineContentScript({
     ) {
       const { snippet, startPos, endPos } = match;
       const text = textNode.textContent || "";
-      const { content: processedContent } =
-        await processSnippetContent(snippet.content, true);
+      const { content: processedContent } = await processSnippetContent(
+        snippet.content,
+        true
+      );
 
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = processedContent;
@@ -517,9 +519,7 @@ export default defineContentScript({
       if (parent) parent.replaceChild(fragment, textNode);
 
       // Handle cursor positioning via marker element
-      const cursorMarker = element.querySelector(
-        '[data-clipio-cursor="true"]'
-      );
+      const cursorMarker = element.querySelector('[data-clipio-cursor="true"]');
       if (cursorMarker) {
         const sel = window.getSelection();
         if (sel) {

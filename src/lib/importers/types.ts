@@ -48,9 +48,9 @@ export interface FormatParser {
 // ---------------------------------------------------------------------------
 
 export type ConflictResolution =
-  | "skip"      // Don't import this snippet at all
+  | "skip" // Don't import this snippet at all
   | "overwrite" // Replace the existing snippet
-  | "rename";   // Keep both — auto-rename the incoming shortcut
+  | "rename"; // Keep both — auto-rename the incoming shortcut
 
 export interface ConflictEntry {
   incoming: ParsedSnippet;
@@ -69,9 +69,9 @@ export interface ConflictEntry {
 // ---------------------------------------------------------------------------
 
 export type UnsupportedPlaceholderAction =
-  | "keep"   // Keep the placeholder as literal text (default)
+  | "keep" // Keep the placeholder as literal text (default)
   | "remove" // Remove the placeholder entirely
-  | "skip";  // Skip importing this snippet
+  | "skip"; // Skip importing this snippet
 
 export interface UnsupportedPlaceholderEntry {
   snippet: ParsedSnippet;
