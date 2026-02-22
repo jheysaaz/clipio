@@ -9,6 +9,7 @@ import {
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
+import { i18n } from "#i18n";
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -28,8 +29,8 @@ export default function ConfirmDialog({
   onConfirm,
   title,
   message,
-  confirmText = "Confirm",
-  cancelText = "Cancel",
+  confirmText = i18n.t("confirmDialog.defaultConfirm"),
+  cancelText = i18n.t("confirmDialog.defaultCancel"),
   confirmVariant = "primary",
   isLoading = false,
 }: ConfirmDialogProps) {
@@ -53,7 +54,7 @@ export default function ConfirmDialog({
             disabled={isLoading}
             variant={confirmVariant === "danger" ? "destructive" : "default"}
           >
-            {isLoading ? "Loading..." : confirmText}
+            {isLoading ? i18n.t("confirmDialog.loading") : confirmText}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

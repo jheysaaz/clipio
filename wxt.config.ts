@@ -3,12 +3,12 @@ import tailwindcss from "@tailwindcss/vite";
 
 // https://wxt.dev/api/config.html
 export default defineConfig({
-  modules: ["@wxt-dev/module-react"],
+  modules: ["@wxt-dev/module-react", "@wxt-dev/i18n/module"],
   srcDir: "src",
   manifest: {
-    name: "Clipio: Snippets Manager",
-    description:
-      "A powerful browser extension for managing and inserting snippets with lightning speed and increase your productivity.",
+    name: "__MSG_extName__",
+    description: "__MSG_extDescription__",
+    default_locale: "es",
     permissions: ["storage", "clipboardWrite", "clipboardRead"],
     browser_specific_settings: {
       gecko: {

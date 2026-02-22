@@ -1,0 +1,235 @@
+extName: "Clipio: Gestor de Fragmentos"
+extDescription: "Una potente extensión de navegador para gestionar e insertar fragmentos de texto con velocidad y aumentar tu productividad."
+
+common:
+  hideSidebar: Ocultar barra lateral
+  showSidebar: Mostrar barra lateral
+  cancel: Cancelar
+
+dashboard:
+  searchPlaceholder: Buscar fragmentos...
+  loadingSnippets: Cargando fragmentos...
+  noSnippetsFound: No se encontraron fragmentos
+  noSnippetsYet: Aún no hay fragmentos
+  tryDifferentSearch: Prueba con otro término de búsqueda
+  draftLabel: Sin título
+  draftShortcut: /...
+  addSnippet: Agregar fragmento
+  switchToDark: Cambiar a modo oscuro
+  switchToLight: Cambiar a modo claro
+  settingsAndExport: Ajustes e Importar/Exportar
+  emptyState:
+    heading: Aún no hay fragmentos
+    body: Crea tu primer fragmento para guardar y reutilizar texto rápidamente.
+    action: Crear tu primer fragmento
+  detailPlaceholder: Selecciona un fragmento para ver los detalles
+  warnings:
+    uninstall:
+      body: Desinstalar eliminará todos los fragmentos.
+      action: Exportar copia de seguridad →
+    quotaFull:
+      body: Almacenamiento de sincronización lleno — los fragmentos se guardan solo localmente.
+      action: Exportar copia de seguridad →
+    recovery:
+      body:
+        1: "Tus fragmentos sincronizados se perdieron (cierre de sesión detectado). 1 fragmento en copia de seguridad."
+        n: "Tus fragmentos sincronizados se perdieron (cierre de sesión detectado). $1 fragmentos en copia de seguridad."
+      action:
+        1: Restaurar 1 fragmento
+        n: Restaurar $1 fragmentos
+  toasts:
+    snippetCreated: "¡Fragmento creado!"
+    failedToLoad: Error al cargar los fragmentos.
+    syncFullSaved: Almacenamiento de sincronización lleno — cambiado a almacenamiento local. Tu fragmento se guardó.
+    failedToCreate: Error al crear el fragmento. Por favor, inténtalo de nuevo.
+    failedToDelete: Error al eliminar el fragmento.
+    restoredSnippets:
+      1: "¡1 fragmento restaurado desde la copia de seguridad!"
+      n: "¡$1 fragmentos restaurados desde la copia de seguridad!"
+    failedToRestore: Error al restaurar los fragmentos.
+
+newSnippet:
+  cancel: Cancelar
+  creating: Creando...
+  create: Crear
+  name: Nombre
+  namePlaceholder: "Ej: Firma de correo"
+  shortcut: Atajo
+  shortcutPlaceholder: "Ej: /firma"
+  shortcutError: El atajo no puede contener espacios
+  content: Contenido
+  contentPlaceholder: Escribe el contenido de tu fragmento...
+  footer: Nuevo fragmento
+
+snippetDetail:
+  deleteSnippet: Eliminar fragmento
+  copyToClipboard: Copiar al portapapeles
+  insertCommand: Insertar comando
+  saving: Guardando...
+  save: Guardar
+  editorPlaceholder: "Empieza a escribir el contenido del fragmento o usa '/' para comandos..."
+  tags: Etiquetas
+  tagPlaceholder: Nombre de etiqueta...
+  addTag: Agregar etiqueta
+  addTagTitle: Agregar una nueva etiqueta
+  uses: usos
+  updated: Actualizado
+  deleteDialog:
+    title: Eliminar fragmento
+    message: '¿Estás seguro de que quieres eliminar "$1"? Esta acción no se puede deshacer.'
+    confirm: Eliminar
+    cancel: Cancelar
+  toasts:
+    copied: "¡Copiado al portapapeles!"
+    failedToCopy: Error al copiar al portapapeles
+    saved: "¡Fragmento guardado!"
+    failedToSave: Error al guardar el fragmento. Por favor, inténtalo de nuevo.
+    deleted: "¡Fragmento eliminado!"
+    failedToDelete: Error al eliminar el fragmento. Por favor, inténtalo de nuevo.
+
+confirmDialog:
+  loading: Cargando...
+  defaultConfirm: Confirmar
+  defaultCancel: Cancelar
+
+options:
+  sidebarSettings: Ajustes
+  menu: Menú
+  nav:
+    general: General
+    importExport: Importar y Exportar
+  theme:
+    darkMode: Modo oscuro
+    lightMode: Modo claro
+  overview:
+    title: Resumen
+    description: Un vistazo de tu biblioteca de Clipio y el uso de almacenamiento.
+    snippets: Fragmentos
+    snippetsMax: "de $1 máx."
+    syncStorage: Almacenamiento de sincronización
+    syncTooltip: "Sincronizado en todos tus dispositivos mediante tu cuenta del navegador. Límite total: 100 KB entre todos los fragmentos. Cada fragmento individual tiene un límite de 8 KB."
+    localStorage: Estimación de almacenamiento local
+    localTooltip: "Tamaño estimado de tus fragmentos en este dispositivo. El almacenamiento local tiene un límite mucho mayor (~5 MB) y se usa como alternativa cuando se supera la cuota de sincronización."
+    quotaExceeded: Cuota de sincronización superada — los fragmentos se almacenan solo localmente.
+  generalSection:
+    title: General
+    description: Los ajustes generales aparecerán aquí en una actualización futura.
+    comingSoon: Próximamente
+  importExport:
+    title: Importar y Exportar
+    description: Importa fragmentos desde exportaciones de Clipio o TextBlaze, o descarga una copia de seguridad de tu biblioteca actual.
+    exportCard:
+      title: Exportar fragmentos
+      description: Descarga tu biblioteca de fragmentos como un archivo JSON. Compatible con Clipio en cualquier dispositivo.
+      button: Exportar
+    importCard:
+      title: Importar fragmentos
+      description: Importa desde un archivo de exportación de Clipio o TextBlaze. Los conflictos y marcadores no compatibles se resuelven paso a paso.
+      button: Importar
+      successMessage:
+        1: "✓ 1 fragmento importado correctamente."
+        n: "✓ $1 fragmentos importados correctamente."
+      supported: "Compatible:"
+    modal:
+      title: Importar Fragmentos
+  warnings:
+    uninstall:
+      body: Si desinstala Clipio, todos los fragmentos se eliminarán permanentemente.
+      action: Exportar una copia de seguridad →
+  toasts:
+    exported: "¡Fragmentos exportados!"
+    failedExport: Error al exportar los fragmentos.
+    imported:
+      1: "¡1 fragmento importado!"
+      n: "¡$1 fragmentos importados!"
+
+importWizard:
+  steps:
+    upload: Subir
+    placeholders: Marcadores
+    conflicts: Conflictos
+    confirm: Confirmar
+  upload:
+    dropHere: Suelta un archivo JSON aquí
+    clickToBrowse: o haz clic para buscar
+    clickToChange: Haz clic para cambiar el archivo
+    detectedFormat: "Formato detectado:"
+    unknownFormat: Desconocido — por favor selecciona abajo
+    formatLabel: Formato
+    invalidJson: Archivo JSON inválido. Por favor verifica el archivo e inténtalo de nuevo.
+    couldNotRead: No se pudo leer el archivo.
+    failedToParse: No se pudo analizar el archivo con el formato seleccionado.
+    foundSnippets:
+      1: Se encontró 1 fragmento
+      n: Se encontraron $1 fragmentos
+  placeholders:
+    description: "Los siguientes fragmentos contienen marcadores que Clipio no admite. Elige qué hacer con ellos."
+    applyToAll: "Aplicar a todos:"
+    chooseAction: Elegir acción…
+    keepAsLiteral: Mantener como texto literal
+    removeFromContent: Eliminar del contenido
+    skipSnippet: Omitir este fragmento
+    actionLabel: "Acción:"
+  conflicts:
+    description:
+      1: "1 fragmento en conflicto con tu biblioteca existente. Elige cómo resolverlo."
+      n: "$1 fragmentos en conflicto con tu biblioteca existente. Elige cómo resolver cada uno."
+    resolveAll: "Resolver todos:"
+    chooseResolution: Elegir resolución…
+    skipDontImport: "Omitir (no importar)"
+    overwriteExisting: Sobrescribir existente
+    importWithNewShortcut: Importar con nuevo atajo
+    incomingColumn: Entrante
+    existingColumn: "Existente (conflicto de $1)"
+    resolution: "Resolución:"
+    newShortcut: "Nuevo atajo:"
+    newShortcutPlaceholder: nuevo/atajo
+  confirm:
+    snippetsToImport: Fragmentos a importar
+    overwritingExisting: Sobreescribiendo existentes
+    importedWithRename: Importado con atajo renombrado
+    skippedConflicts: "Omitidos (conflictos)"
+    estimatedStorage: Uso de almacenamiento estimado
+    quotaWarning: "Esta importación puede exceder los límites de almacenamiento de sincronización del navegador. Clipio cambiará automáticamente al almacenamiento local si es necesario, pero los fragmentos no se sincronizarán con otros dispositivos."
+    done:
+      heading: Importación completa
+      body:
+        1: 1 fragmento añadido a tu biblioteca.
+        n: $1 fragmentos añadidos a tu biblioteca.
+      action: Listo
+  footer:
+    cancel: Cancelar
+    back: Atrás
+    next: Siguiente
+    importing: Importando…
+    importCount:
+      1: Importar 1 fragmento
+      n: Importar $1 fragmentos
+
+editor:
+  toolbar:
+    bold: "Negrita (⌘B)"
+    italic: "Cursiva (⌘I)"
+    underline: "Subrayado (⌘U)"
+    strikethrough: "Tachado (⌘⇧S)"
+    code: "Código (⌘E)"
+    insertLink: "Insertar enlace (⌘K)"
+    removeLink: Eliminar enlace
+    confirmLink: Insertar enlace
+    urlPlaceholder: "https://..."
+  slashMenu:
+    header: Comandos
+    noMatches: Sin comandos coincidentes
+    clipboard:
+      label: Portapapeles
+      description: Insertar marcador de contenido del portapapeles
+    date:
+      label: Hoy
+      description: Insertar la fecha de hoy (clic para cambiar formato)
+    cursor:
+      label: Colocar cursor
+      description: Establecer posición del cursor al insertar
+      alreadyAdded: Ya añadido (solo se permite uno)
+    datepicker:
+      label: Elegir fecha
+      description: Elegir cualquier fecha del calendario

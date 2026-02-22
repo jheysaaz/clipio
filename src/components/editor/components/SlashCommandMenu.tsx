@@ -3,6 +3,7 @@ import { Clipboard, Calendar, MousePointer2, CalendarDays } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { useVirtualFloating, offset, flip, shift } from "@platejs/floating";
 import type { SlashCommandMenuProps } from "../types";
+import { i18n } from "#i18n";
 
 export function SlashCommandMenu({
   onInsertClipboard,
@@ -23,34 +24,34 @@ export function SlashCommandMenu({
     const allCommands = [
       {
         id: "clipboard",
-        label: "Clipboard",
-        description: "Insert clipboard content placeholder",
+        label: i18n.t("editor.slashMenu.clipboard.label"),
+        description: i18n.t("editor.slashMenu.clipboard.description"),
         icon: Clipboard,
         action: onInsertClipboard,
         disabled: false,
       },
       {
         id: "date",
-        label: "Today",
-        description: "Insert today's date (click to change format)",
+        label: i18n.t("editor.slashMenu.date.label"),
+        description: i18n.t("editor.slashMenu.date.description"),
         icon: Calendar,
         action: () => onInsertDate("iso"),
         disabled: false,
       },
       {
         id: "cursor",
-        label: "Place Cursor",
+        label: i18n.t("editor.slashMenu.cursor.label"),
         description: hasCursorPlaceholder
-          ? "Already added (only one allowed)"
-          : "Set cursor position after insertion",
+          ? i18n.t("editor.slashMenu.cursor.alreadyAdded")
+          : i18n.t("editor.slashMenu.cursor.description"),
         icon: MousePointer2,
         action: onInsertCursor,
         disabled: hasCursorPlaceholder,
       },
       {
         id: "datepicker",
-        label: "Pick Date",
-        description: "Choose any date from calendar",
+        label: i18n.t("editor.slashMenu.datepicker.label"),
+        description: i18n.t("editor.slashMenu.datepicker.description"),
         icon: CalendarDays,
         action: onInsertDatepicker,
         disabled: false,
@@ -209,11 +210,12 @@ export function SlashCommandMenu({
       className="z-50 min-w-50 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg p-1"
     >
       <div className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 px-2 py-1 uppercase tracking-wide">
-        Commands{searchQuery && ` · "${searchQuery}"`}
+        {i18n.t("editor.slashMenu.header")}
+        {searchQuery && ` · "${searchQuery}"`}
       </div>
       {commands.length === 0 ? (
         <div className="px-2 py-3 text-sm text-zinc-500 dark:text-zinc-400 text-center">
-          No matching commands
+          {i18n.t("editor.slashMenu.noMatches")}
         </div>
       ) : (
         commands.map((command, index) => {

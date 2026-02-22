@@ -14,6 +14,7 @@ import { useFloatingToolbar, useFloatingToolbarState } from "@platejs/floating";
 import { useEditorRef, useEditorSelector } from "platejs/react";
 import type { TElement } from "platejs";
 import { LINK_ELEMENT } from "../types";
+import { i18n } from "#i18n";
 
 export function FloatingToolbar() {
   const editor = useEditorRef();
@@ -176,7 +177,7 @@ export function FloatingToolbar() {
                 setShowLinkInput(false);
               }, 150);
             }}
-            placeholder="https://..."
+            placeholder={i18n.t("editor.toolbar.urlPlaceholder")}
             className="h-6 w-40 text-xs px-1.5 bg-transparent border border-zinc-300 dark:border-zinc-600 rounded outline-none focus:border-indigo-500 dark:focus:border-indigo-400 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
           />
           <Button
@@ -184,7 +185,7 @@ export function FloatingToolbar() {
             size="icon"
             className="h-6 w-6"
             onClick={handleConfirmLink}
-            title="Insert link"
+            title={i18n.t("editor.toolbar.confirmLink")}
             type="button"
           >
             <Link
@@ -203,7 +204,7 @@ export function FloatingToolbar() {
               isBoldActive && "bg-zinc-200 dark:bg-zinc-700"
             )}
             onClick={() => handleToggleMark("bold")}
-            title="Bold (⌘B)"
+            title={i18n.t("editor.toolbar.bold")}
             type="button"
           >
             <Bold className="h-3.5 w-3.5" strokeWidth={2} />
@@ -216,7 +217,7 @@ export function FloatingToolbar() {
               isItalicActive && "bg-zinc-200 dark:bg-zinc-700"
             )}
             onClick={() => handleToggleMark("italic")}
-            title="Italic (⌘I)"
+            title={i18n.t("editor.toolbar.italic")}
             type="button"
           >
             <Italic className="h-3.5 w-3.5" strokeWidth={2} />
@@ -229,7 +230,7 @@ export function FloatingToolbar() {
               isUnderlineActive && "bg-zinc-200 dark:bg-zinc-700"
             )}
             onClick={() => handleToggleMark("underline")}
-            title="Underline (⌘U)"
+            title={i18n.t("editor.toolbar.underline")}
             type="button"
           >
             <Underline className="h-3.5 w-3.5" strokeWidth={2} />
@@ -242,7 +243,7 @@ export function FloatingToolbar() {
               isStrikethroughActive && "bg-zinc-200 dark:bg-zinc-700"
             )}
             onClick={() => handleToggleMark("strikethrough")}
-            title="Strikethrough (⌘⇧S)"
+            title={i18n.t("editor.toolbar.strikethrough")}
             type="button"
           >
             <Strikethrough className="h-3.5 w-3.5" strokeWidth={2} />
@@ -255,7 +256,7 @@ export function FloatingToolbar() {
               isCodeActive && "bg-zinc-200 dark:bg-zinc-700"
             )}
             onClick={() => handleToggleMark("code")}
-            title="Code (⌘E)"
+            title={i18n.t("editor.toolbar.code")}
             type="button"
           >
             <Code className="h-3.5 w-3.5" strokeWidth={2} />
@@ -269,7 +270,11 @@ export function FloatingToolbar() {
               isLinkActive && "bg-zinc-200 dark:bg-zinc-700"
             )}
             onClick={handleInsertLink}
-            title={isLinkActive ? "Remove link" : "Insert link (⌘K)"}
+            title={
+              isLinkActive
+                ? i18n.t("editor.toolbar.removeLink")
+                : i18n.t("editor.toolbar.insertLink")
+            }
             type="button"
           >
             {isLinkActive ? (

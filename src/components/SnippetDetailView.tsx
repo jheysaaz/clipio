@@ -28,6 +28,7 @@ import {
   getSnippetUsageCount,
   incrementSnippetUsage,
 } from "~/utils/usageTracking";
+import { i18n } from "#i18n";
 
 interface SnippetDetailViewProps {
   snippet: Snippet;
@@ -95,10 +96,10 @@ export default function SnippetDetailView({
       const newCount = await incrementSnippetUsage(snippet.id);
       setUsageCount(newCount);
 
-      showToast("Copied to clipboard!", "success");
+      showToast(i18n.t("snippetDetail.toasts.copied"), "success");
     } catch (err) {
       console.error("Failed to copy:", err);
-      showToast("Failed to copy to clipboard", "error");
+      showToast(i18n.t("snippetDetail.toasts.failedToCopy"), "error");
     }
   };
 
@@ -114,10 +115,10 @@ export default function SnippetDetailView({
         updatedAt: new Date().toISOString(),
       };
       await onUpdate(updated);
-      showToast("Snippet saved!", "success");
+      showToast(i18n.t("snippetDetail.toasts.saved"), "success");
     } catch (error) {
       console.error("Error saving snippet:", error);
-      showToast("Failed to save snippet. Please try again.", "error");
+      showToast(i18n.t("snippetDetail.toasts.failedToSave"), "error");
     } finally {
       setIsSaving(false);
     }
@@ -127,10 +128,10 @@ export default function SnippetDetailView({
     setIsDeleting(true);
     try {
       await onDelete(snippet.id);
-      showToast("Snippet deleted!", "success");
+      showToast(i18n.t("snippetDetail.toasts.deleted"), "success");
     } catch (error) {
       console.error("Error deleting snippet:", error);
-      showToast("Failed to delete snippet. Please try again.", "error");
+      showToast(i18n.t("snippetDetail.toasts.failedToDelete"), "error");
     } finally {
       setIsDeleting(false);
       setShowDeleteDialog(false);
@@ -146,7 +147,11 @@ export default function SnippetDetailView({
           size="icon"
           onClick={onToggleSidebar}
           className="h-8 w-8"
-          title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+          title={
+            sidebarOpen
+              ? i18n.t("common.hideSidebar")
+              : i18n.t("common.showSidebar")
+          }
         >
           {sidebarOpen ? (
             <PanelLeftClose className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -161,7 +166,7 @@ export default function SnippetDetailView({
           onClick={() => setShowDeleteDialog(true)}
           disabled={isDeleting}
           className="h-8 w-8 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50"
-          title="Delete snippet"
+          title={i18n.t("snippetDetail.deleteSnippet")}
         >
           <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
         </Button>
@@ -170,7 +175,7 @@ export default function SnippetDetailView({
           size="icon"
           onClick={handleCopy}
           className="h-8 w-8"
-          title="Copy to clipboard"
+          title={i18n.t("snippetDetail.copyToClipboard")}
         >
           {copied ? (
             <Check className="h-3.5 w-3.5 text-green-600" strokeWidth={1.5} />
@@ -183,7 +188,7 @@ export default function SnippetDetailView({
           size="icon"
           onClick={() => editorRef.current?.openCommandMenu()}
           className="h-8 w-8"
-          title="Insert command"
+          title={i18n.t("snippetDetail.insertCommand")}
         >
           <SquareSlash className="h-3.5 w-3.5" strokeWidth={1.5} />
         </Button>
@@ -196,7 +201,9 @@ export default function SnippetDetailView({
           className="h-8 text-xs"
         >
           <Save className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
-          {isSaving ? "Saving..." : "Save"}
+          {isSaving
+            ? i18n.t("snippetDetail.saving")
+            : i18n.t("snippetDetail.save")}
         </Button>
       </div>
 
@@ -206,7 +213,7 @@ export default function SnippetDetailView({
           ref={editorRef}
           value={editedContent}
           onChange={setEditedContent}
-          placeholder="Start typing your snippet content here or use '/' for commands..."
+          placeholder={i18n.t("snippetDetail.editorPlaceholder")}
         />
       </div>
 
@@ -218,7 +225,7 @@ export default function SnippetDetailView({
           <div className="flex items-center gap-1 text-zinc-400 dark:text-zinc-500 mr-1">
             <Tag className="h-3 w-3 shrink-0" strokeWidth={1.5} />
             <span className="text-[10px] font-medium uppercase tracking-wide">
-              Tags
+              {i18n.t("snippetDetail.tags")}
             </span>
           </div>
           {editedTags.map((tag) => (
@@ -267,7 +274,7 @@ export default function SnippetDetailView({
                 setNewTagInput("");
                 setIsAddingTag(false);
               }}
-              placeholder="Tag name..."
+              placeholder={i18n.t("snippetDetail.tagPlaceholder")}
               className="h-5 w-20 text-[10px] px-1.5 py-0 border-dashed"
               autoFocus
             />
@@ -280,10 +287,10 @@ export default function SnippetDetailView({
                 setTimeout(() => tagInputRef.current?.focus(), 0);
               }}
               className="h-5 px-2 text-[10px] text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 border-dashed border-zinc-300 dark:border-zinc-600 hover:border-zinc-400 dark:hover:border-zinc-500"
-              title="Add a new tag"
+              title={i18n.t("snippetDetail.addTagTitle")}
             >
               <Plus className="h-2.5 w-2.5 mr-0.5" strokeWidth={2} />
-              Add tag
+              {i18n.t("snippetDetail.addTag")}
             </Button>
           )}
         </div>
@@ -294,10 +301,10 @@ export default function SnippetDetailView({
       <div className="px-3 py-1.5 flex items-center justify-between text-[10px] text-zinc-500 dark:text-zinc-400 bg-zinc-50/50 dark:bg-zinc-900/30">
         <div className="flex items-center gap-1.5">
           <span className="font-medium">{usageCount}</span>
-          <span>uses</span>
+          <span>{i18n.t("snippetDetail.uses")}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span>Updated</span>
+          <span>{i18n.t("snippetDetail.updated")}</span>
           <span className="font-medium">
             {getRelativeTime(snippet.updatedAt)}
           </span>
@@ -308,10 +315,10 @@ export default function SnippetDetailView({
         isOpen={showDeleteDialog}
         onClose={() => setShowDeleteDialog(false)}
         onConfirm={handleConfirmDelete}
-        title="Delete Snippet"
-        message={`Are you sure you want to delete "${snippet.label}"? This action cannot be undone.`}
-        confirmText="Delete"
-        cancelText="Cancel"
+        title={i18n.t("snippetDetail.deleteDialog.title")}
+        message={i18n.t("snippetDetail.deleteDialog.message", [snippet.label])}
+        confirmText={i18n.t("snippetDetail.deleteDialog.confirm")}
+        cancelText={i18n.t("snippetDetail.deleteDialog.cancel")}
         confirmVariant="danger"
         isLoading={isDeleting}
       />

@@ -22,3 +22,7 @@ export const deleteSnippet = (id: string) => manager.deleteSnippet(id);
 export const getStorageStatus = () => manager.getStorageStatus();
 export const exportSnippets = () => manager.exportSnippets();
 export const importSnippets = (file: File) => manager.importSnippets(file);
+export const bulkSaveSnippets = (snippets: import("~/types").Snippet[]) =>
+  manager.bulkSaveSnippets(snippets);
+export const tryRecoverFromBackup = () => manager.tryRecoverFromBackup();
+export const clearSyncDataLostFlag = () => manager.clearSyncDataLostFlag();

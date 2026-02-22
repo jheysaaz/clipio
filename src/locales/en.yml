@@ -1,0 +1,235 @@
+extName: "Clipio: Snippets Manager"
+extDescription: "A powerful browser extension for managing and inserting snippets with lightning speed and increase your productivity."
+
+common:
+  hideSidebar: Hide sidebar
+  showSidebar: Show sidebar
+  cancel: Cancel
+
+dashboard:
+  searchPlaceholder: Search snippets...
+  loadingSnippets: Loading snippets...
+  noSnippetsFound: No snippets found
+  noSnippetsYet: No snippets yet
+  tryDifferentSearch: Try a different search term
+  draftLabel: Untitled
+  draftShortcut: /...
+  addSnippet: Add Snippet
+  switchToDark: Switch to dark mode
+  switchToLight: Switch to light mode
+  settingsAndExport: Settings & Import/Export
+  emptyState:
+    heading: No snippets yet
+    body: Create your first snippet to start saving and reusing text quickly.
+    action: Create your first snippet
+  detailPlaceholder: Select a snippet to view details
+  warnings:
+    uninstall:
+      body: Uninstalling will delete all snippets.
+      action: Export backup →
+    quotaFull:
+      body: Sync storage full — snippets saved locally only.
+      action: Export backup →
+    recovery:
+      body:
+        1: "Your synced snippets were lost (sign-out detected). 1 snippet in backup."
+        n: "Your synced snippets were lost (sign-out detected). $1 snippets in backup."
+      action:
+        1: Restore 1 snippet
+        n: Restore $1 snippets
+  toasts:
+    snippetCreated: Snippet created!
+    failedToLoad: Failed to load snippets.
+    syncFullSaved: Sync storage full — switched to local storage. Your snippet was saved.
+    failedToCreate: Failed to create snippet. Please try again.
+    failedToDelete: Failed to delete snippet.
+    restoredSnippets:
+      1: Restored 1 snippet from backup!
+      n: Restored $1 snippets from backup!
+    failedToRestore: Failed to restore snippets.
+
+newSnippet:
+  cancel: Cancel
+  creating: Creating...
+  create: Create
+  name: Name
+  namePlaceholder: "e.g., Email Signature"
+  shortcut: Shortcut
+  shortcutPlaceholder: "e.g., /sig"
+  shortcutError: Shortcut cannot contain spaces
+  content: Content
+  contentPlaceholder: Enter your snippet content...
+  footer: New snippet
+
+snippetDetail:
+  deleteSnippet: Delete snippet
+  copyToClipboard: Copy to clipboard
+  insertCommand: Insert command
+  saving: Saving...
+  save: Save
+  editorPlaceholder: "Start typing your snippet content here or use '/' for commands..."
+  tags: Tags
+  tagPlaceholder: Tag name...
+  addTag: Add tag
+  addTagTitle: Add a new tag
+  uses: uses
+  updated: Updated
+  deleteDialog:
+    title: Delete Snippet
+    message: 'Are you sure you want to delete "$1"? This action cannot be undone.'
+    confirm: Delete
+    cancel: Cancel
+  toasts:
+    copied: Copied to clipboard!
+    failedToCopy: Failed to copy to clipboard
+    saved: Snippet saved!
+    failedToSave: Failed to save snippet. Please try again.
+    deleted: Snippet deleted!
+    failedToDelete: Failed to delete snippet. Please try again.
+
+confirmDialog:
+  loading: Loading...
+  defaultConfirm: Confirm
+  defaultCancel: Cancel
+
+options:
+  sidebarSettings: Settings
+  menu: Menu
+  nav:
+    general: General
+    importExport: Import & Export
+  theme:
+    darkMode: Dark mode
+    lightMode: Light mode
+  overview:
+    title: Overview
+    description: A snapshot of your Clipio library and storage usage.
+    snippets: Snippets
+    snippetsMax: "of $1 max"
+    syncStorage: Sync storage
+    syncTooltip: "Synced across all your devices via your browser account. Total limit: 100 KB across all snippets. Each individual snippet is capped at 8 KB."
+    localStorage: Local storage estimate
+    localTooltip: "Estimated size of your snippets on this device. Local storage has a much higher limit (~5 MB) and is used as fallback when sync quota is exceeded."
+    quotaExceeded: Sync quota exceeded — snippets are stored locally only.
+  generalSection:
+    title: General
+    description: General settings will appear here in a future update.
+    comingSoon: Coming soon
+  importExport:
+    title: Import & Export
+    description: Import snippets from Clipio or TextBlaze exports, or download a backup of your current library.
+    exportCard:
+      title: Export snippets
+      description: Download your snippet library as a JSON file. Compatible with Clipio on any device.
+      button: Export
+    importCard:
+      title: Import snippets
+      description: Import from a Clipio or TextBlaze export file. Conflicts and unsupported placeholders are resolved step-by-step.
+      button: Import
+      successMessage:
+        1: "✓ 1 snippet imported successfully."
+        n: "✓ $1 snippets imported successfully."
+      supported: "Supported:"
+    modal:
+      title: Import Snippets
+  warnings:
+    uninstall:
+      body: If you uninstall Clipio, all snippets will be permanently deleted.
+      action: Export a backup →
+  toasts:
+    exported: Snippets exported!
+    failedExport: Failed to export snippets.
+    imported:
+      1: Imported 1 snippet!
+      n: Imported $1 snippets!
+
+importWizard:
+  steps:
+    upload: Upload
+    placeholders: Placeholders
+    conflicts: Conflicts
+    confirm: Confirm
+  upload:
+    dropHere: Drop a JSON file here
+    clickToBrowse: or click to browse
+    clickToChange: Click to change file
+    detectedFormat: "Detected format:"
+    unknownFormat: Unknown — please select below
+    formatLabel: Format
+    invalidJson: Invalid JSON file. Please check the file and try again.
+    couldNotRead: Could not read the file.
+    failedToParse: Failed to parse file with selected format.
+    foundSnippets:
+      1: Found 1 snippet
+      n: Found $1 snippets
+  placeholders:
+    description: "The following snippets contain placeholders that Clipio doesn't support. Choose what to do with them."
+    applyToAll: "Apply to all:"
+    chooseAction: Choose action…
+    keepAsLiteral: Keep as literal text
+    removeFromContent: Remove from content
+    skipSnippet: Skip this snippet
+    actionLabel: "Action:"
+  conflicts:
+    description:
+      1: "1 snippet conflicts with your existing library. Choose how to resolve each one."
+      n: "$1 snippets conflict with your existing library. Choose how to resolve each one."
+    resolveAll: "Resolve all:"
+    chooseResolution: Choose resolution…
+    skipDontImport: "Skip (don't import)"
+    overwriteExisting: Overwrite existing
+    importWithNewShortcut: Import with new shortcut
+    incomingColumn: Incoming
+    existingColumn: "Existing ($1 conflict)"
+    resolution: "Resolution:"
+    newShortcut: "New shortcut:"
+    newShortcutPlaceholder: new/shortcut
+  confirm:
+    snippetsToImport: Snippets to import
+    overwritingExisting: Overwriting existing
+    importedWithRename: Imported with renamed shortcut
+    skippedConflicts: "Skipped (conflicts)"
+    estimatedStorage: Estimated storage usage
+    quotaWarning: "This import may exceed browser sync storage limits. Clipio will automatically switch to local storage if needed, but snippets won't sync to other devices."
+    done:
+      heading: Import complete
+      body:
+        1: 1 snippet added to your library.
+        n: $1 snippets added to your library.
+      action: Done
+  footer:
+    cancel: Cancel
+    back: Back
+    next: Next
+    importing: Importing…
+    importCount:
+      1: Import 1 snippet
+      n: Import $1 snippets
+
+editor:
+  toolbar:
+    bold: "Bold (⌘B)"
+    italic: "Italic (⌘I)"
+    underline: "Underline (⌘U)"
+    strikethrough: "Strikethrough (⌘⇧S)"
+    code: "Code (⌘E)"
+    insertLink: "Insert link (⌘K)"
+    removeLink: Remove link
+    confirmLink: Insert link
+    urlPlaceholder: "https://..."
+  slashMenu:
+    header: Commands
+    noMatches: No matching commands
+    clipboard:
+      label: Clipboard
+      description: Insert clipboard content placeholder
+    date:
+      label: Today
+      description: Insert today's date (click to change format)
+    cursor:
+      label: Place Cursor
+      description: Set cursor position after insertion
+      alreadyAdded: Already added (only one allowed)
+    datepicker:
+      label: Pick Date
+      description: Choose any date from calendar

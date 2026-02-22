@@ -6,15 +6,19 @@
  *   2. If it throws StorageQuotaError → persist the fallback flag,
  *      notify via a status flag, and retry with LocalBackend.
  *   3. Always keep the content-script cache (browser.storage.local) in sync.
+ *   4. Shadow-write every mutation to IndexedDB as a non-critical backup.
  *
  * The manager is a singleton; import the pre-built instance from index.ts.
  */
 
 import { SyncBackend } from "./backends/sync";
 import { LocalBackend, updateContentScriptCache } from "./backends/local";
+import { IndexedDBBackend } from "./backends/indexeddb";
 import { StorageQuotaError } from "./types";
 import type { StorageMode, StorageStatus } from "./types";
 import type { Snippet } from "~/types";
+import { buildClipioExport } from "~/lib/exporters/clipio";
+import { FLAGS } from "~/config/constants";
 
 /** Key used to persist the current storage mode across sessions. */
 const MODE_KEY = "storageMode";
@@ -22,6 +26,7 @@ const MODE_KEY = "storageMode";
 export class StorageManager {
   private sync = new SyncBackend();
   private local = new LocalBackend();
+  private idb = new IndexedDBBackend();
 
   // -------------------------------------------------------------------------
   // Mode helpers
@@ -67,6 +72,23 @@ export class StorageManager {
     }
   }
 
+  /**
+   * Attempt to recover snippets from the IndexedDB backup.
+   * Returns the recovered snippets (empty array if none found).
+   * Does NOT automatically persist them — the UI prompts the user
+   * first, then calls bulkSaveSnippets() if they confirm.
+   */
+  async tryRecoverFromBackup(): Promise<Snippet[]> {
+    return this.idb.getSnippets();
+  }
+
+  /**
+   * Clear the sync-data-lost flag once the user has been notified.
+   */
+  async clearSyncDataLostFlag(): Promise<void> {
+    await browser.storage.local.remove(FLAGS.SYNC_DATA_LOST);
+  }
+
   // -------------------------------------------------------------------------
   // Write helpers
   // -------------------------------------------------------------------------
@@ -94,6 +116,13 @@ export class StorageManager {
 
     // Always keep the content-script cache current
     await updateContentScriptCache(snippets);
+
+    // Shadow-write to IndexedDB backup (fire-and-forget — never blocks saves)
+    this.idb
+      .saveSnippets(snippets)
+      .catch((err) =>
+        console.warn("[Clipio] IndexedDB backup write failed:", err)
+      );
   }
 
   // -------------------------------------------------------------------------
@@ -117,13 +146,18 @@ export class StorageManager {
     await this.persistSnippets(next);
   }
 
+  async bulkSaveSnippets(snippets: Snippet[]): Promise<void> {
+    await this.persistSnippets(snippets);
+  }
+
   // -------------------------------------------------------------------------
   // Export / Import
   // -------------------------------------------------------------------------
 
   async exportSnippets(): Promise<void> {
     const snippets = await this.getSnippets();
-    const json = JSON.stringify(snippets, null, 2);
+    const payload = buildClipioExport(snippets);
+    const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
 

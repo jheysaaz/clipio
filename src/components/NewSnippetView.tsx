@@ -6,6 +6,7 @@ import { RichTextEditor } from "~/components/editor";
 import { Label } from "~/components/ui/label";
 import { Separator } from "~/components/ui/separator";
 import type { SnippetFormData } from "~/types";
+import { i18n } from "#i18n";
 
 interface NewSnippetViewProps {
   draftSnippet: SnippetFormData;
@@ -35,7 +36,7 @@ export default function NewSnippetView({
 
     // Validate shortcut - no spaces allowed
     if (name === "shortcut" && value.includes(" ")) {
-      setErrors({ ...errors, shortcut: "Shortcut cannot contain spaces" });
+      setErrors({ ...errors, shortcut: i18n.t("newSnippet.shortcutError") });
       return;
     } else if (name === "shortcut") {
       setErrors({ ...errors, shortcut: "" });
@@ -59,7 +60,11 @@ export default function NewSnippetView({
           size="icon"
           onClick={onToggleSidebar}
           className="h-8 w-8"
-          title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+          title={
+            sidebarOpen
+              ? i18n.t("common.hideSidebar")
+              : i18n.t("common.showSidebar")
+          }
         >
           {sidebarOpen ? (
             <PanelLeftClose className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -86,7 +91,9 @@ export default function NewSnippetView({
           className="h-8 text-xs"
         >
           <Save className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
-          {isSaving ? "Creating..." : "Create"}
+          {isSaving
+            ? i18n.t("newSnippet.creating")
+            : i18n.t("newSnippet.create")}
         </Button>
       </div>
 
@@ -95,13 +102,13 @@ export default function NewSnippetView({
         {/* Name Field */}
         <div className="space-y-1.5">
           <Label htmlFor="label" className="text-xs font-medium">
-            Name
+            {i18n.t("newSnippet.name")}
           </Label>
           <Input
             id="label"
             name="label"
             type="text"
-            placeholder="e.g., Email Signature"
+            placeholder={i18n.t("newSnippet.namePlaceholder")}
             value={draftSnippet.label}
             onChange={handleChange}
             className="h-8 text-sm"
@@ -111,13 +118,13 @@ export default function NewSnippetView({
         {/* Shortcut Field */}
         <div className="space-y-1.5">
           <Label htmlFor="shortcut" className="text-xs font-medium">
-            Shortcut
+            {i18n.t("newSnippet.shortcut")}
           </Label>
           <Input
             id="shortcut"
             name="shortcut"
             type="text"
-            placeholder="e.g., /sig"
+            placeholder={i18n.t("newSnippet.shortcutPlaceholder")}
             value={draftSnippet.shortcut}
             onChange={handleChange}
             className={`h-8 text-sm font-mono ${errors.shortcut ? "border-red-500" : ""}`}
@@ -130,7 +137,7 @@ export default function NewSnippetView({
         {/* Content Field */}
         <div className="space-y-1.5 flex-1">
           <Label htmlFor="content" className="text-xs font-medium">
-            Content
+            {i18n.t("newSnippet.content")}
           </Label>
           <div className="min-h-50 border border-zinc-200 dark:border-zinc-800 rounded-md p-2">
             <RichTextEditor
@@ -138,7 +145,7 @@ export default function NewSnippetView({
               onChange={(value) =>
                 onDraftChange({ ...draftSnippet, content: value })
               }
-              placeholder="Enter your snippet content..."
+              placeholder={i18n.t("newSnippet.contentPlaceholder")}
               className="text-sm"
             />
           </div>
@@ -148,7 +155,7 @@ export default function NewSnippetView({
       {/* Footer */}
       <Separator />
       <div className="px-3 py-2 flex items-center justify-center text-xs text-zinc-500 dark:text-zinc-400">
-        <span>New snippet</span>
+        <span>{i18n.t("newSnippet.footer")}</span>
       </div>
     </div>
   );

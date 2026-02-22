@@ -12,10 +12,28 @@ export const STORAGE_KEYS = {
 } as const;
 
 export const SYNC_QUOTA = {
-  /** Hard limit enforced by the browser (bytes). */
+  /** Hard total-bytes limit enforced by the browser. */
   TOTAL_BYTES: 102_400,
-  /** Warn the user before hitting the hard limit (bytes). */
+  /** Per-item limit — each individual storage key cannot exceed this. */
+  BYTES_PER_ITEM: 8_192,
+  /** Maximum number of keys allowed in storage.sync. */
+  MAX_ITEMS: 512,
+  /** Warn the user before hitting the hard total limit (bytes). */
   WARN_AT: 90_000,
+} as const;
+
+export const IDB_CONFIG = {
+  DB_NAME: "clipio-backup",
+  STORE_NAME: "snippets",
+  VERSION: 1,
+} as const;
+
+/** Keys stored in browser.storage.local for UI state flags. */
+export const FLAGS = {
+  /** False on fresh install; true once the user dismisses the warning. */
+  DISMISSED_UNINSTALL_WARNING: "dismissedUninstallWarning",
+  /** Set to true by the background script when a sync sign-out is detected. */
+  SYNC_DATA_LOST: "syncDataLost",
 } as const;
 
 export const TIMING = {

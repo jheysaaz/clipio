@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { i18n } from "#i18n";
 import {
   Plus,
   Search,
@@ -7,10 +8,7 @@ import {
   PanelLeft,
   Sun,
   Moon,
-  Download,
-  Upload,
-  AlertTriangle,
-  X,
+  Settings,
   Clipboard,
 } from "lucide-react";
 import SnippetListItem from "~/components/SnippetListItem";
@@ -30,10 +28,13 @@ import {
   updateSnippet,
   deleteSnippet,
   getStorageStatus,
-  exportSnippets,
-  importSnippets,
+  bulkSaveSnippets,
+  tryRecoverFromBackup,
+  clearSyncDataLostFlag,
   StorageQuotaError,
 } from "~/storage";
+import { WarningBanner } from "~/components/ui/warning-banner";
+import { FLAGS } from "~/config/constants";
 
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -51,8 +52,10 @@ export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const [quotaWarning, setQuotaWarning] = useState(false);
+  const [showUninstallWarning, setShowUninstallWarning] = useState(false);
+  const [recoverySnippets, setRecoverySnippets] = useState<Snippet[]>([]);
+  const [showRecoveryBanner, setShowRecoveryBanner] = useState(false);
   const isResizing = useRef(false);
-  const importInputRef = useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
   const { theme, toggleTheme } = useTheme();
 
@@ -97,9 +100,41 @@ export default function Dashboard() {
         if (status.quotaExceeded) setQuotaWarning(true);
       } catch (err) {
         console.error("[Clipio] Failed to load snippets:", err);
-        showToast("Failed to load snippets.", "error");
+        showToast(i18n.t("dashboard.toasts.failedToLoad"), "error");
       } finally {
         setLoading(false);
+      }
+    })();
+  }, []);
+
+  // Check uninstall-warning flag + sign-out recovery on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const flags = await browser.storage.local.get([
+          FLAGS.DISMISSED_UNINSTALL_WARNING,
+          FLAGS.SYNC_DATA_LOST,
+        ]);
+
+        if (flags[FLAGS.DISMISSED_UNINSTALL_WARNING] !== true) {
+          setShowUninstallWarning(true);
+          // Persist immediately — don't wait for the X click.
+          // If the popup is closed any other way the banner still won't reappear.
+          browser.storage.local
+            .set({ [FLAGS.DISMISSED_UNINSTALL_WARNING]: true })
+            .catch(console.warn);
+        }
+
+        if (flags[FLAGS.SYNC_DATA_LOST] === true) {
+          const backup = await tryRecoverFromBackup();
+          if (backup.length > 0) {
+            setRecoverySnippets(backup);
+            setShowRecoveryBanner(true);
+          }
+          await clearSyncDataLostFlag();
+        }
+      } catch (err) {
+        console.error("[Clipio] Flag check failed:", err);
       }
     })();
   }, []);
@@ -136,14 +171,11 @@ export default function Dashboard() {
       setSelectedSnippet(newSnippet);
       setIsCreating(false);
       setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
-      showToast("Snippet created!", "success");
+      showToast(i18n.t("dashboard.toasts.snippetCreated"), "success");
     } catch (err) {
       if (err instanceof StorageQuotaError) {
         setQuotaWarning(true);
-        showToast(
-          "Sync storage full — switched to local storage. Your snippet was saved.",
-          "error"
-        );
+        showToast(i18n.t("dashboard.toasts.syncFullSaved"), "error");
         // Retry after manager has switched to local mode
         try {
           const newSnippet = createSnippet(draftSnippet);
@@ -154,10 +186,10 @@ export default function Dashboard() {
           setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
         } catch (retryErr) {
           console.error("[Clipio] Retry after quota error failed:", retryErr);
-          showToast("Failed to create snippet. Please try again.", "error");
+          showToast(i18n.t("dashboard.toasts.failedToCreate"), "error");
         }
       } else {
-        showToast("Failed to create snippet. Please try again.", "error");
+        showToast(i18n.t("dashboard.toasts.failedToCreate"), "error");
       }
     } finally {
       setIsSaving(false);
@@ -174,7 +206,7 @@ export default function Dashboard() {
       }
     } catch (err) {
       console.error("[Clipio] Failed to delete snippet:", err);
-      showToast("Failed to delete snippet.", "error");
+      showToast(i18n.t("dashboard.toasts.failedToDelete"), "error");
     }
   };
 
@@ -188,38 +220,6 @@ export default function Dashboard() {
     } catch (err) {
       console.error("[Clipio] Failed to update snippet:", err);
       showToast("Failed to update snippet.", "error");
-    }
-  };
-
-  // -------------------------------------------------------------------------
-  // Export / Import
-  // -------------------------------------------------------------------------
-
-  const handleExport = async () => {
-    try {
-      await exportSnippets();
-      showToast("Snippets exported!", "success");
-    } catch (err) {
-      console.error("[Clipio] Export failed:", err);
-      showToast("Failed to export snippets.", "error");
-    }
-  };
-
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const { imported } = await importSnippets(file);
-      const refreshed = await getSnippets();
-      setSnippets(refreshed);
-      showToast(`Imported ${imported} new snippet(s)!`, "success");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Import failed.";
-      showToast(message, "error");
-    } finally {
-      // Reset input so same file can be re-imported if needed
-      if (importInputRef.current) importInputRef.current.value = "";
     }
   };
 
@@ -284,27 +284,64 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-full select-none">
+      {/* Sign-out recovery banner */}
+      {showRecoveryBanner && (
+        <WarningBanner
+          action={{
+            label: i18n.t(
+              "dashboard.warnings.recovery.action",
+              recoverySnippets.length
+            ),
+            onClick: async () => {
+              try {
+                await bulkSaveSnippets(recoverySnippets);
+                const list = await getSnippets();
+                setSnippets(list);
+                if (list.length > 0) setSelectedSnippet(list[0]);
+                setShowRecoveryBanner(false);
+                showToast(
+                  i18n.t(
+                    "dashboard.toasts.restoredSnippets",
+                    recoverySnippets.length
+                  ),
+                  "success"
+                );
+              } catch (err) {
+                console.error("[Clipio] Recovery failed:", err);
+                showToast(i18n.t("dashboard.toasts.failedToRestore"), "error");
+              }
+            },
+          }}
+          onDismiss={() => setShowRecoveryBanner(false)}
+        >
+          {i18n.t("dashboard.warnings.recovery.body", recoverySnippets.length)}
+        </WarningBanner>
+      )}
+
+      {/* First-open uninstall data-loss warning */}
+      {showUninstallWarning && (
+        <WarningBanner
+          action={{
+            label: i18n.t("dashboard.warnings.uninstall.action"),
+            onClick: () => browser.runtime.openOptionsPage(),
+          }}
+          onDismiss={() => setShowUninstallWarning(false)}
+        >
+          {i18n.t("dashboard.warnings.uninstall.body")}
+        </WarningBanner>
+      )}
+
       {/* Quota warning banner */}
       {quotaWarning && (
-        <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs">
-          <AlertTriangle
-            className="h-3.5 w-3.5 shrink-0 mt-0.5"
-            strokeWidth={1.5}
-          />
-          <p className="flex-1">
-            Browser sync storage is full. New snippets are saved locally on this
-            device only.{" "}
-            <button
-              onClick={handleExport}
-              className="underline hover:no-underline font-medium"
-            >
-              Export a backup.
-            </button>
-          </p>
-          <button onClick={() => setQuotaWarning(false)}>
-            <X className="h-3 w-3" strokeWidth={2} />
-          </button>
-        </div>
+        <WarningBanner
+          action={{
+            label: i18n.t("dashboard.warnings.quotaFull.action"),
+            onClick: () => browser.runtime.openOptionsPage(),
+          }}
+          onDismiss={() => setQuotaWarning(false)}
+        >
+          {i18n.t("dashboard.warnings.quotaFull.body")}
+        </WarningBanner>
       )}
 
       {/* Master-Detail Layout */}
@@ -333,7 +370,7 @@ export default function Dashboard() {
               />
               <Input
                 type="text"
-                placeholder="Search snippets..."
+                placeholder={i18n.t("dashboard.searchPlaceholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-8 h-8 text-sm rounded-lg"
@@ -351,17 +388,19 @@ export default function Dashboard() {
                     strokeWidth={1.5}
                   />
                   <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                    Loading snippets...
+                    {i18n.t("dashboard.loadingSnippets")}
                   </p>
                 </div>
               ) : filteredSnippets.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-2">
                   <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                    {searchQuery ? "No snippets found" : "No snippets yet"}
+                    {searchQuery
+                      ? i18n.t("dashboard.noSnippetsFound")
+                      : i18n.t("dashboard.noSnippetsYet")}
                   </p>
                   {searchQuery && (
                     <p className="text-xs text-zinc-500">
-                      Try a different search term
+                      {i18n.t("dashboard.tryDifferentSearch")}
                     </p>
                   )}
                 </div>
@@ -373,10 +412,12 @@ export default function Dashboard() {
                       <div className="w-full text-left h-auto py-2 px-2.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-dashed border-zinc-300 dark:border-zinc-600">
                         <div className="flex items-center gap-2 w-full min-w-0 overflow-hidden">
                           <span className="font-medium text-xs text-zinc-900 dark:text-zinc-100 truncate flex-1 min-w-0">
-                            {draftSnippet.label || "Untitled"}
+                            {draftSnippet.label ||
+                              i18n.t("dashboard.draftLabel")}
                           </span>
                           <span className="font-mono text-xs px-1.5 py-0 border border-zinc-200 dark:border-zinc-700 rounded max-w-18 truncate shrink-0 text-zinc-500">
-                            {draftSnippet.shortcut || "/..."}
+                            {draftSnippet.shortcut ||
+                              i18n.t("dashboard.draftShortcut")}
                           </span>
                         </div>
                       </div>
@@ -415,7 +456,7 @@ export default function Dashboard() {
               className="w-full h-8 text-xs rounded-lg"
             >
               <Plus className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
-              Add Snippet
+              {i18n.t("dashboard.addSnippet")}
             </Button>
           </div>
 
@@ -430,8 +471,8 @@ export default function Dashboard() {
                 className="h-6 w-6 rounded-md"
                 title={
                   theme === "light"
-                    ? "Switch to dark mode"
-                    : "Switch to light mode"
+                    ? i18n.t("dashboard.switchToDark")
+                    : i18n.t("dashboard.switchToLight")
                 }
               >
                 {theme === "light" ? (
@@ -441,33 +482,17 @@ export default function Dashboard() {
                 )}
               </Button>
             </div>
-            {/* Import/Export group */}
+            {/* Settings / Options */}
             <div className="flex items-center gap-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={handleExport}
+                onClick={() => browser.runtime.openOptionsPage()}
                 className="h-6 w-6 rounded-md"
-                title="Export snippets as JSON"
+                title={i18n.t("dashboard.settingsAndExport")}
               >
-                <Download className="h-3 w-3" strokeWidth={1.5} />
+                <Settings className="h-3 w-3" strokeWidth={1.5} />
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => importInputRef.current?.click()}
-                className="h-6 w-6 rounded-md"
-                title="Import snippets from JSON"
-              >
-                <Upload className="h-3 w-3" strokeWidth={1.5} />
-              </Button>
-              <input
-                ref={importInputRef}
-                type="file"
-                accept=".json"
-                className="hidden"
-                onChange={handleImport}
-              />
             </div>
           </div>
         </div>
@@ -502,7 +527,11 @@ export default function Dashboard() {
                   size="icon"
                   onClick={() => setSidebarOpen(!sidebarOpen)}
                   className="h-8 w-8"
-                  title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+                  title={
+                    sidebarOpen
+                      ? i18n.t("common.hideSidebar")
+                      : i18n.t("common.showSidebar")
+                  }
                 >
                   {sidebarOpen ? (
                     <PanelLeftClose className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -519,15 +548,14 @@ export default function Dashboard() {
                   />
                 </div>
                 <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-1">
-                  No snippets yet
+                  {i18n.t("dashboard.emptyState.heading")}
                 </h3>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4 max-w-50">
-                  Create your first snippet to start saving and reusing text
-                  quickly.
+                  {i18n.t("dashboard.emptyState.body")}
                 </p>
                 <Button onClick={handleAddSnippet} className="h-8 text-xs">
                   <Plus className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
-                  Create your first snippet
+                  {i18n.t("dashboard.emptyState.action")}
                 </Button>
               </div>
             </>
@@ -539,7 +567,11 @@ export default function Dashboard() {
                   size="icon"
                   onClick={() => setSidebarOpen(!sidebarOpen)}
                   className="h-8 w-8"
-                  title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+                  title={
+                    sidebarOpen
+                      ? i18n.t("common.hideSidebar")
+                      : i18n.t("common.showSidebar")
+                  }
                 >
                   {sidebarOpen ? (
                     <PanelLeftClose className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -550,7 +582,7 @@ export default function Dashboard() {
               </div>
               <div className="flex items-center justify-center flex-1">
                 <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                  Select a snippet to view details
+                  {i18n.t("dashboard.detailPlaceholder")}
                 </p>
               </div>
             </>
