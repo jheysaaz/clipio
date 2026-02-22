@@ -4,7 +4,18 @@ import {
   DATE_PLACEHOLDER,
   CURSOR_PLACEHOLDER,
   DATEPICKER_PLACEHOLDER,
+  LINK_ELEMENT,
 } from "./types";
+
+// Create a plugin for link elements (inline, NOT void — wraps text)
+export const LinkPlugin = createPlatePlugin({
+  key: LINK_ELEMENT,
+  node: {
+    isElement: true,
+    isInline: true,
+    isVoid: false,
+  },
+});
 
 // Create a plugin for the clipboard placeholder element
 export const ClipboardPlaceholderPlugin = createPlatePlugin({

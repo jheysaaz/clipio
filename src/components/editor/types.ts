@@ -46,7 +46,15 @@ export interface SlashCommandMenuProps {
   manualTrigger?: boolean;
 }
 
+// Link element type
+export const LINK_ELEMENT = "a";
+
 // Element types with custom properties
+export interface LinkElementType extends TElement {
+  type: typeof LINK_ELEMENT;
+  url: string;
+}
+
 export interface DatePlaceholderElement extends TElement {
   type: typeof DATE_PLACEHOLDER;
   format?: string;

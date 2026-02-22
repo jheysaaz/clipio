@@ -185,6 +185,8 @@ export default defineContentScript({
     // Convert markdown to plain text (content is now stored as markdown)
     function markdownToPlainText(content: string): string {
       let text = content;
+      // Extract link URLs only (strip label): [label](url) → url
+      text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$2");
       // Remove markdown formatting
       text = text.replace(/\*\*([^*]+)\*\*/g, "$1"); // bold
       text = text.replace(/_([^_]+)_/g, "$1"); // italic
@@ -198,6 +200,118 @@ export default defineContentScript({
         text = temp.textContent || temp.innerText || "";
       }
       return text;
+    }
+
+    // Sanitize a URL to prevent XSS (only allow http, https, mailto)
+    function sanitizeUrl(url: string): string {
+      const trimmed = url.trim();
+      if (/^(https?:\/\/|mailto:)/i.test(trimmed)) {
+        return trimmed;
+      }
+      // Block javascript: and other dangerous schemes
+      if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+        return "";
+      }
+      // Bare domain or path — assume https
+      return `https://${trimmed}`;
+    }
+
+    // Escape HTML special characters
+    function escapeHtml(text: string): string {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    // Convert markdown inline formatting to HTML
+    // Processes: links (before italic to avoid URL underscore conflicts),
+    // bold, italic, strikethrough, code, underline
+    function markdownInlineToHtml(text: string): string {
+      let result = "";
+      let remaining = text;
+
+      while (remaining.length > 0) {
+        // Link [label](url) — must be before italic
+        const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
+        if (linkMatch) {
+          const label = markdownInlineToHtml(linkMatch[1]); // recurse for nested marks
+          const url = sanitizeUrl(linkMatch[2]);
+          if (url) {
+            result += `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+          } else {
+            result += escapeHtml(linkMatch[1]);
+          }
+          remaining = remaining.slice(linkMatch[0].length);
+          continue;
+        }
+
+        // Bold **text**
+        const boldMatch = remaining.match(/^\*\*([^*]+)\*\*/);
+        if (boldMatch) {
+          result += `<strong>${markdownInlineToHtml(boldMatch[1])}</strong>`;
+          remaining = remaining.slice(boldMatch[0].length);
+          continue;
+        }
+
+        // Italic _text_
+        const italicMatch = remaining.match(/^_([^_]+)_/);
+        if (italicMatch) {
+          result += `<em>${markdownInlineToHtml(italicMatch[1])}</em>`;
+          remaining = remaining.slice(italicMatch[0].length);
+          continue;
+        }
+
+        // Strikethrough ~~text~~
+        const strikeMatch = remaining.match(/^~~([^~]+)~~/);
+        if (strikeMatch) {
+          result += `<s>${markdownInlineToHtml(strikeMatch[1])}</s>`;
+          remaining = remaining.slice(strikeMatch[0].length);
+          continue;
+        }
+
+        // Code `text`
+        const codeMatch = remaining.match(/^`([^`]+)`/);
+        if (codeMatch) {
+          result += `<code>${escapeHtml(codeMatch[1])}</code>`;
+          remaining = remaining.slice(codeMatch[0].length);
+          continue;
+        }
+
+        // Underline <u>text</u>
+        const underlineMatch = remaining.match(/^<u>([^<]+)<\/u>/);
+        if (underlineMatch) {
+          result += `<u>${markdownInlineToHtml(underlineMatch[1])}</u>`;
+          remaining = remaining.slice(underlineMatch[0].length);
+          continue;
+        }
+
+        // Find next special character
+        const nextSpecial = remaining.search(
+          /\[(?=[^\]]+\]\([^)]+\))|\*\*|_(?!_)|~~|`|<u>/
+        );
+        if (nextSpecial === -1) {
+          result += escapeHtml(remaining);
+          break;
+        } else if (nextSpecial === 0) {
+          // No match at position 0 — consume one char to avoid infinite loop
+          result += escapeHtml(remaining[0]);
+          remaining = remaining.slice(1);
+        } else {
+          result += escapeHtml(remaining.slice(0, nextSpecial));
+          remaining = remaining.slice(nextSpecial);
+        }
+      }
+
+      return result;
+    }
+
+    // Convert full markdown content to HTML
+    function markdownToHtml(content: string): string {
+      const paragraphs = content.split(/\n/);
+      const htmlParts = paragraphs.map((para) => markdownInlineToHtml(para));
+      return htmlParts.join("<br>");
     }
 
     // Format date according to the specified format
@@ -242,8 +356,9 @@ export default defineContentScript({
       content: string,
       asHtml: boolean = false
     ): Promise<ProcessedContent> {
-      // First convert to plain text if needed (content is stored as markdown)
-      let processedContent = asHtml ? content : markdownToPlainText(content);
+      // Process dynamic placeholders on the raw markdown FIRST
+      // (before any format conversion, so replaced text doesn't contain accidental markdown)
+      let processedContent = content;
       let cursorOffset: number | null = null;
 
       // Process clipboard placeholder
@@ -269,7 +384,6 @@ export default defineContentScript({
           dateMatch[0],
           formattedDate
         );
-        // Reset regex to handle multiple occurrences
         dateRegex.lastIndex = 0;
       }
 
@@ -288,12 +402,38 @@ export default defineContentScript({
         datepickerRegex.lastIndex = 0;
       }
 
-      // Process cursor placeholder - {{cursor}}
-      // Find the position and remove the placeholder
-      const cursorMatch = processedContent.match(/\{\{cursor\}\}/);
-      if (cursorMatch && cursorMatch.index !== undefined) {
-        cursorOffset = cursorMatch.index;
-        processedContent = processedContent.replace(/\{\{cursor\}\}/, "");
+      if (asHtml) {
+        // For HTML mode: insert a marker element for cursor positioning
+        processedContent = processedContent.replace(
+          /\{\{cursor\}\}/,
+          '<span id="clipio-cursor-marker" data-clipio-cursor="true"></span>'
+        );
+        // Remove any remaining cursor placeholders
+        processedContent = processedContent.replace(/\{\{cursor\}\}/g, "");
+        // Convert markdown → HTML
+        processedContent = markdownToHtml(processedContent);
+      } else {
+        // For plain text mode: strip markdown and handle cursor offset
+        const cursorMatch = processedContent.match(/\{\{cursor\}\}/);
+        if (cursorMatch && cursorMatch.index !== undefined) {
+          processedContent = processedContent.replace(/\{\{cursor\}\}/, "");
+          // Convert to plain text, then compute cursor offset
+          processedContent = markdownToPlainText(processedContent);
+          // Re-calculate the cursor offset on the plain text
+          // We need to process the content before the cursor marker separately
+          const beforeCursor = content.substring(0, cursorMatch.index);
+          // Replace placeholders in beforeCursor (same as above but for the portion before cursor)
+          let processedBefore = beforeCursor;
+          processedBefore = processedBefore.replace(/\{\{clipboard\}\}/g, ""); // already replaced above
+          processedBefore = processedBefore.replace(/\{\{date:[a-z]+\}\}/g, "");
+          processedBefore = processedBefore.replace(
+            /\{\{datepicker:\d{4}-\d{2}-\d{2}\}\}/g,
+            ""
+          );
+          cursorOffset = markdownToPlainText(processedBefore).length;
+        } else {
+          processedContent = markdownToPlainText(processedContent);
+        }
       }
 
       return { content: processedContent, cursorOffset };
@@ -359,7 +499,7 @@ export default defineContentScript({
     ) {
       const { snippet, startPos, endPos } = match;
       const text = textNode.textContent || "";
-      const { content: processedContent, cursorOffset } =
+      const { content: processedContent } =
         await processSnippetContent(snippet.content, true);
 
       const tempDiv = document.createElement("div");
@@ -376,8 +516,22 @@ export default defineContentScript({
       const parent = textNode.parentNode;
       if (parent) parent.replaceChild(fragment, textNode);
 
-      // TODO: Handle cursor positioning for contentEditable (more complex)
-      // For now, just dispatch the input event
+      // Handle cursor positioning via marker element
+      const cursorMarker = element.querySelector(
+        '[data-clipio-cursor="true"]'
+      );
+      if (cursorMarker) {
+        const sel = window.getSelection();
+        if (sel) {
+          const cursorRange = document.createRange();
+          cursorRange.setStartAfter(cursorMarker);
+          cursorRange.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(cursorRange);
+        }
+        cursorMarker.remove();
+      }
+
       element.dispatchEvent(
         new Event("input", { bubbles: true, cancelable: true })
       );

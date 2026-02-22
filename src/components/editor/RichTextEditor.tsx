@@ -32,6 +32,7 @@ import {
   DatePlaceholderPlugin,
   CursorPlaceholderPlugin,
   DatepickerPlaceholderPlugin,
+  LinkPlugin,
 } from "./plugins";
 import {
   ClipboardPlaceholderElement,
@@ -46,6 +47,7 @@ import {
   StrikethroughLeaf,
   CodeLeaf,
 } from "./components/leaves";
+import { LinkElementComponent } from "./components/LinkElement";
 import { FloatingToolbar } from "./components/FloatingToolbar";
 import { SlashCommandMenu } from "./components/SlashCommandMenu";
 
@@ -77,6 +79,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
           UnderlinePlugin,
           StrikethroughPlugin,
           CodePlugin,
+          LinkPlugin.withComponent(LinkElementComponent),
           ClipboardPlaceholderPlugin.withComponent(ClipboardPlaceholderElement),
           DatePlaceholderPlugin.withComponent(DatePlaceholderElement),
           CursorPlaceholderPlugin.withComponent(CursorPlaceholderElement),

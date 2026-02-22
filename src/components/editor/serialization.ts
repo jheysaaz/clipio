@@ -4,6 +4,7 @@ import {
   DATE_PLACEHOLDER,
   CURSOR_PLACEHOLDER,
   DATEPICKER_PLACEHOLDER,
+  LINK_ELEMENT,
 } from "./types";
 
 // Type for parsed text nodes with marks
@@ -15,13 +16,14 @@ const REGEX_PATTERNS = {
   date: /^\{\{date:(iso|us|eu|long|short)\}\}/,
   cursor: /^\{\{cursor\}\}/,
   datepicker: /^\{\{datepicker:(\d{4}-\d{2}-\d{2})\}\}/,
+  link: /^\[([^\]]+)\]\(([^)]+)\)/,
   bold: /^\*\*([^*]+)\*\*/,
   italic: /^_([^_]+)_/,
   strikethrough: /^~~([^~]+)~~/,
   code: /^`([^`]+)`/,
   underline: /^<u>([^<]+)<\/u>/,
   nextSpecial:
-    /\*\*|_(?!_)|~~|`|<u>|\{\{clipboard\}\}|\{\{date:|\{\{cursor\}\}|\{\{datepicker:/,
+    /\[(?=[^\]]+\]\([^)]+\))|\*\*|_(?!_)|~~|`|<u>|\{\{clipboard\}\}|\{\{date:|\{\{cursor\}\}|\{\{datepicker:/,
   htmlTags: /<[a-z][\s\S]*>/i,
 } as const;
 
@@ -75,6 +77,11 @@ function serializeNode(node: Descendant): string {
   if (element.type === DATEPICKER_PLACEHOLDER) {
     const date = (element as TElement & { date?: string }).date || "";
     return `{{datepicker:${date}}}`;
+  }
+
+  if (element.type === LINK_ELEMENT) {
+    const url = (element as TElement & { url?: string }).url || "";
+    return `[${children}](${url})`;
   }
 
   return children;
@@ -161,6 +168,19 @@ function parseMarkdownInline(text: string): Descendant[] {
         children: [{ text: "" }],
       } as TElement & { date: string });
       remaining = remaining.slice(datepickerMatch[0].length);
+      continue;
+    }
+
+    // Check for link [label](url) — must be before italic to avoid URL underscores triggering italic
+    const linkMatch = remaining.match(REGEX_PATTERNS.link);
+    if (linkMatch) {
+      const linkChildren = parseMarkdownInline(linkMatch[1]);
+      nodes.push({
+        type: LINK_ELEMENT,
+        url: linkMatch[2],
+        children: linkChildren.length > 0 ? linkChildren : [{ text: linkMatch[1] }],
+      } as TElement & { url: string });
+      remaining = remaining.slice(linkMatch[0].length);
       continue;
     }
 
@@ -330,6 +350,18 @@ function deserializeNodes(element: Node): Descendant[] {
         return results;
       };
 
+      // Handle link elements
+      if (tagName === "a") {
+        const url = el.getAttribute("href") || "";
+        const linkChildren = deserializeNodes(el);
+        nodes.push({
+          type: LINK_ELEMENT,
+          url,
+          children: linkChildren.length > 0 ? linkChildren : [{ text: el.textContent || "" }],
+        } as TElement & { url: string });
+        return;
+      }
+
       if (
         ["strong", "b", "em", "i", "u", "s", "del", "strike", "code"].includes(
           tagName
@@ -357,4 +389,115 @@ function deserializeNodes(element: Node): Descendant[] {
   });
 
   return nodes;
+}
+
+// ─── Markdown ↔ HTML / Plain-text converters (for copy & insertion) ────────
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function sanitizeUrl(url: string): string {
+  const trimmed = url.trim();
+  if (/^(https?:\/\/|mailto:)/i.test(trimmed)) return trimmed;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return ""; // block javascript:, data:, etc.
+  return `https://${trimmed}`;
+}
+
+function markdownInlineToHtml(text: string): string {
+  let result = "";
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    // Link [label](url) — before italic
+    const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
+    if (linkMatch) {
+      const label = markdownInlineToHtml(linkMatch[1]);
+      const url = sanitizeUrl(linkMatch[2]);
+      if (url) {
+        result += `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+      } else {
+        result += escapeHtml(linkMatch[1]);
+      }
+      remaining = remaining.slice(linkMatch[0].length);
+      continue;
+    }
+
+    const boldMatch = remaining.match(/^\*\*([^*]+)\*\*/);
+    if (boldMatch) {
+      result += `<strong>${markdownInlineToHtml(boldMatch[1])}</strong>`;
+      remaining = remaining.slice(boldMatch[0].length);
+      continue;
+    }
+
+    const italicMatch = remaining.match(/^_([^_]+)_/);
+    if (italicMatch) {
+      result += `<em>${markdownInlineToHtml(italicMatch[1])}</em>`;
+      remaining = remaining.slice(italicMatch[0].length);
+      continue;
+    }
+
+    const strikeMatch = remaining.match(/^~~([^~]+)~~/);
+    if (strikeMatch) {
+      result += `<s>${markdownInlineToHtml(strikeMatch[1])}</s>`;
+      remaining = remaining.slice(strikeMatch[0].length);
+      continue;
+    }
+
+    const codeMatch = remaining.match(/^`([^`]+)`/);
+    if (codeMatch) {
+      result += `<code>${escapeHtml(codeMatch[1])}</code>`;
+      remaining = remaining.slice(codeMatch[0].length);
+      continue;
+    }
+
+    const underlineMatch = remaining.match(/^<u>([^<]+)<\/u>/);
+    if (underlineMatch) {
+      result += `<u>${markdownInlineToHtml(underlineMatch[1])}</u>`;
+      remaining = remaining.slice(underlineMatch[0].length);
+      continue;
+    }
+
+    const nextSpecial = remaining.search(
+      /\[(?=[^\]]+\]\([^)]+\))|\*\*|_(?!_)|~~|`|<u>/
+    );
+    if (nextSpecial === -1) {
+      result += escapeHtml(remaining);
+      break;
+    } else if (nextSpecial === 0) {
+      result += escapeHtml(remaining[0]);
+      remaining = remaining.slice(1);
+    } else {
+      result += escapeHtml(remaining.slice(0, nextSpecial));
+      remaining = remaining.slice(nextSpecial);
+    }
+  }
+
+  return result;
+}
+
+/** Convert markdown content to HTML string */
+export function markdownToHtml(markdown: string): string {
+  if (!markdown) return "";
+  const paragraphs = markdown.split(/\n/);
+  return paragraphs.map((p) => markdownInlineToHtml(p)).join("<br>");
+}
+
+/** Convert markdown content to plain text (strips all formatting, links → URL only) */
+export function markdownToPlainText(markdown: string): string {
+  if (!markdown) return "";
+  let text = markdown;
+  // Links → URL only
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$2");
+  // Strip formatting marks
+  text = text.replace(/\*\*([^*]+)\*\*/g, "$1");
+  text = text.replace(/_([^_]+)_/g, "$1");
+  text = text.replace(/~~([^~]+)~~/g, "$1");
+  text = text.replace(/`([^`]+)`/g, "$1");
+  text = text.replace(/<u>([^<]+)<\/u>/g, "$1");
+  return text;
 }

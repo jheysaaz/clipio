@@ -14,6 +14,10 @@ import {
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { RichTextEditor, type RichTextEditorRef } from "~/components/editor";
+import {
+  markdownToHtml,
+  markdownToPlainText,
+} from "~/components/editor/serialization";
 import { Separator } from "~/components/ui/separator";
 import ConfirmDialog from "~/components/ConfirmDialog";
 import { Badge } from "~/components/ui/badge";
@@ -74,7 +78,16 @@ export default function SnippetDetailView({
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(editedContent);
+      const plainText = markdownToPlainText(editedContent);
+      const html = markdownToHtml(editedContent);
+
+      // Write both plain text and HTML to clipboard for rich paste support
+      const clipboardItem = new ClipboardItem({
+        "text/plain": new Blob([plainText], { type: "text/plain" }),
+        "text/html": new Blob([html], { type: "text/html" }),
+      });
+      await navigator.clipboard.write([clipboardItem]);
+
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
 
