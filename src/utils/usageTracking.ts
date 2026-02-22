@@ -3,6 +3,8 @@
  * Tracks how many times each snippet has been copied/used
  */
 
+import { captureError } from "~/lib/sentry";
+
 const USAGE_KEY = "snippetUsageCount";
 
 interface UsageData {
@@ -33,6 +35,7 @@ export const getUsageCounts = async (): Promise<UsageData> => {
     return data ? JSON.parse(data) : {};
   } catch (error) {
     console.error("Failed to get usage counts:", error);
+    captureError(error, { action: "getUsageCounts" });
     return {};
   }
 };
@@ -66,6 +69,7 @@ export const incrementSnippetUsage = async (
     return newCount;
   } catch (error) {
     console.error("Failed to increment usage count:", error);
+    captureError(error, { action: "incrementSnippetUsage" });
     return 0;
   }
 };

@@ -9,6 +9,7 @@
 
 import type { StorageBackend } from "../types";
 import type { Snippet } from "~/types";
+import { captureError } from "~/lib/sentry";
 
 const LOCAL_KEY = "snippets";
 
@@ -26,6 +27,7 @@ export class LocalBackend implements StorageBackend {
       return typeof raw === "string" ? JSON.parse(raw) : (raw as Snippet[]);
     } catch {
       console.error("[Clipio] LocalBackend: failed to parse snippets", raw);
+      captureError(new Error("LocalBackend: failed to parse snippets"), { action: "local.parseSnippets" });
       return [];
     }
   }
@@ -53,5 +55,6 @@ export async function updateContentScriptCache(
     });
   } catch (error) {
     console.error("[Clipio] Failed to update content script cache:", error);
+    captureError(error, { action: "local.updateCache" });
   }
 }

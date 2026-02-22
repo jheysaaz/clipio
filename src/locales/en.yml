@@ -23,6 +23,7 @@ dashboard:
     heading: No snippets yet
     body: Create your first snippet to start saving and reusing text quickly.
     action: Create your first snippet
+  detailPlaceholder: Select a snippet to view details
   snippetListLabel: Snippets
   warnings:
     uninstall:

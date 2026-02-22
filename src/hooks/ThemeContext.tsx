@@ -5,6 +5,7 @@ import React, {
   useEffect,
   ReactNode,
 } from "react";
+import { captureError } from "~/lib/sentry";
 
 type Theme = "light" | "dark";
 
@@ -39,6 +40,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         console.error("Error loading theme:", error);
+        captureError(error, { action: "loadTheme" });
       } finally {
         setIsLoaded(true);
       }

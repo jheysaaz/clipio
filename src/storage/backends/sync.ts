@@ -24,6 +24,7 @@
 import type { StorageBackend } from "../types";
 import { StorageQuotaError } from "../types";
 import type { Snippet } from "~/types";
+import { captureError } from "~/lib/sentry";
 
 const SNIPPET_PREFIX = "snip:";
 /** Legacy key used before the per-item layout — kept for migration only. */
@@ -51,6 +52,7 @@ export class SyncBackend implements StorageBackend {
         return snippets;
       } catch {
         console.error("[Clipio] SyncBackend: migration from legacy key failed");
+        captureError(new Error("SyncBackend: migration from legacy key failed"), { action: "sync.migration" });
       }
     }
 
@@ -71,6 +73,7 @@ export class SyncBackend implements StorageBackend {
           "[Clipio] SyncBackend: failed to parse snippet at key",
           key
         );
+        captureError(new Error(`SyncBackend: failed to parse snippet at key ${key}`), { action: "sync.parseSnippet" });
       }
     }
     return snippets;

@@ -42,6 +42,7 @@ import {
 } from "~/storage";
 import { WarningBanner } from "~/components/ui/warning-banner";
 import { FLAGS } from "~/config/constants";
+import { captureError } from "~/lib/sentry";
 
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -109,6 +110,7 @@ export default function Dashboard() {
         if (status.quotaExceeded) setQuotaWarning(true);
       } catch (err) {
         console.error("[Clipio] Failed to load snippets:", err);
+        captureError(err, { action: "loadSnippets" });
         setLoadError(i18n.t("dashboard.toasts.failedToLoad"));
       } finally {
         setLoading(false);
@@ -144,6 +146,7 @@ export default function Dashboard() {
         }
       } catch (err) {
         console.error("[Clipio] Flag check failed:", err);
+        captureError(err, { action: "flagCheck" });
       }
     })();
   }, []);
@@ -193,6 +196,7 @@ export default function Dashboard() {
           setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
         } catch (retryErr) {
           console.error("[Clipio] Retry after quota error failed:", retryErr);
+          captureError(retryErr, { action: "saveSnippetRetry" });
           setCreateError(i18n.t("dashboard.toasts.failedToCreate"));
         }
       } else {
@@ -213,6 +217,7 @@ export default function Dashboard() {
       }
     } catch (err) {
       console.error("[Clipio] Failed to delete snippet:", err);
+      captureError(err, { action: "deleteSnippet" });
       throw err;
     }
   };
@@ -226,6 +231,7 @@ export default function Dashboard() {
       if (selectedSnippet?.id === updated.id) setSelectedSnippet(updated);
     } catch (err) {
       console.error("[Clipio] Failed to update snippet:", err);
+      captureError(err, { action: "updateSnippet" });
       throw err;
     }
   };

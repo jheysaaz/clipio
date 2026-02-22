@@ -17,6 +17,7 @@
 import { IDB_CONFIG } from "~/config/constants";
 import type { StorageBackend } from "../types";
 import type { Snippet } from "~/types";
+import { captureError } from "~/lib/sentry";
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -47,6 +48,7 @@ export class IndexedDBBackend implements StorageBackend {
       });
     } catch (error) {
       console.warn("[Clipio] IndexedDBBackend.getSnippets failed:", error);
+      captureError(error, { action: "idb.getSnippets" });
       return [];
     }
   }
@@ -69,6 +71,7 @@ export class IndexedDBBackend implements StorageBackend {
       });
     } catch (error) {
       console.warn("[Clipio] IndexedDBBackend.saveSnippets failed:", error);
+      captureError(error, { action: "idb.saveSnippets" });
     }
   }
 
@@ -83,6 +86,7 @@ export class IndexedDBBackend implements StorageBackend {
       });
     } catch (error) {
       console.warn("[Clipio] IndexedDBBackend.clear failed:", error);
+      captureError(error, { action: "idb.clear" });
     }
   }
 }

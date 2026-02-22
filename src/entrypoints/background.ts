@@ -1,8 +1,16 @@
 import { FLAGS } from "~/config/constants";
+import { initSentry, captureMessage } from "~/lib/sentry";
+import { registerSentryRelayListener } from "~/lib/sentry-relay";
 
 const SNIPPET_PREFIX = "snip:";
 
 export default defineBackground(() => {
+  initSentry("background");
+
+  // Register relay listener so content scripts can forward Sentry events
+  // through the background when the host page's CSP blocks direct fetch.
+  registerSentryRelayListener();
+
   // ---------------------------------------------------------------------------
   // On install / update
   // ---------------------------------------------------------------------------
@@ -29,9 +37,13 @@ export default defineBackground(() => {
     );
 
     if (removedSnipKeys.length >= 2) {
-      console.warn(
-        `[Clipio] ${removedSnipKeys.length} sync keys removed at once — possible sign-out`
-      );
+      const msg = `[Clipio] ${
+        removedSnipKeys.length
+      } sync keys removed at once — possible sign-out`;
+      console.warn(msg);
+      captureMessage("Sync storage wipe detected", "warning", {
+        wipedKeyCount: removedSnipKeys.length,
+      });
       browser.storage.local.set({ [FLAGS.SYNC_DATA_LOST]: true });
     }
   });

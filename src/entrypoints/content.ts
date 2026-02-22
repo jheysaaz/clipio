@@ -1,12 +1,19 @@
 import { STORAGE_KEYS, TIMING } from "~/config/constants";
 import { incrementSnippetUsage } from "~/utils/usageTracking";
 import confetti from "canvas-confetti";
+import { initSentry, captureError, captureMessage } from "~/lib/sentry";
+import { makeRelayTransport } from "~/lib/sentry-relay";
 
 export default defineContentScript({
   matches: ["<all_urls>"],
   runAt: "document_idle",
 
   main() {
+    // Initialize Sentry with the relay transport so errors are forwarded
+    // through the background service worker when the host page's CSP blocks
+    // direct fetch to the Sentry ingest endpoint.
+    initSentry("content", { transport: makeRelayTransport });
+
     interface Snippet {
       id: string;
       shortcut: string;
@@ -141,11 +148,13 @@ export default defineContentScript({
       try {
         if (!browser.runtime?.id) {
           isExtensionValid = false;
+          captureMessage("Extension context no longer valid", "warning");
           return false;
         }
         return true;
       } catch {
         isExtensionValid = false;
+        captureMessage("Extension context invalidated", "warning");
         return false;
       }
     }
@@ -174,6 +183,9 @@ export default defineContentScript({
           error.message.includes("Extension context invalidated")
         ) {
           isExtensionValid = false;
+          captureMessage("Extension context invalidated during loadSnippets", "warning");
+        } else {
+          captureError(error, { action: "loadSnippets" });
         }
       }
     }
@@ -389,6 +401,7 @@ export default defineContentScript({
           );
         } catch (error) {
           console.error("[Clipio] Failed to read clipboard:", error);
+          captureError(error, { action: "clipboardRead" });
         }
       }
 
@@ -677,6 +690,7 @@ export default defineContentScript({
               }
             } catch (error) {
               console.error("[Clipio] Error parsing updated snippets:", error);
+              captureError(error, { action: "cacheParseError" });
               loadSnippets();
             }
           }

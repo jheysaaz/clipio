@@ -19,6 +19,7 @@ import type { StorageMode, StorageStatus } from "./types";
 import type { Snippet } from "~/types";
 import { buildClipioExport } from "~/lib/exporters/clipio";
 import { FLAGS } from "~/config/constants";
+import { captureError } from "~/lib/sentry";
 
 /** Key used to persist the current storage mode across sessions. */
 const MODE_KEY = "storageMode";
@@ -65,6 +66,7 @@ export class StorageManager {
     } catch (error) {
       if (error instanceof StorageQuotaError) {
         // Sync is unreadable — fall back silently
+        captureError(error, { action: "getSnippets", fallback: "local" });
         await this.setMode("local");
         return this.local.getSnippets();
       }
@@ -120,9 +122,10 @@ export class StorageManager {
     // Shadow-write to IndexedDB backup (fire-and-forget — never blocks saves)
     this.idb
       .saveSnippets(snippets)
-      .catch((err) =>
-        console.warn("[Clipio] IndexedDB backup write failed:", err)
-      );
+      .catch((err) => {
+        console.warn("[Clipio] IndexedDB backup write failed:", err);
+        captureError(err, { action: "idbBackupWrite" });
+      });
   }
 
   // -------------------------------------------------------------------------

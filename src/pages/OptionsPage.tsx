@@ -10,6 +10,7 @@ import {
   Cloud,
   HardDrive,
   FileText,
+  Bug,
 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Progress } from "~/components/ui/progress";
@@ -22,6 +23,7 @@ import { WarningBanner } from "~/components/ui/warning-banner";
 import { exportSnippets, getSnippets, getStorageStatus } from "~/storage";
 import { SYNC_QUOTA, FLAGS } from "~/config/constants";
 import { i18n } from "#i18n";
+import { captureError, sendTestError } from "~/lib/sentry";
 
 // ---------------------------------------------------------------------------
 // Sidebar nav items
@@ -263,6 +265,7 @@ function ImportExportSection() {
       setTimeout(() => setExportedFeedback(false), 3000);
     } catch (err) {
       console.error("[Clipio] Export failed:", err);
+      captureError(err, { action: "exportSnippets" });
       setExportError(i18n.t("options.toasts.failedExport"));
     }
   };
@@ -568,6 +571,17 @@ export default function OptionsPage() {
               </>
             )}
           </button>
+          {/* Dev-only Sentry test button — tree-shaken out in production builds */}
+          {import.meta.env.DEV && (
+            <button
+              onClick={() => sendTestError()}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+              title="Send test error to Sentry (dev only)"
+            >
+              <Bug className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+              <span className="truncate">Send test error</span>
+            </button>
+          )}
         </div>
 
         {/* Resize handle */}
