@@ -20,7 +20,8 @@ const REGEX_PATTERNS = {
   strikethrough: /^~~([^~]+)~~/,
   code: /^`([^`]+)`/,
   underline: /^<u>([^<]+)<\/u>/,
-  nextSpecial: /\*\*|_(?!_)|~~|`|<u>|\{\{clipboard\}\}|\{\{date:|\{\{cursor\}\}|\{\{datepicker:/,
+  nextSpecial:
+    /\*\*|_(?!_)|~~|`|<u>|\{\{clipboard\}\}|\{\{date:|\{\{cursor\}\}|\{\{datepicker:/,
   htmlTags: /<[a-z][\s\S]*>/i,
 } as const;
 

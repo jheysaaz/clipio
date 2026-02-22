@@ -24,7 +24,14 @@ export default defineContentScript({
         particleCount: 50,
         spread: 60,
         origin: { x: originX, y: originY },
-        colors: ["#6366f1", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#3b82f6"],
+        colors: [
+          "#6366f1",
+          "#8b5cf6",
+          "#ec4899",
+          "#f59e0b",
+          "#10b981",
+          "#3b82f6",
+        ],
         ticks: 150,
         gravity: 1.2,
         scalar: 0.8,
@@ -33,7 +40,10 @@ export default defineContentScript({
     }
 
     // Get cursor position on screen for confetti
-    function getCursorScreenPosition(element: HTMLElement): { x: number; y: number } {
+    function getCursorScreenPosition(element: HTMLElement): {
+      x: number;
+      y: number;
+    } {
       // For contenteditable elements, use selection API
       if (element.isContentEditable) {
         const selection = window.getSelection();
@@ -88,8 +98,12 @@ export default defineContentScript({
         document.body.removeChild(mirror);
 
         // Calculate actual cursor position
-        const x = inputRect.left + markerRect.left - mirror.getBoundingClientRect().left + input.scrollLeft;
-        const y = inputRect.top + (inputRect.height / 2);
+        const x =
+          inputRect.left +
+          markerRect.left -
+          mirror.getBoundingClientRect().left +
+          input.scrollLeft;
+        const y = inputRect.top + inputRect.height / 2;
 
         return { x: Math.min(x, inputRect.right - 10), y };
       }
@@ -251,7 +265,10 @@ export default defineContentScript({
       while ((dateMatch = dateRegex.exec(processedContent)) !== null) {
         const format = dateMatch[1];
         const formattedDate = formatDate(format);
-        processedContent = processedContent.replace(dateMatch[0], formattedDate);
+        processedContent = processedContent.replace(
+          dateMatch[0],
+          formattedDate
+        );
         // Reset regex to handle multiple occurrences
         dateRegex.lastIndex = 0;
       }
@@ -259,10 +276,15 @@ export default defineContentScript({
       // Process datepicker placeholders - {{datepicker:YYYY-MM-DD}}
       const datepickerRegex = /\{\{datepicker:(\d{4}-\d{2}-\d{2})\}\}/g;
       let datepickerMatch;
-      while ((datepickerMatch = datepickerRegex.exec(processedContent)) !== null) {
+      while (
+        (datepickerMatch = datepickerRegex.exec(processedContent)) !== null
+      ) {
         const dateStr = datepickerMatch[1];
         const formattedDate = formatDate("long", dateStr);
-        processedContent = processedContent.replace(datepickerMatch[0], formattedDate);
+        processedContent = processedContent.replace(
+          datepickerMatch[0],
+          formattedDate
+        );
         datepickerRegex.lastIndex = 0;
       }
 
@@ -288,23 +310,26 @@ export default defineContentScript({
       if (!match) return;
 
       const { snippet, startPos, endPos } = match;
-      const { content: processedContent, cursorOffset } = await processSnippetContent(
-        snippet.content,
-        false
-      );
+      const { content: processedContent, cursorOffset } =
+        await processSnippetContent(snippet.content, false);
 
       const textBefore = element.value.substring(0, startPos);
       const textAfter = element.value.substring(endPos);
       element.value = textBefore + processedContent + textAfter;
 
       // If cursor placeholder was found, position cursor there; otherwise at the end
-      const newCursorPos = cursorOffset !== null
-        ? startPos + cursorOffset
-        : startPos + processedContent.length;
+      const newCursorPos =
+        cursorOffset !== null
+          ? startPos + cursorOffset
+          : startPos + processedContent.length;
       element.setSelectionRange(newCursorPos, newCursorPos);
 
-      element.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
-      element.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
+      element.dispatchEvent(
+        new Event("input", { bubbles: true, cancelable: true })
+      );
+      element.dispatchEvent(
+        new Event("change", { bubbles: true, cancelable: true })
+      );
       element.focus();
 
       // 🎉 Show confetti!
@@ -334,7 +359,8 @@ export default defineContentScript({
     ) {
       const { snippet, startPos, endPos } = match;
       const text = textNode.textContent || "";
-      const { content: processedContent, cursorOffset } = await processSnippetContent(snippet.content, true);
+      const { content: processedContent, cursorOffset } =
+        await processSnippetContent(snippet.content, true);
 
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = processedContent;
@@ -352,7 +378,9 @@ export default defineContentScript({
 
       // TODO: Handle cursor positioning for contentEditable (more complex)
       // For now, just dispatch the input event
-      element.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
+      element.dispatchEvent(
+        new Event("input", { bubbles: true, cancelable: true })
+      );
 
       // 🎉 Show confetti!
       const pos = getCursorScreenPosition(element);
@@ -414,7 +442,12 @@ export default defineContentScript({
           const text = textNode.textContent || "";
           const match = findSnippetMatch(text, range.startOffset);
           if (match) {
-            await expandSnippetInContentEditable(target, textNode, range, match);
+            await expandSnippetInContentEditable(
+              target,
+              textNode,
+              range,
+              match
+            );
           }
         }
       }, TYPING_TIMEOUT);
@@ -458,15 +491,14 @@ export default defineContentScript({
           areaName: string
         ) => {
           if (!checkExtensionContext()) return;
-          if (
-            areaName === "local" &&
-            changes[STORAGE_KEYS.CACHED_SNIPPETS]
-          ) {
+          if (areaName === "local" && changes[STORAGE_KEYS.CACHED_SNIPPETS]) {
             try {
               const newValue = changes[STORAGE_KEYS.CACHED_SNIPPETS].newValue;
               if (newValue) {
                 const parsedData =
-                  typeof newValue === "string" ? JSON.parse(newValue) : newValue;
+                  typeof newValue === "string"
+                    ? JSON.parse(newValue)
+                    : newValue;
                 snippets = Array.isArray(parsedData)
                   ? parsedData
                   : parsedData.items || [];

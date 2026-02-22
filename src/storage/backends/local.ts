@@ -16,27 +16,27 @@ const LOCAL_KEY = "snippets";
 export const CONTENT_SCRIPT_CACHE_KEY = "cachedSnippets";
 
 export class LocalBackend implements StorageBackend {
-	async getSnippets(): Promise<Snippet[]> {
-		const result = await browser.storage.local.get(LOCAL_KEY);
-		const raw = result[LOCAL_KEY];
+  async getSnippets(): Promise<Snippet[]> {
+    const result = await browser.storage.local.get(LOCAL_KEY);
+    const raw = result[LOCAL_KEY];
 
-		if (!raw) return [];
+    if (!raw) return [];
 
-		try {
-			return typeof raw === "string" ? JSON.parse(raw) : (raw as Snippet[]);
-		} catch {
-			console.error("[Clipio] LocalBackend: failed to parse snippets", raw);
-			return [];
-		}
-	}
+    try {
+      return typeof raw === "string" ? JSON.parse(raw) : (raw as Snippet[]);
+    } catch {
+      console.error("[Clipio] LocalBackend: failed to parse snippets", raw);
+      return [];
+    }
+  }
 
-	async saveSnippets(snippets: Snippet[]): Promise<void> {
-		await browser.storage.local.set({ [LOCAL_KEY]: snippets });
-	}
+  async saveSnippets(snippets: Snippet[]): Promise<void> {
+    await browser.storage.local.set({ [LOCAL_KEY]: snippets });
+  }
 
-	async clear(): Promise<void> {
-		await browser.storage.local.remove(LOCAL_KEY);
-	}
+  async clear(): Promise<void> {
+    await browser.storage.local.remove(LOCAL_KEY);
+  }
 }
 
 /**
@@ -45,13 +45,13 @@ export class LocalBackend implements StorageBackend {
  * an up-to-date list without needing to communicate with the popup.
  */
 export async function updateContentScriptCache(
-	snippets: Snippet[]
+  snippets: Snippet[]
 ): Promise<void> {
-	try {
-		await browser.storage.local.set({
-			[CONTENT_SCRIPT_CACHE_KEY]: JSON.stringify(snippets),
-		});
-	} catch (error) {
-		console.error("[Clipio] Failed to update content script cache:", error);
-	}
+  try {
+    await browser.storage.local.set({
+      [CONTENT_SCRIPT_CACHE_KEY]: JSON.stringify(snippets),
+    });
+  } catch (error) {
+    console.error("[Clipio] Failed to update content script cache:", error);
+  }
 }

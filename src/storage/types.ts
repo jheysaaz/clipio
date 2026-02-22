@@ -20,14 +20,14 @@ import type { Snippet } from "~/types";
  * The manager delegates to the active backend through this contract.
  */
 export interface StorageBackend {
-	/** Return all snippets from this backend. */
-	getSnippets(): Promise<Snippet[]>;
+  /** Return all snippets from this backend. */
+  getSnippets(): Promise<Snippet[]>;
 
-	/** Persist the full snippets array to this backend. */
-	saveSnippets(snippets: Snippet[]): Promise<void>;
+  /** Persist the full snippets array to this backend. */
+  saveSnippets(snippets: Snippet[]): Promise<void>;
 
-	/** Erase all data owned by this backend. */
-	clear(): Promise<void>;
+  /** Erase all data owned by this backend. */
+  clear(): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -46,13 +46,13 @@ export type StorageMode = "sync" | "local" /* | "cloud" — future */;
 
 /** Exposed to the UI so it can show contextual banners / warnings. */
 export interface StorageStatus {
-	/** Which backend is currently being used. */
-	mode: StorageMode;
-	/**
-	 * True when the extension fell back from sync to local because the
-	 * browser.storage.sync quota was exceeded.
-	 */
-	quotaExceeded: boolean;
+  /** Which backend is currently being used. */
+  mode: StorageMode;
+  /**
+   * True when the extension fell back from sync to local because the
+   * browser.storage.sync quota was exceeded.
+   */
+  quotaExceeded: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,8 +64,8 @@ export interface StorageStatus {
  * The manager catches this and transparently switches to LocalBackend.
  */
 export class StorageQuotaError extends Error {
-	constructor(message = "browser.storage.sync quota exceeded") {
-		super(message);
-		this.name = "StorageQuotaError";
-	}
+  constructor(message = "browser.storage.sync quota exceeded") {
+    super(message);
+    this.name = "StorageQuotaError";
+  }
 }

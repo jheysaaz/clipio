@@ -20,39 +20,39 @@ import type { Snippet } from "~/types";
 const SYNC_KEY = "snippets";
 
 export class SyncBackend implements StorageBackend {
-	async getSnippets(): Promise<Snippet[]> {
-		const result = await browser.storage.sync.get(SYNC_KEY);
-		const raw = result[SYNC_KEY];
+  async getSnippets(): Promise<Snippet[]> {
+    const result = await browser.storage.sync.get(SYNC_KEY);
+    const raw = result[SYNC_KEY];
 
-		if (!raw) return [];
+    if (!raw) return [];
 
-		try {
-			return typeof raw === "string" ? JSON.parse(raw) : (raw as Snippet[]);
-		} catch {
-			console.error("[Clipio] SyncBackend: failed to parse snippets", raw);
-			return [];
-		}
-	}
+    try {
+      return typeof raw === "string" ? JSON.parse(raw) : (raw as Snippet[]);
+    } catch {
+      console.error("[Clipio] SyncBackend: failed to parse snippets", raw);
+      return [];
+    }
+  }
 
-	async saveSnippets(snippets: Snippet[]): Promise<void> {
-		try {
-			await browser.storage.sync.set({ [SYNC_KEY]: snippets });
-		} catch (error) {
-			// browser.storage.sync throws a generic Error whose message contains
-			// "QUOTA_BYTES" or "MAX_ITEMS" when limits are hit.
-			if (
-				error instanceof Error &&
-				(error.message.includes("QUOTA_BYTES") ||
-					error.message.includes("MAX_ITEMS") ||
-					error.message.includes("quota"))
-			) {
-				throw new StorageQuotaError();
-			}
-			throw error;
-		}
-	}
+  async saveSnippets(snippets: Snippet[]): Promise<void> {
+    try {
+      await browser.storage.sync.set({ [SYNC_KEY]: snippets });
+    } catch (error) {
+      // browser.storage.sync throws a generic Error whose message contains
+      // "QUOTA_BYTES" or "MAX_ITEMS" when limits are hit.
+      if (
+        error instanceof Error &&
+        (error.message.includes("QUOTA_BYTES") ||
+          error.message.includes("MAX_ITEMS") ||
+          error.message.includes("quota"))
+      ) {
+        throw new StorageQuotaError();
+      }
+      throw error;
+    }
+  }
 
-	async clear(): Promise<void> {
-		await browser.storage.sync.remove(SYNC_KEY);
-	}
+  async clear(): Promise<void> {
+    await browser.storage.sync.remove(SYNC_KEY);
+  }
 }

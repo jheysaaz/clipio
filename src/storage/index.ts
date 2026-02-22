@@ -15,9 +15,9 @@ const manager = new StorageManager();
 
 export const getSnippets = () => manager.getSnippets();
 export const saveSnippet = (snippet: import("~/types").Snippet) =>
-	manager.saveSnippet(snippet);
+  manager.saveSnippet(snippet);
 export const updateSnippet = (snippet: import("~/types").Snippet) =>
-	manager.updateSnippet(snippet);
+  manager.updateSnippet(snippet);
 export const deleteSnippet = (id: string) => manager.deleteSnippet(id);
 export const getStorageStatus = () => manager.getStorageStatus();
 export const exportSnippets = () => manager.exportSnippets();
