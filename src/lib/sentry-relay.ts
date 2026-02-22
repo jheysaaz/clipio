@@ -13,10 +13,13 @@
  * content script entry point only.
  */
 
-import {
-  makeFetchTransport,
-} from "@sentry/browser";
-import type { Transport, TransportMakeRequestResponse, BaseTransportOptions, Envelope } from "@sentry/core";
+import { makeFetchTransport } from "@sentry/browser";
+import type {
+  Transport,
+  TransportMakeRequestResponse,
+  BaseTransportOptions,
+  Envelope,
+} from "@sentry/core";
 import { serializeEnvelope } from "@sentry/core";
 
 export const SENTRY_RELAY_MESSAGE_TYPE = "sentry-relay" as const;
@@ -81,9 +84,7 @@ export function makeRelayTransport(options: BaseTransportOptions): Transport {
   const directTransport = makeFetchTransport(options);
 
   return {
-    send: async (
-      envelope: Envelope
-    ): Promise<TransportMakeRequestResponse> => {
+    send: async (envelope: Envelope): Promise<TransportMakeRequestResponse> => {
       try {
         return await directTransport.send(envelope);
       } catch (directError) {
@@ -92,7 +93,10 @@ export function makeRelayTransport(options: BaseTransportOptions): Transport {
           const serialized = serializeEnvelope(envelope);
           const message: SentryRelayMessage = {
             type: SENTRY_RELAY_MESSAGE_TYPE,
-            envelope: typeof serialized === "string" ? serialized : new TextDecoder().decode(serialized),
+            envelope:
+              typeof serialized === "string"
+                ? serialized
+                : new TextDecoder().decode(serialized),
           };
           await browser.runtime.sendMessage(message);
           return { statusCode: 200 };

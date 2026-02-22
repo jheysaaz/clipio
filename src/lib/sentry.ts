@@ -54,8 +54,9 @@ export function initSentry(
   if (!enabled) return;
 
   // Derive release from env var or manifest version
-  let release: string | undefined =
-    import.meta.env.WXT_SENTRY_RELEASE as string | undefined;
+  let release: string | undefined = import.meta.env.WXT_SENTRY_RELEASE as
+    | string
+    | undefined;
 
   if (!release) {
     try {

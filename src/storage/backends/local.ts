@@ -27,7 +27,9 @@ export class LocalBackend implements StorageBackend {
       return typeof raw === "string" ? JSON.parse(raw) : (raw as Snippet[]);
     } catch {
       console.error("[Clipio] LocalBackend: failed to parse snippets", raw);
-      captureError(new Error("LocalBackend: failed to parse snippets"), { action: "local.parseSnippets" });
+      captureError(new Error("LocalBackend: failed to parse snippets"), {
+        action: "local.parseSnippets",
+      });
       return [];
     }
   }

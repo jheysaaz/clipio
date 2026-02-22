@@ -183,7 +183,10 @@ export default defineContentScript({
           error.message.includes("Extension context invalidated")
         ) {
           isExtensionValid = false;
-          captureMessage("Extension context invalidated during loadSnippets", "warning");
+          captureMessage(
+            "Extension context invalidated during loadSnippets",
+            "warning"
+          );
         } else {
           captureError(error, { action: "loadSnippets" });
         }

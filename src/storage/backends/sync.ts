@@ -52,7 +52,10 @@ export class SyncBackend implements StorageBackend {
         return snippets;
       } catch {
         console.error("[Clipio] SyncBackend: migration from legacy key failed");
-        captureError(new Error("SyncBackend: migration from legacy key failed"), { action: "sync.migration" });
+        captureError(
+          new Error("SyncBackend: migration from legacy key failed"),
+          { action: "sync.migration" }
+        );
       }
     }
 
@@ -73,7 +76,10 @@ export class SyncBackend implements StorageBackend {
           "[Clipio] SyncBackend: failed to parse snippet at key",
           key
         );
-        captureError(new Error(`SyncBackend: failed to parse snippet at key ${key}`), { action: "sync.parseSnippet" });
+        captureError(
+          new Error(`SyncBackend: failed to parse snippet at key ${key}`),
+          { action: "sync.parseSnippet" }
+        );
       }
     }
     return snippets;

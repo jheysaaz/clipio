@@ -120,12 +120,10 @@ export class StorageManager {
     await updateContentScriptCache(snippets);
 
     // Shadow-write to IndexedDB backup (fire-and-forget — never blocks saves)
-    this.idb
-      .saveSnippets(snippets)
-      .catch((err) => {
-        console.warn("[Clipio] IndexedDB backup write failed:", err);
-        captureError(err, { action: "idbBackupWrite" });
-      });
+    this.idb.saveSnippets(snippets).catch((err) => {
+      console.warn("[Clipio] IndexedDB backup write failed:", err);
+      captureError(err, { action: "idbBackupWrite" });
+    });
   }
 
   // -------------------------------------------------------------------------

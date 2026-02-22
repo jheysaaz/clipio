@@ -29,9 +29,7 @@ const SENSITIVE_KEYS = new Set([
   "items",
 ]);
 
-function redactObject(
-  obj: Record<string, unknown>
-): Record<string, unknown> {
+function redactObject(obj: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(obj)) {
     if (SENSITIVE_KEYS.has(key)) {
@@ -61,7 +59,7 @@ export function scrubEvent(event: Event): Event {
       scrubbed[ctxKey] =
         ctxVal !== null && ctxVal !== undefined && typeof ctxVal === "object"
           ? redactObject(ctxVal as Record<string, unknown>)
-          : {} as Record<string, unknown>;
+          : ({} as Record<string, unknown>);
     }
     event.contexts = scrubbed;
   }
@@ -75,13 +73,14 @@ export function scrubEvent(event: Event): Event {
  */
 export function scrubBreadcrumb(breadcrumb: Breadcrumb): Breadcrumb {
   if (breadcrumb.data && typeof breadcrumb.data === "object") {
-    breadcrumb.data = redactObject(
-      breadcrumb.data as Record<string, unknown>
-    );
+    breadcrumb.data = redactObject(breadcrumb.data as Record<string, unknown>);
   }
 
   // Strip long string values from console breadcrumbs that may echo snippet text
-  if (breadcrumb.category === "console" && typeof breadcrumb.message === "string") {
+  if (
+    breadcrumb.category === "console" &&
+    typeof breadcrumb.message === "string"
+  ) {
     // Keep the prefix (e.g. "[Clipio] ...") but truncate long messages
     if (breadcrumb.message.length > 200) {
       breadcrumb.message = breadcrumb.message.slice(0, 200) + " [truncated]";
