@@ -9,16 +9,15 @@ import {
   Tag,
   X,
   Plus,
+  SquareSlash,
 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import RichTextEditor from "~/components/RichTextEditor";
+import { RichTextEditor, type RichTextEditorRef } from "~/components/editor";
 import { Separator } from "~/components/ui/separator";
 import ConfirmDialog from "~/components/ConfirmDialog";
 import { Badge } from "~/components/ui/badge";
 import type { Snippet } from "~/types";
-import { authenticatedFetch } from "~/utils/api";
-import { API_BASE_URL, API_ENDPOINTS } from "~/config/constants";
 import { useToast } from "~/hooks/ToastContext";
 import { getRelativeTime } from "~/utils/dateUtils";
 import {
@@ -47,6 +46,7 @@ export default function SnippetDetailView({
   const [newTagInput, setNewTagInput] = useState("");
   const [isAddingTag, setIsAddingTag] = useState(false);
   const tagInputRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<RichTextEditorRef>(null);
   const [copied, setCopied] = useState(false);
   const [usageCount, setUsageCount] = useState(0);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -94,32 +94,14 @@ export default function SnippetDetailView({
 
     setIsSaving(true);
     try {
-      const response = await authenticatedFetch(
-        API_BASE_URL + API_ENDPOINTS.SNIPPET_BY_ID(snippet.id),
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ...snippet,
-            content: editedContent.trim(),
-            tags: editedTags,
-          }),
-        }
-      );
-
-      if (response.ok) {
-        const updatedData = await response.json();
-        showToast("Snippet saved!", "success");
-        onUpdate(updatedData.snippet || updatedData);
-      } else {
-        const error = await response.json();
-        showToast(
-          error.message || "Failed to save snippet. Please try again.",
-          "error"
-        );
-      }
+      const updated: Snippet = {
+        ...snippet,
+        content: editedContent.trim(),
+        tags: editedTags,
+        updatedAt: new Date().toISOString(),
+      };
+      await onUpdate(updated);
+      showToast("Snippet saved!", "success");
     } catch (error) {
       console.error("Error saving snippet:", error);
       showToast("Failed to save snippet. Please try again.", "error");
@@ -130,25 +112,9 @@ export default function SnippetDetailView({
 
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
-
     try {
-      const response = await authenticatedFetch(
-        API_BASE_URL + API_ENDPOINTS.SNIPPET_BY_ID(snippet.id),
-        {
-          method: "DELETE",
-        }
-      );
-
-      if (response.ok) {
-        showToast("Snippet deleted successfully!", "success");
-        onDelete(snippet.id);
-      } else {
-        const error = await response.json();
-        showToast(
-          error.message || "Failed to delete snippet. Please try again.",
-          "error"
-        );
-      }
+      await onDelete(snippet.id);
+      showToast("Snippet deleted!", "success");
     } catch (error) {
       console.error("Error deleting snippet:", error);
       showToast("Failed to delete snippet. Please try again.", "error");
@@ -199,6 +165,15 @@ export default function SnippetDetailView({
             <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
           )}
         </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => editorRef.current?.openCommandMenu()}
+          className="h-8 w-8"
+          title="Insert command"
+        >
+          <SquareSlash className="h-3.5 w-3.5" strokeWidth={1.5} />
+        </Button>
         <Separator orientation="vertical" className="h-5 mx-1" />
         <Button
           variant="default"
@@ -213,32 +188,38 @@ export default function SnippetDetailView({
       </div>
 
       {/* Content Area - Always Editable */}
-      <div className="flex-1 overflow-auto p-3">
+      <div className="flex-1 overflow-auto p-4">
         <RichTextEditor
+          ref={editorRef}
           value={editedContent}
           onChange={setEditedContent}
-          placeholder="Enter snippet content..."
+          placeholder="Start typing your snippet content here or use '/' for commands..."
         />
       </div>
 
       {/* Footer */}
       {/* Tags Section */}
       <Separator />
-      <div className="px-3 py-2">
+      <div className="px-3 py-2.5">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <Tag className="h-3 w-3 text-zinc-400 shrink-0" strokeWidth={1.5} />
+          <div className="flex items-center gap-1 text-zinc-400 dark:text-zinc-500 mr-1">
+            <Tag className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+            <span className="text-[10px] font-medium uppercase tracking-wide">
+              Tags
+            </span>
+          </div>
           {editedTags.map((tag) => (
             <Badge
               key={tag}
-              variant="secondary"
-              className="text-[10px] px-1.5 py-0 h-5 font-normal bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 gap-1 group cursor-default"
+              variant="outline"
+              className="text-[10px] px-2 py-0.5 h-5 font-normal border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 gap-1 group cursor-default hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
             >
               {tag}
               <button
                 onClick={() =>
                   setEditedTags(editedTags.filter((t) => t !== tag))
                 }
-                className="opacity-50 hover:opacity-100 transition-opacity"
+                className="opacity-50 hover:opacity-100 transition-opacity -mr-0.5"
                 title={`Remove "${tag}"`}
               >
                 <X className="h-2.5 w-2.5" strokeWidth={2} />
@@ -274,21 +255,22 @@ export default function SnippetDetailView({
                 setIsAddingTag(false);
               }}
               placeholder="Tag name..."
-              className="h-5 w-20 text-[10px] px-1.5 py-0"
+              className="h-5 w-20 text-[10px] px-1.5 py-0 border-dashed"
               autoFocus
             />
           ) : (
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               onClick={() => {
                 setIsAddingTag(true);
                 setTimeout(() => tagInputRef.current?.focus(), 0);
               }}
-              className="h-5 px-1.5 text-[10px] text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+              className="h-5 px-2 text-[10px] text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 border-dashed border-zinc-300 dark:border-zinc-600 hover:border-zinc-400 dark:hover:border-zinc-500"
+              title="Add a new tag"
             >
               <Plus className="h-2.5 w-2.5 mr-0.5" strokeWidth={2} />
-              Add
+              Add tag
             </Button>
           )}
         </div>
@@ -296,9 +278,17 @@ export default function SnippetDetailView({
 
       {/* Stats Section */}
       <Separator />
-      <div className="px-3 py-2 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
-        <span>{usageCount} uses</span>
-        <span>Updated {getRelativeTime(snippet.updatedAt)}</span>
+      <div className="px-3 py-1.5 flex items-center justify-between text-[10px] text-zinc-500 dark:text-zinc-400 bg-zinc-50/50 dark:bg-zinc-900/30">
+        <div className="flex items-center gap-1.5">
+          <span className="font-medium">{usageCount}</span>
+          <span>uses</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span>Updated</span>
+          <span className="font-medium">
+            {getRelativeTime(snippet.updatedAt)}
+          </span>
+        </div>
       </div>
 
       <ConfirmDialog

@@ -9,11 +9,10 @@ export default defineConfig({
     name: "Clipio: Snippets Manager",
     description:
       "A powerful browser extension for managing and inserting snippets with lightning speed and increase your productivity.",
-    permissions: ["storage", "alarms", "clipboardWrite", "clipboardRead"],
-    host_permissions: ["http://prod.clipio.xyz/*", "https://prod.clipio.xyz/*"],
+    permissions: ["storage", "clipboardWrite", "clipboardRead"],
     browser_specific_settings: {
       gecko: {
-        id: "clipio@clipio.xyz",
+        id: "jhey@clipio.xyz",
         strict_min_version: "142.0",
       },
     },

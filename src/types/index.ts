@@ -1,15 +1,6 @@
 /**
- * Type definitions for the application
+ * Type definitions for the application.
  */
-
-export interface User {
-  id: string;
-  email: string;
-  name?: string;
-  avatarUrl?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
 
 export interface Snippet {
   id: string;
@@ -17,23 +8,9 @@ export interface Snippet {
   content: string;
   shortcut: string;
   tags?: string[];
-  userId?: string;
   usageCount?: number;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface AuthTokens {
-  accessToken: string;
-  expiresIn: number;
-  refreshToken?: string;
-}
-
-export interface LoginResponse {
-  accessToken: string;
-  expiresIn?: number;
-  user: User;
-  refreshToken?: string;
 }
 
 export interface SnippetFormData {
@@ -41,5 +18,22 @@ export interface SnippetFormData {
   shortcut: string;
   content: string;
   tags?: string[];
-  userId?: string;
+}
+
+/**
+ * Creates a new Snippet from form data, generating a client-side ID
+ * and timestamps. No server required.
+ */
+export function createSnippet(form: SnippetFormData): Snippet {
+  const now = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    label: form.label,
+    shortcut: form.shortcut,
+    content: form.content,
+    tags: form.tags ?? [],
+    usageCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  };
 }

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Save, X, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import RichTextEditor from "~/components/RichTextEditor";
+import { RichTextEditor } from "~/components/editor";
 import { Label } from "~/components/ui/label";
 import { Separator } from "~/components/ui/separator";
 import type { SnippetFormData } from "~/types";

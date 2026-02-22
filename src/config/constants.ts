@@ -1,31 +1,26 @@
 /**
- * Application constants
+ * Application-wide constants.
  */
 
-export const API_BASE_URL =
-  import.meta.env.VITE_API_URI || "http://128.199.4.253:8080";
-
-export const API_ENDPOINTS = {
-  LOGIN: "/api/v1/auth/login",
-  LOGOUT: "/api/v1/auth/logout",
-  REFRESH: "/api/v1/auth/refresh",
-  REGISTER: "/api/v1/auth/register",
-  SNIPPETS: "/api/v1/snippets",
-  USER_SNIPPETS: `/api/v1/snippets`,
-  SNIPPET_BY_ID: (id: string) => `/api/v1/snippets/${id}`,
+export const STORAGE_KEYS = {
+  /** Primary snippets store (sync or local depending on mode). */
+  SNIPPETS: "snippets",
+  /** Content-script cache — always in browser.storage.local. */
+  CACHED_SNIPPETS: "cachedSnippets",
+  /** Persisted storage mode: "sync" | "local". */
+  STORAGE_MODE: "storageMode",
 } as const;
 
-export const STORAGE_KEYS = {
-  ACCESS_TOKEN: "accessToken",
-  REFRESH_TOKEN: "refreshToken",
-  USER_INFO: "userInfo",
-  CACHED_SNIPPETS: "cachedSnippets",
-  TOKEN_EXPIRES_AT: "tokenExpiresAt",
-  STORAGE_TYPE: "storageType",
+export const SYNC_QUOTA = {
+  /** Hard limit enforced by the browser (bytes). */
+  TOTAL_BYTES: 102_400,
+  /** Warn the user before hitting the hard limit (bytes). */
+  WARN_AT: 90_000,
 } as const;
 
 export const TIMING = {
-  TYPING_TIMEOUT: 750, // ms to wait before expanding snippet
-  TOKEN_REFRESH_PERCENTAGE: 0.9, // Refresh at 90% of token lifetime
-  TOAST_DURATION: 3000, // Toast display duration in ms
+  /** Milliseconds after typing stops before attempting snippet expansion. */
+  TYPING_TIMEOUT: 750,
+  /** Duration a toast notification is shown (ms). */
+  TOAST_DURATION: 3_000,
 } as const;

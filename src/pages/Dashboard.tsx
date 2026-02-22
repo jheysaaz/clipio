@@ -1,20 +1,39 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Plus, Search, Loader2, PanelLeftClose, PanelLeft } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Loader2,
+  PanelLeftClose,
+  PanelLeft,
+  Sun,
+  Moon,
+  Download,
+  Upload,
+  AlertTriangle,
+  X,
+  Clipboard,
+} from "lucide-react";
 import SnippetListItem from "~/components/SnippetListItem";
 import SnippetDetailView from "~/components/SnippetDetailView";
 import NewSnippetView from "~/components/NewSnippetView";
-import SidebarUserProfile from "~/components/SidebarUserProfile";
-import { authenticatedFetch } from "~/utils/api";
 import { useToast } from "~/hooks/ToastContext";
-import { getUserInfo, getAccessToken, clearAuthData } from "~/utils/storage";
-import { useNavigate } from "react-router";
+import { useTheme } from "~/hooks/ThemeContext";
 import type { Snippet, SnippetFormData } from "~/types";
-import { API_BASE_URL, API_ENDPOINTS, STORAGE_KEYS } from "~/config/constants";
+import { createSnippet } from "~/types";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Separator } from "~/components/ui/separator";
-import { logger } from "~/utils/logger";
+import {
+  getSnippets,
+  saveSnippet,
+  updateSnippet,
+  deleteSnippet,
+  getStorageStatus,
+  exportSnippets,
+  importSnippets,
+  StorageQuotaError,
+} from "~/storage";
 
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -29,18 +48,21 @@ export default function Dashboard() {
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [selectedSnippet, setSelectedSnippet] = useState<Snippet | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarWidth, setSidebarWidth] = useState(240); // in pixels
+  const [sidebarWidth, setSidebarWidth] = useState(240);
+  const [quotaWarning, setQuotaWarning] = useState(false);
   const isResizing = useRef(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
-  const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
 
-  // Handle sidebar resize
+  // -------------------------------------------------------------------------
+  // Sidebar resize
+  // -------------------------------------------------------------------------
+
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing.current) return;
-    const newWidth = Math.max(120, Math.min(240, e.clientX));
-    setSidebarWidth(newWidth);
+    setSidebarWidth(Math.max(120, Math.min(240, e.clientX)));
   }, []);
 
   const handleMouseUp = useCallback(() => {
@@ -58,84 +80,33 @@ export default function Dashboard() {
     };
   }, [handleMouseMove, handleMouseUp]);
 
-  const startResizing = () => {
-    isResizing.current = true;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-  };
+  // -------------------------------------------------------------------------
+  // Load snippets on mount
+  // -------------------------------------------------------------------------
 
-  // Guard: if no access token, redirect to cloud login
   useEffect(() => {
     (async () => {
-      const token = await getAccessToken();
-      if (!token) {
-        navigate("/login", { replace: true });
-      } else {
-        fetchSnippets();
+      try {
+        setLoading(true);
+        const list = await getSnippets();
+        setSnippets(list);
+        if (list.length > 0) setSelectedSnippet(list[0]);
+
+        // Check if we're already in local-fallback mode
+        const status = await getStorageStatus();
+        if (status.quotaExceeded) setQuotaWarning(true);
+      } catch (err) {
+        console.error("[Clipio] Failed to load snippets:", err);
+        showToast("Failed to load snippets.", "error");
+      } finally {
+        setLoading(false);
       }
     })();
-  }, [navigate]);
+  }, []);
 
-  const fetchSnippets = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const user = await getUserInfo();
-
-      if (!user) {
-        setError("No authentication found. Please login.");
-        setLoading(false);
-        navigate("/login");
-        return;
-      }
-
-      const response = await authenticatedFetch(
-        API_BASE_URL + API_ENDPOINTS.USER_SNIPPETS,
-        {
-          method: "GET",
-        }
-      );
-
-      // If 401, redirect immediately to login
-      if (response.status === 401) {
-        await clearAuthData();
-        navigate("/login");
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch snippets: ${response.status} ${response.statusText}`
-        );
-      }
-
-      const data = await response.json();
-      const snippetsList = data.items || data;
-      setSnippets(snippetsList);
-
-      // Auto-select first snippet if available
-      if (snippetsList.length > 0 && !selectedSnippet) {
-        setSelectedSnippet(snippetsList[0]);
-      }
-
-      // Cache snippets for content script to use
-      try {
-        await browser.storage.local.set({
-          [STORAGE_KEYS.CACHED_SNIPPETS]: JSON.stringify(snippetsList),
-        });
-        logger.success("Snippets cached for content script");
-      } catch (error) {
-        logger.error("Failed to cache snippets", { data: { error } });
-      }
-
-      setLoading(false);
-    } catch (err) {
-      logger.error("Error fetching snippets", { data: { error: err } });
-      setError("Failed to load snippets. Please try again.");
-      setLoading(false);
-    }
-  };
+  // -------------------------------------------------------------------------
+  // CRUD helpers
+  // -------------------------------------------------------------------------
 
   const handleAddSnippet = () => {
     setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
@@ -146,10 +117,7 @@ export default function Dashboard() {
   const handleCancelCreate = () => {
     setIsCreating(false);
     setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
-    // Select first snippet if available
-    if (snippets.length > 0) {
-      setSelectedSnippet(snippets[0]);
-    }
+    if (snippets.length > 0) setSelectedSnippet(snippets[0]);
   };
 
   const handleSaveNewSnippet = async () => {
@@ -157,144 +125,129 @@ export default function Dashboard() {
       !draftSnippet.label.trim() ||
       !draftSnippet.shortcut.trim() ||
       !draftSnippet.content.trim()
-    ) {
+    )
       return;
-    }
 
     setIsSaving(true);
     try {
-      const user = await getUserInfo();
-      const snippetData = { ...draftSnippet };
-      if (user) {
-        snippetData.userId = user.id;
-      }
-
-      const response = await authenticatedFetch(
-        API_BASE_URL + API_ENDPOINTS.SNIPPETS,
-        {
-          method: "POST",
-          body: JSON.stringify(snippetData),
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        showToast("Snippet created successfully!", "success");
-        setIsCreating(false);
-        setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
-        await fetchSnippets();
-        // Select the newly created snippet
-        if (data.snippet) {
-          setSelectedSnippet(data.snippet);
+      const newSnippet = createSnippet(draftSnippet);
+      await saveSnippet(newSnippet);
+      setSnippets((prev) => [...prev, newSnippet]);
+      setSelectedSnippet(newSnippet);
+      setIsCreating(false);
+      setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
+      showToast("Snippet created!", "success");
+    } catch (err) {
+      if (err instanceof StorageQuotaError) {
+        setQuotaWarning(true);
+        showToast(
+          "Sync storage full — switched to local storage. Your snippet was saved.",
+          "error"
+        );
+        // Retry after manager has switched to local mode
+        try {
+          const newSnippet = createSnippet(draftSnippet);
+          await saveSnippet(newSnippet);
+          setSnippets((prev) => [...prev, newSnippet]);
+          setSelectedSnippet(newSnippet);
+          setIsCreating(false);
+          setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
+        } catch (retryErr) {
+          console.error("[Clipio] Retry after quota error failed:", retryErr);
+          showToast("Failed to create snippet. Please try again.", "error");
         }
       } else {
-        const error = await response.json();
-        showToast(error.message || "Failed to create snippet", "error");
+        showToast("Failed to create snippet. Please try again.", "error");
       }
-    } catch (error) {
-      console.error("Failed to create snippet:", error);
-      showToast("Failed to create snippet. Please try again.", "error");
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDeleteSnippet = async (snippetId: string) => {
-    const newSnippets = snippets.filter((s) => s.id !== snippetId);
-    setSnippets(newSnippets);
-
-    // Update cache immediately
     try {
-      await browser.storage.local.set({
-        [STORAGE_KEYS.CACHED_SNIPPETS]: JSON.stringify(newSnippets),
-      });
-      logger.success("Cache updated after delete");
-    } catch (error) {
-      logger.error("Failed to update cache after delete", { data: { error } });
-    }
-
-    // If deleted snippet was selected, select another one
-    if (selectedSnippet?.id === snippetId) {
-      setSelectedSnippet(newSnippets.length > 0 ? newSnippets[0] : null);
-    }
-  };
-
-  const handleUpdateSnippet = async (updatedSnippet: Snippet) => {
-    const newSnippets = snippets.map((s) =>
-      s.id === updatedSnippet.id ? updatedSnippet : s
-    );
-    setSnippets(newSnippets);
-
-    // Update cache immediately
-    try {
-      await browser.storage.local.set({
-        [STORAGE_KEYS.CACHED_SNIPPETS]: JSON.stringify(newSnippets),
-      });
-      logger.success("Cache updated after update");
-    } catch (error) {
-      logger.error("Failed to update cache after update", { data: { error } });
-    }
-
-    // Update selected snippet if it's the one being updated
-    if (selectedSnippet?.id === updatedSnippet.id) {
-      setSelectedSnippet(updatedSnippet);
-    }
-  };
-
-  const handleInlineUpdateSnippet = async (updatedSnippet: Snippet) => {
-    // Optimistically update the UI
-    handleUpdateSnippet(updatedSnippet);
-
-    // Make API call to persist changes
-    try {
-      const response = await authenticatedFetch(
-        API_BASE_URL + API_ENDPOINTS.SNIPPET_BY_ID(updatedSnippet.id),
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(updatedSnippet),
-        }
-      );
-
-      if (!response.ok) {
-        // Revert on error by refetching
-        showToast("Failed to update snippet", "error");
-        fetchSnippets();
+      await deleteSnippet(snippetId);
+      const newList = snippets.filter((s) => s.id !== snippetId);
+      setSnippets(newList);
+      if (selectedSnippet?.id === snippetId) {
+        setSelectedSnippet(newList.length > 0 ? newList[0] : null);
       }
-    } catch (error) {
-      console.error("Error updating snippet:", error);
-      showToast("Failed to update snippet", "error");
-      fetchSnippets();
+    } catch (err) {
+      console.error("[Clipio] Failed to delete snippet:", err);
+      showToast("Failed to delete snippet.", "error");
     }
   };
+
+  const handleUpdateSnippet = async (updated: Snippet) => {
+    try {
+      await updateSnippet(updated);
+      setSnippets((prev) =>
+        prev.map((s) => (s.id === updated.id ? updated : s))
+      );
+      if (selectedSnippet?.id === updated.id) setSelectedSnippet(updated);
+    } catch (err) {
+      console.error("[Clipio] Failed to update snippet:", err);
+      showToast("Failed to update snippet.", "error");
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // Export / Import
+  // -------------------------------------------------------------------------
+
+  const handleExport = async () => {
+    try {
+      await exportSnippets();
+      showToast("Snippets exported!", "success");
+    } catch (err) {
+      console.error("[Clipio] Export failed:", err);
+      showToast("Failed to export snippets.", "error");
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const { imported } = await importSnippets(file);
+      const refreshed = await getSnippets();
+      setSnippets(refreshed);
+      showToast(`Imported ${imported} new snippet(s)!`, "success");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Import failed.";
+      showToast(message, "error");
+    } finally {
+      // Reset input so same file can be re-imported if needed
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // Filtering & keyboard navigation
+  // -------------------------------------------------------------------------
 
   const filteredSnippets = snippets.filter((snippet) => {
     if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
+    const q = searchQuery.toLowerCase();
     return (
-      snippet.label.toLowerCase().includes(query) ||
-      snippet.content.toLowerCase().includes(query) ||
-      snippet.shortcut.toLowerCase().includes(query) ||
-      snippet.tags?.some((tag) => tag.toLowerCase().includes(query))
+      snippet.label.toLowerCase().includes(q) ||
+      snippet.content.toLowerCase().includes(q) ||
+      snippet.shortcut.toLowerCase().includes(q) ||
+      snippet.tags?.some((t) => t.toLowerCase().includes(q))
     );
   });
 
-  // Keyboard navigation for snippet list
   const handleKeyboardNavigation = useCallback(
     (e: KeyboardEvent) => {
-      // Don't navigate if we're in creating mode or typing in an input
       const target = e.target as HTMLElement;
       if (
         isCreating ||
         target.tagName === "INPUT" ||
         target.tagName === "TEXTAREA" ||
         target.isContentEditable
-      ) {
+      )
         return;
-      }
-
       if (filteredSnippets.length === 0) return;
 
       const currentIndex = selectedSnippet
@@ -302,7 +255,6 @@ export default function Dashboard() {
         : -1;
 
       let newIndex = currentIndex;
-
       if (e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey)) {
         e.preventDefault();
         newIndex =
@@ -322,25 +274,56 @@ export default function Dashboard() {
 
   useEffect(() => {
     document.addEventListener("keydown", handleKeyboardNavigation);
-    return () => {
+    return () =>
       document.removeEventListener("keydown", handleKeyboardNavigation);
-    };
   }, [handleKeyboardNavigation]);
+
+  // -------------------------------------------------------------------------
+  // Render
+  // -------------------------------------------------------------------------
 
   return (
     <div className="flex flex-col h-full select-none">
+      {/* Quota warning banner */}
+      {quotaWarning && (
+        <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs">
+          <AlertTriangle
+            className="h-3.5 w-3.5 shrink-0 mt-0.5"
+            strokeWidth={1.5}
+          />
+          <p className="flex-1">
+            Browser sync storage is full. New snippets are saved locally on this
+            device only.{" "}
+            <button
+              onClick={handleExport}
+              className="underline hover:no-underline font-medium"
+            >
+              Export a backup.
+            </button>
+          </p>
+          <button onClick={() => setQuotaWarning(false)}>
+            <X className="h-3 w-3" strokeWidth={2} />
+          </button>
+        </div>
+      )}
+
       {/* Master-Detail Layout */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar - Master */}
+        {/* Left Sidebar */}
         <div
           style={{ width: sidebarOpen ? sidebarWidth : 0 }}
-          className="flex flex-col border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 relative shrink-0 transition-[width] duration-200 ease-in-out overflow-hidden"
+          className="flex flex-col border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 relative shrink-0 transition-[width] duration-200 ease-in-out overflow-hidden min-w-0"
         >
           {/* Resize Handle */}
           <div
             className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors z-10"
-            onMouseDown={startResizing}
+            onMouseDown={() => {
+              isResizing.current = true;
+              document.body.style.cursor = "col-resize";
+              document.body.style.userSelect = "none";
+            }}
           />
+
           {/* Search Bar */}
           <div className="px-2 py-2 border-b border-zinc-200 dark:border-zinc-800">
             <div className="relative">
@@ -359,8 +342,8 @@ export default function Dashboard() {
           </div>
 
           {/* Snippet List */}
-          <ScrollArea className="flex-1">
-            <div className="p-2 pb-14">
+          <ScrollArea className="flex-1 min-w-0">
+            <div className="p-2 pb-14 overflow-hidden">
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-3">
                   <Loader2
@@ -371,33 +354,20 @@ export default function Dashboard() {
                     Loading snippets...
                   </p>
                 </div>
-              ) : error ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-3">
-                  <p className="text-xs text-red-600 dark:text-red-400">
-                    {error}
-                  </p>
-                  <Button
-                    variant="link"
-                    onClick={fetchSnippets}
-                    className="text-xs"
-                  >
-                    Try again
-                  </Button>
-                </div>
               ) : filteredSnippets.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-2">
                   <p className="text-xs text-zinc-600 dark:text-zinc-400">
                     {searchQuery ? "No snippets found" : "No snippets yet"}
                   </p>
                   {searchQuery && (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-500">
+                    <p className="text-xs text-zinc-500">
                       Try a different search term
                     </p>
                   )}
                 </div>
               ) : (
-                <div className="space-y-1">
-                  {/* Draft snippet preview when creating */}
+                <div className="space-y-1 overflow-hidden">
+                  {/* Draft preview while creating */}
                   {isCreating &&
                     (draftSnippet.label || draftSnippet.shortcut) && (
                       <div className="w-full text-left h-auto py-2 px-2.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-dashed border-zinc-300 dark:border-zinc-600">
@@ -430,7 +400,7 @@ export default function Dashboard() {
                         }
                         setSelectedSnippet(snippet);
                       }}
-                      onUpdate={handleInlineUpdateSnippet}
+                      onUpdate={handleUpdateSnippet}
                     />
                   ))}
                 </div>
@@ -438,7 +408,7 @@ export default function Dashboard() {
             </div>
           </ScrollArea>
 
-          {/* Floating Add Button */}
+          {/* Add Snippet Button */}
           <div className="px-2 py-2 border-t border-zinc-200 dark:border-zinc-800">
             <Button
               onClick={handleAddSnippet}
@@ -449,8 +419,57 @@ export default function Dashboard() {
             </Button>
           </div>
 
-          {/* User Profile at Bottom */}
-          <SidebarUserProfile />
+          {/* Settings Footer */}
+          <div className="px-2 py-1.5 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+            {/* Theme toggle group */}
+            <div className="flex items-center gap-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                className="h-6 w-6 rounded-md"
+                title={
+                  theme === "light"
+                    ? "Switch to dark mode"
+                    : "Switch to light mode"
+                }
+              >
+                {theme === "light" ? (
+                  <Moon className="h-3 w-3" strokeWidth={1.5} />
+                ) : (
+                  <Sun className="h-3 w-3" strokeWidth={1.5} />
+                )}
+              </Button>
+            </div>
+            {/* Import/Export group */}
+            <div className="flex items-center gap-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleExport}
+                className="h-6 w-6 rounded-md"
+                title="Export snippets as JSON"
+              >
+                <Download className="h-3 w-3" strokeWidth={1.5} />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => importInputRef.current?.click()}
+                className="h-6 w-6 rounded-md"
+                title="Import snippets from JSON"
+              >
+                <Upload className="h-3 w-3" strokeWidth={1.5} />
+              </Button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={handleImport}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Right Content - Detail */}
@@ -474,9 +493,46 @@ export default function Dashboard() {
               sidebarOpen={sidebarOpen}
               onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
             />
+          ) : snippets.length === 0 && !loading ? (
+            /* Empty state when no snippets exist */
+            <>
+              <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  className="h-8 w-8"
+                  title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+                >
+                  {sidebarOpen ? (
+                    <PanelLeftClose className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  ) : (
+                    <PanelLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  )}
+                </Button>
+              </div>
+              <div className="flex flex-col items-center justify-center flex-1 p-8 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-4">
+                  <Clipboard
+                    className="h-8 w-8 text-zinc-400 dark:text-zinc-500"
+                    strokeWidth={1.5}
+                  />
+                </div>
+                <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-1">
+                  No snippets yet
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4 max-w-50">
+                  Create your first snippet to start saving and reusing text
+                  quickly.
+                </p>
+                <Button onClick={handleAddSnippet} className="h-8 text-xs">
+                  <Plus className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+                  Create your first snippet
+                </Button>
+              </div>
+            </>
           ) : (
             <>
-              {/* Header with toggle when no snippet selected */}
               <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center">
                 <Button
                   variant="ghost"
@@ -493,11 +549,9 @@ export default function Dashboard() {
                 </Button>
               </div>
               <div className="flex items-center justify-center flex-1">
-                <div className="text-center">
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                    Select a snippet to view details
-                  </p>
-                </div>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                  Select a snippet to view details
+                </p>
               </div>
             </>
           )}
