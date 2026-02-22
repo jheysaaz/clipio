@@ -22,7 +22,7 @@ import { Separator } from "~/components/ui/separator";
 import ConfirmDialog from "~/components/ConfirmDialog";
 import { Badge } from "~/components/ui/badge";
 import type { Snippet } from "~/types";
-import { useToast } from "~/hooks/ToastContext";
+import { InlineError } from "~/components/ui/inline-error";
 import { getRelativeTime } from "~/utils/dateUtils";
 import {
   getSnippetUsageCount,
@@ -45,7 +45,6 @@ export default function SnippetDetailView({
   sidebarOpen = true,
   onToggleSidebar,
 }: SnippetDetailViewProps) {
-  const { showToast } = useToast();
   const [editedContent, setEditedContent] = useState(snippet.content);
   const [editedTags, setEditedTags] = useState<string[]>(snippet.tags || []);
   const [newTagInput, setNewTagInput] = useState("");
@@ -53,6 +52,8 @@ export default function SnippetDetailView({
   const tagInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<RichTextEditorRef>(null);
   const [copied, setCopied] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [usageCount, setUsageCount] = useState(0);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -95,11 +96,9 @@ export default function SnippetDetailView({
       // Increment usage count
       const newCount = await incrementSnippetUsage(snippet.id);
       setUsageCount(newCount);
-
-      showToast(i18n.t("snippetDetail.toasts.copied"), "success");
     } catch (err) {
       console.error("Failed to copy:", err);
-      showToast(i18n.t("snippetDetail.toasts.failedToCopy"), "error");
+      setActionError(i18n.t("snippetDetail.toasts.failedToCopy"));
     }
   };
 
@@ -115,10 +114,11 @@ export default function SnippetDetailView({
         updatedAt: new Date().toISOString(),
       };
       await onUpdate(updated);
-      showToast(i18n.t("snippetDetail.toasts.saved"), "success");
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
     } catch (error) {
       console.error("Error saving snippet:", error);
-      showToast(i18n.t("snippetDetail.toasts.failedToSave"), "error");
+      setActionError(i18n.t("snippetDetail.toasts.failedToSave"));
     } finally {
       setIsSaving(false);
     }
@@ -128,10 +128,9 @@ export default function SnippetDetailView({
     setIsDeleting(true);
     try {
       await onDelete(snippet.id);
-      showToast(i18n.t("snippetDetail.toasts.deleted"), "success");
     } catch (error) {
       console.error("Error deleting snippet:", error);
-      showToast(i18n.t("snippetDetail.toasts.failedToDelete"), "error");
+      setActionError(i18n.t("snippetDetail.toasts.failedToDelete"));
     } finally {
       setIsDeleting(false);
       setShowDeleteDialog(false);
@@ -152,6 +151,11 @@ export default function SnippetDetailView({
               ? i18n.t("common.hideSidebar")
               : i18n.t("common.showSidebar")
           }
+          aria-label={
+            sidebarOpen
+              ? i18n.t("common.hideSidebar")
+              : i18n.t("common.showSidebar")
+          }
         >
           {sidebarOpen ? (
             <PanelLeftClose className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -167,6 +171,7 @@ export default function SnippetDetailView({
           disabled={isDeleting}
           className="h-8 w-8 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50"
           title={i18n.t("snippetDetail.deleteSnippet")}
+          aria-label={i18n.t("snippetDetail.deleteSnippet")}
         >
           <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
         </Button>
@@ -176,6 +181,12 @@ export default function SnippetDetailView({
           onClick={handleCopy}
           className="h-8 w-8"
           title={i18n.t("snippetDetail.copyToClipboard")}
+          aria-label={
+            copied
+              ? i18n.t("snippetDetail.copiedLabel")
+              : i18n.t("snippetDetail.copyToClipboard")
+          }
+          aria-pressed={copied}
         >
           {copied ? (
             <Check className="h-3.5 w-3.5 text-green-600" strokeWidth={1.5} />
@@ -189,23 +200,46 @@ export default function SnippetDetailView({
           onClick={() => editorRef.current?.openCommandMenu()}
           className="h-8 w-8"
           title={i18n.t("snippetDetail.insertCommand")}
+          aria-label={i18n.t("snippetDetail.insertCommand")}
         >
           <SquareSlash className="h-3.5 w-3.5" strokeWidth={1.5} />
         </Button>
         <Separator orientation="vertical" className="h-5 mx-1" />
+        {/* Screen-reader live region for save status */}
+        <span role="status" aria-live="polite" className="sr-only">
+          {isSaved ? i18n.t("snippetDetail.toasts.saved") : ""}
+        </span>
         <Button
           variant="default"
           size="sm"
           onClick={handleSave}
-          disabled={!hasChanges || isSaving}
+          disabled={(!hasChanges && !isSaved) || isSaving}
           className="h-8 text-xs"
         >
-          <Save className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
-          {isSaving
-            ? i18n.t("snippetDetail.saving")
-            : i18n.t("snippetDetail.save")}
+          {isSaved ? (
+            <>
+              <Check
+                className="h-3.5 w-3.5 mr-1.5 text-green-300"
+                strokeWidth={1.5}
+              />
+              {i18n.t("snippetDetail.savedLabel")}
+            </>
+          ) : (
+            <>
+              <Save className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+              {isSaving
+                ? i18n.t("snippetDetail.saving")
+                : i18n.t("snippetDetail.save")}
+            </>
+          )}
         </Button>
       </div>
+
+      {/* Inline error — co-located with action bar, always visible until dismissed */}
+      <InlineError
+        message={actionError}
+        onDismiss={() => setActionError(null)}
+      />
 
       {/* Content Area - Always Editable */}
       <div className="flex-1 overflow-auto p-4">
@@ -241,6 +275,7 @@ export default function SnippetDetailView({
                 }
                 className="opacity-50 hover:opacity-100 transition-opacity -mr-0.5"
                 title={`Remove "${tag}"`}
+                aria-label={`Remove "${tag}"`}
               >
                 <X className="h-2.5 w-2.5" strokeWidth={2} />
               </button>

@@ -5,6 +5,7 @@ common:
   hideSidebar: Hide sidebar
   showSidebar: Show sidebar
   cancel: Cancel
+  closeModal: Close
 
 dashboard:
   searchPlaceholder: Search snippets...
@@ -22,7 +23,7 @@ dashboard:
     heading: No snippets yet
     body: Create your first snippet to start saving and reusing text quickly.
     action: Create your first snippet
-  detailPlaceholder: Select a snippet to view details
+  snippetListLabel: Snippets
   warnings:
     uninstall:
       body: Uninstalling will delete all snippets.
@@ -43,6 +44,7 @@ dashboard:
     syncFullSaved: Sync storage full — switched to local storage. Your snippet was saved.
     failedToCreate: Failed to create snippet. Please try again.
     failedToDelete: Failed to delete snippet.
+    failedToUpdate: Failed to update snippet.
     restoredSnippets:
       1: Restored 1 snippet from backup!
       n: Restored $1 snippets from backup!
@@ -67,6 +69,8 @@ snippetDetail:
   insertCommand: Insert command
   saving: Saving...
   save: Save
+  savedLabel: Saved
+  copiedLabel: Copied!
   editorPlaceholder: "Start typing your snippet content here or use '/' for commands..."
   tags: Tags
   tagPlaceholder: Tag name...
@@ -122,6 +126,7 @@ options:
       title: Export snippets
       description: Download your snippet library as a JSON file. Compatible with Clipio on any device.
       button: Export
+      exported: Exported!
     importCard:
       title: Import snippets
       description: Import from a Clipio or TextBlaze export file. Conflicts and unsupported placeholders are resolved step-by-step.
@@ -208,6 +213,7 @@ importWizard:
 
 editor:
   toolbar:
+    label: Formatting options
     bold: "Bold (⌘B)"
     italic: "Italic (⌘I)"
     underline: "Underline (⌘U)"

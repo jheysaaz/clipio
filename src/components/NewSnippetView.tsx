@@ -5,6 +5,7 @@ import { Input } from "~/components/ui/input";
 import { RichTextEditor } from "~/components/editor";
 import { Label } from "~/components/ui/label";
 import { Separator } from "~/components/ui/separator";
+import { InlineError } from "~/components/ui/inline-error";
 import type { SnippetFormData } from "~/types";
 import { i18n } from "#i18n";
 
@@ -14,6 +15,8 @@ interface NewSnippetViewProps {
   onSave: () => void;
   onCancel: () => void;
   isSaving: boolean;
+  createError?: string | null;
+  onClearCreateError?: () => void;
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
 }
@@ -24,6 +27,8 @@ export default function NewSnippetView({
   onSave,
   onCancel,
   isSaving,
+  createError = null,
+  onClearCreateError,
   sidebarOpen = true,
   onToggleSidebar,
 }: NewSnippetViewProps) {
@@ -65,6 +70,11 @@ export default function NewSnippetView({
               ? i18n.t("common.hideSidebar")
               : i18n.t("common.showSidebar")
           }
+          aria-label={
+            sidebarOpen
+              ? i18n.t("common.hideSidebar")
+              : i18n.t("common.showSidebar")
+          }
         >
           {sidebarOpen ? (
             <PanelLeftClose className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -78,7 +88,8 @@ export default function NewSnippetView({
           size="icon"
           onClick={onCancel}
           className="h-8 w-8"
-          title="Cancel"
+          title={i18n.t("newSnippet.cancel")}
+          aria-label={i18n.t("newSnippet.cancel")}
         >
           <X className="h-3.5 w-3.5" strokeWidth={1.5} />
         </Button>
@@ -96,6 +107,12 @@ export default function NewSnippetView({
             : i18n.t("newSnippet.create")}
         </Button>
       </div>
+
+      {/* Inline error — shown when snippet creation fails */}
+      <InlineError
+        message={createError}
+        onDismiss={() => onClearCreateError?.()}
+      />
 
       {/* Form Content */}
       <div className="flex-1 overflow-auto p-3 space-y-4">
@@ -127,10 +144,18 @@ export default function NewSnippetView({
             placeholder={i18n.t("newSnippet.shortcutPlaceholder")}
             value={draftSnippet.shortcut}
             onChange={handleChange}
+            aria-describedby={errors.shortcut ? "shortcut-error" : undefined}
+            aria-invalid={!!errors.shortcut}
             className={`h-8 text-sm font-mono ${errors.shortcut ? "border-red-500" : ""}`}
           />
           {errors.shortcut && (
-            <p className="text-xs text-red-500">{errors.shortcut}</p>
+            <p
+              id="shortcut-error"
+              role="alert"
+              className="text-xs text-red-500"
+            >
+              {errors.shortcut}
+            </p>
           )}
         </div>
 

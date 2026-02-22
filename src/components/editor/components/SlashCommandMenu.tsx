@@ -207,6 +207,13 @@ export function SlashCommandMenu({
         floating.refs.setFloating(node);
       }}
       style={floating.style}
+      role="listbox"
+      aria-label={i18n.t("editor.slashMenu.header")}
+      aria-activedescendant={
+        commands[selectedIndex]
+          ? `slash-cmd-${commands[selectedIndex].id}`
+          : undefined
+      }
       className="z-50 min-w-50 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg p-1"
     >
       <div className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 px-2 py-1 uppercase tracking-wide">
@@ -223,7 +230,11 @@ export function SlashCommandMenu({
           return (
             <button
               key={command.id}
+              id={`slash-cmd-${command.id}`}
               type="button"
+              role="option"
+              aria-selected={selectedIndex === index}
+              aria-disabled={command.disabled}
               disabled={command.disabled}
               className={cn(
                 "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-left transition-colors",

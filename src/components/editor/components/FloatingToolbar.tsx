@@ -159,6 +159,8 @@ export function FloatingToolbar() {
     <div
       ref={ref}
       {...props}
+      role="toolbar"
+      aria-label={i18n.t("editor.toolbar.label")}
       className={cn(
         "flex items-center gap-0.5 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg z-50"
       )}
@@ -205,6 +207,8 @@ export function FloatingToolbar() {
             )}
             onClick={() => handleToggleMark("bold")}
             title={i18n.t("editor.toolbar.bold")}
+            aria-label={i18n.t("editor.toolbar.bold")}
+            aria-pressed={isBoldActive}
             type="button"
           >
             <Bold className="h-3.5 w-3.5" strokeWidth={2} />
@@ -218,6 +222,8 @@ export function FloatingToolbar() {
             )}
             onClick={() => handleToggleMark("italic")}
             title={i18n.t("editor.toolbar.italic")}
+            aria-label={i18n.t("editor.toolbar.italic")}
+            aria-pressed={isItalicActive}
             type="button"
           >
             <Italic className="h-3.5 w-3.5" strokeWidth={2} />
@@ -231,6 +237,8 @@ export function FloatingToolbar() {
             )}
             onClick={() => handleToggleMark("underline")}
             title={i18n.t("editor.toolbar.underline")}
+            aria-label={i18n.t("editor.toolbar.underline")}
+            aria-pressed={isUnderlineActive}
             type="button"
           >
             <Underline className="h-3.5 w-3.5" strokeWidth={2} />
@@ -244,6 +252,8 @@ export function FloatingToolbar() {
             )}
             onClick={() => handleToggleMark("strikethrough")}
             title={i18n.t("editor.toolbar.strikethrough")}
+            aria-label={i18n.t("editor.toolbar.strikethrough")}
+            aria-pressed={isStrikethroughActive}
             type="button"
           >
             <Strikethrough className="h-3.5 w-3.5" strokeWidth={2} />
@@ -257,6 +267,8 @@ export function FloatingToolbar() {
             )}
             onClick={() => handleToggleMark("code")}
             title={i18n.t("editor.toolbar.code")}
+            aria-label={i18n.t("editor.toolbar.code")}
+            aria-pressed={isCodeActive}
             type="button"
           >
             <Code className="h-3.5 w-3.5" strokeWidth={2} />
@@ -275,6 +287,12 @@ export function FloatingToolbar() {
                 ? i18n.t("editor.toolbar.removeLink")
                 : i18n.t("editor.toolbar.insertLink")
             }
+            aria-label={
+              isLinkActive
+                ? i18n.t("editor.toolbar.removeLink")
+                : i18n.t("editor.toolbar.insertLink")
+            }
+            aria-pressed={isLinkActive}
             type="button"
           >
             {isLinkActive ? (

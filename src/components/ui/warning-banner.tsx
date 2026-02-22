@@ -16,6 +16,7 @@ export function WarningBanner({
 }: WarningBannerProps) {
   return (
     <div
+      role="alert"
       className={cn(
         "flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-[10px]",
         className

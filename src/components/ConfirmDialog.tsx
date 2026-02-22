@@ -49,13 +49,15 @@ export default function ConfirmDialog({
           <AlertDialogCancel disabled={isLoading}>
             {cancelText}
           </AlertDialogCancel>
-          <Button
-            onClick={handleConfirm}
-            disabled={isLoading}
-            variant={confirmVariant === "danger" ? "destructive" : "default"}
-          >
-            {isLoading ? i18n.t("confirmDialog.loading") : confirmText}
-          </Button>
+          <AlertDialogAction asChild>
+            <Button
+              onClick={handleConfirm}
+              disabled={isLoading}
+              variant={confirmVariant === "danger" ? "destructive" : "default"}
+            >
+              {isLoading ? i18n.t("confirmDialog.loading") : confirmText}
+            </Button>
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

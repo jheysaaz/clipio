@@ -110,6 +110,8 @@ export default function SnippetListItem({
   return (
     <Button
       variant="ghost"
+      role="option"
+      aria-selected={isSelected}
       className={cn(
         "w-full justify-start items-start text-left h-auto py-2 px-2.5 rounded-lg transition-colors overflow-hidden relative max-w-full",
         isSelected

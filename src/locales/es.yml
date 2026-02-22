@@ -5,6 +5,7 @@ common:
   hideSidebar: Ocultar barra lateral
   showSidebar: Mostrar barra lateral
   cancel: Cancelar
+  closeModal: Cerrar
 
 dashboard:
   searchPlaceholder: Buscar fragmentos...
@@ -23,6 +24,7 @@ dashboard:
     body: Crea tu primer fragmento para guardar y reutilizar texto rápidamente.
     action: Crear tu primer fragmento
   detailPlaceholder: Selecciona un fragmento para ver los detalles
+  snippetListLabel: Fragmentos
   warnings:
     uninstall:
       body: Desinstalar eliminará todos los fragmentos.
@@ -43,6 +45,7 @@ dashboard:
     syncFullSaved: Almacenamiento de sincronización lleno — cambiado a almacenamiento local. Tu fragmento se guardó.
     failedToCreate: Error al crear el fragmento. Por favor, inténtalo de nuevo.
     failedToDelete: Error al eliminar el fragmento.
+    failedToUpdate: Error al actualizar el fragmento.
     restoredSnippets:
       1: "¡1 fragmento restaurado desde la copia de seguridad!"
       n: "¡$1 fragmentos restaurados desde la copia de seguridad!"
@@ -67,6 +70,8 @@ snippetDetail:
   insertCommand: Insertar comando
   saving: Guardando...
   save: Guardar
+  savedLabel: Guardado
+  copiedLabel: "¡Copiado!"
   editorPlaceholder: "Empieza a escribir el contenido del fragmento o usa '/' para comandos..."
   tags: Etiquetas
   tagPlaceholder: Nombre de etiqueta...
@@ -122,6 +127,7 @@ options:
       title: Exportar fragmentos
       description: Descarga tu biblioteca de fragmentos como un archivo JSON. Compatible con Clipio en cualquier dispositivo.
       button: Exportar
+      exported: "¡Exportado!"
     importCard:
       title: Importar fragmentos
       description: Importa desde un archivo de exportación de Clipio o TextBlaze. Los conflictos y marcadores no compatibles se resuelven paso a paso.
@@ -208,6 +214,7 @@ importWizard:
 
 editor:
   toolbar:
+    label: Opciones de formato
     bold: "Negrita (⌘B)"
     italic: "Cursiva (⌘I)"
     underline: "Subrayado (⌘U)"

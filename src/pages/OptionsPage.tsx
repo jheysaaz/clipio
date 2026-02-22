@@ -5,6 +5,7 @@ import {
   Moon,
   Sun,
   Download,
+  Check,
   Info,
   Cloud,
   HardDrive,
@@ -14,7 +15,7 @@ import { Button } from "~/components/ui/button";
 import { Progress } from "~/components/ui/progress";
 import { cn } from "~/lib/utils";
 import { useTheme } from "~/hooks/ThemeContext";
-import { useToast } from "~/hooks/ToastContext";
+import { InlineError } from "~/components/ui/inline-error";
 import { lazy, Suspense } from "react";
 const ImportWizard = lazy(() => import("~/components/ImportWizard"));
 import { WarningBanner } from "~/components/ui/warning-banner";
@@ -249,17 +250,20 @@ function GeneralSection() {
 // ---------------------------------------------------------------------------
 
 function ImportExportSection() {
-  const { showToast } = useToast();
   const [showImportWizard, setShowImportWizard] = useState(false);
   const [importedCount, setImportedCount] = useState<number | null>(null);
+  const [exportedFeedback, setExportedFeedback] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const importButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleExport = async () => {
     try {
       await exportSnippets();
-      showToast(i18n.t("options.toasts.exported"), "success");
+      setExportedFeedback(true);
+      setTimeout(() => setExportedFeedback(false), 3000);
     } catch (err) {
       console.error("[Clipio] Export failed:", err);
-      showToast(i18n.t("options.toasts.failedExport"), "error");
+      setExportError(i18n.t("options.toasts.failedExport"));
     }
   };
 
@@ -291,11 +295,29 @@ function ImportExportSection() {
             onClick={handleExport}
             className="shrink-0"
           >
-            <Download className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
-            {i18n.t("options.importExport.exportCard.button")}
+            {exportedFeedback ? (
+              <>
+                <Check
+                  className="h-3.5 w-3.5 mr-1.5 text-green-600"
+                  strokeWidth={1.5}
+                />
+                {i18n.t("options.importExport.exportCard.exported")}
+              </>
+            ) : (
+              <>
+                <Download className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+                {i18n.t("options.importExport.exportCard.button")}
+              </>
+            )}
           </Button>
         </div>
       </div>
+
+      <InlineError
+        message={exportError}
+        onDismiss={() => setExportError(null)}
+        className="rounded-lg border border-red-200 dark:border-red-800"
+      />
 
       {/* Import card */}
       <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 space-y-3">
@@ -309,6 +331,7 @@ function ImportExportSection() {
             </p>
           </div>
           <Button
+            ref={importButtonRef}
             size="sm"
             onClick={() => {
               setImportedCount(null);
@@ -321,7 +344,11 @@ function ImportExportSection() {
         </div>
 
         {importedCount !== null && (
-          <p className="text-xs text-green-600 dark:text-green-400">
+          <p
+            aria-live="polite"
+            role="status"
+            className="text-xs text-green-600 dark:text-green-400"
+          >
             {i18n.t(
               "options.importExport.importCard.successMessage",
               importedCount
@@ -347,19 +374,39 @@ function ImportExportSection() {
 
       {/* Import wizard modal */}
       {showImportWizard && (
-        <div className="fixed inset-0 z-50 bg-black/40 dark:bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-xl w-full max-w-lg p-6 max-h-[min(90vh,640px)] overflow-y-auto">
+        <div
+          className="fixed inset-0 z-50 bg-black/40 dark:bg-black/60 flex items-center justify-center p-4"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setShowImportWizard(false);
+              importButtonRef.current?.focus();
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="import-wizard-title"
+            className="bg-white dark:bg-zinc-950 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-xl w-full max-w-lg p-6 max-h-[min(90vh,640px)] overflow-y-auto"
+          >
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+              <h2
+                id="import-wizard-title"
+                className="text-base font-semibold text-zinc-900 dark:text-zinc-100"
+              >
                 {i18n.t("options.importExport.modal.title")}
               </h2>
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7"
-                onClick={() => setShowImportWizard(false)}
+                onClick={() => {
+                  setShowImportWizard(false);
+                  importButtonRef.current?.focus();
+                }}
+                aria-label={i18n.t("common.closeModal")}
               >
-                <span className="sr-only">Close</span>×
+                <span aria-hidden="true">×</span>
               </Button>
             </div>
             <Suspense
@@ -370,14 +417,14 @@ function ImportExportSection() {
               }
             >
               <ImportWizard
-                onClose={() => setShowImportWizard(false)}
+                onClose={() => {
+                  setShowImportWizard(false);
+                  importButtonRef.current?.focus();
+                }}
                 onImportComplete={(count) => {
                   setImportedCount(count);
                   setShowImportWizard(false);
-                  showToast(
-                    i18n.t("options.toasts.imported", count),
-                    "success"
-                  );
+                  importButtonRef.current?.focus();
                 }}
               />
             </Suspense>
@@ -475,6 +522,7 @@ export default function OptionsPage() {
             <button
               key={item.id}
               onClick={() => setActiveSection(item.id)}
+              aria-current={activeSection === item.id ? "page" : undefined}
               className={cn(
                 "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150 truncate",
                 activeSection === item.id

@@ -21,7 +21,7 @@ import {
 import SnippetListItem from "~/components/SnippetListItem";
 const SnippetDetailView = lazy(() => import("~/components/SnippetDetailView"));
 const NewSnippetView = lazy(() => import("~/components/NewSnippetView"));
-import { useToast } from "~/hooks/ToastContext";
+import { InlineError } from "~/components/ui/inline-error";
 import { useTheme } from "~/hooks/ThemeContext";
 import type { Snippet, SnippetFormData } from "~/types";
 import { createSnippet } from "~/types";
@@ -62,8 +62,10 @@ export default function Dashboard() {
   const [showUninstallWarning, setShowUninstallWarning] = useState(false);
   const [recoverySnippets, setRecoverySnippets] = useState<Snippet[]>([]);
   const [showRecoveryBanner, setShowRecoveryBanner] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const isResizing = useRef(false);
-  const { showToast } = useToast();
   const { theme, toggleTheme } = useTheme();
 
   // -------------------------------------------------------------------------
@@ -107,7 +109,7 @@ export default function Dashboard() {
         if (status.quotaExceeded) setQuotaWarning(true);
       } catch (err) {
         console.error("[Clipio] Failed to load snippets:", err);
-        showToast(i18n.t("dashboard.toasts.failedToLoad"), "error");
+        setLoadError(i18n.t("dashboard.toasts.failedToLoad"));
       } finally {
         setLoading(false);
       }
@@ -178,11 +180,9 @@ export default function Dashboard() {
       setSelectedSnippet(newSnippet);
       setIsCreating(false);
       setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
-      showToast(i18n.t("dashboard.toasts.snippetCreated"), "success");
     } catch (err) {
       if (err instanceof StorageQuotaError) {
         setQuotaWarning(true);
-        showToast(i18n.t("dashboard.toasts.syncFullSaved"), "error");
         // Retry after manager has switched to local mode
         try {
           const newSnippet = createSnippet(draftSnippet);
@@ -193,10 +193,10 @@ export default function Dashboard() {
           setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
         } catch (retryErr) {
           console.error("[Clipio] Retry after quota error failed:", retryErr);
-          showToast(i18n.t("dashboard.toasts.failedToCreate"), "error");
+          setCreateError(i18n.t("dashboard.toasts.failedToCreate"));
         }
       } else {
-        showToast(i18n.t("dashboard.toasts.failedToCreate"), "error");
+        setCreateError(i18n.t("dashboard.toasts.failedToCreate"));
       }
     } finally {
       setIsSaving(false);
@@ -213,7 +213,7 @@ export default function Dashboard() {
       }
     } catch (err) {
       console.error("[Clipio] Failed to delete snippet:", err);
-      showToast(i18n.t("dashboard.toasts.failedToDelete"), "error");
+      throw err;
     }
   };
 
@@ -226,7 +226,7 @@ export default function Dashboard() {
       if (selectedSnippet?.id === updated.id) setSelectedSnippet(updated);
     } catch (err) {
       console.error("[Clipio] Failed to update snippet:", err);
-      showToast("Failed to update snippet.", "error");
+      throw err;
     }
   };
 
@@ -262,11 +262,11 @@ export default function Dashboard() {
         : -1;
 
       let newIndex = currentIndex;
-      if (e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey)) {
+      if (e.key === "ArrowDown") {
         e.preventDefault();
         newIndex =
           currentIndex < filteredSnippets.length - 1 ? currentIndex + 1 : 0;
-      } else if (e.key === "ArrowUp" || (e.key === "Tab" && e.shiftKey)) {
+      } else if (e.key === "ArrowUp") {
         e.preventDefault();
         newIndex =
           currentIndex > 0 ? currentIndex - 1 : filteredSnippets.length - 1;
@@ -306,16 +306,9 @@ export default function Dashboard() {
                 setSnippets(list);
                 if (list.length > 0) setSelectedSnippet(list[0]);
                 setShowRecoveryBanner(false);
-                showToast(
-                  i18n.t(
-                    "dashboard.toasts.restoredSnippets",
-                    recoverySnippets.length
-                  ),
-                  "success"
-                );
               } catch (err) {
                 console.error("[Clipio] Recovery failed:", err);
-                showToast(i18n.t("dashboard.toasts.failedToRestore"), "error");
+                setRecoveryError(i18n.t("dashboard.toasts.failedToRestore"));
               }
             },
           }}
@@ -324,6 +317,10 @@ export default function Dashboard() {
           {i18n.t("dashboard.warnings.recovery.body", recoverySnippets.length)}
         </WarningBanner>
       )}
+      <InlineError
+        message={recoveryError}
+        onDismiss={() => setRecoveryError(null)}
+      />
 
       {/* First-open uninstall data-loss warning */}
       {showUninstallWarning && (
@@ -389,7 +386,11 @@ export default function Dashboard() {
           <ScrollArea className="flex-1 min-w-0">
             <div className="p-2 pb-14 overflow-hidden">
               {loading ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <div
+                  className="flex flex-col items-center justify-center py-12 gap-3"
+                  role="status"
+                  aria-live="polite"
+                >
                   <Loader2
                     className="h-6 w-6 animate-spin text-zinc-600 dark:text-zinc-400"
                     strokeWidth={1.5}
@@ -398,6 +399,12 @@ export default function Dashboard() {
                     {i18n.t("dashboard.loadingSnippets")}
                   </p>
                 </div>
+              ) : loadError ? (
+                <InlineError
+                  message={loadError}
+                  onDismiss={() => setLoadError(null)}
+                  className="border border-red-200 dark:border-red-800 rounded-lg"
+                />
               ) : filteredSnippets.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-2">
                   <p className="text-xs text-zinc-600 dark:text-zinc-400">
@@ -412,7 +419,11 @@ export default function Dashboard() {
                   )}
                 </div>
               ) : (
-                <div className="space-y-1 overflow-hidden">
+                <div
+                  className="space-y-1 overflow-hidden"
+                  role="listbox"
+                  aria-label={i18n.t("dashboard.snippetListLabel")}
+                >
                   {/* Draft preview while creating */}
                   {isCreating &&
                     (draftSnippet.label || draftSnippet.shortcut) && (
@@ -481,6 +492,11 @@ export default function Dashboard() {
                     ? i18n.t("dashboard.switchToDark")
                     : i18n.t("dashboard.switchToLight")
                 }
+                aria-label={
+                  theme === "light"
+                    ? i18n.t("dashboard.switchToDark")
+                    : i18n.t("dashboard.switchToLight")
+                }
               >
                 {theme === "light" ? (
                   <Moon className="h-3 w-3" strokeWidth={1.5} />
@@ -497,6 +513,7 @@ export default function Dashboard() {
                 onClick={() => browser.runtime.openOptionsPage()}
                 className="h-6 w-6 rounded-md"
                 title={i18n.t("dashboard.settingsAndExport")}
+                aria-label={i18n.t("dashboard.settingsAndExport")}
               >
                 <Settings className="h-3 w-3" strokeWidth={1.5} />
               </Button>
@@ -520,6 +537,8 @@ export default function Dashboard() {
                 onSave={handleSaveNewSnippet}
                 onCancel={handleCancelCreate}
                 isSaving={isSaving}
+                createError={createError}
+                onClearCreateError={() => setCreateError(null)}
                 sidebarOpen={sidebarOpen}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
               />
@@ -551,6 +570,11 @@ export default function Dashboard() {
                   onClick={() => setSidebarOpen(!sidebarOpen)}
                   className="h-8 w-8"
                   title={
+                    sidebarOpen
+                      ? i18n.t("common.hideSidebar")
+                      : i18n.t("common.showSidebar")
+                  }
+                  aria-label={
                     sidebarOpen
                       ? i18n.t("common.hideSidebar")
                       : i18n.t("common.showSidebar")
@@ -591,6 +615,11 @@ export default function Dashboard() {
                   onClick={() => setSidebarOpen(!sidebarOpen)}
                   className="h-8 w-8"
                   title={
+                    sidebarOpen
+                      ? i18n.t("common.hideSidebar")
+                      : i18n.t("common.showSidebar")
+                  }
+                  aria-label={
                     sidebarOpen
                       ? i18n.t("common.hideSidebar")
                       : i18n.t("common.showSidebar")
