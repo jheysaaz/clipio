@@ -63,10 +63,9 @@ export const confettiEnabledItem = storage.defineItem<boolean>(
 export type ThemeMode = "light" | "dark" | "system";
 
 /** User-selected theme mode. */
-export const themeModeItem = storage.defineItem<ThemeMode>(
-  "local:themeMode",
-  { defaultValue: "system" }
-);
+export const themeModeItem = storage.defineItem<ThemeMode>("local:themeMode", {
+  defaultValue: "system",
+});
 
 /** Legacy theme key — read-only, used for one-time migration. */
 export const legacyThemeItem = storage.defineItem<string | null>(

@@ -150,10 +150,8 @@ export function captureMessage(
 function readFileAsUint8Array(file: File): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () =>
-      resolve(new Uint8Array(reader.result as ArrayBuffer));
-    reader.onerror = () =>
-      reject(new Error("Failed to read screenshot file"));
+    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+    reader.onerror = () => reject(new Error("Failed to read screenshot file"));
     reader.readAsArrayBuffer(file);
   });
 }

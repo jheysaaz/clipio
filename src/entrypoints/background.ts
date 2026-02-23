@@ -99,7 +99,7 @@ export default defineBackground(() => {
       }
 
       case CONTEXT_MENU.GIVE_FEEDBACK: {
-        const optionsUrl = browser.runtime.getURL("/options.html")
+        const optionsUrl = browser.runtime.getURL("/options.html");
         browser.tabs.create({
           url: optionsUrl + "#feedback",
         });
