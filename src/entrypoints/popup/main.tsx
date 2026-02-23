@@ -4,7 +4,7 @@ import { ErrorBoundary } from "@sentry/react";
 import "~/app.css";
 import Dashboard from "~/pages/Dashboard";
 import { ThemeProvider } from "~/hooks/ThemeContext";
-import { initSentry } from "~/lib/sentry";
+import { initSentry, captureError } from "~/lib/sentry";
 
 initSentry("popup");
 
@@ -26,7 +26,10 @@ function ErrorFallback() {
 
 function App() {
   return (
-    <ErrorBoundary fallback={<ErrorFallback />}>
+    <ErrorBoundary
+      fallback={<ErrorFallback />}
+      onError={(error) => captureError(error, { action: "ReactErrorBoundary" })}
+    >
       <ThemeProvider>
         <Dashboard />
       </ThemeProvider>

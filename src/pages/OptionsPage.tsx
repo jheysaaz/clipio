@@ -46,7 +46,8 @@ import {
   dismissedUninstallWarningItem,
 } from "~/storage/items";
 import { i18n } from "#i18n";
-import { captureError, sendUserFeedback } from "~/lib/sentry";
+import { captureError, captureMessage, sendUserFeedback } from "~/lib/sentry";
+import { SENTRY_TEST_MESSAGE_TYPE } from "~/config/constants";
 
 // ---------------------------------------------------------------------------
 // Sidebar nav items
@@ -823,6 +824,85 @@ function FeedbackSection() {
           </div>
         </form>
       </div>
+
+      {/* Dev only: Test Sentry (options + content script) */}
+      {(import.meta.env.MODE as string) !== "production" && (
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-6 space-y-3">
+          <h3 className="text-sm font-semibold text-foreground">
+            Development – Test Sentry
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Send test events to Sentry to verify capture in each context. Only
+            visible in development.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                captureError(
+                  new Error("Clipio Sentry test exception (options)")
+                );
+              }}
+            >
+              Send test exception (options)
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                captureMessage(
+                  "Clipio Sentry test message (options)",
+                  "info"
+                );
+              }}
+            >
+              Send test message (options)
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  const tabs = await browser.tabs.query({
+                    url: ["http://*/*", "https://*/*"],
+                  });
+                  for (const tab of tabs) {
+                    if (tab.id == null) continue;
+                    try {
+                      await browser.tabs.sendMessage(tab.id, {
+                        type: SENTRY_TEST_MESSAGE_TYPE,
+                      });
+                      return;
+                    } catch {
+                      // No content script in this tab, try next
+                    }
+                  }
+                  captureMessage(
+                    "No tab with content script found. Open a regular webpage and try again.",
+                    "warning"
+                  );
+                } catch (err) {
+                  captureError(err, { action: "sentryTestContentScript" });
+                }
+              }}
+            >
+              Trigger test in content script
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Or on any webpage: press{" "}
+            {navigator.platform.toLowerCase().includes("mac")
+              ? "Cmd+Shift+E"
+              : "Ctrl+Shift+E"}{" "}
+            to send a test from the content script (dev only). Check the
+            console for confirmation.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

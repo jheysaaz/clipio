@@ -24,6 +24,9 @@ export const TIMING = {
   TYPING_TIMEOUT: 300,
 } as const;
 
+/** Runtime message type for dev-only Sentry test (content script). */
+export const SENTRY_TEST_MESSAGE_TYPE = "clipio-test-sentry" as const;
+
 /** Context-menu item IDs. */
 export const CONTEXT_MENU = {
   PARENT: "clipio-parent",

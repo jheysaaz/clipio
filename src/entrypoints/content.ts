@@ -1,4 +1,4 @@
-import { TIMING } from "~/config/constants";
+import { TIMING, SENTRY_TEST_MESSAGE_TYPE } from "~/config/constants";
 import { cachedSnippetsItem, confettiEnabledItem } from "~/storage/items";
 import { incrementSnippetUsage } from "~/utils/usageTracking";
 import confetti from "canvas-confetti";
@@ -10,10 +10,58 @@ export default defineContentScript({
   runAt: "document_idle",
 
   main() {
-    // Initialize Sentry with the relay transport so errors are forwarded
-    // through the background service worker when the host page's CSP blocks
-    // direct fetch to the Sentry ingest endpoint.
+    // ── Sentry (content script) ───────────────────────────────────────
+    // Relay transport forwards envelopes via background when host CSP blocks fetch.
     initSentry("content", { transport: makeRelayTransport });
+
+    // Dev only: test Sentry capture (message from options or keyboard shortcut)
+    if ((import.meta.env.MODE as string) !== "production") {
+      browser.runtime.onMessage.addListener(
+        (message: unknown): boolean => {
+          if (
+            typeof message === "object" &&
+            message !== null &&
+            (message as { type?: string }).type === SENTRY_TEST_MESSAGE_TYPE
+          ) {
+            console.info(
+              "[Clipio] Sentry test triggered (content script, from options): sending exception + message"
+            );
+            captureError(
+              new Error("Clipio Sentry test exception (content script)")
+            );
+            captureMessage(
+              "Clipio Sentry test message (content script)",
+              "info"
+            );
+            return false;
+          }
+          return false;
+        }
+      );
+      document.addEventListener(
+        "keydown",
+        (e) => {
+          if (
+            (e.ctrlKey || e.metaKey) &&
+            e.shiftKey &&
+            e.key === "E"
+          ) {
+            e.preventDefault();
+            console.info(
+              "[Clipio] Sentry test triggered (content script): sending exception + message"
+            );
+            captureError(
+              new Error("Clipio Sentry test exception (content script, shortcut)")
+            );
+            captureMessage(
+              "Clipio Sentry test message (content script, shortcut)",
+              "info"
+            );
+          }
+        },
+        true
+      );
+    }
 
     interface Snippet {
       id: string;
@@ -22,6 +70,7 @@ export default defineContentScript({
       label: string;
     }
 
+    // ── Confetti (UX) ─────────────────────────────────────────────────
     // Dedicated confetti canvas that sits above all page content
     let confettiCanvas: HTMLCanvasElement | null = null;
     let confettiInstance: confetti.CreateTypes | null = null;
@@ -34,7 +83,7 @@ export default defineContentScript({
       if (confettiCanvas?.isConnected) confettiCanvas.remove();
       confettiCanvas = document.createElement("canvas");
       confettiCanvas.style.cssText =
-        "position:fixed;inset:0;width:100vw;height:100vh;z-index:2147483647;pointer-events:none;";
+        "position:fixed;inset:0;width:100vw;height:100vh;z-index:314159;pointer-events:none;";
       document.documentElement.appendChild(confettiCanvas);
       confettiInstance = confetti.create(confettiCanvas, { resize: true });
       return confettiInstance;
@@ -395,6 +444,7 @@ export default defineContentScript({
       }
     }
 
+    // ── Transformation (placeholders, markdown, HTML) ─────────────────
     // Read clipboard text using the extension's clipboardRead permission.
     // navigator.clipboard.readText() requires transient user-activation AND
     // the host page's Permissions-Policy to allow clipboard-read — both of
@@ -430,7 +480,8 @@ export default defineContentScript({
       let processedContent = content;
       let cursorOffset: number | null = null;
 
-      // Process clipboard placeholder
+      // Process clipboard placeholder. On failure use a visible placeholder
+      // so the user sees why nothing was pasted and we don't show confetti for empty insert.
       if (processedContent.includes("{{clipboard}}")) {
         try {
           const clipboardText = readClipboardText();
@@ -441,6 +492,10 @@ export default defineContentScript({
         } catch (error) {
           console.error("[Clipio] Failed to read clipboard:", error);
           captureError(error, { action: "clipboardRead" });
+          processedContent = processedContent.replace(
+            /\{\{clipboard\}\}/g,
+            "(clipboard unavailable)"
+          );
         }
       }
 
@@ -509,6 +564,64 @@ export default defineContentScript({
       return { content: processedContent, cursorOffset };
     }
 
+    // Post-insertion verification: after a short delay, check the field still
+    // contains the inserted text (host apps may revert DOM changes).
+    function verifyInsertionSuccessForInput(
+      element: HTMLInputElement | HTMLTextAreaElement,
+      insertedText: string,
+      startPos: number
+    ): Promise<boolean> {
+      if (!insertedText) return Promise.resolve(false);
+      return new Promise((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const actual = element.value;
+            const segment = actual.substring(
+              startPos,
+              startPos + insertedText.length
+            );
+            resolve(segment === insertedText);
+          });
+        });
+      });
+    }
+
+    // Plain text from HTML for contenteditable verification
+    function getPlainTextFromHtml(html: string): string {
+      const div = document.createElement("div");
+      div.innerHTML = html;
+      return (div.textContent || "").trim();
+    }
+
+    function verifyInsertionSuccessForContentEditable(
+      element: HTMLElement,
+      insertedHtml: string
+    ): Promise<boolean> {
+      const expectedPlain = getPlainTextFromHtml(insertedHtml);
+      if (!expectedPlain) return Promise.resolve(false);
+      return new Promise((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const actual = element.innerText || element.textContent || "";
+            resolve(actual.includes(expectedPlain));
+          });
+        });
+      });
+    }
+
+    // Rate-limit "insertion reverted" reports per host to avoid flooding Sentry
+    let lastRevertReportTime = 0;
+    const REVERT_REPORT_COOLDOWN_MS = 10_000;
+    function reportInsertionReverted(elementType: "input" | "contenteditable") {
+      const now = Date.now();
+      if (now - lastRevertReportTime < REVERT_REPORT_COOLDOWN_MS) return;
+      lastRevertReportTime = now;
+      captureMessage("Snippet insertion reverted by host", "warning", {
+        host: window.location.hostname,
+        elementType,
+      });
+    }
+
     // Replace shortcut with snippet content in input / textarea
     async function expandSnippet(
       element: HTMLInputElement | HTMLTextAreaElement
@@ -522,6 +635,9 @@ export default defineContentScript({
       const { snippet, startPos, endPos } = match;
       const { content: processedContent, cursorOffset } =
         await processSnippetContent(snippet.content, false);
+
+      // Empty insertion (e.g. clipboard failed and snippet was only {{clipboard}})
+      if (!processedContent) return;
 
       const textBefore = element.value.substring(0, startPos);
       const textAfter = element.value.substring(endPos);
@@ -543,10 +659,16 @@ export default defineContentScript({
       );
       element.focus();
 
-      // 🎉 Show confetti!
-      if (confettiEnabled) {
+      const insertionStuck = await verifyInsertionSuccessForInput(
+        element,
+        processedContent,
+        startPos
+      );
+      if (confettiEnabled && insertionStuck) {
         const pos = getCursorScreenPosition(element);
         showConfetti(pos.x, pos.y);
+      } else if (!insertionStuck) {
+        reportInsertionReverted("input");
       }
 
       incrementSnippetUsage(snippet.id).catch((err) => {
@@ -554,17 +676,21 @@ export default defineContentScript({
       });
     }
 
-    // Handle input events with debounce
+    // ── Event handlers ───────────────────────────────────────────────
+    // Document-level listeners (capture) so we see all input/keydown/focusout.
     function handleInput(event: Event) {
       if (!isExtensionValid) return;
-      // After expanding a snippet we dispatch a synthetic input event;
-      // skip re-processing it to avoid a redundant timer + match attempt.
       if (justExpanded) {
         justExpanded = false;
         return;
       }
-      const target = event.target as HTMLInputElement | HTMLTextAreaElement;
-      if (!target || !target.value) return;
+      const target = event.target;
+      if (
+        !target ||
+        !(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) ||
+        !target.value
+      )
+        return;
       if (typingTimer) clearTimeout(typingTimer);
       typingTimer = setTimeout(() => expandSnippet(target), TYPING_TIMEOUT);
     }
@@ -582,6 +708,8 @@ export default defineContentScript({
         snippet.content,
         true
       );
+
+      if (!getPlainTextFromHtml(processedContent)) return;
 
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = processedContent;
@@ -616,10 +744,15 @@ export default defineContentScript({
         new Event("input", { bubbles: true, cancelable: true })
       );
 
-      // 🎉 Show confetti!
-      if (confettiEnabled) {
+      const insertionStuck = await verifyInsertionSuccessForContentEditable(
+        element,
+        processedContent
+      );
+      if (confettiEnabled && insertionStuck) {
         const pos = getCursorScreenPosition(element);
         showConfetti(pos.x, pos.y);
+      } else if (!insertionStuck) {
+        reportInsertionReverted("contenteditable");
       }
 
       incrementSnippetUsage(snippet.id).catch(console.error);
@@ -628,9 +761,10 @@ export default defineContentScript({
     // Handle keydown to expand immediately on Space or Tab
     function handleKeyDown(event: KeyboardEvent) {
       if (!isExtensionValid) return;
-      const target = event.target as HTMLElement;
+      const target = event.target;
+      if (!target || !(target instanceof HTMLElement)) return;
       const isInputOrTextarea =
-        target.tagName === "INPUT" || target.tagName === "TEXTAREA";
+        target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
       const isContentEditable = target.isContentEditable;
 
       if (!isInputOrTextarea && !isContentEditable) return;
@@ -639,13 +773,12 @@ export default defineContentScript({
       if (typingTimer) clearTimeout(typingTimer);
 
       if (isInputOrTextarea) {
-        const inputTarget = target as HTMLInputElement | HTMLTextAreaElement;
         const cursorPosition =
-          inputTarget.selectionStart || inputTarget.value.length;
-        const match = findSnippetMatch(inputTarget.value, cursorPosition);
+          target.selectionStart ?? target.value.length;
+        const match = findSnippetMatch(target.value, cursorPosition);
         if (match) {
           event.preventDefault();
-          expandSnippet(inputTarget);
+          expandSnippet(target);
         }
       } else if (isContentEditable) {
         const selection = window.getSelection();
@@ -693,7 +826,9 @@ export default defineContentScript({
       }, TYPING_TIMEOUT);
     }
 
+    // ── Init: storage watchers + document listeners ───────────────────
     async function initialize() {
+      if (!checkExtensionContext()) return;
       // Read confetti preference
       try {
         confettiEnabled = await confettiEnabledItem.getValue();
