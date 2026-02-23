@@ -23,10 +23,7 @@ export function StrikethroughLeaf({ children, attributes }: LeafProps) {
 
 export function CodeLeaf({ children, attributes }: LeafProps) {
   return (
-    <code
-      {...attributes}
-      className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded text-sm font-mono"
-    >
+    <code {...attributes} className="bg-muted px-1 rounded text-sm font-mono">
       {children}
     </code>
   );

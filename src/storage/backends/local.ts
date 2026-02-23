@@ -52,8 +52,10 @@ export async function updateContentScriptCache(
   snippets: Snippet[]
 ): Promise<void> {
   try {
+    // Store as a plain array — structured-clone is faster than
+    // JSON.stringify here and the content script avoids a JSON.parse.
     await browser.storage.local.set({
-      [CONTENT_SCRIPT_CACHE_KEY]: JSON.stringify(snippets),
+      [CONTENT_SCRIPT_CACHE_KEY]: snippets,
     });
   } catch (error) {
     console.error("[Clipio] Failed to update content script cache:", error);

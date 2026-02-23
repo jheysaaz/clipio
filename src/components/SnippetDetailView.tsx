@@ -98,7 +98,7 @@ export default function SnippetDetailView({
       setUsageCount(newCount);
     } catch (err) {
       console.error("Failed to copy:", err);
-      setActionError(i18n.t("snippetDetail.toasts.failedToCopy"));
+      setActionError(i18n.t("snippetDetail.errors.failedToCopy"));
     }
   };
 
@@ -118,7 +118,7 @@ export default function SnippetDetailView({
       setTimeout(() => setIsSaved(false), 2000);
     } catch (error) {
       console.error("Error saving snippet:", error);
-      setActionError(i18n.t("snippetDetail.toasts.failedToSave"));
+      setActionError(i18n.t("snippetDetail.errors.failedToSave"));
     } finally {
       setIsSaving(false);
     }
@@ -130,7 +130,7 @@ export default function SnippetDetailView({
       await onDelete(snippet.id);
     } catch (error) {
       console.error("Error deleting snippet:", error);
-      setActionError(i18n.t("snippetDetail.toasts.failedToDelete"));
+      setActionError(i18n.t("snippetDetail.errors.failedToDelete"));
     } finally {
       setIsDeleting(false);
       setShowDeleteDialog(false);
@@ -140,7 +140,7 @@ export default function SnippetDetailView({
   return (
     <div className="flex flex-col h-full">
       {/* Action Bar */}
-      <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-1">
+      <div className="px-3 py-2 border-b border-border flex items-center gap-1">
         <Button
           variant="ghost"
           size="icon"
@@ -169,7 +169,7 @@ export default function SnippetDetailView({
           size="icon"
           onClick={() => setShowDeleteDialog(true)}
           disabled={isDeleting}
-          className="h-8 w-8 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50"
+          className="h-8 w-8 hover:text-destructive hover:bg-destructive/10"
           title={i18n.t("snippetDetail.deleteSnippet")}
           aria-label={i18n.t("snippetDetail.deleteSnippet")}
         >
@@ -207,7 +207,7 @@ export default function SnippetDetailView({
         <Separator orientation="vertical" className="h-5 mx-1" />
         {/* Screen-reader live region for save status */}
         <span role="status" aria-live="polite" className="sr-only">
-          {isSaved ? i18n.t("snippetDetail.toasts.saved") : ""}
+          {isSaved ? i18n.t("snippetDetail.status.saved") : ""}
         </span>
         <Button
           variant="default"
@@ -256,7 +256,7 @@ export default function SnippetDetailView({
       <Separator />
       <div className="px-3 py-2.5">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <div className="flex items-center gap-1 text-zinc-400 dark:text-zinc-500 mr-1">
+          <div className="flex items-center gap-1 text-muted-foreground mr-1">
             <Tag className="h-3 w-3 shrink-0" strokeWidth={1.5} />
             <span className="text-[10px] font-medium uppercase tracking-wide">
               {i18n.t("snippetDetail.tags")}
@@ -266,7 +266,7 @@ export default function SnippetDetailView({
             <Badge
               key={tag}
               variant="outline"
-              className="text-[10px] px-2 py-0.5 h-5 font-normal border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 gap-1 group cursor-default hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              className="text-[10px] px-2 py-0.5 h-5 font-normal border-border text-muted-foreground gap-1 group cursor-default hover:bg-accent transition-colors"
             >
               {tag}
               <button
@@ -321,7 +321,7 @@ export default function SnippetDetailView({
                 setIsAddingTag(true);
                 setTimeout(() => tagInputRef.current?.focus(), 0);
               }}
-              className="h-5 px-2 text-[10px] text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 border-dashed border-zinc-300 dark:border-zinc-600 hover:border-zinc-400 dark:hover:border-zinc-500"
+              className="h-5 px-2 text-[10px] text-muted-foreground hover:text-foreground border-dashed border-border hover:border-muted-foreground"
               title={i18n.t("snippetDetail.addTagTitle")}
             >
               <Plus className="h-2.5 w-2.5 mr-0.5" strokeWidth={2} />
@@ -333,7 +333,7 @@ export default function SnippetDetailView({
 
       {/* Stats Section */}
       <Separator />
-      <div className="px-3 py-1.5 flex items-center justify-between text-[10px] text-zinc-500 dark:text-zinc-400 bg-zinc-50/50 dark:bg-zinc-900/30">
+      <div className="px-3 py-1.5 flex items-center justify-between text-[10px] text-muted-foreground bg-muted/30">
         <div className="flex items-center gap-1.5">
           <span className="font-medium">{usageCount}</span>
           <span>{i18n.t("snippetDetail.uses")}</span>

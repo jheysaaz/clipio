@@ -232,10 +232,10 @@ function StepIndicator({
               className={cn(
                 "flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium border transition-colors",
                 isDone
-                  ? "bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900 border-transparent"
+                  ? "bg-primary text-primary-foreground border-transparent"
                   : isActive
-                    ? "border-zinc-900 dark:border-zinc-50 text-zinc-900 dark:text-zinc-50"
-                    : "border-zinc-300 dark:border-zinc-700 text-zinc-400 dark:text-zinc-600"
+                    ? "border-primary text-foreground"
+                    : "border-border text-muted-foreground"
               )}
             >
               {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : stepNum}
@@ -244,14 +244,14 @@ function StepIndicator({
               className={cn(
                 "text-xs",
                 isActive
-                  ? "text-zinc-900 dark:text-zinc-50 font-medium"
-                  : "text-zinc-400 dark:text-zinc-600"
+                  ? "text-foreground font-medium"
+                  : "text-muted-foreground"
               )}
             >
               {label}
             </span>
             {i < labels.length - 1 && (
-              <ChevronRight className="h-3 w-3 text-zinc-300 dark:text-zinc-700 mx-0.5" />
+              <ChevronRight className="h-3 w-3 text-muted-foreground/50 mx-0.5" />
             )}
           </div>
         );
@@ -518,8 +518,8 @@ export default function ImportWizard({
         className={cn(
           "border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer",
           isDragging
-            ? "border-zinc-500 dark:border-zinc-400 bg-zinc-50 dark:bg-zinc-900"
-            : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-500"
+            ? "border-ring bg-accent/50"
+            : "border-border hover:border-muted-foreground"
         )}
         onDragOver={(e) => {
           e.preventDefault();
@@ -543,26 +543,24 @@ export default function ImportWizard({
         {fileName ? (
           <div className="flex flex-col items-center gap-2">
             <FileJson
-              className="h-8 w-8 text-zinc-500 dark:text-zinc-400"
+              className="h-8 w-8 text-muted-foreground"
               strokeWidth={1.5}
             />
-            <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              {fileName}
-            </p>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-sm font-medium text-foreground">{fileName}</p>
+            <p className="text-xs text-muted-foreground">
               {i18n.t("importWizard.upload.clickToChange")}
             </p>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2">
             <Upload
-              className="h-8 w-8 text-zinc-400 dark:text-zinc-500"
+              className="h-8 w-8 text-muted-foreground"
               strokeWidth={1.5}
             />
-            <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <p className="text-sm font-medium text-foreground">
               {i18n.t("importWizard.upload.dropHere")}
             </p>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-xs text-muted-foreground">
               {i18n.t("importWizard.upload.clickToBrowse")}
             </p>
           </div>
@@ -573,11 +571,11 @@ export default function ImportWizard({
       {rawJson && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="text-sm text-muted-foreground">
               {i18n.t("importWizard.upload.detectedFormat")}
             </p>
             {detectedFormat ? (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground">
                 {PARSERS[detectedFormat].iconUrl && (
                   <img
                     src={PARSERS[detectedFormat].iconUrl}
@@ -598,7 +596,7 @@ export default function ImportWizard({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs text-zinc-500 dark:text-zinc-400">
+            <Label className="text-xs text-muted-foreground">
               {i18n.t("importWizard.upload.formatLabel")}
             </Label>
             <RadioGroup
@@ -639,7 +637,7 @@ export default function ImportWizard({
 
       {/* Parse result */}
       {parseError && (
-        <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-400 text-xs">
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs">
           <AlertTriangle
             className="h-3.5 w-3.5 mt-0.5 shrink-0"
             strokeWidth={1.5}
@@ -648,7 +646,7 @@ export default function ImportWizard({
         </div>
       )}
       {parsedSnippets.length > 0 && !parseError && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-600 dark:text-zinc-400">
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-muted border text-xs text-muted-foreground">
           <CheckCircle2
             className="h-3.5 w-3.5 text-green-500 shrink-0"
             strokeWidth={1.5}
@@ -665,13 +663,13 @@ export default function ImportWizard({
 
   const renderStep2 = () => (
     <div className="space-y-3">
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="text-sm text-muted-foreground">
         {i18n.t("importWizard.placeholders.description")}
       </p>
 
       {/* Apply to all */}
-      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800">
-        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted border">
+        <span className="text-xs font-medium text-muted-foreground shrink-0">
           {i18n.t("importWizard.placeholders.applyToAll")}
         </span>
         <Select
@@ -709,14 +707,14 @@ export default function ImportWizard({
         {unsupportedEntries.map((entry, idx) => (
           <div
             key={entry.snippet.suggestedId}
-            className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-2"
+            className="p-3 rounded-lg border space-y-2"
           >
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                <p className="text-sm font-medium text-foreground">
                   {entry.snippet.label}
                 </p>
-                <p className="text-xs font-mono text-zinc-500 dark:text-zinc-400">
+                <p className="text-xs font-mono text-muted-foreground">
                   {entry.snippet.shortcut}
                 </p>
               </div>
@@ -735,7 +733,7 @@ export default function ImportWizard({
             <div className="flex items-center gap-2">
               <Label
                 htmlFor={`action-${idx}`}
-                className="text-xs text-zinc-500 dark:text-zinc-400 shrink-0"
+                className="text-xs text-muted-foreground shrink-0"
               >
                 {i18n.t("importWizard.placeholders.actionLabel")}
               </Label>
@@ -782,13 +780,13 @@ export default function ImportWizard({
 
   const renderStep3 = () => (
     <div className="space-y-3">
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="text-sm text-muted-foreground">
         {i18n.t("importWizard.conflicts.description", conflictEntries.length)}
       </p>
 
       {/* Resolve all */}
-      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800">
-        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted border">
+        <span className="text-xs font-medium text-muted-foreground shrink-0">
           {i18n.t("importWizard.conflicts.resolveAll")}
         </span>
         <Select
@@ -823,37 +821,37 @@ export default function ImportWizard({
         {conflictEntries.map((entry, idx) => (
           <div
             key={entry.incoming.suggestedId}
-            className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-2"
+            className="p-3 rounded-lg border space-y-2"
           >
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="space-y-0.5">
-                <p className="text-zinc-400 dark:text-zinc-500 uppercase tracking-wide text-[10px] font-medium">
+                <p className="text-muted-foreground/80 uppercase tracking-wide text-[10px] font-medium">
                   {i18n.t("importWizard.conflicts.incomingColumn")}
                 </p>
-                <p className="font-medium text-zinc-900 dark:text-zinc-100">
+                <p className="font-medium text-foreground">
                   {entry.incoming.label}
                 </p>
-                <p className="font-mono text-zinc-500 dark:text-zinc-400">
+                <p className="font-mono text-muted-foreground">
                   {entry.incoming.shortcut}
                 </p>
               </div>
               <div className="space-y-0.5">
-                <p className="text-zinc-400 dark:text-zinc-500 uppercase tracking-wide text-[10px] font-medium">
+                <p className="text-muted-foreground/80 uppercase tracking-wide text-[10px] font-medium">
                   {i18n.t("importWizard.conflicts.existingColumn", [
                     entry.conflictType,
                   ])}
                 </p>
-                <p className="font-medium text-zinc-900 dark:text-zinc-100">
+                <p className="font-medium text-foreground">
                   {entry.existing.label}
                 </p>
-                <p className="font-mono text-zinc-500 dark:text-zinc-400">
+                <p className="font-mono text-muted-foreground">
                   {entry.existing.shortcut}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <Label className="text-xs text-zinc-500 dark:text-zinc-400 shrink-0">
+              <Label className="text-xs text-muted-foreground shrink-0">
                 {i18n.t("importWizard.conflicts.resolution")}
               </Label>
               <Select
@@ -887,7 +885,7 @@ export default function ImportWizard({
 
             {entry.resolution === "rename" && (
               <div className="flex items-center gap-2">
-                <Label className="text-xs text-zinc-500 dark:text-zinc-400 shrink-0">
+                <Label className="text-xs text-muted-foreground shrink-0">
                   {i18n.t("importWizard.conflicts.newShortcut")}
                 </Label>
                 <Input
@@ -928,10 +926,10 @@ export default function ImportWizard({
               strokeWidth={1.5}
             />
           </div>
-          <p className="text-base font-medium text-zinc-900 dark:text-zinc-100">
+          <p className="text-base font-medium text-foreground">
             {i18n.t("importWizard.confirm.done.heading")}
           </p>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="text-sm text-muted-foreground">
             {i18n.t("importWizard.confirm.done.body", importedCount)}
           </p>
           <Button onClick={onClose} className="mt-2 h-8 text-sm">
@@ -944,41 +942,39 @@ export default function ImportWizard({
     return (
       <div className="space-y-4">
         {/* Summary */}
-        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
+        <div className="rounded-lg border divide-y">
           <div className="flex justify-between items-center px-4 py-2.5 text-sm">
-            <span className="text-zinc-500 dark:text-zinc-400">
+            <span className="text-muted-foreground">
               {i18n.t("importWizard.confirm.snippetsToImport")}
             </span>
-            <span className="font-medium text-zinc-900 dark:text-zinc-100">
-              {snippetsToAdd}
-            </span>
+            <span className="font-medium text-foreground">{snippetsToAdd}</span>
           </div>
           {overwrittenCount > 0 && (
             <div className="flex justify-between items-center px-4 py-2.5 text-sm">
-              <span className="text-zinc-500 dark:text-zinc-400">
+              <span className="text-muted-foreground">
                 {i18n.t("importWizard.confirm.overwritingExisting")}
               </span>
-              <span className="font-medium text-zinc-900 dark:text-zinc-100">
+              <span className="font-medium text-foreground">
                 {overwrittenCount}
               </span>
             </div>
           )}
           {renamedCount > 0 && (
             <div className="flex justify-between items-center px-4 py-2.5 text-sm">
-              <span className="text-zinc-500 dark:text-zinc-400">
+              <span className="text-muted-foreground">
                 {i18n.t("importWizard.confirm.importedWithRename")}
               </span>
-              <span className="font-medium text-zinc-900 dark:text-zinc-100">
+              <span className="font-medium text-foreground">
                 {renamedCount}
               </span>
             </div>
           )}
           {skippedCount > 0 && (
             <div className="flex justify-between items-center px-4 py-2.5 text-sm">
-              <span className="text-zinc-500 dark:text-zinc-400">
+              <span className="text-muted-foreground">
                 {i18n.t("importWizard.confirm.skippedConflicts")}
               </span>
-              <span className="font-medium text-zinc-500 dark:text-zinc-400">
+              <span className="font-medium text-muted-foreground">
                 {skippedCount}
               </span>
             </div>
@@ -987,7 +983,7 @@ export default function ImportWizard({
 
         {/* Quota */}
         <div className="space-y-1.5">
-          <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-400">
+          <div className="flex justify-between text-xs text-muted-foreground">
             <span>{i18n.t("importWizard.confirm.estimatedStorage")}</span>
             <span>
               {(estimatedSize / 1024).toFixed(1)} KB /{" "}
@@ -1021,7 +1017,7 @@ export default function ImportWizard({
     if (step === 4 && importDone) return null;
 
     return (
-      <div className="flex justify-between pt-4 border-t border-zinc-100 dark:border-zinc-800">
+      <div className="flex justify-between pt-4 border-t">
         <Button
           variant="ghost"
           size="sm"

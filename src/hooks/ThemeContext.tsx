@@ -7,35 +7,49 @@ import React, {
 } from "react";
 import { captureError } from "~/lib/sentry";
 
-type Theme = "light" | "dark";
+export type ThemeMode = "light" | "dark" | "system";
+type ResolvedTheme = "light" | "dark";
 
 interface ThemeContextType {
-  theme: Theme;
+  /** The user-selected mode: "light", "dark", or "system". */
+  themeMode: ThemeMode;
+  setThemeMode: (mode: ThemeMode) => void;
+  /** The actually applied theme ("light" or "dark"), resolving "system" from OS. */
+  theme: ResolvedTheme;
+  /** Toggles between light and dark (ignores system mode). Kept for backward compat. */
   toggleTheme: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+function getSystemTheme(): ResolvedTheme {
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light");
+  const [themeMode, setThemeModeState] = useState<ThemeMode>("system");
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
   const [isLoaded, setIsLoaded] = useState(false);
 
+  // Load persisted mode on mount
   useEffect(() => {
-    // Load theme from browser.storage on mount
     const loadTheme = async () => {
       try {
         if (typeof browser !== "undefined" && browser.storage?.local) {
-          const result = await browser.storage.local.get("theme");
-          if (result.theme) {
-            setTheme(result.theme as Theme);
+          const result = await browser.storage.local.get("themeMode");
+          const saved = result.themeMode as ThemeMode | undefined;
+          if (saved === "light" || saved === "dark" || saved === "system") {
+            setThemeModeState(saved);
           } else {
-            // Check system preference
-            const systemTheme = window.matchMedia(
-              "(prefers-color-scheme: dark)"
-            ).matches
-              ? "dark"
-              : "light";
-            setTheme(systemTheme);
+            // Legacy: check old "theme" key
+            const legacy = await browser.storage.local.get("theme");
+            if (legacy.theme === "light" || legacy.theme === "dark") {
+              setThemeModeState(legacy.theme as ThemeMode);
+            } else {
+              setThemeModeState("system");
+            }
           }
         }
       } catch (error) {
@@ -48,24 +62,51 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     loadTheme();
   }, []);
 
+  // Resolve and apply theme whenever mode changes or system pref changes
   useEffect(() => {
     if (!isLoaded) return;
 
-    // Apply theme to document
-    document.documentElement.classList.toggle("dark", theme === "dark");
+    const apply = (mode: ThemeMode) => {
+      const resolved = mode === "system" ? getSystemTheme() : mode;
+      setResolvedTheme(resolved);
+      document.documentElement.classList.toggle("dark", resolved === "dark");
+    };
 
-    // Save to browser.storage
+    apply(themeMode);
+
+    // Listen to OS preference changes when in system mode
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onSystemChange = () => {
+      if (themeMode === "system") apply("system");
+    };
+    mq.addEventListener("change", onSystemChange);
+    return () => mq.removeEventListener("change", onSystemChange);
+  }, [themeMode, isLoaded]);
+
+  // Persist mode to storage
+  useEffect(() => {
+    if (!isLoaded) return;
     if (typeof browser !== "undefined" && browser.storage?.local) {
-      browser.storage.local.set({ theme });
+      browser.storage.local.set({ themeMode });
     }
-  }, [theme, isLoaded]);
+  }, [themeMode, isLoaded]);
+
+  const setThemeMode = (mode: ThemeMode) => {
+    setThemeModeState(mode);
+  };
 
   const toggleTheme = () => {
-    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+    // Toggle between explicit light/dark, exiting system mode if active
+    setThemeModeState((prev) => {
+      const current = prev === "system" ? getSystemTheme() : prev;
+      return current === "light" ? "dark" : "light";
+    });
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider
+      value={{ themeMode, setThemeMode, theme: resolvedTheme, toggleTheme }}
+    >
       {children}
     </ThemeContext.Provider>
   );

@@ -46,7 +46,7 @@ export function InlineError({
     <div
       role="alert"
       className={cn(
-        "flex items-start gap-2 px-3 py-2 bg-red-50 dark:bg-red-950/40 border-b border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 text-xs",
+        "flex items-start gap-2 px-3 py-2 bg-destructive/10 border-b border-destructive/20 text-destructive text-xs",
         className
       )}
     >

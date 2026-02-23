@@ -75,13 +75,11 @@ export function DatepickerPlaceholderElement({
         className={cn(
           "inline-flex items-center gap-1 px-1.5 py-0.5 rounded cursor-pointer select-none align-baseline mx-0.5",
           "font-mono text-[10px] leading-none",
-          "bg-zinc-100 border border-zinc-300",
-          "shadow-[0_1px_0_1px_#f4f4f5,0_2px_3px_rgba(0,0,0,0.05)]",
-          "text-zinc-700",
-          "dark:bg-zinc-800 dark:border-zinc-600",
+          "bg-muted border border-border",
+          "shadow-[0_1px_0_1px_var(--secondary),0_2px_3px_rgba(0,0,0,0.05)]",
+          "text-muted-foreground",
           "dark:shadow-[0_1px_0_1px_rgba(0,0,0,0.3),0_2px_3px_rgba(0,0,0,0.2)]",
-          "dark:text-zinc-300",
-          "hover:bg-zinc-200 dark:hover:bg-zinc-700",
+          "hover:bg-accent",
           "transition-colors duration-150"
         )}
         title={`Click to change date. Current: ${displayDate}`}
@@ -94,8 +92,8 @@ export function DatepickerPlaceholderElement({
           ref={pickerRef}
           className={cn(
             "absolute left-0 top-full mt-1 z-50",
-            "rounded-lg border border-zinc-200 dark:border-zinc-700",
-            "bg-white dark:bg-zinc-900 shadow-lg p-2"
+            "rounded-lg border border-border",
+            "bg-popover shadow-lg p-2"
           )}
         >
           <input
@@ -104,10 +102,10 @@ export function DatepickerPlaceholderElement({
             onChange={(e) => handleDateChange(e.target.value)}
             className={cn(
               "w-full px-2 py-1.5 rounded-md text-sm",
-              "border border-zinc-200 dark:border-zinc-700",
-              "bg-white dark:bg-zinc-800",
-              "text-zinc-900 dark:text-zinc-100",
-              "focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-500"
+              "border border-border",
+              "bg-background",
+              "text-foreground",
+              "focus:outline-none focus:ring-2 focus:ring-ring"
             )}
           />
         </div>

@@ -1,4 +1,4 @@
-import { STORAGE_KEYS, TIMING } from "~/config/constants";
+import { STORAGE_KEYS, TIMING, FLAGS } from "~/config/constants";
 import { incrementSnippetUsage } from "~/utils/usageTracking";
 import confetti from "canvas-confetti";
 import { initSentry, captureError, captureMessage } from "~/lib/sentry";
@@ -57,7 +57,7 @@ export default defineContentScript({
           "#10b981",
           "#3b82f6",
         ],
-        ticks: 150,
+        ticks: 100,
         gravity: 1.2,
         scalar: 0.8,
         drift: 0,
@@ -142,6 +142,27 @@ export default defineContentScript({
     let typingTimer: ReturnType<typeof setTimeout> | null = null;
     const TYPING_TIMEOUT = TIMING.TYPING_TIMEOUT;
     let isExtensionValid = true;
+    let confettiEnabled = true; // default on; overridden from storage in initialize()
+    let justExpanded = false; // guard to skip redundant input events after expansion
+
+    // ── Shortcut lookup index ──────────────────────────────────────────
+    // Instead of iterating all snippets on every keystroke, keep a Map
+    // keyed by shortcut string and a sorted (desc) list of unique shortcut
+    // lengths so findSnippetMatch is O(k) where k = distinct lengths.
+    const shortcutMap = new Map<string, Snippet>();
+    let shortcutLengths: number[] = [];
+    const WORD_BOUNDARY_RE = /[\s\n]/;
+
+    function rebuildShortcutIndex() {
+      shortcutMap.clear();
+      const lengths = new Set<number>();
+      for (const s of snippets) {
+        shortcutMap.set(s.shortcut, s);
+        lengths.add(s.shortcut.length);
+      }
+      // Sort descending so longer (more specific) shortcuts match first
+      shortcutLengths = [...lengths].sort((a, b) => b - a);
+    }
 
     // Check if extension context is still valid
     function checkExtensionContext(): boolean {
@@ -169,13 +190,14 @@ export default defineContentScript({
         const cachedData = await browser.storage.local.get(
           STORAGE_KEYS.CACHED_SNIPPETS
         );
-        if (cachedData[STORAGE_KEYS.CACHED_SNIPPETS]) {
-          const parsedData = JSON.parse(
-            cachedData[STORAGE_KEYS.CACHED_SNIPPETS] as string
-          );
+        const raw = cachedData[STORAGE_KEYS.CACHED_SNIPPETS];
+        if (raw) {
+          // Handle both legacy JSON-string cache and new array format
+          const parsedData = typeof raw === "string" ? JSON.parse(raw) : raw;
           snippets = Array.isArray(parsedData)
             ? parsedData
             : parsedData.items || [];
+          rebuildShortcutIndex();
         }
       } catch (error) {
         if (
@@ -193,22 +215,25 @@ export default defineContentScript({
       }
     }
 
-    // Find snippet by checking the text before cursor
+    // Find snippet by checking the text before cursor.
+    // Uses the pre-built shortcutMap + shortcutLengths for O(k) lookup
+    // where k = number of distinct shortcut lengths (typically 3-5).
     function findSnippetMatch(
       text: string,
       cursorPosition: number
     ): { snippet: Snippet; startPos: number; endPos: number } | null {
-      if (!text || snippets.length === 0) return null;
+      if (!text || shortcutMap.size === 0) return null;
 
-      const textBeforeCursor = text.substring(0, cursorPosition);
-
-      for (const snippet of snippets) {
-        const shortcut = snippet.shortcut;
-        if (textBeforeCursor.endsWith(shortcut)) {
-          const startPos = cursorPosition - shortcut.length;
-          if (startPos === 0 || /[\s\n]/.test(text[startPos - 1])) {
-            return { snippet, startPos, endPos: cursorPosition };
-          }
+      for (const len of shortcutLengths) {
+        if (len > cursorPosition) continue;
+        const startPos = cursorPosition - len;
+        const candidate = text.substring(startPos, cursorPosition);
+        const snippet = shortcutMap.get(candidate);
+        if (
+          snippet &&
+          (startPos === 0 || WORD_BOUNDARY_RE.test(text[startPos - 1]))
+        ) {
+          return { snippet, startPos, endPos: cursorPosition };
         }
       }
 
@@ -498,6 +523,7 @@ export default defineContentScript({
           : startPos + processedContent.length;
       element.setSelectionRange(newCursorPos, newCursorPos);
 
+      justExpanded = true;
       element.dispatchEvent(
         new Event("input", { bubbles: true, cancelable: true })
       );
@@ -507,8 +533,10 @@ export default defineContentScript({
       element.focus();
 
       // 🎉 Show confetti!
-      const pos = getCursorScreenPosition(element);
-      showConfetti(pos.x, pos.y);
+      if (confettiEnabled) {
+        const pos = getCursorScreenPosition(element);
+        showConfetti(pos.x, pos.y);
+      }
 
       incrementSnippetUsage(snippet.id).catch((err) => {
         console.error("Failed to increment snippet usage:", err);
@@ -518,6 +546,12 @@ export default defineContentScript({
     // Handle input events with debounce
     function handleInput(event: Event) {
       if (!isExtensionValid) return;
+      // After expanding a snippet we dispatch a synthetic input event;
+      // skip re-processing it to avoid a redundant timer + match attempt.
+      if (justExpanded) {
+        justExpanded = false;
+        return;
+      }
       const target = event.target as HTMLInputElement | HTMLTextAreaElement;
       if (!target || !target.value) return;
       if (typingTimer) clearTimeout(typingTimer);
@@ -566,13 +600,16 @@ export default defineContentScript({
         cursorMarker.remove();
       }
 
+      justExpanded = true;
       element.dispatchEvent(
         new Event("input", { bubbles: true, cancelable: true })
       );
 
       // 🎉 Show confetti!
-      const pos = getCursorScreenPosition(element);
-      showConfetti(pos.x, pos.y);
+      if (confettiEnabled) {
+        const pos = getCursorScreenPosition(element);
+        showConfetti(pos.x, pos.y);
+      }
 
       incrementSnippetUsage(snippet.id).catch(console.error);
     }
@@ -618,6 +655,10 @@ export default defineContentScript({
     // Handle input events for contenteditable
     function handleContentEditableInput(event: Event) {
       if (!isExtensionValid) return;
+      if (justExpanded) {
+        justExpanded = false;
+        return;
+      }
       const target = event.target as HTMLElement;
       if (!target.isContentEditable) return;
       if (typingTimer) clearTimeout(typingTimer);
@@ -642,6 +683,16 @@ export default defineContentScript({
     }
 
     async function initialize() {
+      // Read confetti preference
+      try {
+        const flags = await browser.storage.local.get(FLAGS.CONFETTI_ENABLED);
+        if (flags[FLAGS.CONFETTI_ENABLED] === false) {
+          confettiEnabled = false;
+        }
+      } catch {
+        // keep default true
+      }
+
       await loadSnippets();
 
       document.addEventListener(
@@ -672,6 +723,18 @@ export default defineContentScript({
         true
       );
 
+      // Cancel pending expansion when the user leaves the field
+      document.addEventListener(
+        "focusout",
+        () => {
+          if (typingTimer) {
+            clearTimeout(typingTimer);
+            typingTimer = null;
+          }
+        },
+        true
+      );
+
       // Reload snippets when storage changes
       browser.storage.onChanged.addListener(
         (
@@ -679,10 +742,14 @@ export default defineContentScript({
           areaName: string
         ) => {
           if (!checkExtensionContext()) return;
+          if (areaName === "local" && FLAGS.CONFETTI_ENABLED in changes) {
+            confettiEnabled = changes[FLAGS.CONFETTI_ENABLED].newValue !== false;
+          }
           if (areaName === "local" && changes[STORAGE_KEYS.CACHED_SNIPPETS]) {
             try {
               const newValue = changes[STORAGE_KEYS.CACHED_SNIPPETS].newValue;
               if (newValue) {
+                // Handle both legacy JSON-string and new array format
                 const parsedData =
                   typeof newValue === "string"
                     ? JSON.parse(newValue)
@@ -690,6 +757,7 @@ export default defineContentScript({
                 snippets = Array.isArray(parsedData)
                   ? parsedData
                   : parsedData.items || [];
+                rebuildShortcutIndex();
               }
             } catch (error) {
               console.error("[Clipio] Error parsing updated snippets:", error);

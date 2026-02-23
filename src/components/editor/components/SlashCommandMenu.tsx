@@ -214,14 +214,14 @@ export function SlashCommandMenu({
           ? `slash-cmd-${commands[selectedIndex].id}`
           : undefined
       }
-      className="z-50 min-w-50 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg p-1"
+      className="z-50 min-w-50 rounded-lg border border-border bg-popover shadow-lg p-1"
     >
-      <div className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 px-2 py-1 uppercase tracking-wide">
+      <div className="text-[10px] font-medium text-muted-foreground px-2 py-1 uppercase tracking-wide">
         {i18n.t("editor.slashMenu.header")}
         {searchQuery && ` · "${searchQuery}"`}
       </div>
       {commands.length === 0 ? (
-        <div className="px-2 py-3 text-sm text-zinc-500 dark:text-zinc-400 text-center">
+        <div className="px-2 py-3 text-sm text-muted-foreground text-center">
           {i18n.t("editor.slashMenu.noMatches")}
         </div>
       ) : (
@@ -241,8 +241,8 @@ export function SlashCommandMenu({
                 command.disabled
                   ? "opacity-50 cursor-not-allowed"
                   : selectedIndex === index
-                    ? "bg-zinc-100 dark:bg-zinc-800"
-                    : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    ? "bg-accent"
+                    : "hover:bg-accent"
               )}
               onClick={() => !command.disabled && command.action()}
               onMouseEnter={() => setSelectedIndex(index)}
@@ -251,8 +251,8 @@ export function SlashCommandMenu({
                 className={cn(
                   "flex items-center justify-center w-6 h-6 rounded",
                   command.disabled
-                    ? "bg-zinc-50 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-600"
-                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                    ? "bg-muted text-muted-foreground"
+                    : "bg-accent text-accent-foreground"
                 )}
               >
                 <Icon className="h-3.5 w-3.5" strokeWidth={2} />
@@ -262,13 +262,13 @@ export function SlashCommandMenu({
                   className={cn(
                     "font-medium",
                     command.disabled
-                      ? "text-zinc-500 dark:text-zinc-500"
-                      : "text-zinc-900 dark:text-zinc-100"
+                      ? "text-muted-foreground"
+                      : "text-foreground"
                   )}
                 >
                   {command.label}
                 </div>
-                <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
+                <div className="text-xs text-muted-foreground truncate">
                   {command.description}
                 </div>
               </div>

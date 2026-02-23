@@ -144,26 +144,62 @@ export function captureMessage(
   });
 }
 
-// Re-export core Sentry so callers only need one import
-export { Sentry };
-
-// ---------------------------------------------------------------------------
-// Dev helpers
-// ---------------------------------------------------------------------------
+/**
+ * Reads a File into a Uint8Array.
+ */
+function readFileAsUint8Array(file: File): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () =>
+      resolve(new Uint8Array(reader.result as ArrayBuffer));
+    reader.onerror = () =>
+      reject(new Error("Failed to read screenshot file"));
+    reader.readAsArrayBuffer(file);
+  });
+}
 
 /**
- * Fire a test exception and a test message to Sentry.
- * Only intended for development — use to verify the DSN and integration work.
+ * Send user feedback to Sentry via the feedback integration.
+ * Optionally attach a screenshot file.
+ * Returns a promise that resolves when feedback is sent, or rejects with an error.
  */
-export function sendTestError(): void {
-  Sentry.withScope((scope) => {
-    scope.setTag("test", "true");
-    scope.setExtra("triggeredAt", new Date().toISOString());
-    scope.setExtra("source", "sendTestError()");
-    Sentry.captureException(
-      new Error("[Clipio] Sentry test error — feel free to ignore")
-    );
-  });
-  captureMessage("[Clipio] Sentry test message", "info", { test: true });
-  console.info("[Clipio] Test error sent to Sentry.");
+export async function sendUserFeedback(params: {
+  name?: string;
+  email?: string;
+  message: string;
+  screenshot?: File;
+}): Promise<void> {
+  // Read screenshot bytes before calling Sentry — withScope() is synchronous
+  // so attaching inside a FileReader.onload callback would be too late.
+  let attachments:
+    | { filename: string; data: Uint8Array; contentType: string }[]
+    | undefined;
+
+  if (params.screenshot) {
+    const data = await readFileAsUint8Array(params.screenshot);
+    attachments = [
+      {
+        filename: params.screenshot.name,
+        data,
+        contentType: params.screenshot.type,
+      },
+    ];
+  }
+
+  const feedbackId = Sentry.captureFeedback(
+    {
+      message: params.message,
+      name: params.name,
+      email: params.email,
+    },
+    // Pass attachments via the event hint so they travel with the feedback event
+    attachments ? { attachments } : undefined
+  );
+
+  if (!feedbackId) {
+    throw new Error("Failed to send feedback");
+  }
 }
+
+// Re-export core Sentry so callers only need one import
+export { Sentry };

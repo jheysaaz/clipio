@@ -383,8 +383,8 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
               placeholder={placeholder}
               className={cn(
                 "h-full overflow-auto outline-none text-sm leading-relaxed",
-                "text-zinc-900 dark:text-zinc-100",
-                "**:data-slate-placeholder:text-zinc-400 **:data-slate-placeholder:dark:text-zinc-500",
+                "text-foreground",
+                "**:data-slate-placeholder:text-muted-foreground",
                 "**:data-slate-placeholder:opacity-100!"
               )}
             />

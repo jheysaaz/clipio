@@ -162,7 +162,7 @@ export function FloatingToolbar() {
       role="toolbar"
       aria-label={i18n.t("editor.toolbar.label")}
       className={cn(
-        "flex items-center gap-0.5 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg z-50"
+        "flex items-center gap-0.5 p-1 rounded-lg border border-border bg-popover shadow-lg z-50"
       )}
     >
       {showLinkInput ? (
@@ -180,7 +180,7 @@ export function FloatingToolbar() {
               }, 150);
             }}
             placeholder={i18n.t("editor.toolbar.urlPlaceholder")}
-            className="h-6 w-40 text-xs px-1.5 bg-transparent border border-zinc-300 dark:border-zinc-600 rounded outline-none focus:border-indigo-500 dark:focus:border-indigo-400 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+            className="h-6 w-40 text-xs px-1.5 bg-transparent border border-border rounded outline-none focus:border-indigo-500 dark:focus:border-indigo-400 text-foreground placeholder:text-muted-foreground"
           />
           <Button
             variant="ghost"
@@ -201,10 +201,7 @@ export function FloatingToolbar() {
           <Button
             variant="ghost"
             size="icon"
-            className={cn(
-              "h-7 w-7",
-              isBoldActive && "bg-zinc-200 dark:bg-zinc-700"
-            )}
+            className={cn("h-7 w-7", isBoldActive && "bg-accent")}
             onClick={() => handleToggleMark("bold")}
             title={i18n.t("editor.toolbar.bold")}
             aria-label={i18n.t("editor.toolbar.bold")}
@@ -216,10 +213,7 @@ export function FloatingToolbar() {
           <Button
             variant="ghost"
             size="icon"
-            className={cn(
-              "h-7 w-7",
-              isItalicActive && "bg-zinc-200 dark:bg-zinc-700"
-            )}
+            className={cn("h-7 w-7", isItalicActive && "bg-accent")}
             onClick={() => handleToggleMark("italic")}
             title={i18n.t("editor.toolbar.italic")}
             aria-label={i18n.t("editor.toolbar.italic")}
@@ -231,10 +225,7 @@ export function FloatingToolbar() {
           <Button
             variant="ghost"
             size="icon"
-            className={cn(
-              "h-7 w-7",
-              isUnderlineActive && "bg-zinc-200 dark:bg-zinc-700"
-            )}
+            className={cn("h-7 w-7", isUnderlineActive && "bg-accent")}
             onClick={() => handleToggleMark("underline")}
             title={i18n.t("editor.toolbar.underline")}
             aria-label={i18n.t("editor.toolbar.underline")}
@@ -246,10 +237,7 @@ export function FloatingToolbar() {
           <Button
             variant="ghost"
             size="icon"
-            className={cn(
-              "h-7 w-7",
-              isStrikethroughActive && "bg-zinc-200 dark:bg-zinc-700"
-            )}
+            className={cn("h-7 w-7", isStrikethroughActive && "bg-accent")}
             onClick={() => handleToggleMark("strikethrough")}
             title={i18n.t("editor.toolbar.strikethrough")}
             aria-label={i18n.t("editor.toolbar.strikethrough")}
@@ -261,10 +249,7 @@ export function FloatingToolbar() {
           <Button
             variant="ghost"
             size="icon"
-            className={cn(
-              "h-7 w-7",
-              isCodeActive && "bg-zinc-200 dark:bg-zinc-700"
-            )}
+            className={cn("h-7 w-7", isCodeActive && "bg-accent")}
             onClick={() => handleToggleMark("code")}
             title={i18n.t("editor.toolbar.code")}
             aria-label={i18n.t("editor.toolbar.code")}
@@ -273,14 +258,11 @@ export function FloatingToolbar() {
           >
             <Code className="h-3.5 w-3.5" strokeWidth={2} />
           </Button>
-          <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
+          <div className="w-px h-4 bg-border mx-0.5" />
           <Button
             variant="ghost"
             size="icon"
-            className={cn(
-              "h-7 w-7",
-              isLinkActive && "bg-zinc-200 dark:bg-zinc-700"
-            )}
+            className={cn("h-7 w-7", isLinkActive && "bg-accent")}
             onClick={handleInsertLink}
             title={
               isLinkActive

@@ -21,6 +21,7 @@ export function WarningBanner({
         "flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-[10px]",
         className
       )}
+      // Note: amber colors are intentionally kept as semantic warning colors (no --warning token in shadcn base)
     >
       <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={1.5} />
       <p className="flex-1 leading-snug">

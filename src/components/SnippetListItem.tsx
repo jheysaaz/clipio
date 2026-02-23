@@ -115,8 +115,8 @@ export default function SnippetListItem({
       className={cn(
         "w-full justify-start items-start text-left h-auto py-2 px-2.5 rounded-lg transition-colors overflow-hidden relative max-w-full",
         isSelected
-          ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 border-l-2 border-l-zinc-900 dark:border-l-zinc-100"
-          : "hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 border-l-2 border-l-transparent"
+          ? "bg-muted text-foreground border-l-2 border-l-primary"
+          : "hover:bg-muted/50 border-l-2 border-l-transparent"
       )}
       onClick={onClick}
     >
@@ -132,11 +132,11 @@ export default function SnippetListItem({
               onKeyDown={handleKeyDown}
               onBlur={handleSave}
               onClick={(e) => e.stopPropagation()}
-              className="font-medium text-xs text-zinc-900 dark:text-zinc-100 flex-1 min-w-0 bg-transparent border-none outline-none focus:ring-0 p-0"
+              className="font-medium text-xs text-foreground flex-1 min-w-0 bg-transparent border-none outline-none focus:ring-0 p-0"
             />
           ) : (
             <h3
-              className="font-medium text-xs text-zinc-900 dark:text-zinc-100 truncate flex-1 min-w-0 cursor-text"
+              className="font-medium text-xs text-foreground truncate flex-1 min-w-0 cursor-text"
               onDoubleClick={handleDoubleClickLabel}
             >
               {snippet.label}
@@ -151,7 +151,7 @@ export default function SnippetListItem({
               onKeyDown={handleKeyDown}
               onBlur={handleSave}
               onClick={(e) => e.stopPropagation()}
-              className="font-mono text-[10px] px-1.5 py-0.5 bg-transparent border border-zinc-300 dark:border-zinc-600 rounded outline-none w-16 text-center shrink-0"
+              className="font-mono text-[10px] px-1.5 py-0.5 bg-transparent border border-border rounded outline-none w-16 text-center shrink-0"
             />
           ) : (
             <kbd
@@ -165,7 +165,7 @@ export default function SnippetListItem({
         </div>
         {/* Content preview */}
         {contentPreview && (
-          <p className="text-[10px] text-zinc-500 dark:text-zinc-400 leading-relaxed truncate">
+          <p className="text-[10px] text-muted-foreground leading-relaxed truncate">
             {contentPreview}
           </p>
         )}

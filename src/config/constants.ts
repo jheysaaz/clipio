@@ -34,11 +34,11 @@ export const FLAGS = {
   DISMISSED_UNINSTALL_WARNING: "dismissedUninstallWarning",
   /** Set to true by the background script when a sync sign-out is detected. */
   SYNC_DATA_LOST: "syncDataLost",
+  /** When false, confetti is suppressed on snippet insertion. Default: true. */
+  CONFETTI_ENABLED: "confettiEnabled",
 } as const;
 
 export const TIMING = {
   /** Milliseconds after typing stops before attempting snippet expansion. */
-  TYPING_TIMEOUT: 750,
-  /** Duration a toast notification is shown (ms). */
-  TOAST_DURATION: 3_000,
+  TYPING_TIMEOUT: 300,
 } as const;

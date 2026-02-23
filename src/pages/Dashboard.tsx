@@ -13,16 +13,14 @@ import {
   Loader2,
   PanelLeftClose,
   PanelLeft,
-  Sun,
-  Moon,
   Settings,
   Clipboard,
+  ArrowDownUp,
 } from "lucide-react";
 import SnippetListItem from "~/components/SnippetListItem";
 const SnippetDetailView = lazy(() => import("~/components/SnippetDetailView"));
 const NewSnippetView = lazy(() => import("~/components/NewSnippetView"));
 import { InlineError } from "~/components/ui/inline-error";
-import { useTheme } from "~/hooks/ThemeContext";
 import type { Snippet, SnippetFormData } from "~/types";
 import { createSnippet } from "~/types";
 import { Button } from "~/components/ui/button";
@@ -67,7 +65,7 @@ export default function Dashboard() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const isResizing = useRef(false);
-  const { theme, toggleTheme } = useTheme();
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // -------------------------------------------------------------------------
   // Sidebar resize
@@ -111,7 +109,7 @@ export default function Dashboard() {
       } catch (err) {
         console.error("[Clipio] Failed to load snippets:", err);
         captureError(err, { action: "loadSnippets" });
-        setLoadError(i18n.t("dashboard.toasts.failedToLoad"));
+        setLoadError(i18n.t("dashboard.errors.failedToLoad"));
       } finally {
         setLoading(false);
       }
@@ -197,10 +195,10 @@ export default function Dashboard() {
         } catch (retryErr) {
           console.error("[Clipio] Retry after quota error failed:", retryErr);
           captureError(retryErr, { action: "saveSnippetRetry" });
-          setCreateError(i18n.t("dashboard.toasts.failedToCreate"));
+          setCreateError(i18n.t("dashboard.errors.failedToCreate"));
         }
       } else {
-        setCreateError(i18n.t("dashboard.toasts.failedToCreate"));
+        setCreateError(i18n.t("dashboard.errors.failedToCreate"));
       }
     } finally {
       setIsSaving(false);
@@ -291,6 +289,19 @@ export default function Dashboard() {
       document.removeEventListener("keydown", handleKeyboardNavigation);
   }, [handleKeyboardNavigation]);
 
+  // Focus search on ⌘K / Ctrl+K
+  useEffect(() => {
+    const handleSearchShortcut = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    document.addEventListener("keydown", handleSearchShortcut);
+    return () => document.removeEventListener("keydown", handleSearchShortcut);
+  }, []);
+
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
@@ -314,7 +325,7 @@ export default function Dashboard() {
                 setShowRecoveryBanner(false);
               } catch (err) {
                 console.error("[Clipio] Recovery failed:", err);
-                setRecoveryError(i18n.t("dashboard.toasts.failedToRestore"));
+                setRecoveryError(i18n.t("dashboard.errors.failedToRestore"));
               }
             },
           }}
@@ -359,11 +370,11 @@ export default function Dashboard() {
         {/* Left Sidebar */}
         <div
           style={{ width: sidebarOpen ? sidebarWidth : 0 }}
-          className="flex flex-col border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 relative shrink-0 transition-[width] duration-200 ease-in-out overflow-hidden min-w-0"
+          className="flex flex-col border-r bg-muted/50 relative shrink-0 transition-[width] duration-200 ease-in-out overflow-hidden min-w-0"
         >
           {/* Resize Handle */}
           <div
-            className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors z-10"
+            className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-muted-foreground/20 transition-colors z-10"
             onMouseDown={() => {
               isResizing.current = true;
               document.body.style.cursor = "col-resize";
@@ -372,19 +383,25 @@ export default function Dashboard() {
           />
 
           {/* Search Bar */}
-          <div className="px-2 py-2 border-b border-zinc-200 dark:border-zinc-800">
+          <div className="px-2 py-2 border-b">
             <div className="relative">
               <Search
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground"
                 strokeWidth={1.5}
               />
               <Input
+                ref={searchInputRef}
                 type="text"
                 placeholder={i18n.t("dashboard.searchPlaceholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 h-8 text-sm rounded-lg"
+                className="pl-8 pr-12 h-8 text-sm rounded-lg"
               />
+              {!searchQuery && (
+                <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 hidden h-5 select-none items-center rounded border bg-muted px-1 font-mono text-[10px] font-medium text-muted-foreground sm:flex">
+                  {/mac/i.test(navigator.platform) ? "⌘K" : "Ctrl+K"}
+                </kbd>
+              )}
             </div>
           </div>
 
@@ -398,10 +415,10 @@ export default function Dashboard() {
                   aria-live="polite"
                 >
                   <Loader2
-                    className="h-6 w-6 animate-spin text-zinc-600 dark:text-zinc-400"
+                    className="h-6 w-6 animate-spin text-muted-foreground"
                     strokeWidth={1.5}
                   />
-                  <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                  <p className="text-xs text-muted-foreground">
                     {i18n.t("dashboard.loadingSnippets")}
                   </p>
                 </div>
@@ -412,17 +429,38 @@ export default function Dashboard() {
                   className="border border-red-200 dark:border-red-800 rounded-lg"
                 />
               ) : filteredSnippets.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-2">
-                  <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                <div className="flex flex-col items-center justify-center py-8 gap-2.5 px-3">
+                  <p className="text-xs text-muted-foreground text-center">
                     {searchQuery
                       ? i18n.t("dashboard.noSnippetsFound")
                       : i18n.t("dashboard.noSnippetsYet")}
                   </p>
-                  {searchQuery && (
-                    <p className="text-xs text-zinc-500">
+                  {searchQuery ? (
+                    <p className="text-xs text-muted-foreground text-center">
                       {i18n.t("dashboard.tryDifferentSearch")}
                     </p>
-                  )}
+                  ) : snippets.length === 0 ? (
+                    <>
+                      <p className="text-xs text-muted-foreground text-center">
+                        {i18n.t("dashboard.importSuggestion")}
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full h-7 text-xs gap-1.5 mt-1"
+                        onClick={() =>
+                          browser.tabs.create({
+                            url:
+                              browser.runtime.getURL("/options.html") +
+                              "#import-export",
+                          })
+                        }
+                      >
+                        <ArrowDownUp className="h-3 w-3" strokeWidth={1.5} />
+                        {i18n.t("dashboard.importButton")}
+                      </Button>
+                    </>
+                  ) : null}
                 </div>
               ) : (
                 <div
@@ -433,13 +471,13 @@ export default function Dashboard() {
                   {/* Draft preview while creating */}
                   {isCreating &&
                     (draftSnippet.label || draftSnippet.shortcut) && (
-                      <div className="w-full text-left h-auto py-2 px-2.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-dashed border-zinc-300 dark:border-zinc-600">
+                      <div className="w-full text-left h-auto py-2 px-2.5 rounded-lg bg-muted border border-dashed">
                         <div className="flex items-center gap-2 w-full min-w-0 overflow-hidden">
-                          <span className="font-medium text-xs text-zinc-900 dark:text-zinc-100 truncate flex-1 min-w-0">
+                          <span className="font-medium text-xs text-foreground truncate flex-1 min-w-0">
                             {draftSnippet.label ||
                               i18n.t("dashboard.draftLabel")}
                           </span>
-                          <span className="font-mono text-xs px-1.5 py-0 border border-zinc-200 dark:border-zinc-700 rounded max-w-18 truncate shrink-0 text-zinc-500">
+                          <span className="font-mono text-xs px-1.5 py-0 border rounded max-w-18 truncate shrink-0 text-muted-foreground">
                             {draftSnippet.shortcut ||
                               i18n.t("dashboard.draftShortcut")}
                           </span>
@@ -473,67 +511,35 @@ export default function Dashboard() {
             </div>
           </ScrollArea>
 
-          {/* Add Snippet Button */}
-          <div className="px-2 py-2 border-t border-zinc-200 dark:border-zinc-800">
+          {/* Add Snippet + Settings */}
+          <div className="px-2 py-2 border-t flex items-center gap-1.5">
             <Button
               onClick={handleAddSnippet}
-              className="w-full h-8 text-xs rounded-lg"
+              className="flex-1 h-8 text-xs rounded-lg"
             >
               <Plus className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
               {i18n.t("dashboard.addSnippet")}
             </Button>
-          </div>
-
-          {/* Settings Footer */}
-          <div className="px-2 py-1.5 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-            {/* Theme toggle group */}
-            <div className="flex items-center gap-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleTheme}
-                className="h-6 w-6 rounded-md"
-                title={
-                  theme === "light"
-                    ? i18n.t("dashboard.switchToDark")
-                    : i18n.t("dashboard.switchToLight")
-                }
-                aria-label={
-                  theme === "light"
-                    ? i18n.t("dashboard.switchToDark")
-                    : i18n.t("dashboard.switchToLight")
-                }
-              >
-                {theme === "light" ? (
-                  <Moon className="h-3 w-3" strokeWidth={1.5} />
-                ) : (
-                  <Sun className="h-3 w-3" strokeWidth={1.5} />
-                )}
-              </Button>
-            </div>
-            {/* Settings / Options */}
-            <div className="flex items-center gap-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => browser.runtime.openOptionsPage()}
-                className="h-6 w-6 rounded-md"
-                title={i18n.t("dashboard.settingsAndExport")}
-                aria-label={i18n.t("dashboard.settingsAndExport")}
-              >
-                <Settings className="h-3 w-3" strokeWidth={1.5} />
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => browser.runtime.openOptionsPage()}
+              className="h-8 w-8 shrink-0 rounded-lg"
+              title={i18n.t("dashboard.settingsAndExport")}
+              aria-label={i18n.t("dashboard.settingsAndExport")}
+            >
+              <Settings className="h-3.5 w-3.5" strokeWidth={1.5} />
+            </Button>
           </div>
         </div>
 
         {/* Right Content - Detail */}
-        <div className="flex-1 flex flex-col bg-white dark:bg-zinc-950">
+        <div className="flex-1 flex flex-col bg-background">
           {isCreating ? (
             <Suspense
               fallback={
                 <div className="flex items-center justify-center flex-1">
-                  <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
               }
             >
@@ -553,7 +559,7 @@ export default function Dashboard() {
             <Suspense
               fallback={
                 <div className="flex items-center justify-center flex-1">
-                  <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
               }
             >
@@ -569,7 +575,7 @@ export default function Dashboard() {
           ) : snippets.length === 0 && !loading ? (
             /* Empty state when no snippets exist */
             <>
-              <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center">
+              <div className="px-3 py-2 border-b flex items-center">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -594,16 +600,16 @@ export default function Dashboard() {
                 </Button>
               </div>
               <div className="flex flex-col items-center justify-center flex-1 p-8 text-center">
-                <div className="w-16 h-16 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-4">
+                <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
                   <Clipboard
-                    className="h-8 w-8 text-zinc-400 dark:text-zinc-500"
+                    className="h-8 w-8 text-muted-foreground"
                     strokeWidth={1.5}
                   />
                 </div>
-                <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-1">
+                <h3 className="text-sm font-medium text-foreground mb-1">
                   {i18n.t("dashboard.emptyState.heading")}
                 </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4 max-w-50">
+                <p className="text-xs text-muted-foreground mb-4 max-w-50">
                   {i18n.t("dashboard.emptyState.body")}
                 </p>
                 <Button onClick={handleAddSnippet} className="h-8 text-xs">
@@ -614,7 +620,7 @@ export default function Dashboard() {
             </>
           ) : (
             <>
-              <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center">
+              <div className="px-3 py-2 border-b flex items-center">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -639,7 +645,7 @@ export default function Dashboard() {
                 </Button>
               </div>
               <div className="flex items-center justify-center flex-1">
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                <p className="text-sm text-muted-foreground">
                   {i18n.t("dashboard.detailPlaceholder")}
                 </p>
               </div>

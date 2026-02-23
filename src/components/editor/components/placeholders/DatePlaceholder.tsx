@@ -67,33 +67,29 @@ export function DatePlaceholderElement({
         className={cn(
           "inline-flex items-center gap-1 px-1.5 py-0.5 rounded cursor-pointer select-none align-baseline mx-0.5",
           "font-mono text-[10px] leading-none",
-          "bg-zinc-100 border border-zinc-300",
-          "shadow-[0_1px_0_1px_#f4f4f5,0_2px_3px_rgba(0,0,0,0.05)]",
-          "text-zinc-700",
-          "dark:bg-zinc-800 dark:border-zinc-600",
+          "bg-muted border border-border",
+          "shadow-[0_1px_0_1px_var(--secondary),0_2px_3px_rgba(0,0,0,0.05)]",
+          "text-muted-foreground",
           "dark:shadow-[0_1px_0_1px_rgba(0,0,0,0.3),0_2px_3px_rgba(0,0,0,0.2)]",
-          "dark:text-zinc-300",
-          "hover:bg-zinc-200 dark:hover:bg-zinc-700",
+          "hover:bg-accent",
           "transition-colors duration-150"
         )}
         title={`Click to change format. Current: ${formatInfo.example}`}
       >
         <Calendar className="h-2.5 w-2.5" strokeWidth={2.5} />
         <span>today</span>
-        <span className="text-zinc-500 dark:text-zinc-400">
-          · {formatInfo.label}
-        </span>
+        <span className="text-muted-foreground">· {formatInfo.label}</span>
       </span>
       {showFormatMenu && (
         <div
           ref={menuRef}
           className={cn(
             "absolute left-0 top-full mt-1 z-50 min-w-36",
-            "rounded-lg border border-zinc-200 dark:border-zinc-700",
-            "bg-white dark:bg-zinc-900 shadow-lg p-1"
+            "rounded-lg border border-border",
+            "bg-popover shadow-lg p-1"
           )}
         >
-          <div className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 px-2 py-1 uppercase tracking-wide">
+          <div className="text-[10px] font-medium text-muted-foreground px-2 py-1 uppercase tracking-wide">
             Date Format
           </div>
           {DATE_FORMATS.map((fmt) => (
@@ -103,17 +99,11 @@ export function DatePlaceholderElement({
               onClick={() => handleSelectFormat(fmt.id)}
               className={cn(
                 "w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-xs text-left transition-colors",
-                fmt.id === format
-                  ? "bg-zinc-100 dark:bg-zinc-800"
-                  : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                fmt.id === format ? "bg-accent" : "hover:bg-accent"
               )}
             >
-              <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                {fmt.label}
-              </span>
-              <span className="text-zinc-500 dark:text-zinc-400">
-                {fmt.example}
-              </span>
+              <span className="font-medium text-foreground">{fmt.label}</span>
+              <span className="text-muted-foreground">{fmt.example}</span>
             </button>
           ))}
         </div>

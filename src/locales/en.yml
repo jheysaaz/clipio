@@ -13,6 +13,8 @@ dashboard:
   noSnippetsFound: No snippets found
   noSnippetsYet: No snippets yet
   tryDifferentSearch: Try a different search term
+  importSuggestion: Already using another tool? Import your snippets.
+  importButton: Import snippets
   draftLabel: Untitled
   draftShortcut: /...
   addSnippet: Add Snippet
@@ -39,16 +41,9 @@ dashboard:
       action:
         1: Restore 1 snippet
         n: Restore $1 snippets
-  toasts:
-    snippetCreated: Snippet created!
+  errors:
     failedToLoad: Failed to load snippets.
-    syncFullSaved: Sync storage full — switched to local storage. Your snippet was saved.
     failedToCreate: Failed to create snippet. Please try again.
-    failedToDelete: Failed to delete snippet.
-    failedToUpdate: Failed to update snippet.
-    restoredSnippets:
-      1: Restored 1 snippet from backup!
-      n: Restored $1 snippets from backup!
     failedToRestore: Failed to restore snippets.
 
 newSnippet:
@@ -84,13 +79,12 @@ snippetDetail:
     message: 'Are you sure you want to delete "$1"? This action cannot be undone.'
     confirm: Delete
     cancel: Cancel
-  toasts:
-    copied: Copied to clipboard!
+  errors:
     failedToCopy: Failed to copy to clipboard
-    saved: Snippet saved!
     failedToSave: Failed to save snippet. Please try again.
-    deleted: Snippet deleted!
     failedToDelete: Failed to delete snippet. Please try again.
+  status:
+    saved: Snippet saved!
 
 confirmDialog:
   loading: Loading...
@@ -98,14 +92,28 @@ confirmDialog:
   defaultCancel: Cancel
 
 options:
-  sidebarSettings: Settings
+  sidebarSettings: Preferences
   menu: Menu
   nav:
     general: General
     importExport: Import & Export
+    feedback: Feedback
+    appearance: Appearance
   theme:
     darkMode: Dark mode
     lightMode: Light mode
+    light: Light
+    dark: Dark
+    system: System
+  appearance:
+    description: Customize the look and feel of Clipio.
+    themeTitle: Theme
+    themeDescription: Choose between light, dark, or follow your system preference.
+    confettiTitle: Confetti on insert
+    confettiDescription: Show a confetti burst each time a snippet is inserted.
+    confettiPreviewHint: Click the button to see confetti in action.
+    confettiDisabledHint: Confetti is disabled. Toggle it on to re-enable.
+    confettiPreviewButton: Preview
   overview:
     title: Overview
     description: A snapshot of your Clipio library and storage usage.
@@ -120,6 +128,29 @@ options:
     title: General
     description: General settings will appear here in a future update.
     comingSoon: Coming soon
+  feedback:
+    title: Feedback
+    description: Help us improve Clipio by sharing your thoughts, suggestions, or bug reports. Your feedback is valuable!
+    nameLabel: Name
+    nameTooltip: "Your name helps us follow up on your feedback and gives context to the Clipio team. It's optional."
+    namePlaceholder: Your name (optional)
+    emailLabel: Email
+    emailTooltip: "Your email allows us to contact you if we need clarification about your feedback. We won't use it for anything else. It's optional."
+    emailPlaceholder: your@email.com (optional)
+    messageLabel: Message
+    messageTooltip: "Detailed feedback helps us understand issues and prioritize improvements. The more specific you are, the better we can help."
+    messagePlaceholder: "Please provide as much detail as possible. What were you trying to do? What happened? What did you expect?"
+    screenshotLabel: Screenshot
+    screenshotPlaceholder: Attach a screenshot (optional)
+    screenshotSelected: "Screenshot selected: $1"
+    removeScreenshot: Remove screenshot
+    submit: Send Feedback
+    submitting: Sending...
+    success: Thank you! Your feedback has been sent.
+    error: Failed to send feedback. Please try again.
+    cardTitle: Share Your Feedback
+    cardDescription: Help us improve Clipio with your thoughts and suggestions.
+    cardAction: Send Feedback
   importExport:
     title: Import & Export
     description: Import snippets from Clipio or TextBlaze exports, or download a backup of your current library.
@@ -142,12 +173,8 @@ options:
     uninstall:
       body: If you uninstall Clipio, all snippets will be permanently deleted.
       action: Export a backup →
-  toasts:
-    exported: Snippets exported!
+  errors:
     failedExport: Failed to export snippets.
-    imported:
-      1: Imported 1 snippet!
-      n: Imported $1 snippets!
 
 importWizard:
   steps:

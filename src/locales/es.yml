@@ -13,6 +13,8 @@ dashboard:
   noSnippetsFound: No se encontraron fragmentos
   noSnippetsYet: Aún no hay fragmentos
   tryDifferentSearch: Prueba con otro término de búsqueda
+  importSuggestion: "¿Ya usas otra herramienta? Importa tus fragmentos."
+  importButton: Importar fragmentos
   draftLabel: Sin título
   draftShortcut: /...
   addSnippet: Agregar fragmento
@@ -39,16 +41,9 @@ dashboard:
       action:
         1: Restaurar 1 fragmento
         n: Restaurar $1 fragmentos
-  toasts:
-    snippetCreated: "¡Fragmento creado!"
+  errors:
     failedToLoad: Error al cargar los fragmentos.
-    syncFullSaved: Almacenamiento de sincronización lleno — cambiado a almacenamiento local. Tu fragmento se guardó.
     failedToCreate: Error al crear el fragmento. Por favor, inténtalo de nuevo.
-    failedToDelete: Error al eliminar el fragmento.
-    failedToUpdate: Error al actualizar el fragmento.
-    restoredSnippets:
-      1: "¡1 fragmento restaurado desde la copia de seguridad!"
-      n: "¡$1 fragmentos restaurados desde la copia de seguridad!"
     failedToRestore: Error al restaurar los fragmentos.
 
 newSnippet:
@@ -84,13 +79,12 @@ snippetDetail:
     message: '¿Estás seguro de que quieres eliminar "$1"? Esta acción no se puede deshacer.'
     confirm: Eliminar
     cancel: Cancelar
-  toasts:
-    copied: "¡Copiado al portapapeles!"
+  errors:
     failedToCopy: Error al copiar al portapapeles
-    saved: "¡Fragmento guardado!"
     failedToSave: Error al guardar el fragmento. Por favor, inténtalo de nuevo.
-    deleted: "¡Fragmento eliminado!"
     failedToDelete: Error al eliminar el fragmento. Por favor, inténtalo de nuevo.
+  status:
+    saved: "¡Fragmento guardado!"
 
 confirmDialog:
   loading: Cargando...
@@ -98,14 +92,28 @@ confirmDialog:
   defaultCancel: Cancelar
 
 options:
-  sidebarSettings: Ajustes
+  sidebarSettings: Preferencias
   menu: Menú
   nav:
     general: General
     importExport: Importar y Exportar
+    feedback: Comentarios
+    appearance: Apariencia
   theme:
     darkMode: Modo oscuro
     lightMode: Modo claro
+    light: Claro
+    dark: Oscuro
+    system: Sistema
+  appearance:
+    description: Personaliza el aspecto y la apariencia de Clipio.
+    themeTitle: Tema
+    themeDescription: Elige entre claro, oscuro o sigue las preferencias de tu sistema.
+    confettiTitle: Confeti al insertar
+    confettiDescription: Muestra una explosión de confeti cada vez que se inserta un fragmento.
+    confettiPreviewHint: Haz clic en el botón para ver el confeti en acción.
+    confettiDisabledHint: El confeti está desactivado. Actívalo de nuevo con el interruptor.
+    confettiPreviewButton: Vista previa
   overview:
     title: Resumen
     description: Un vistazo de tu biblioteca de Clipio y el uso de almacenamiento.
@@ -120,6 +128,29 @@ options:
     title: General
     description: Los ajustes generales aparecerán aquí en una actualización futura.
     comingSoon: Próximamente
+  feedback:
+    title: Comentarios
+    description: ¡Ayúdanos a mejorar Clipio compartiendo tus opiniones, sugerencias o reportes de errores! ¡Tus comentarios son valiosos!
+    nameLabel: Nombre
+    nameTooltip: "Tu nombre nos ayuda a hacer un seguimiento de tus comentarios y proporciona contexto al equipo de Clipio. Es opcional."
+    namePlaceholder: Tu nombre (opcional)
+    emailLabel: Correo electrónico
+    emailTooltip: "Tu correo nos permite ponernos en contacto si necesitamos aclaraciones sobre tus comentarios. No lo usaremos para nada más. Es opcional."
+    emailPlaceholder: tu@email.com (opcional)
+    messageLabel: Mensaje
+    messageTooltip: "Los comentarios detallados nos ayudan a entender problemas y priorizar mejoras. Cuanto más específ ico seas, mejor podremos ayudarte."
+    messagePlaceholder: "Por favor, proporciona tantos detalles como sea posible. ¿Qué estabas intentando hacer? ¿Qué pasó? ¿Qué esperabas?"
+    screenshotLabel: Captura de pantalla
+    screenshotPlaceholder: Adjuntar una captura de pantalla (opcional)
+    screenshotSelected: "Captura de pantalla seleccionada: $1"
+    removeScreenshot: Eliminar captura de pantalla
+    submit: Enviar comentarios
+    submitting: Enviando...
+    success: ¡Gracias! Tus comentarios han sido enviados.
+    error: Error al enviar comentarios. Por favor, inténtalo de nuevo.
+    cardTitle: Comparte tus comentarios
+    cardDescription: Ayúdanos a mejorar Clipio con tus opiniones y sugerencias.
+    cardAction: Enviar comentarios
   importExport:
     title: Importar y Exportar
     description: Importa fragmentos desde exportaciones de Clipio o TextBlaze, o descarga una copia de seguridad de tu biblioteca actual.
@@ -142,12 +173,8 @@ options:
     uninstall:
       body: Si desinstala Clipio, todos los fragmentos se eliminarán permanentemente.
       action: Exportar una copia de seguridad →
-  toasts:
-    exported: "¡Fragmentos exportados!"
+  errors:
     failedExport: Error al exportar los fragmentos.
-    imported:
-      1: "¡1 fragmento importado!"
-      n: "¡$1 fragmentos importados!"
 
 importWizard:
   steps:

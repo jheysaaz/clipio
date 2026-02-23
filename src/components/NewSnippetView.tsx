@@ -59,7 +59,7 @@ export default function NewSnippetView({
   return (
     <div className="flex flex-col h-full">
       {/* Action Bar */}
-      <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-1">
+      <div className="px-3 py-2 border-b border-border flex items-center gap-1">
         <Button
           variant="ghost"
           size="icon"
@@ -146,13 +146,13 @@ export default function NewSnippetView({
             onChange={handleChange}
             aria-describedby={errors.shortcut ? "shortcut-error" : undefined}
             aria-invalid={!!errors.shortcut}
-            className={`h-8 text-sm font-mono ${errors.shortcut ? "border-red-500" : ""}`}
+            className={`h-8 text-sm font-mono ${errors.shortcut ? "border-destructive" : ""}`}
           />
           {errors.shortcut && (
             <p
               id="shortcut-error"
               role="alert"
-              className="text-xs text-red-500"
+              className="text-xs text-destructive"
             >
               {errors.shortcut}
             </p>
@@ -164,7 +164,7 @@ export default function NewSnippetView({
           <Label htmlFor="content" className="text-xs font-medium">
             {i18n.t("newSnippet.content")}
           </Label>
-          <div className="min-h-50 border border-zinc-200 dark:border-zinc-800 rounded-md p-2">
+          <div className="min-h-50 border border-border rounded-md p-2">
             <RichTextEditor
               value={draftSnippet.content}
               onChange={(value) =>
@@ -179,8 +179,10 @@ export default function NewSnippetView({
 
       {/* Footer */}
       <Separator />
-      <div className="px-3 py-2 flex items-center justify-center text-xs text-zinc-500 dark:text-zinc-400">
-        <span>{i18n.t("newSnippet.footer")}</span>
+      <div className="px-3 py-2 flex items-center justify-center text-xs">
+        <span className="text-muted-foreground">
+          {i18n.t("newSnippet.footer")}
+        </span>
       </div>
     </div>
   );
