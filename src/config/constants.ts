@@ -2,15 +2,6 @@
  * Application-wide constants.
  */
 
-export const STORAGE_KEYS = {
-  /** Primary snippets store (sync or local depending on mode). */
-  SNIPPETS: "snippets",
-  /** Content-script cache — always in browser.storage.local. */
-  CACHED_SNIPPETS: "cachedSnippets",
-  /** Persisted storage mode: "sync" | "local". */
-  STORAGE_MODE: "storageMode",
-} as const;
-
 export const SYNC_QUOTA = {
   /** Hard total-bytes limit enforced by the browser. */
   TOTAL_BYTES: 102_400,
@@ -28,17 +19,16 @@ export const IDB_CONFIG = {
   VERSION: 1,
 } as const;
 
-/** Keys stored in browser.storage.local for UI state flags. */
-export const FLAGS = {
-  /** False on fresh install; true once the user dismisses the warning. */
-  DISMISSED_UNINSTALL_WARNING: "dismissedUninstallWarning",
-  /** Set to true by the background script when a sync sign-out is detected. */
-  SYNC_DATA_LOST: "syncDataLost",
-  /** When false, confetti is suppressed on snippet insertion. Default: true. */
-  CONFETTI_ENABLED: "confettiEnabled",
-} as const;
-
 export const TIMING = {
   /** Milliseconds after typing stops before attempting snippet expansion. */
   TYPING_TIMEOUT: 300,
+} as const;
+
+/** Context-menu item IDs. */
+export const CONTEXT_MENU = {
+  PARENT: "clipio-parent",
+  SAVE_SELECTION: "clipio-save-selection",
+  CREATE_SNIPPET: "clipio-create-snippet",
+  OPEN_DASHBOARD: "clipio-open-dashboard",
+  GIVE_FEEDBACK: "clipio-give-feedback",
 } as const;

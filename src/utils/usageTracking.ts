@@ -4,35 +4,14 @@
  */
 
 import { captureError } from "~/lib/sentry";
-
-const USAGE_KEY = "snippetUsageCount";
-
-interface UsageData {
-  [snippetId: string]: number;
-}
-
-/**
- * Check if browser.storage is available
- */
-const isBrowserStorageAvailable = (): boolean => {
-  try {
-    return !!(browser && browser.storage && browser.storage.local);
-  } catch {
-    return false;
-  }
-};
+import { usageCountsItem } from "~/storage/items";
 
 /**
  * Get usage count for all snippets
  */
-export const getUsageCounts = async (): Promise<UsageData> => {
+export const getUsageCounts = async (): Promise<Record<string, number>> => {
   try {
-    if (isBrowserStorageAvailable()) {
-      const result = await browser.storage.local.get(USAGE_KEY);
-      return (result[USAGE_KEY] as UsageData) || {};
-    }
-    const data = localStorage.getItem(USAGE_KEY);
-    return data ? JSON.parse(data) : {};
+    return await usageCountsItem.getValue();
   } catch (error) {
     console.error("Failed to get usage counts:", error);
     captureError(error, { action: "getUsageCounts" });
@@ -60,12 +39,7 @@ export const incrementSnippetUsage = async (
     const usageData = await getUsageCounts();
     const newCount = (usageData[snippetId] || 0) + 1;
     usageData[snippetId] = newCount;
-
-    if (isBrowserStorageAvailable()) {
-      await browser.storage.local.set({ [USAGE_KEY]: usageData });
-    }
-    localStorage.setItem(USAGE_KEY, JSON.stringify(usageData));
-
+    await usageCountsItem.setValue(usageData);
     return newCount;
   } catch (error) {
     console.error("Failed to increment usage count:", error);
@@ -81,11 +55,7 @@ export const resetSnippetUsage = async (snippetId: string): Promise<void> => {
   try {
     const usageData = await getUsageCounts();
     delete usageData[snippetId];
-
-    if (isBrowserStorageAvailable()) {
-      await browser.storage.local.set({ [USAGE_KEY]: usageData });
-    }
-    localStorage.setItem(USAGE_KEY, JSON.stringify(usageData));
+    await usageCountsItem.setValue(usageData);
   } catch (error) {
     console.error("Failed to reset usage count:", error);
   }
@@ -96,10 +66,7 @@ export const resetSnippetUsage = async (snippetId: string): Promise<void> => {
  */
 export const clearAllUsageCounts = async (): Promise<void> => {
   try {
-    if (isBrowserStorageAvailable()) {
-      await browser.storage.local.remove(USAGE_KEY);
-    }
-    localStorage.removeItem(USAGE_KEY);
+    await usageCountsItem.removeValue();
   } catch (error) {
     console.error("Failed to clear usage counts:", error);
   }

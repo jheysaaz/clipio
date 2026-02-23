@@ -29,7 +29,7 @@ dashboard:
   snippetListLabel: Snippets
   warnings:
     uninstall:
-      body: Uninstalling will delete all snippets.
+      body: Uninstalling will delete all snippets. Back up from Preferences first.
       action: Export backup →
     quotaFull:
       body: Sync storage full — snippets saved locally only.
@@ -171,7 +171,7 @@ options:
       title: Import Snippets
   warnings:
     uninstall:
-      body: If you uninstall Clipio, all snippets will be permanently deleted.
+      body: Uninstalling Clipio will permanently delete all your snippets. Export a backup before uninstalling.
       action: Export a backup →
   errors:
     failedExport: Failed to export snippets.
@@ -224,6 +224,7 @@ importWizard:
     skippedConflicts: "Skipped (conflicts)"
     estimatedStorage: Estimated storage usage
     quotaWarning: "This import may exceed browser sync storage limits. Clipio will automatically switch to local storage if needed, but snippets won't sync to other devices."
+    failedToImport: Failed to save imported snippets. Please try again.
     done:
       heading: Import complete
       body:
@@ -267,3 +268,9 @@ editor:
     datepicker:
       label: Pick Date
       description: Choose any date from calendar
+
+contextMenu:
+  saveSelection: Save selection as snippet
+  createSnippet: Create new snippet
+  openDashboard: Open Clipio
+  giveFeedback: Give feedback

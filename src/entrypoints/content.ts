@@ -1,4 +1,5 @@
-import { STORAGE_KEYS, TIMING, FLAGS } from "~/config/constants";
+import { TIMING } from "~/config/constants";
+import { cachedSnippetsItem, confettiEnabledItem } from "~/storage/items";
 import { incrementSnippetUsage } from "~/utils/usageTracking";
 import confetti from "canvas-confetti";
 import { initSentry, captureError, captureMessage } from "~/lib/sentry";
@@ -187,18 +188,9 @@ export default defineContentScript({
       }
 
       try {
-        const cachedData = await browser.storage.local.get(
-          STORAGE_KEYS.CACHED_SNIPPETS
-        );
-        const raw = cachedData[STORAGE_KEYS.CACHED_SNIPPETS];
-        if (raw) {
-          // Handle both legacy JSON-string cache and new array format
-          const parsedData = typeof raw === "string" ? JSON.parse(raw) : raw;
-          snippets = Array.isArray(parsedData)
-            ? parsedData
-            : parsedData.items || [];
-          rebuildShortcutIndex();
-        }
+        const cached = await cachedSnippetsItem.getValue();
+        snippets = cached;
+        rebuildShortcutIndex();
       } catch (error) {
         if (
           error instanceof Error &&
@@ -403,6 +395,25 @@ export default defineContentScript({
       }
     }
 
+    // Read clipboard text using the extension's clipboardRead permission.
+    // navigator.clipboard.readText() requires transient user-activation AND
+    // the host page's Permissions-Policy to allow clipboard-read — both of
+    // which are unreliable from a content script (especially after the
+    // debounce timer expires). Instead we use a hidden textarea +
+    // document.execCommand("paste") which is covered by the extension
+    // manifest's "clipboardRead" permission and never prompts the user.
+    function readClipboardText(): string {
+      const textarea = document.createElement("textarea");
+      textarea.style.cssText =
+        "position:fixed;left:-9999px;top:-9999px;opacity:0;";
+      document.documentElement.appendChild(textarea);
+      textarea.focus();
+      document.execCommand("paste");
+      const text = textarea.value;
+      textarea.remove();
+      return text;
+    }
+
     // Process snippet content with dynamic placeholders
     // Returns { content: string, cursorOffset: number | null }
     interface ProcessedContent {
@@ -422,7 +433,7 @@ export default defineContentScript({
       // Process clipboard placeholder
       if (processedContent.includes("{{clipboard}}")) {
         try {
-          const clipboardText = await navigator.clipboard.readText();
+          const clipboardText = readClipboardText();
           processedContent = processedContent.replace(
             /\{\{clipboard\}\}/g,
             clipboardText
@@ -685,10 +696,7 @@ export default defineContentScript({
     async function initialize() {
       // Read confetti preference
       try {
-        const flags = await browser.storage.local.get(FLAGS.CONFETTI_ENABLED);
-        if (flags[FLAGS.CONFETTI_ENABLED] === false) {
-          confettiEnabled = false;
-        }
+        confettiEnabled = await confettiEnabledItem.getValue();
       } catch {
         // keep default true
       }
@@ -735,38 +743,17 @@ export default defineContentScript({
         true
       );
 
-      // Reload snippets when storage changes
-      browser.storage.onChanged.addListener(
-        (
-          changes: Record<string, Browser.storage.StorageChange>,
-          areaName: string
-        ) => {
-          if (!checkExtensionContext()) return;
-          if (areaName === "local" && FLAGS.CONFETTI_ENABLED in changes) {
-            confettiEnabled = changes[FLAGS.CONFETTI_ENABLED].newValue !== false;
-          }
-          if (areaName === "local" && changes[STORAGE_KEYS.CACHED_SNIPPETS]) {
-            try {
-              const newValue = changes[STORAGE_KEYS.CACHED_SNIPPETS].newValue;
-              if (newValue) {
-                // Handle both legacy JSON-string and new array format
-                const parsedData =
-                  typeof newValue === "string"
-                    ? JSON.parse(newValue)
-                    : newValue;
-                snippets = Array.isArray(parsedData)
-                  ? parsedData
-                  : parsedData.items || [];
-                rebuildShortcutIndex();
-              }
-            } catch (error) {
-              console.error("[Clipio] Error parsing updated snippets:", error);
-              captureError(error, { action: "cacheParseError" });
-              loadSnippets();
-            }
-          }
-        }
-      );
+      // Watch for snippet cache and confetti preference changes
+      cachedSnippetsItem.watch((newSnippets: Snippet[]) => {
+        if (!checkExtensionContext()) return;
+        snippets = newSnippets;
+        rebuildShortcutIndex();
+      });
+
+      confettiEnabledItem.watch((newVal: boolean) => {
+        if (!checkExtensionContext()) return;
+        confettiEnabled = newVal;
+      });
     }
 
     if (document.readyState === "loading") {

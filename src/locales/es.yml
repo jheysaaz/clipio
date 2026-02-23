@@ -29,7 +29,7 @@ dashboard:
   snippetListLabel: Fragmentos
   warnings:
     uninstall:
-      body: Desinstalar eliminará todos los fragmentos.
+      body: Desinstalar eliminará todos los fragmentos. Haz una copia desde Preferencias primero.
       action: Exportar copia de seguridad →
     quotaFull:
       body: Almacenamiento de sincronización lleno — los fragmentos se guardan solo localmente.
@@ -171,7 +171,7 @@ options:
       title: Importar Fragmentos
   warnings:
     uninstall:
-      body: Si desinstala Clipio, todos los fragmentos se eliminarán permanentemente.
+      body: Desinstalar Clipio eliminará permanentemente todos tus fragmentos. Exporta una copia de seguridad antes de desinstalar.
       action: Exportar una copia de seguridad →
   errors:
     failedExport: Error al exportar los fragmentos.
@@ -224,6 +224,7 @@ importWizard:
     skippedConflicts: "Omitidos (conflictos)"
     estimatedStorage: Uso de almacenamiento estimado
     quotaWarning: "Esta importación puede exceder los límites de almacenamiento de sincronización del navegador. Clipio cambiará automáticamente al almacenamiento local si es necesario, pero los fragmentos no se sincronizarán con otros dispositivos."
+    failedToImport: Error al guardar los fragmentos importados. Por favor, inténtalo de nuevo.
     done:
       heading: Importación completa
       body:
@@ -267,3 +268,9 @@ editor:
     datepicker:
       label: Elegir fecha
       description: Elegir cualquier fecha del calendario
+
+contextMenu:
+  saveSelection: Guardar selección como fragmento
+  createSnippet: Crear nuevo fragmento
+  openDashboard: Abrir Clipio
+  giveFeedback: Enviar comentarios

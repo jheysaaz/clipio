@@ -10,7 +10,9 @@ import {
   X,
   Plus,
   SquareSlash,
+  AlertTriangle,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertAction } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { RichTextEditor, type RichTextEditorRef } from "~/components/editor";
@@ -36,6 +38,8 @@ interface SnippetDetailViewProps {
   onUpdate: (updatedSnippet: Snippet) => void;
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
+  uninstallWarning?: boolean;
+  onDismissUninstallWarning?: () => void;
 }
 
 export default function SnippetDetailView({
@@ -44,6 +48,8 @@ export default function SnippetDetailView({
   onUpdate,
   sidebarOpen = true,
   onToggleSidebar,
+  uninstallWarning,
+  onDismissUninstallWarning,
 }: SnippetDetailViewProps) {
   const [editedContent, setEditedContent] = useState(snippet.content);
   const [editedTags, setEditedTags] = useState<string[]>(snippet.tags || []);
@@ -250,6 +256,27 @@ export default function SnippetDetailView({
           placeholder={i18n.t("snippetDetail.editorPlaceholder")}
         />
       </div>
+
+      {/* Uninstall warning — between editor and tags */}
+      {uninstallWarning && (
+        <div className="px-3 pb-3">
+          <Alert className="border-amber-200 bg-amber-50 text-amber-800 [&>svg]:text-amber-500 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:[&>svg]:text-amber-400">
+            <AlertTriangle />
+            <AlertDescription className="text-amber-800 dark:text-amber-300">
+              {i18n.t("dashboard.warnings.uninstall.body")}
+            </AlertDescription>
+            <AlertAction>
+              <button
+                onClick={onDismissUninstallWarning}
+                className="opacity-50 hover:opacity-100 transition-opacity"
+                aria-label="Dismiss"
+              >
+                <X className="size-3.5" strokeWidth={2} />
+              </button>
+            </AlertAction>
+          </Alert>
+        </div>
+      )}
 
       {/* Footer */}
       {/* Tags Section */}

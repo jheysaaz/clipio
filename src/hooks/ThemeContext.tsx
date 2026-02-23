@@ -6,8 +6,13 @@ import React, {
   ReactNode,
 } from "react";
 import { captureError } from "~/lib/sentry";
+import {
+  themeModeItem,
+  legacyThemeItem,
+  type ThemeMode,
+} from "~/storage/items";
 
-export type ThemeMode = "light" | "dark" | "system";
+export type { ThemeMode };
 type ResolvedTheme = "light" | "dark";
 
 interface ThemeContextType {
@@ -37,19 +42,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadTheme = async () => {
       try {
-        if (typeof browser !== "undefined" && browser.storage?.local) {
-          const result = await browser.storage.local.get("themeMode");
-          const saved = result.themeMode as ThemeMode | undefined;
-          if (saved === "light" || saved === "dark" || saved === "system") {
-            setThemeModeState(saved);
+        const saved = await themeModeItem.getValue();
+        if (saved === "light" || saved === "dark" || saved === "system") {
+          setThemeModeState(saved);
+        } else {
+          // Legacy: check old "theme" key
+          const legacy = await legacyThemeItem.getValue();
+          if (legacy === "light" || legacy === "dark") {
+            setThemeModeState(legacy as ThemeMode);
           } else {
-            // Legacy: check old "theme" key
-            const legacy = await browser.storage.local.get("theme");
-            if (legacy.theme === "light" || legacy.theme === "dark") {
-              setThemeModeState(legacy.theme as ThemeMode);
-            } else {
-              setThemeModeState("system");
-            }
+            setThemeModeState("system");
           }
         }
       } catch (error) {
@@ -86,9 +88,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // Persist mode to storage
   useEffect(() => {
     if (!isLoaded) return;
-    if (typeof browser !== "undefined" && browser.storage?.local) {
-      browser.storage.local.set({ themeMode });
-    }
+    themeModeItem.setValue(themeMode).catch(console.warn);
   }, [themeMode, isLoaded]);
 
   const setThemeMode = (mode: ThemeMode) => {

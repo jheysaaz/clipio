@@ -18,11 +18,8 @@ import { StorageQuotaError } from "./types";
 import type { StorageMode, StorageStatus } from "./types";
 import type { Snippet } from "~/types";
 import { buildClipioExport } from "~/lib/exporters/clipio";
-import { FLAGS } from "~/config/constants";
 import { captureError } from "~/lib/sentry";
-
-/** Key used to persist the current storage mode across sessions. */
-const MODE_KEY = "storageMode";
+import { storageModeItem, syncDataLostItem } from "./items";
 
 export class StorageManager {
   private sync = new SyncBackend();
@@ -34,12 +31,11 @@ export class StorageManager {
   // -------------------------------------------------------------------------
 
   private async getMode(): Promise<StorageMode> {
-    const result = await browser.storage.local.get(MODE_KEY);
-    return (result[MODE_KEY] as StorageMode) ?? "sync";
+    return storageModeItem.getValue();
   }
 
   private async setMode(mode: StorageMode): Promise<void> {
-    await browser.storage.local.set({ [MODE_KEY]: mode });
+    await storageModeItem.setValue(mode);
   }
 
   // -------------------------------------------------------------------------
@@ -88,7 +84,7 @@ export class StorageManager {
    * Clear the sync-data-lost flag once the user has been notified.
    */
   async clearSyncDataLostFlag(): Promise<void> {
-    await browser.storage.local.remove(FLAGS.SYNC_DATA_LOST);
+    await syncDataLostItem.removeValue();
   }
 
   // -------------------------------------------------------------------------

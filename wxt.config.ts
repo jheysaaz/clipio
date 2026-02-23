@@ -10,7 +10,7 @@ export default defineConfig({
     name: "__MSG_extName__",
     description: "__MSG_extDescription__",
     default_locale: "en",
-    permissions: ["storage", "clipboardWrite", "clipboardRead"],
+    permissions: ["storage", "clipboardWrite", "clipboardRead", "contextMenus"],
     // Allow all extension contexts (including content scripts) to reach Sentry.
     // The DSN uses the US ingest cluster (*.ingest.us.sentry.io); keeping the
     // broader *.ingest.sentry.io as well covers EU tenants and future regions.

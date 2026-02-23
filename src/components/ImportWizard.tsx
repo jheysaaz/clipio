@@ -47,6 +47,7 @@ import type {
   UnsupportedPlaceholderAction,
 } from "~/lib/importers/types";
 import { SYNC_QUOTA } from "~/config/constants";
+import { captureError } from "~/lib/sentry";
 import { i18n } from "#i18n";
 
 // ---------------------------------------------------------------------------
@@ -297,6 +298,7 @@ export default function ImportWizard({
   const [importing, setImporting] = useState(false);
   const [importDone, setImportDone] = useState(false);
   const [importedCount, setImportedCount] = useState(0);
+  const [importError, setImportError] = useState<string | null>(null);
   const [storageMode, setStorageMode] = useState<"sync" | "local">("sync");
 
   // Load existing snippets & storage status on mount
@@ -457,6 +459,8 @@ export default function ImportWizard({
       onImportComplete(count);
     } catch (e) {
       console.error("[Clipio] Import failed:", e);
+      captureError(e, { action: "importSnippets" });
+      setImportError(i18n.t("importWizard.confirm.failedToImport"));
     } finally {
       setImporting(false);
     }
@@ -1003,6 +1007,16 @@ export default function ImportWizard({
               strokeWidth={1.5}
             />
             <span>{i18n.t("importWizard.confirm.quotaWarning")}</span>
+          </div>
+        )}
+
+        {importError && (
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs">
+            <AlertTriangle
+              className="h-3.5 w-3.5 mt-0.5 shrink-0"
+              strokeWidth={1.5}
+            />
+            {importError}
           </div>
         )}
       </div>

@@ -1,4 +1,11 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import {
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+  lazy,
+  Suspense,
+} from "react";
 import {
   Settings,
   ArrowDownUp,
@@ -17,6 +24,8 @@ import {
   Search,
   PanelLeftClose,
   PanelLeft,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { Button } from "~/components/ui/button";
@@ -25,13 +34,17 @@ import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
 import { cn } from "~/lib/utils";
 import { useTheme, type ThemeMode } from "~/hooks/ThemeContext";
+import { Alert, AlertDescription, AlertAction } from "~/components/ui/alert";
 import { InlineError } from "~/components/ui/inline-error";
+
 import { Label } from "~/components/ui/label";
-import { lazy, Suspense } from "react";
 const ImportWizard = lazy(() => import("~/components/ImportWizard"));
-import { WarningBanner } from "~/components/ui/warning-banner";
 import { exportSnippets, getSnippets, getStorageStatus } from "~/storage";
-import { SYNC_QUOTA, FLAGS } from "~/config/constants";
+import { SYNC_QUOTA } from "~/config/constants";
+import {
+  confettiEnabledItem,
+  dismissedUninstallWarningItem,
+} from "~/storage/items";
 import { i18n } from "#i18n";
 import { captureError, sendUserFeedback } from "~/lib/sentry";
 
@@ -351,10 +364,10 @@ function AppearanceSection() {
   const [confettiEnabled, setConfettiEnabled] = useState(true);
 
   useEffect(() => {
-    browser.storage.local
-      .get(FLAGS.CONFETTI_ENABLED)
-      .then((result) => {
-        if (result[FLAGS.CONFETTI_ENABLED] === false) {
+    confettiEnabledItem
+      .getValue()
+      .then((val) => {
+        if (val === false) {
           setConfettiEnabled(false);
         }
       })
@@ -363,9 +376,7 @@ function AppearanceSection() {
 
   const handleConfettiToggle = (enabled: boolean) => {
     setConfettiEnabled(enabled);
-    browser.storage.local
-      .set({ [FLAGS.CONFETTI_ENABLED]: enabled })
-      .catch(console.warn);
+    confettiEnabledItem.setValue(enabled).catch(console.warn);
   };
 
   const handlePreviewConfetti = () => {
@@ -1039,15 +1050,10 @@ export default function OptionsPage() {
   const [showUninstallWarning, setShowUninstallWarning] = useState(false);
 
   useEffect(() => {
-    browser.storage.local
-      .get(FLAGS.DISMISSED_UNINSTALL_WARNING)
-      .then((flags) => {
-        if (flags[FLAGS.DISMISSED_UNINSTALL_WARNING] !== true) {
-          setShowUninstallWarning(true);
-          browser.storage.local
-            .set({ [FLAGS.DISMISSED_UNINSTALL_WARNING]: true })
-            .catch(console.warn);
-        }
+    dismissedUninstallWarningItem
+      .getValue()
+      .then((dismissed) => {
+        if (!dismissed) setShowUninstallWarning(true);
       })
       .catch(console.warn);
   }, []);
@@ -1095,7 +1101,7 @@ export default function OptionsPage() {
   }, [sidebarOpen]);
 
   return (
-    <div className="flex min-h-screen bg-background select-none">
+    <div className="flex h-screen overflow-hidden bg-background select-none">
       {/* Sidebar */}
       <aside
         style={{ width: sidebarOpen ? sidebarWidth : 0 }}
@@ -1249,18 +1255,29 @@ export default function OptionsPage() {
             </button>
           </div>
         )}
-        {showUninstallWarning && (
-          <WarningBanner
-            action={{
-              label: i18n.t("options.warnings.uninstall.action"),
-              onClick: () => setActiveSection("import-export"),
-            }}
-            onDismiss={() => setShowUninstallWarning(false)}
-          >
-            {i18n.t("options.warnings.uninstall.body")}
-          </WarningBanner>
-        )}
         <div className="max-w-2xl mx-auto px-8 py-8">
+          {showUninstallWarning && (
+            <Alert className="mb-6 border-amber-200 bg-amber-50 text-amber-800 [&>svg]:text-amber-500 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:[&>svg]:text-amber-400">
+              <AlertTriangle />
+              <AlertDescription className="text-amber-800 dark:text-amber-300">
+                {i18n.t("options.warnings.uninstall.body")}
+              </AlertDescription>
+              <AlertAction>
+                <button
+                  onClick={() => {
+                    setShowUninstallWarning(false);
+                    dismissedUninstallWarningItem
+                      .setValue(true)
+                      .catch(console.warn);
+                  }}
+                  className="opacity-50 hover:opacity-100 transition-opacity"
+                  aria-label="Dismiss"
+                >
+                  <X className="size-3.5" strokeWidth={2} />
+                </button>
+              </AlertAction>
+            </Alert>
+          )}
           {activeSection === "general" && (
             <GeneralSection onNavigate={setActiveSection} />
           )}

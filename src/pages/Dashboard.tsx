@@ -16,11 +16,15 @@ import {
   Settings,
   Clipboard,
   ArrowDownUp,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import SnippetListItem from "~/components/SnippetListItem";
 const SnippetDetailView = lazy(() => import("~/components/SnippetDetailView"));
 const NewSnippetView = lazy(() => import("~/components/NewSnippetView"));
+import { Alert, AlertDescription, AlertAction } from "~/components/ui/alert";
 import { InlineError } from "~/components/ui/inline-error";
+
 import type { Snippet, SnippetFormData } from "~/types";
 import { createSnippet } from "~/types";
 import { Button } from "~/components/ui/button";
@@ -39,7 +43,11 @@ import {
   StorageQuotaError,
 } from "~/storage";
 import { WarningBanner } from "~/components/ui/warning-banner";
-import { FLAGS } from "~/config/constants";
+import {
+  dismissedUninstallWarningItem,
+  syncDataLostItem,
+  contextMenuDraftItem,
+} from "~/storage/items";
 import { captureError } from "~/lib/sentry";
 
 export default function Dashboard() {
@@ -66,6 +74,11 @@ export default function Dashboard() {
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const isResizing = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDismissUninstallWarning = useCallback(() => {
+    setShowUninstallWarning(false);
+    dismissedUninstallWarningItem.setValue(true).catch(console.warn);
+  }, []);
 
   // -------------------------------------------------------------------------
   // Sidebar resize
@@ -116,25 +129,42 @@ export default function Dashboard() {
     })();
   }, []);
 
+  // Check if the popup was opened via the "Save selection" context-menu action.
+  // If so, pre-fill the draft and switch to create mode.
+  useEffect(() => {
+    (async () => {
+      try {
+        const draft = await contextMenuDraftItem.getValue();
+        if (draft) {
+          // Consume the key immediately so it doesn't persist across reopens
+          await contextMenuDraftItem.removeValue();
+          setDraftSnippet({
+            label: "",
+            shortcut: "",
+            content: draft,
+            tags: [],
+          });
+          setSelectedSnippet(null);
+          setIsCreating(true);
+        }
+      } catch (err) {
+        console.error("[Clipio] Failed to read context-menu draft:", err);
+        captureError(err, { action: "loadContextMenuDraft" });
+      }
+    })();
+  }, []);
+
   // Check uninstall-warning flag + sign-out recovery on mount
   useEffect(() => {
     (async () => {
       try {
-        const flags = await browser.storage.local.get([
-          FLAGS.DISMISSED_UNINSTALL_WARNING,
-          FLAGS.SYNC_DATA_LOST,
-        ]);
-
-        if (flags[FLAGS.DISMISSED_UNINSTALL_WARNING] !== true) {
+        const dismissed = await dismissedUninstallWarningItem.getValue();
+        if (!dismissed) {
           setShowUninstallWarning(true);
-          // Persist immediately — don't wait for the X click.
-          // If the popup is closed any other way the banner still won't reappear.
-          browser.storage.local
-            .set({ [FLAGS.DISMISSED_UNINSTALL_WARNING]: true })
-            .catch(console.warn);
         }
 
-        if (flags[FLAGS.SYNC_DATA_LOST] === true) {
+        const dataLost = await syncDataLostItem.getValue();
+        if (dataLost) {
           const backup = await tryRecoverFromBackup();
           if (backup.length > 0) {
             setRecoverySnippets(backup);
@@ -325,6 +355,7 @@ export default function Dashboard() {
                 setShowRecoveryBanner(false);
               } catch (err) {
                 console.error("[Clipio] Recovery failed:", err);
+                captureError(err, { action: "recoverSnippets" });
                 setRecoveryError(i18n.t("dashboard.errors.failedToRestore"));
               }
             },
@@ -338,19 +369,6 @@ export default function Dashboard() {
         message={recoveryError}
         onDismiss={() => setRecoveryError(null)}
       />
-
-      {/* First-open uninstall data-loss warning */}
-      {showUninstallWarning && (
-        <WarningBanner
-          action={{
-            label: i18n.t("dashboard.warnings.uninstall.action"),
-            onClick: () => browser.runtime.openOptionsPage(),
-          }}
-          onDismiss={() => setShowUninstallWarning(false)}
-        >
-          {i18n.t("dashboard.warnings.uninstall.body")}
-        </WarningBanner>
-      )}
 
       {/* Quota warning banner */}
       {quotaWarning && (
@@ -570,6 +588,8 @@ export default function Dashboard() {
                 onUpdate={handleUpdateSnippet}
                 sidebarOpen={sidebarOpen}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                uninstallWarning={showUninstallWarning}
+                onDismissUninstallWarning={handleDismissUninstallWarning}
               />
             </Suspense>
           ) : snippets.length === 0 && !loading ? (
@@ -617,6 +637,25 @@ export default function Dashboard() {
                   {i18n.t("dashboard.emptyState.action")}
                 </Button>
               </div>
+              {showUninstallWarning && (
+                <div className="p-3 border-t shrink-0">
+                  <Alert className="border-amber-200 bg-amber-50 text-amber-800 [&>svg]:text-amber-500 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:[&>svg]:text-amber-400">
+                    <AlertTriangle />
+                    <AlertDescription className="text-amber-800 dark:text-amber-300">
+                      {i18n.t("dashboard.warnings.uninstall.body")}
+                    </AlertDescription>
+                    <AlertAction>
+                      <button
+                        onClick={handleDismissUninstallWarning}
+                        className="opacity-50 hover:opacity-100 transition-opacity"
+                        aria-label="Dismiss"
+                      >
+                        <X className="size-3.5" strokeWidth={2} />
+                      </button>
+                    </AlertAction>
+                  </Alert>
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -649,6 +688,25 @@ export default function Dashboard() {
                   {i18n.t("dashboard.detailPlaceholder")}
                 </p>
               </div>
+              {showUninstallWarning && (
+                <div className="p-3 border-t shrink-0">
+                  <Alert className="border-amber-200 bg-amber-50 text-amber-800 [&>svg]:text-amber-500 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:[&>svg]:text-amber-400">
+                    <AlertTriangle />
+                    <AlertDescription className="text-amber-800 dark:text-amber-300">
+                      {i18n.t("dashboard.warnings.uninstall.body")}
+                    </AlertDescription>
+                    <AlertAction>
+                      <button
+                        onClick={handleDismissUninstallWarning}
+                        className="opacity-50 hover:opacity-100 transition-opacity"
+                        aria-label="Dismiss"
+                      >
+                        <X className="size-3.5" strokeWidth={2} />
+                      </button>
+                    </AlertAction>
+                  </Alert>
+                </div>
+              )}
             </>
           )}
         </div>

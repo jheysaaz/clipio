@@ -10,36 +10,19 @@
 import type { StorageBackend } from "../types";
 import type { Snippet } from "~/types";
 import { captureError } from "~/lib/sentry";
-
-const LOCAL_KEY = "snippets";
-
-/** Key used by the content script to read the snippet cache. */
-export const CONTENT_SCRIPT_CACHE_KEY = "cachedSnippets";
+import { localSnippetsItem, cachedSnippetsItem } from "../items";
 
 export class LocalBackend implements StorageBackend {
   async getSnippets(): Promise<Snippet[]> {
-    const result = await browser.storage.local.get(LOCAL_KEY);
-    const raw = result[LOCAL_KEY];
-
-    if (!raw) return [];
-
-    try {
-      return typeof raw === "string" ? JSON.parse(raw) : (raw as Snippet[]);
-    } catch {
-      console.error("[Clipio] LocalBackend: failed to parse snippets", raw);
-      captureError(new Error("LocalBackend: failed to parse snippets"), {
-        action: "local.parseSnippets",
-      });
-      return [];
-    }
+    return localSnippetsItem.getValue();
   }
 
   async saveSnippets(snippets: Snippet[]): Promise<void> {
-    await browser.storage.local.set({ [LOCAL_KEY]: snippets });
+    await localSnippetsItem.setValue(snippets);
   }
 
   async clear(): Promise<void> {
-    await browser.storage.local.remove(LOCAL_KEY);
+    await localSnippetsItem.removeValue();
   }
 }
 
@@ -52,11 +35,7 @@ export async function updateContentScriptCache(
   snippets: Snippet[]
 ): Promise<void> {
   try {
-    // Store as a plain array — structured-clone is faster than
-    // JSON.stringify here and the content script avoids a JSON.parse.
-    await browser.storage.local.set({
-      [CONTENT_SCRIPT_CACHE_KEY]: snippets,
-    });
+    await cachedSnippetsItem.setValue(snippets);
   } catch (error) {
     console.error("[Clipio] Failed to update content script cache:", error);
     captureError(error, { action: "local.updateCache" });
