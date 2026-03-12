@@ -36,3 +36,6 @@ release/
 # Environment variables
 .env
 .env.*.local
+
+# Test coverage
+coverage/

@@ -14,7 +14,10 @@
     "compile": "tsc --noEmit",
     "postinstall": "wxt prepare",
     "format": "prettier --write \"./**/*.{ts,tsx,js,jsx,json,css,html}\"",
-    "format:check": "prettier --check \"./**/*.{ts,tsx,js,jsx,json,css,html}\""
+    "format:check": "prettier --check \"./**/*.{ts,tsx,js,jsx,json,css,html}\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@platejs/basic-nodes": "^52.0.11",
@@ -52,11 +55,15 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
+    "@vitest/coverage-v8": "^4.0.18",
     "@wxt-dev/module-react": "^1.1.5",
+    "fake-indexeddb": "^6.2.5",
+    "happy-dom": "^20.8.3",
     "prettier": "^3.7.4",
     "typescript": "~5.9.3",
     "unplugin-fonts": "^1.4.0",
     "vite": "^7.3.0",
+    "vitest": "^4.0.18",
     "wxt": "^0.20.13"
   }
 }

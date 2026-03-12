@@ -4,6 +4,14 @@ import { incrementSnippetUsage } from "~/utils/usageTracking";
 import confetti from "canvas-confetti";
 import { initSentry, captureError, captureMessage } from "~/lib/sentry";
 import { makeRelayTransport } from "~/lib/sentry-relay";
+import {
+  buildShortcutIndex,
+  findSnippetMatch as findSnippetMatchHelper,
+  formatDate,
+  processSnippetContent as processSnippetContentHelper,
+  type ContentSnippet,
+  type ShortcutIndex,
+} from "~/lib/content-helpers";
 
 export default defineContentScript({
   matches: ["<all_urls>"],
@@ -16,42 +24,35 @@ export default defineContentScript({
 
     // Dev only: test Sentry capture (message from options or keyboard shortcut)
     if ((import.meta.env.MODE as string) !== "production") {
-      browser.runtime.onMessage.addListener(
-        (message: unknown): boolean => {
-          if (
-            typeof message === "object" &&
-            message !== null &&
-            (message as { type?: string }).type === SENTRY_TEST_MESSAGE_TYPE
-          ) {
-            console.info(
-              "[Clipio] Sentry test triggered (content script, from options): sending exception + message"
-            );
-            captureError(
-              new Error("Clipio Sentry test exception (content script)")
-            );
-            captureMessage(
-              "Clipio Sentry test message (content script)",
-              "info"
-            );
-            return false;
-          }
+      browser.runtime.onMessage.addListener((message: unknown): boolean => {
+        if (
+          typeof message === "object" &&
+          message !== null &&
+          (message as { type?: string }).type === SENTRY_TEST_MESSAGE_TYPE
+        ) {
+          console.info(
+            "[Clipio] Sentry test triggered (content script, from options): sending exception + message"
+          );
+          captureError(
+            new Error("Clipio Sentry test exception (content script)")
+          );
+          captureMessage("Clipio Sentry test message (content script)", "info");
           return false;
         }
-      );
+        return false;
+      });
       document.addEventListener(
         "keydown",
         (e) => {
-          if (
-            (e.ctrlKey || e.metaKey) &&
-            e.shiftKey &&
-            e.key === "E"
-          ) {
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "E") {
             e.preventDefault();
             console.info(
               "[Clipio] Sentry test triggered (content script): sending exception + message"
             );
             captureError(
-              new Error("Clipio Sentry test exception (content script, shortcut)")
+              new Error(
+                "Clipio Sentry test exception (content script, shortcut)"
+              )
             );
             captureMessage(
               "Clipio Sentry test message (content script, shortcut)",
@@ -63,12 +64,8 @@ export default defineContentScript({
       );
     }
 
-    interface Snippet {
-      id: string;
-      shortcut: string;
-      content: string;
-      label: string;
-    }
+    // Use the shared ContentSnippet interface from content-helpers
+    type Snippet = ContentSnippet;
 
     // ── Confetti (UX) ─────────────────────────────────────────────────
     // Dedicated confetti canvas that sits above all page content
@@ -196,22 +193,10 @@ export default defineContentScript({
     let justExpanded = false; // guard to skip redundant input events after expansion
 
     // ── Shortcut lookup index ──────────────────────────────────────────
-    // Instead of iterating all snippets on every keystroke, keep a Map
-    // keyed by shortcut string and a sorted (desc) list of unique shortcut
-    // lengths so findSnippetMatch is O(k) where k = distinct lengths.
-    const shortcutMap = new Map<string, Snippet>();
-    let shortcutLengths: number[] = [];
-    const WORD_BOUNDARY_RE = /[\s\n]/;
+    let shortcutIndex: ShortcutIndex = { map: new Map(), lengths: [] };
 
     function rebuildShortcutIndex() {
-      shortcutMap.clear();
-      const lengths = new Set<number>();
-      for (const s of snippets) {
-        shortcutMap.set(s.shortcut, s);
-        lengths.add(s.shortcut.length);
-      }
-      // Sort descending so longer (more specific) shortcuts match first
-      shortcutLengths = [...lengths].sort((a, b) => b - a);
+      shortcutIndex = buildShortcutIndex(snippets);
     }
 
     // Check if extension context is still valid
@@ -257,191 +242,12 @@ export default defineContentScript({
     }
 
     // Find snippet by checking the text before cursor.
-    // Uses the pre-built shortcutMap + shortcutLengths for O(k) lookup
-    // where k = number of distinct shortcut lengths (typically 3-5).
+    // Delegates to the shared findSnippetMatch helper from content-helpers.
     function findSnippetMatch(
       text: string,
       cursorPosition: number
     ): { snippet: Snippet; startPos: number; endPos: number } | null {
-      if (!text || shortcutMap.size === 0) return null;
-
-      for (const len of shortcutLengths) {
-        if (len > cursorPosition) continue;
-        const startPos = cursorPosition - len;
-        const candidate = text.substring(startPos, cursorPosition);
-        const snippet = shortcutMap.get(candidate);
-        if (
-          snippet &&
-          (startPos === 0 || WORD_BOUNDARY_RE.test(text[startPos - 1]))
-        ) {
-          return { snippet, startPos, endPos: cursorPosition };
-        }
-      }
-
-      return null;
-    }
-
-    // Convert markdown to plain text (content is now stored as markdown)
-    function markdownToPlainText(content: string): string {
-      let text = content;
-      // Extract link URLs only (strip label): [label](url) → url
-      text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$2");
-      // Remove markdown formatting
-      text = text.replace(/\*\*([^*]+)\*\*/g, "$1"); // bold
-      text = text.replace(/_([^_]+)_/g, "$1"); // italic
-      text = text.replace(/~~([^~]+)~~/g, "$1"); // strikethrough
-      text = text.replace(/`([^`]+)`/g, "$1"); // code
-      text = text.replace(/<u>([^<]+)<\/u>/g, "$1"); // underline
-      // Handle any legacy HTML (for backward compatibility)
-      if (text.includes("<")) {
-        const temp = document.createElement("div");
-        temp.innerHTML = text;
-        text = temp.textContent || temp.innerText || "";
-      }
-      return text;
-    }
-
-    // Sanitize a URL to prevent XSS (only allow http, https, mailto)
-    function sanitizeUrl(url: string): string {
-      const trimmed = url.trim();
-      if (/^(https?:\/\/|mailto:)/i.test(trimmed)) {
-        return trimmed;
-      }
-      // Block javascript: and other dangerous schemes
-      if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
-        return "";
-      }
-      // Bare domain or path — assume https
-      return `https://${trimmed}`;
-    }
-
-    // Escape HTML special characters
-    function escapeHtml(text: string): string {
-      return text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-    }
-
-    // Convert markdown inline formatting to HTML
-    // Processes: links (before italic to avoid URL underscore conflicts),
-    // bold, italic, strikethrough, code, underline
-    function markdownInlineToHtml(text: string): string {
-      let result = "";
-      let remaining = text;
-
-      while (remaining.length > 0) {
-        // Link [label](url) — must be before italic
-        const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
-        if (linkMatch) {
-          const label = markdownInlineToHtml(linkMatch[1]); // recurse for nested marks
-          const url = sanitizeUrl(linkMatch[2]);
-          if (url) {
-            result += `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
-          } else {
-            result += escapeHtml(linkMatch[1]);
-          }
-          remaining = remaining.slice(linkMatch[0].length);
-          continue;
-        }
-
-        // Bold **text**
-        const boldMatch = remaining.match(/^\*\*([^*]+)\*\*/);
-        if (boldMatch) {
-          result += `<strong>${markdownInlineToHtml(boldMatch[1])}</strong>`;
-          remaining = remaining.slice(boldMatch[0].length);
-          continue;
-        }
-
-        // Italic _text_
-        const italicMatch = remaining.match(/^_([^_]+)_/);
-        if (italicMatch) {
-          result += `<em>${markdownInlineToHtml(italicMatch[1])}</em>`;
-          remaining = remaining.slice(italicMatch[0].length);
-          continue;
-        }
-
-        // Strikethrough ~~text~~
-        const strikeMatch = remaining.match(/^~~([^~]+)~~/);
-        if (strikeMatch) {
-          result += `<s>${markdownInlineToHtml(strikeMatch[1])}</s>`;
-          remaining = remaining.slice(strikeMatch[0].length);
-          continue;
-        }
-
-        // Code `text`
-        const codeMatch = remaining.match(/^`([^`]+)`/);
-        if (codeMatch) {
-          result += `<code>${escapeHtml(codeMatch[1])}</code>`;
-          remaining = remaining.slice(codeMatch[0].length);
-          continue;
-        }
-
-        // Underline <u>text</u>
-        const underlineMatch = remaining.match(/^<u>([^<]+)<\/u>/);
-        if (underlineMatch) {
-          result += `<u>${markdownInlineToHtml(underlineMatch[1])}</u>`;
-          remaining = remaining.slice(underlineMatch[0].length);
-          continue;
-        }
-
-        // Find next special character
-        const nextSpecial = remaining.search(
-          /\[(?=[^\]]+\]\([^)]+\))|\*\*|_(?!_)|~~|`|<u>/
-        );
-        if (nextSpecial === -1) {
-          result += escapeHtml(remaining);
-          break;
-        } else if (nextSpecial === 0) {
-          // No match at position 0 — consume one char to avoid infinite loop
-          result += escapeHtml(remaining[0]);
-          remaining = remaining.slice(1);
-        } else {
-          result += escapeHtml(remaining.slice(0, nextSpecial));
-          remaining = remaining.slice(nextSpecial);
-        }
-      }
-
-      return result;
-    }
-
-    // Convert full markdown content to HTML
-    function markdownToHtml(content: string): string {
-      const paragraphs = content.split(/\n/);
-      const htmlParts = paragraphs.map((para) => markdownInlineToHtml(para));
-      return htmlParts.join("<br>");
-    }
-
-    // Format date according to the specified format
-    function formatDate(format: string, dateStr?: string): string {
-      const date = dateStr ? new Date(dateStr + "T00:00:00") : new Date();
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const day = String(date.getDate()).padStart(2, "0");
-
-      switch (format) {
-        case "iso":
-          return `${year}-${month}-${day}`;
-        case "us":
-          return `${month}/${day}/${year}`;
-        case "eu":
-          return `${day}/${month}/${year}`;
-        case "long":
-          return date.toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          });
-        case "short":
-          return date.toLocaleDateString("en-US", {
-            year: "2-digit",
-            month: "short",
-            day: "numeric",
-          });
-        default:
-          return `${year}-${month}-${day}`;
-      }
+      return findSnippetMatchHelper(text, cursorPosition, shortcutIndex);
     }
 
     // ── Transformation (placeholders, markdown, HTML) ─────────────────
@@ -464,104 +270,24 @@ export default defineContentScript({
       return text;
     }
 
-    // Process snippet content with dynamic placeholders
-    // Returns { content: string, cursorOffset: number | null }
-    interface ProcessedContent {
-      content: string;
-      cursorOffset: number | null;
-    }
-
+    // Process snippet content with dynamic placeholders.
+    // Delegates to the shared processSnippetContent helper from content-helpers,
+    // injecting readClipboardText as the clipboard reader dependency.
+    // On clipboard read failure, substitutes "(clipboard unavailable)" and reports to Sentry.
     async function processSnippetContent(
       content: string,
       asHtml: boolean = false
-    ): Promise<ProcessedContent> {
-      // Process dynamic placeholders on the raw markdown FIRST
-      // (before any format conversion, so replaced text doesn't contain accidental markdown)
-      let processedContent = content;
-      let cursorOffset: number | null = null;
-
-      // Process clipboard placeholder. On failure use a visible placeholder
-      // so the user sees why nothing was pasted and we don't show confetti for empty insert.
-      if (processedContent.includes("{{clipboard}}")) {
+    ): Promise<{ content: string; cursorOffset: number | null }> {
+      const safeReadClipboard = (): string => {
         try {
-          const clipboardText = readClipboardText();
-          processedContent = processedContent.replace(
-            /\{\{clipboard\}\}/g,
-            clipboardText
-          );
+          return readClipboardText();
         } catch (error) {
           console.error("[Clipio] Failed to read clipboard:", error);
           captureError(error, { action: "clipboardRead" });
-          processedContent = processedContent.replace(
-            /\{\{clipboard\}\}/g,
-            "(clipboard unavailable)"
-          );
+          return "(clipboard unavailable)";
         }
-      }
-
-      // Process date placeholders - {{date:format}}
-      const dateRegex = /\{\{date:([a-z]+)\}\}/g;
-      let dateMatch;
-      while ((dateMatch = dateRegex.exec(processedContent)) !== null) {
-        const format = dateMatch[1];
-        const formattedDate = formatDate(format);
-        processedContent = processedContent.replace(
-          dateMatch[0],
-          formattedDate
-        );
-        dateRegex.lastIndex = 0;
-      }
-
-      // Process datepicker placeholders - {{datepicker:YYYY-MM-DD}}
-      const datepickerRegex = /\{\{datepicker:(\d{4}-\d{2}-\d{2})\}\}/g;
-      let datepickerMatch;
-      while (
-        (datepickerMatch = datepickerRegex.exec(processedContent)) !== null
-      ) {
-        const dateStr = datepickerMatch[1];
-        const formattedDate = formatDate("long", dateStr);
-        processedContent = processedContent.replace(
-          datepickerMatch[0],
-          formattedDate
-        );
-        datepickerRegex.lastIndex = 0;
-      }
-
-      if (asHtml) {
-        // Convert markdown → HTML first ({{cursor}} survives escaping intact)
-        processedContent = markdownToHtml(processedContent);
-        // Now replace the first {{cursor}} with a marker element for cursor positioning
-        processedContent = processedContent.replace(
-          /\{\{cursor\}\}/,
-          '<span id="clipio-cursor-marker" data-clipio-cursor="true"></span>'
-        );
-        // Remove any remaining cursor placeholders
-        processedContent = processedContent.replace(/\{\{cursor\}\}/g, "");
-      } else {
-        // For plain text mode: strip markdown and handle cursor offset
-        const cursorMatch = processedContent.match(/\{\{cursor\}\}/);
-        if (cursorMatch && cursorMatch.index !== undefined) {
-          processedContent = processedContent.replace(/\{\{cursor\}\}/, "");
-          // Convert to plain text, then compute cursor offset
-          processedContent = markdownToPlainText(processedContent);
-          // Re-calculate the cursor offset on the plain text
-          // We need to process the content before the cursor marker separately
-          const beforeCursor = content.substring(0, cursorMatch.index);
-          // Replace placeholders in beforeCursor (same as above but for the portion before cursor)
-          let processedBefore = beforeCursor;
-          processedBefore = processedBefore.replace(/\{\{clipboard\}\}/g, ""); // already replaced above
-          processedBefore = processedBefore.replace(/\{\{date:[a-z]+\}\}/g, "");
-          processedBefore = processedBefore.replace(
-            /\{\{datepicker:\d{4}-\d{2}-\d{2}\}\}/g,
-            ""
-          );
-          cursorOffset = markdownToPlainText(processedBefore).length;
-        } else {
-          processedContent = markdownToPlainText(processedContent);
-        }
-      }
-
-      return { content: processedContent, cursorOffset };
+      };
+      return processSnippetContentHelper(content, asHtml, safeReadClipboard);
     }
 
     // Post-insertion verification: after a short delay, check the field still
@@ -687,7 +413,10 @@ export default defineContentScript({
       const target = event.target;
       if (
         !target ||
-        !(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) ||
+        !(
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement
+        ) ||
         !target.value
       )
         return;
@@ -764,7 +493,8 @@ export default defineContentScript({
       const target = event.target;
       if (!target || !(target instanceof HTMLElement)) return;
       const isInputOrTextarea =
-        target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement;
       const isContentEditable = target.isContentEditable;
 
       if (!isInputOrTextarea && !isContentEditable) return;
@@ -773,8 +503,7 @@ export default defineContentScript({
       if (typingTimer) clearTimeout(typingTimer);
 
       if (isInputOrTextarea) {
-        const cursorPosition =
-          target.selectionStart ?? target.value.length;
+        const cursorPosition = target.selectionStart ?? target.value.length;
         const match = findSnippetMatch(target.value, cursorPosition);
         if (match) {
           event.preventDefault();
