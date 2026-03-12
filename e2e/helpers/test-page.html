@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clipio E2E Test Page</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 20px;
+        background: #fff;
+      }
+      .field-group {
+        margin-bottom: 16px;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 4px;
+      }
+      input[type="text"],
+      textarea {
+        width: 400px;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 14px;
+        font-family: monospace;
+      }
+      textarea {
+        height: 80px;
+        resize: vertical;
+      }
+      [contenteditable] {
+        width: 400px;
+        min-height: 60px;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 14px;
+        font-family: monospace;
+        outline: none;
+      }
+      [contenteditable]:focus {
+        border-color: #6366f1;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Clipio E2E Test Page</h2>
+
+    <div class="field-group">
+      <label for="text-input">Text Input</label>
+      <input
+        type="text"
+        id="text-input"
+        data-testid="text-input"
+        placeholder="Type a snippet shortcut here..."
+        autocomplete="off"
+      />
+    </div>
+
+    <div class="field-group">
+      <label for="password-input">Password Input (should NOT expand)</label>
+      <input
+        type="password"
+        id="password-input"
+        data-testid="password-input"
+        placeholder="Shortcuts should not expand here"
+      />
+    </div>
+
+    <div class="field-group">
+      <label for="textarea-field">Textarea</label>
+      <textarea
+        id="textarea-field"
+        data-testid="textarea-field"
+        placeholder="Type a snippet shortcut here..."
+        autocomplete="off"
+      ></textarea>
+    </div>
+
+    <div class="field-group">
+      <label>Contenteditable Div</label>
+      <div
+        id="contenteditable-field"
+        data-testid="contenteditable-field"
+        contenteditable="true"
+        role="textbox"
+        aria-multiline="true"
+        aria-label="Contenteditable test field"
+      ></div>
+    </div>
+
+    <div class="field-group">
+      <label for="readonly-input">Readonly Input (should NOT expand)</label>
+      <input
+        type="text"
+        id="readonly-input"
+        data-testid="readonly-input"
+        value="readonly content"
+        readonly
+      />
+    </div>
+
+    <script>
+      // Signal to Playwright that the test page is ready.
+      // Content script injection happens asynchronously, so we also poll.
+      window.__testPageReady = true;
+
+      // Expose a helper for tests to check if content script is loaded
+      window.__waitForContentScript = () =>
+        new Promise((resolve) => {
+          let attempts = 0;
+          const check = () => {
+            // The content script doesn't expose a flag, but we know it's
+            // ready when the storage.local cachedSnippets are accessible.
+            // We just resolve after a short delay.
+            if (attempts++ > 20) {
+              resolve(false);
+              return;
+            }
+            setTimeout(check, 100);
+          };
+          // Give content script 500ms to initialize
+          setTimeout(() => resolve(true), 500);
+        });
+    </script>
+  </body>
+</html>

@@ -39,3 +39,9 @@ release/
 
 # Test coverage
 coverage/
+
+# Playwright E2E test artifacts
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
