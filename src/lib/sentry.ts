@@ -96,10 +96,7 @@ export function initSentry(
   const filtered = defaultIntegrations.filter(
     (integration) => !GLOBAL_STATE_INTEGRATION_NAMES.has(integration.name)
   );
-  const integrations = [
-    ...filtered,
-    browserTracingIntegration(),
-  ];
+  const integrations = [...filtered, browserTracingIntegration()];
 
   const transportFactory = transport ?? makeFetchTransport;
 

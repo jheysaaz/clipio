@@ -853,10 +853,7 @@ function FeedbackSection() {
               size="sm"
               variant="outline"
               onClick={() => {
-                captureMessage(
-                  "Clipio Sentry test message (options)",
-                  "info"
-                );
+                captureMessage("Clipio Sentry test message (options)", "info");
               }}
             >
               Send test message (options)
@@ -898,8 +895,8 @@ function FeedbackSection() {
             {navigator.platform.toLowerCase().includes("mac")
               ? "Cmd+Shift+E"
               : "Ctrl+Shift+E"}{" "}
-            to send a test from the content script (dev only). Check the
-            console for confirmation.
+            to send a test from the content script (dev only). Check the console
+            for confirmation.
           </p>
         </div>
       )}
