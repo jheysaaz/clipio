@@ -1,0 +1,30 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 1%
+    patch:
+      default:
+        target: 80%
+        threshold: 1%
+
+comment:
+  layout: "diff, flags, files"
+  behavior: default
+  require_changes: false
+
+ignore:
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "tests/**"
+  - "src/components/**/*.tsx"
+  - "src/entrypoints/**/*.tsx"
+  - "src/hooks/**"
+  - "src/pages/**"
+  - "src/lib/sentry.ts"
+  - "src/config.ts"
+  - "vitest.config.ts"
+  - ".wxt/**"
+  - "dist/**"
+  - "coverage/**"
