@@ -92,3 +92,25 @@ export const contextMenuDraftItem = storage.defineItem<string | null>(
   "local:contextMenuDraft",
   { defaultValue: null }
 );
+
+// ---------------------------------------------------------------------------
+// Developers / advanced settings
+// ---------------------------------------------------------------------------
+
+/**
+ * User-supplied Giphy API key override.
+ * Empty string means "use the bundled default key".
+ */
+export const giphyApiKeyItem = storage.defineItem<string>("local:giphyApiKey", {
+  defaultValue: "",
+});
+
+/**
+ * List of hostnames where Clipio snippet expansion is disabled.
+ * Populated via the "Hide on this site" context menu item.
+ * Example: ["github.com", "twitter.com"]
+ */
+export const blockedSitesItem = storage.defineItem<string[]>(
+  "local:blockedSites",
+  { defaultValue: [] }
+);

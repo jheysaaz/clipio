@@ -5,6 +5,8 @@ export const CLIPBOARD_PLACEHOLDER = "clipboard_placeholder";
 export const DATE_PLACEHOLDER = "date_placeholder";
 export const CURSOR_PLACEHOLDER = "cursor_placeholder";
 export const DATEPICKER_PLACEHOLDER = "datepicker_placeholder";
+export const IMAGE_PLACEHOLDER = "image_placeholder";
+export const GIF_PLACEHOLDER = "gif_placeholder";
 
 // Date format options
 export const DATE_FORMATS = [
@@ -28,6 +30,8 @@ export interface RichTextEditorProps {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  /** Called when a cmd+c copy initiated from within the editor fails. */
+  onCopyError?: (err: unknown) => void;
 }
 
 export interface RichTextEditorRef {
@@ -39,6 +43,8 @@ export interface SlashCommandMenuProps {
   onInsertDate: (format: string) => void;
   onInsertCursor: () => void;
   onInsertDatepicker: () => void;
+  onInsertImage: () => void;
+  onInsertGif: () => void;
   onClose: () => void;
   targetRange: TRange | null;
   searchQuery: string;
@@ -63,4 +69,18 @@ export interface DatePlaceholderElement extends TElement {
 export interface DatepickerPlaceholderElement extends TElement {
   type: typeof DATEPICKER_PLACEHOLDER;
   date?: string;
+}
+
+export interface ImagePlaceholderElement extends TElement {
+  type: typeof IMAGE_PLACEHOLDER;
+  mediaId: string;
+  /** Explicit pixel width set by the user via drag-resize. Omitted = natural/auto size. */
+  width?: number;
+}
+
+export interface GifPlaceholderElement extends TElement {
+  type: typeof GIF_PLACEHOLDER;
+  giphyId: string;
+  /** Explicit pixel width set by the user via drag-resize. Omitted = natural/auto size. */
+  width?: number;
 }

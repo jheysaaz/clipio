@@ -36,7 +36,7 @@ import type { Snippet } from "~/types";
 import { createSnippet } from "~/types";
 import { detectFormat } from "~/lib/importers/detect";
 import { TextBlazeParser } from "~/lib/importers/textblaze";
-import { ClipioParser } from "~/lib/importers/clipio";
+import { ClipioParser, importClipioZip } from "~/lib/importers/clipio";
 import { PowerTextParser } from "~/lib/importers/powertext";
 import type {
   FormatId,
@@ -47,7 +47,8 @@ import type {
   UnsupportedPlaceholderAction,
 } from "~/lib/importers/types";
 import { SYNC_QUOTA } from "~/config/constants";
-import { captureError } from "~/lib/sentry";
+import { restoreMediaEntry } from "~/storage/backends/media";
+import { captureError, captureMessage } from "~/lib/sentry";
 import { i18n } from "#i18n";
 
 // ---------------------------------------------------------------------------
@@ -301,6 +302,20 @@ export default function ImportWizard({
   const [importError, setImportError] = useState<string | null>(null);
   const [storageMode, setStorageMode] = useState<"sync" | "local">("sync");
 
+  // ZIP import state (v2 exports)
+  const [isZipImport, setIsZipImport] = useState(false);
+  const [zipMediaCount, setZipMediaCount] = useState(0);
+  const [zipMissingMediaWarning, setZipMissingMediaWarning] = useState<
+    string | null
+  >(null);
+  // Holds the resolved media blobs from a ZIP import so they can be saved on confirm
+  const zipMediaBlobsRef = useRef<
+    Map<
+      string,
+      { blob: Blob; meta: import("~/storage/backends/media").MediaMetadata }
+    >
+  >(new Map());
+
   // Load existing snippets & storage status on mount
   useEffect(() => {
     getSnippets().then(setExistingSnippets).catch(console.error);
@@ -317,6 +332,50 @@ export default function ImportWizard({
     (file: File) => {
       setParseError(null);
       setFileName(file.name);
+
+      // ZIP import path (v2 exports)
+      const isZip =
+        file.name.endsWith(".zip") || file.name.endsWith(".clipio.zip");
+      if (isZip) {
+        setIsZipImport(true);
+        zipMediaBlobsRef.current = new Map();
+        setZipMediaCount(0);
+        setZipMissingMediaWarning(null);
+
+        importClipioZip(file)
+          .then((result) => {
+            zipMediaBlobsRef.current = result.mediaBlobs;
+            setZipMediaCount(result.mediaBlobs.size);
+            if (result.missingMediaIds.length > 0) {
+              setZipMissingMediaWarning(
+                i18n.t("importWizard.confirm.missingImagesWarning")
+              );
+              captureMessage("ZIP import: missing media entries", "warning", {
+                missingIds: result.missingMediaIds,
+              });
+            }
+            setParsedSnippets(result.snippets);
+            setRawJson(null);
+            setDetectedFormat("clipio");
+            setSelectedFormat("clipio");
+            setParseError(null);
+          })
+          .catch((e) => {
+            captureError(e, { action: "importClipioZip" });
+            setParseError(
+              e instanceof Error
+                ? e.message
+                : i18n.t("importWizard.upload.couldNotRead")
+            );
+            setIsZipImport(false);
+          });
+        return;
+      }
+
+      setIsZipImport(false);
+      zipMediaBlobsRef.current = new Map();
+      setZipMediaCount(0);
+      setZipMissingMediaWarning(null);
 
       file
         .text()
@@ -444,6 +503,29 @@ export default function ImportWizard({
   async function handleImport() {
     setImporting(true);
     try {
+      // Save media blobs from ZIP import first
+      if (isZipImport && zipMediaBlobsRef.current.size > 0) {
+        let savedCount = 0;
+        for (const [id, { blob, meta }] of zipMediaBlobsRef.current) {
+          try {
+            await restoreMediaEntry({ ...meta, id, blob });
+            savedCount++;
+          } catch (e) {
+            captureError(e, { action: "importZipMedia", mediaId: id });
+          }
+        }
+        if (savedCount < zipMediaBlobsRef.current.size) {
+          captureMessage(
+            "ZIP import: some media blobs failed to save",
+            "warning",
+            {
+              saved: savedCount,
+              total: zipMediaBlobsRef.current.size,
+            }
+          );
+        }
+      }
+
       const finalSnippets = buildFinalSnippets(
         existingSnippets,
         parsedSnippets,
@@ -536,7 +618,7 @@ export default function ImportWizard({
         <input
           ref={fileInputRef}
           type="file"
-          accept=".json"
+          accept=".json,.zip,.clipio.zip"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -953,6 +1035,16 @@ export default function ImportWizard({
             </span>
             <span className="font-medium text-foreground">{snippetsToAdd}</span>
           </div>
+          {isZipImport && zipMediaCount > 0 && (
+            <div className="flex justify-between items-center px-4 py-2.5 text-sm">
+              <span className="text-muted-foreground">
+                {i18n.t("importWizard.confirm.imagesIncluded")}
+              </span>
+              <span className="font-medium text-foreground">
+                {zipMediaCount}
+              </span>
+            </div>
+          )}
           {overwrittenCount > 0 && (
             <div className="flex justify-between items-center px-4 py-2.5 text-sm">
               <span className="text-muted-foreground">
@@ -1007,6 +1099,16 @@ export default function ImportWizard({
               strokeWidth={1.5}
             />
             <span>{i18n.t("importWizard.confirm.quotaWarning")}</span>
+          </div>
+        )}
+
+        {zipMissingMediaWarning && (
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs">
+            <AlertTriangle
+              className="h-3.5 w-3.5 mt-0.5 shrink-0"
+              strokeWidth={1.5}
+            />
+            <span>{zipMissingMediaWarning}</span>
           </div>
         )}
 

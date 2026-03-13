@@ -37,6 +37,8 @@ Copy `.env.example` to `.env` and fill in any values you need for local developm
 cp .env.example .env
 ```
 
+Set `WXT_GIPHY_API_KEY` in `.env` if you want a project-wide default Giphy key. Users can still override it from Options > Developers.
+
 ## Building for Production
 
 Build the unpacked extension:

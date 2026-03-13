@@ -16,7 +16,22 @@ export const SYNC_QUOTA = {
 export const IDB_CONFIG = {
   DB_NAME: "clipio-backup",
   STORE_NAME: "snippets",
-  VERSION: 1,
+  MEDIA_STORE_NAME: "media",
+  VERSION: 2,
+} as const;
+
+export const MEDIA_LIMITS = {
+  /** Maximum size per uploaded file (bytes). */
+  MAX_FILE_SIZE: 2 * 1024 * 1024, // 2 MB
+  /** Maximum total size of all stored media (bytes). */
+  MAX_TOTAL_SIZE: 50 * 1024 * 1024, // 50 MB
+  /** Allowed MIME types for image upload. */
+  SUPPORTED_TYPES: [
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+  ] as const,
 } as const;
 
 export const TIMING = {
@@ -34,4 +49,6 @@ export const CONTEXT_MENU = {
   CREATE_SNIPPET: "clipio-create-snippet",
   OPEN_DASHBOARD: "clipio-open-dashboard",
   GIVE_FEEDBACK: "clipio-give-feedback",
+  SEPARATOR_HIDE: "clipio-separator-hide",
+  HIDE_ON_SITE: "clipio-hide-on-site",
 } as const;

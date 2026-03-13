@@ -61,6 +61,34 @@ export function markdownInlineToHtml(text: string): string {
   let remaining = text;
 
   while (remaining.length > 0) {
+    // Image placeholder {{image:<uuid>}} or {{image:<uuid>:<width>}}
+    const imageMatch = remaining.match(
+      /^\{\{image:([a-f0-9-]+)(?::(\d+))?\}\}/
+    );
+    if (imageMatch) {
+      const mediaId = escapeHtml(imageMatch[1]);
+      const width = imageMatch[2];
+      const style = width
+        ? `width:${width}px;max-width:100%;height:auto;`
+        : `max-width:100%;height:auto;`;
+      result += `<img data-clipio-media="${mediaId}" alt="image" style="${style}" />`;
+      remaining = remaining.slice(imageMatch[0].length);
+      continue;
+    }
+
+    // GIF placeholder {{gif:<giphyId>}} or {{gif:<giphyId>:<width>}}
+    const gifMatch = remaining.match(/^\{\{gif:([a-zA-Z0-9]+)(?::(\d+))?\}\}/);
+    if (gifMatch) {
+      const giphyId = escapeHtml(gifMatch[1]);
+      const width = gifMatch[2];
+      const style = width
+        ? `width:${width}px;max-width:100%;height:auto;`
+        : `max-width:100%;height:auto;`;
+      result += `<img src="https://media.giphy.com/media/${giphyId}/giphy.gif" alt="GIF" style="${style}" />`;
+      remaining = remaining.slice(gifMatch[0].length);
+      continue;
+    }
+
     // Link [label](url) — must be before italic
     const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
     if (linkMatch) {
@@ -117,7 +145,7 @@ export function markdownInlineToHtml(text: string): string {
 
     // Find next special character to avoid O(n²) char-by-char processing
     const nextSpecial = remaining.search(
-      /\[(?=[^\]]+\]\([^)]+\))|\*\*|_(?!_)|~~|`|<u>/
+      /\[(?=[^\]]+\]\([^)]+\))|\*\*|_(?!_)|~~|`|<u>|\{\{image:|\{\{gif:/
     );
     if (nextSpecial === -1) {
       result += escapeHtml(remaining);
@@ -158,6 +186,9 @@ export function markdownToHtml(content: string): string {
 export function markdownToPlainText(content: string): string {
   if (!content) return "";
   let text = content;
+  // Image/GIF placeholders → descriptive text (optional :width suffix)
+  text = text.replace(/\{\{image:[a-f0-9-]+(?::\d+)?\}\}/g, "[image]");
+  text = text.replace(/\{\{gif:[a-zA-Z0-9]+(?::\d+)?\}\}/g, "[GIF]");
   // Links → URL only (must run before stripping marks to avoid URL underscores matching italic)
   text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$2");
   // Strip formatting marks

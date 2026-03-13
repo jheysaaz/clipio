@@ -1,5 +1,9 @@
 import { TIMING, SENTRY_TEST_MESSAGE_TYPE } from "~/config/constants";
-import { cachedSnippetsItem, confettiEnabledItem } from "~/storage/items";
+import {
+  cachedSnippetsItem,
+  confettiEnabledItem,
+  blockedSitesItem,
+} from "~/storage/items";
 import { incrementSnippetUsage } from "~/utils/usageTracking";
 import confetti from "canvas-confetti";
 import { initSentry, captureError, captureMessage } from "~/lib/sentry";
@@ -12,6 +16,30 @@ import {
   type ContentSnippet,
   type ShortcutIndex,
 } from "~/lib/content-helpers";
+import {
+  MEDIA_GET_DATA_URL,
+  type MediaGetDataUrlResponse,
+} from "~/lib/messages";
+import { buildGifUrl } from "~/lib/giphy";
+
+/**
+ * Returns true if `hostname` is covered by any entry in `blockedPatterns`.
+ * Supports exact matches (e.g. "example.com") and wildcard subdomain
+ * patterns (e.g. "*.example.com" matches "mail.example.com" and
+ * "app.sub.example.com" but NOT bare "example.com").
+ */
+function isHostnameBlocked(
+  hostname: string,
+  blockedPatterns: string[]
+): boolean {
+  return blockedPatterns.some((pattern) => {
+    if (pattern.startsWith("*.")) {
+      const base = pattern.slice(2); // e.g. "example.com"
+      return hostname.endsWith("." + base);
+    }
+    return hostname === pattern;
+  });
+}
 
 export default defineContentScript({
   matches: ["<all_urls>"],
@@ -191,6 +219,7 @@ export default defineContentScript({
     let isExtensionValid = true;
     let confettiEnabled = true; // default on; overridden from storage in initialize()
     let justExpanded = false; // guard to skip redundant input events after expansion
+    let isBlocked = false; // true when current hostname is in blockedSites
 
     // ── Shortcut lookup index ──────────────────────────────────────────
     let shortcutIndex: ShortcutIndex = { map: new Map(), lengths: [] };
@@ -274,10 +303,15 @@ export default defineContentScript({
     // Delegates to the shared processSnippetContent helper from content-helpers,
     // injecting readClipboardText as the clipboard reader dependency.
     // On clipboard read failure, substitutes "(clipboard unavailable)" and reports to Sentry.
+    // When the snippet contains image placeholders, resolves blobs from the background
+    // service worker (which has access to the extension-origin IndexedDB).
     async function processSnippetContent(
       content: string,
       asHtml: boolean = false
-    ): Promise<{ content: string; cursorOffset: number | null }> {
+    ): Promise<{
+      content: string;
+      cursorOffset: number | null;
+    }> {
       const safeReadClipboard = (): string => {
         try {
           return readClipboardText();
@@ -287,7 +321,54 @@ export default defineContentScript({
           return "(clipboard unavailable)";
         }
       };
-      return processSnippetContentHelper(content, asHtml, safeReadClipboard);
+
+      // Build a resolveMedia function if the content has {{image:...}} placeholders.
+      // Blob reads are routed through the background service worker because
+      // content scripts in the isolated world access the PAGE's origin IDB,
+      // not the extension's origin where blobs are stored.
+      let resolveMedia:
+        | ((id: string) => { src: string; alt?: string | null } | null)
+        | undefined;
+      if (asHtml && /\{\{image:[a-f0-9-]+(?::\d+)?\}\}/.test(content)) {
+        const idMatches = [
+          ...content.matchAll(/\{\{image:([a-f0-9-]+)(?::\d+)?\}\}/g),
+        ];
+        const uniqueIds = [...new Set(idMatches.map((m) => m[1]))];
+        const blobMap = new Map<string, { src: string; alt?: string | null }>();
+        await Promise.all(
+          uniqueIds.map(async (id) => {
+            try {
+              const response = (await browser.runtime.sendMessage({
+                type: MEDIA_GET_DATA_URL,
+                mediaId: id,
+              })) as MediaGetDataUrlResponse;
+              if (response?.dataUrl) {
+                blobMap.set(id, { src: response.dataUrl, alt: response.alt });
+              } else {
+                captureMessage(
+                  "Media blob not found during content expansion",
+                  "warning",
+                  { mediaId: id }
+                );
+              }
+            } catch (err) {
+              captureError(err, { action: "resolveMedia", mediaId: id });
+            }
+          })
+        );
+        resolveMedia = (id: string) => blobMap.get(id) ?? null;
+      }
+
+      const resolveGif = (id: string) => buildGifUrl(id);
+
+      const result = processSnippetContentHelper(
+        content,
+        asHtml,
+        safeReadClipboard,
+        resolveMedia,
+        resolveGif
+      );
+      return result;
     }
 
     // Post-insertion verification: after a short delay, check the field still
@@ -324,7 +405,20 @@ export default defineContentScript({
       insertedHtml: string
     ): Promise<boolean> {
       const expectedPlain = getPlainTextFromHtml(insertedHtml);
-      if (!expectedPlain) return Promise.resolve(false);
+      if (!expectedPlain) {
+        // Image-only snippet: verify by checking whether the element gained
+        // at least one <img> element after the insertion.
+        if (/<img/i.test(insertedHtml)) {
+          return new Promise((resolve) => {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                resolve(element.querySelectorAll("img").length > 0);
+              });
+            });
+          });
+        }
+        return Promise.resolve(false);
+      }
       return new Promise((resolve) => {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
@@ -399,13 +493,14 @@ export default defineContentScript({
 
       incrementSnippetUsage(snippet.id).catch((err) => {
         console.error("Failed to increment snippet usage:", err);
+        captureError(err, { action: "incrementUsage", snippetId: snippet.id });
       });
     }
 
     // ── Event handlers ───────────────────────────────────────────────
     // Document-level listeners (capture) so we see all input/keydown/focusout.
     function handleInput(event: Event) {
-      if (!isExtensionValid) return;
+      if (!isExtensionValid || isBlocked) return;
       if (justExpanded) {
         justExpanded = false;
         return;
@@ -438,7 +533,10 @@ export default defineContentScript({
         true
       );
 
-      if (!getPlainTextFromHtml(processedContent)) return;
+      // Allow image-only snippets through — getPlainTextFromHtml returns ""
+      // for HTML with no text nodes (e.g. a single <img>), which would
+      // incorrectly drop valid image-only snippets.
+      if (!processedContent?.trim()) return;
 
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = processedContent;
@@ -484,12 +582,15 @@ export default defineContentScript({
         reportInsertionReverted("contenteditable");
       }
 
-      incrementSnippetUsage(snippet.id).catch(console.error);
+      incrementSnippetUsage(snippet.id).catch((err) => {
+        console.error("Failed to increment snippet usage:", err);
+        captureError(err, { action: "incrementUsage", snippetId: snippet.id });
+      });
     }
 
     // Handle keydown to expand immediately on Space or Tab
     function handleKeyDown(event: KeyboardEvent) {
-      if (!isExtensionValid) return;
+      if (!isExtensionValid || isBlocked) return;
       const target = event.target;
       if (!target || !(target instanceof HTMLElement)) return;
       const isInputOrTextarea =
@@ -527,7 +628,7 @@ export default defineContentScript({
 
     // Handle input events for contenteditable
     function handleContentEditableInput(event: Event) {
-      if (!isExtensionValid) return;
+      if (!isExtensionValid || isBlocked) return;
       if (justExpanded) {
         justExpanded = false;
         return;
@@ -561,8 +662,20 @@ export default defineContentScript({
       // Read confetti preference
       try {
         confettiEnabled = await confettiEnabledItem.getValue();
-      } catch {
-        // keep default true
+      } catch (err) {
+        captureMessage("Failed to read confetti preference", "warning", {
+          action: "initialize",
+        });
+      }
+
+      // Check blocked sites list — skip expansion on blocked hostnames
+      try {
+        const blockedSites = await blockedSitesItem.getValue();
+        isBlocked = isHostnameBlocked(window.location.hostname, blockedSites);
+      } catch (err) {
+        captureMessage("Failed to read blocked sites", "warning", {
+          action: "initialize",
+        });
       }
 
       await loadSnippets();
@@ -617,6 +730,12 @@ export default defineContentScript({
       confettiEnabledItem.watch((newVal: boolean) => {
         if (!checkExtensionContext()) return;
         confettiEnabled = newVal;
+      });
+
+      // Watch blocklist — dynamically block/unblock this hostname
+      blockedSitesItem.watch((newSites: string[]) => {
+        if (!checkExtensionContext()) return;
+        isBlocked = isHostnameBlocked(window.location.hostname, newSites);
       });
     }
 

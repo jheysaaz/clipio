@@ -4,6 +4,8 @@ import {
   DATE_PLACEHOLDER,
   CURSOR_PLACEHOLDER,
   DATEPICKER_PLACEHOLDER,
+  IMAGE_PLACEHOLDER,
+  GIF_PLACEHOLDER,
   LINK_ELEMENT,
 } from "./types";
 
@@ -50,6 +52,26 @@ export const CursorPlaceholderPlugin = createPlatePlugin({
 // Create a plugin for the date picker placeholder element
 export const DatepickerPlaceholderPlugin = createPlatePlugin({
   key: DATEPICKER_PLACEHOLDER,
+  node: {
+    isElement: true,
+    isInline: true,
+    isVoid: true,
+  },
+});
+
+// Create a plugin for the image placeholder element
+export const ImagePlaceholderPlugin = createPlatePlugin({
+  key: IMAGE_PLACEHOLDER,
+  node: {
+    isElement: true,
+    isInline: true,
+    isVoid: true,
+  },
+});
+
+// Create a plugin for the GIF placeholder element
+export const GifPlaceholderPlugin = createPlatePlugin({
+  key: GIF_PLACEHOLDER,
   node: {
     isElement: true,
     isInline: true,

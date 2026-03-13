@@ -1,4 +1,4 @@
-extName: "Clipio: Snippets Manager"
+extName: "Clipio — Snippets Manager"
 extDescription: "A powerful browser extension for managing and inserting snippets with lightning speed and increase your productivity."
 
 common:
@@ -6,6 +6,7 @@ common:
   showSidebar: Show sidebar
   cancel: Cancel
   closeModal: Close
+  save: Save
 
 dashboard:
   searchPlaceholder: Search snippets...
@@ -79,6 +80,11 @@ snippetDetail:
     message: 'Are you sure you want to delete "$1"? This action cannot be undone.'
     confirm: Delete
     cancel: Cancel
+  unsavedChanges:
+    title: Unsaved changes
+    message: You have unsaved changes. If you switch snippets now, your changes will be lost.
+    discard: Discard changes
+    keepEditing: Keep editing
   errors:
     failedToCopy: Failed to copy to clipboard
     failedToSave: Failed to save snippet. Please try again.
@@ -99,6 +105,8 @@ options:
     importExport: Import & Export
     feedback: Feedback
     appearance: Appearance
+    images: Images
+    developers: Developers
   theme:
     darkMode: Dark mode
     lightMode: Light mode
@@ -128,6 +136,18 @@ options:
     title: General
     description: General settings will appear here in a future update.
     comingSoon: Coming soon
+    blockedSites:
+      title: Blocked Sites
+      description: Clipio snippet expansion is disabled on these sites. Right-click on any page → Clipio → Hide on this site to add from the browser.
+      addPlaceholder: "e.g. example.com or *.slack.com"
+      addButton: Add site
+      empty: No sites blocked yet.
+      remove: Remove
+      removed: Site removed
+      added: Site added
+      errorDuplicate: This site is already blocked.
+      errorInvalid: Enter a valid hostname (e.g. example.com or *.slack.com).
+      wildcardTip: "Use *.example.com to block all subdomains of a site (e.g. *.slack.com blocks app.slack.com, team.slack.com, etc.)."
   feedback:
     title: Feedback
     description: Help us improve Clipio by sharing your thoughts, suggestions, or bug reports. Your feedback is valuable!
@@ -153,7 +173,7 @@ options:
     cardAction: Send Feedback
   importExport:
     title: Import & Export
-    description: Import snippets from Clipio or TextBlaze exports, or download a backup of your current library.
+    description: Import snippets from Clipio or another tools exports, or download a backup of your current library.
     exportCard:
       title: Export snippets
       description: Download your snippet library as a JSON file. Compatible with Clipio on any device.
@@ -161,7 +181,7 @@ options:
       exported: Exported!
     importCard:
       title: Import snippets
-      description: Import from a Clipio or TextBlaze export file. Conflicts and unsupported placeholders are resolved step-by-step.
+      description: Import from a Clipio or other tools export file. Conflicts and unsupported placeholders are resolved step-by-step.
       button: Import
       successMessage:
         1: "✓ 1 snippet imported successfully."
@@ -175,6 +195,44 @@ options:
       action: Export a backup →
   errors:
     failedExport: Failed to export snippets.
+  images:
+    title: Images
+    description: Manage all images stored in your snippets.
+    empty: No images stored yet. Images are added when you insert them into a snippet.
+    loading: Loading images...
+    totalStorage: Total image storage
+    viewList: List view
+    viewGrid: Grid view
+    deleteButton: Delete
+    deleteConfirmTitle: Delete image?
+    deleteConfirmMessage: "Deleting this image will break $1 snippet(s) that reference it. This action cannot be undone."
+    deleteConfirmMessageNoRefs: This action cannot be undone.
+    referencedBy: "Used in: $1"
+    noReferences: Not used in any snippets
+    dimensions: "$1 × $2"
+    errors:
+      failedToLoad: Failed to load images.
+      failedToDelete: Failed to delete image. Please try again.
+      failedToSaveDescription: Failed to save description. Please try again.
+    altText:
+      label: Description
+      placeholder: Add a description (used as alt text)
+      saved: Description saved
+  developers:
+    title: Developers
+    description: Advanced settings for power users and developers.
+    giphyApiKey:
+      title: Giphy API Key
+      description: Override the default Giphy API key with your own. Leave empty to use the bundled key.
+      placeholder: Enter your Giphy API key
+      reset: Reset to default
+      saved: API key saved
+    blockedSites:
+      title: Blocked Sites
+      description: Clipio snippet expansion is disabled on these sites.
+      empty: "No sites blocked. Right-click on any page → Clipio → Hide on this site."
+      remove: Remove
+      removed: Site removed from blocklist
 
 importWizard:
   steps:
@@ -183,7 +241,7 @@ importWizard:
     conflicts: Conflicts
     confirm: Confirm
   upload:
-    dropHere: Drop a JSON file here
+    dropHere: Drop a JSON or ZIP file here
     clickToBrowse: or click to browse
     clickToChange: Click to change file
     detectedFormat: "Detected format:"
@@ -219,6 +277,8 @@ importWizard:
     newShortcutPlaceholder: new/shortcut
   confirm:
     snippetsToImport: Snippets to import
+    imagesIncluded: Images included
+    missingImagesWarning: "Some images from the ZIP could not be found and will be missing after import."
     overwritingExisting: Overwriting existing
     importedWithRename: Imported with renamed shortcut
     skippedConflicts: "Skipped (conflicts)"
@@ -252,6 +312,8 @@ editor:
     removeLink: Remove link
     confirmLink: Insert link
     urlPlaceholder: "https://..."
+    insertImage: Insert image
+    insertGif: Insert GIF
   slashMenu:
     header: Commands
     noMatches: No matching commands
@@ -268,9 +330,47 @@ editor:
     datepicker:
       label: Pick Date
       description: Choose any date from calendar
+    image:
+      label: Image
+      description: Insert an image from your device
+    gif:
+      label: GIF
+      description: Search and insert a GIF from Giphy
 
 contextMenu:
   saveSelection: Save selection as snippet
   createSnippet: Create new snippet
   openDashboard: Open Clipio
   giveFeedback: Give feedback
+  hideOnThisSite: Hide on this site
+
+gifPicker:
+  searchPlaceholder: Search GIFs...
+  trending: Trending
+  noResults: No GIFs found for "$1"
+  loading: Loading GIFs...
+  loadMore: Load more
+  retry: Retry
+  error: Failed to load GIFs. Please try again.
+  poweredBy: Powered by GIPHY
+  apiKeyMissing: Giphy API key not configured. Add it in Options > Developers.
+
+imagePlaceholder:
+  loading: Loading image...
+  error: Image not found
+  tooltip: Image ($1)
+
+gifPlaceholder:
+  error: GIF unavailable
+  retry: Retry
+  poweredBy: Powered by GIPHY
+
+mediaControls:
+  delete: Remove
+  resize: Drag to resize
+
+imageUpload:
+  tooLarge: "Image is too large. Maximum size is $1 MB."
+  unsupportedType: "Unsupported file type. Please use JPEG, PNG, WebP, or GIF."
+  storageFull: "Image storage is full. Delete some images to free up space."
+  failed: Failed to save image. Please try again.

@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import SnippetListItem from "~/components/SnippetListItem";
+import ConfirmDialog from "~/components/ConfirmDialog";
 const SnippetDetailView = lazy(() => import("~/components/SnippetDetailView"));
 const NewSnippetView = lazy(() => import("~/components/NewSnippetView"));
 import { Alert, AlertDescription, AlertAction } from "~/components/ui/alert";
@@ -49,6 +50,7 @@ import {
   contextMenuDraftItem,
 } from "~/storage/items";
 import { captureError } from "~/lib/sentry";
+import { selectNewest } from "~/lib/snippetUtils";
 
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -74,6 +76,8 @@ export default function Dashboard() {
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const isResizing = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const detailHasChanges = useRef(false);
+  const [pendingSnippet, setPendingSnippet] = useState<Snippet | null>(null);
 
   const handleDismissUninstallWarning = useCallback(() => {
     setShowUninstallWarning(false);
@@ -114,7 +118,7 @@ export default function Dashboard() {
         setLoading(true);
         const list = await getSnippets();
         setSnippets(list);
-        if (list.length > 0) setSelectedSnippet(list[0]);
+        setSelectedSnippet(selectNewest(list));
 
         // Check if we're already in local-fallback mode
         const status = await getStorageStatus();
@@ -140,7 +144,7 @@ export default function Dashboard() {
           await contextMenuDraftItem.removeValue();
           setDraftSnippet({
             label: "",
-            shortcut: "",
+            shortcut: "/",
             content: draft,
             tags: [],
           });
@@ -184,15 +188,15 @@ export default function Dashboard() {
   // -------------------------------------------------------------------------
 
   const handleAddSnippet = () => {
-    setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
+    setDraftSnippet({ label: "", shortcut: "/", content: "", tags: [] });
     setSelectedSnippet(null);
     setIsCreating(true);
   };
 
   const handleCancelCreate = () => {
     setIsCreating(false);
-    setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
-    if (snippets.length > 0) setSelectedSnippet(snippets[0]);
+    setDraftSnippet({ label: "", shortcut: "/", content: "", tags: [] });
+    setSelectedSnippet(selectNewest(snippets));
   };
 
   const handleSaveNewSnippet = async () => {
@@ -228,6 +232,7 @@ export default function Dashboard() {
           setCreateError(i18n.t("dashboard.errors.failedToCreate"));
         }
       } else {
+        captureError(err, { action: "saveSnippet" });
         setCreateError(i18n.t("dashboard.errors.failedToCreate"));
       }
     } finally {
@@ -241,7 +246,7 @@ export default function Dashboard() {
       const newList = snippets.filter((s) => s.id !== snippetId);
       setSnippets(newList);
       if (selectedSnippet?.id === snippetId) {
-        setSelectedSnippet(newList.length > 0 ? newList[0] : null);
+        setSelectedSnippet(selectNewest(newList));
       }
     } catch (err) {
       console.error("[Clipio] Failed to delete snippet:", err);
@@ -268,16 +273,18 @@ export default function Dashboard() {
   // Filtering & keyboard navigation
   // -------------------------------------------------------------------------
 
-  const filteredSnippets = snippets.filter((snippet) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      snippet.label.toLowerCase().includes(q) ||
-      snippet.content.toLowerCase().includes(q) ||
-      snippet.shortcut.toLowerCase().includes(q) ||
-      snippet.tags?.some((t) => t.toLowerCase().includes(q))
-    );
-  });
+  const filteredSnippets = snippets
+    .filter((snippet) => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        snippet.label.toLowerCase().includes(q) ||
+        snippet.content.toLowerCase().includes(q) ||
+        snippet.shortcut.toLowerCase().includes(q) ||
+        snippet.tags?.some((t) => t.toLowerCase().includes(q))
+      );
+    })
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   const handleKeyboardNavigation = useCallback(
     (e: KeyboardEvent) => {
@@ -351,7 +358,7 @@ export default function Dashboard() {
                 await bulkSaveSnippets(recoverySnippets);
                 const list = await getSnippets();
                 setSnippets(list);
-                if (list.length > 0) setSelectedSnippet(list[0]);
+                setSelectedSnippet(selectNewest(list));
                 setShowRecoveryBanner(false);
               } catch (err) {
                 console.error("[Clipio] Recovery failed:", err);
@@ -510,6 +517,11 @@ export default function Dashboard() {
                         selectedSnippet?.id === snippet.id && !isCreating
                       }
                       onClick={() => {
+                        const target = snippet;
+                        if (detailHasChanges.current) {
+                          setPendingSnippet(target);
+                          return;
+                        }
                         if (isCreating) {
                           setIsCreating(false);
                           setDraftSnippet({
@@ -519,7 +531,7 @@ export default function Dashboard() {
                             tags: [],
                           });
                         }
-                        setSelectedSnippet(snippet);
+                        setSelectedSnippet(target);
                       }}
                       onUpdate={handleUpdateSnippet}
                     />
@@ -590,6 +602,9 @@ export default function Dashboard() {
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
                 uninstallWarning={showUninstallWarning}
                 onDismissUninstallWarning={handleDismissUninstallWarning}
+                onHasChanges={(v) => {
+                  detailHasChanges.current = v;
+                }}
               />
             </Suspense>
           ) : snippets.length === 0 && !loading ? (
@@ -711,6 +726,24 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Unsaved changes guard */}
+      <ConfirmDialog
+        isOpen={pendingSnippet !== null}
+        onClose={() => setPendingSnippet(null)}
+        onConfirm={() => {
+          if (pendingSnippet) {
+            detailHasChanges.current = false;
+            setSelectedSnippet(pendingSnippet);
+            setPendingSnippet(null);
+          }
+        }}
+        title={i18n.t("snippetDetail.unsavedChanges.title")}
+        message={i18n.t("snippetDetail.unsavedChanges.message")}
+        confirmText={i18n.t("snippetDetail.unsavedChanges.discard")}
+        cancelText={i18n.t("snippetDetail.unsavedChanges.keepEditing")}
+        confirmVariant="danger"
+      />
     </div>
   );
 }

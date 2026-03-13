@@ -4,6 +4,8 @@ import {
   DATE_PLACEHOLDER,
   CURSOR_PLACEHOLDER,
   DATEPICKER_PLACEHOLDER,
+  IMAGE_PLACEHOLDER,
+  GIF_PLACEHOLDER,
   LINK_ELEMENT,
 } from "./types";
 
@@ -16,6 +18,9 @@ const REGEX_PATTERNS = {
   date: /^\{\{date:(iso|us|eu|long|short)\}\}/,
   cursor: /^\{\{cursor\}\}/,
   datepicker: /^\{\{datepicker:(\d{4}-\d{2}-\d{2})\}\}/,
+  // Width suffix (:NNN) is optional — matches both {{image:uuid}} and {{image:uuid:200}}
+  image: /^\{\{image:([a-f0-9-]+)(?::(\d+))?\}\}/,
+  gif: /^\{\{gif:([a-zA-Z0-9]+)(?::(\d+))?\}\}/,
   link: /^\[([^\]]+)\]\(([^)]+)\)/,
   bold: /^\*\*([^*]+)\*\*/,
   italic: /^_([^_]+)_/,
@@ -23,7 +28,7 @@ const REGEX_PATTERNS = {
   code: /^`([^`]+)`/,
   underline: /^<u>([^<]+)<\/u>/,
   nextSpecial:
-    /\[(?=[^\]]+\]\([^)]+\))|\*\*|_(?!_)|~~|`|<u>|\{\{clipboard\}\}|\{\{date:|\{\{cursor\}\}|\{\{datepicker:/,
+    /\[(?=[^\]]+\]\([^)]+\))|\*\*|_(?!_)|~~|`|<u>|\{\{clipboard\}\}|\{\{date:|\{\{cursor\}\}|\{\{datepicker:|\{\{image:|\{\{gif:/,
   htmlTags: /<[a-z][\s\S]*>/i,
 } as const;
 
@@ -77,6 +82,18 @@ function serializeNode(node: Descendant): string {
   if (element.type === DATEPICKER_PLACEHOLDER) {
     const date = (element as TElement & { date?: string }).date || "";
     return `{{datepicker:${date}}}`;
+  }
+
+  if (element.type === IMAGE_PLACEHOLDER) {
+    const mediaId = (element as TElement & { mediaId?: string }).mediaId || "";
+    const width = (element as TElement & { width?: number }).width;
+    return width ? `{{image:${mediaId}:${width}}}` : `{{image:${mediaId}}}`;
+  }
+
+  if (element.type === GIF_PLACEHOLDER) {
+    const giphyId = (element as TElement & { giphyId?: string }).giphyId || "";
+    const width = (element as TElement & { width?: number }).width;
+    return width ? `{{gif:${giphyId}:${width}}}` : `{{gif:${giphyId}}}`;
   }
 
   if (element.type === LINK_ELEMENT) {
@@ -168,6 +185,34 @@ function parseMarkdownInline(text: string): Descendant[] {
         children: [{ text: "" }],
       } as TElement & { date: string });
       remaining = remaining.slice(datepickerMatch[0].length);
+      continue;
+    }
+
+    // Check for image placeholder {{image:<uuid>}} or {{image:<uuid>:<width>}}
+    const imageMatch = remaining.match(REGEX_PATTERNS.image);
+    if (imageMatch) {
+      const width = imageMatch[2] ? parseInt(imageMatch[2], 10) : undefined;
+      nodes.push({
+        type: IMAGE_PLACEHOLDER,
+        mediaId: imageMatch[1],
+        ...(width ? { width } : {}),
+        children: [{ text: "" }],
+      } as TElement & { mediaId: string; width?: number });
+      remaining = remaining.slice(imageMatch[0].length);
+      continue;
+    }
+
+    // Check for gif placeholder {{gif:<giphyId>}} or {{gif:<giphyId>:<width>}}
+    const gifMatch = remaining.match(REGEX_PATTERNS.gif);
+    if (gifMatch) {
+      const width = gifMatch[2] ? parseInt(gifMatch[2], 10) : undefined;
+      nodes.push({
+        type: GIF_PLACEHOLDER,
+        giphyId: gifMatch[1],
+        ...(width ? { width } : {}),
+        children: [{ text: "" }],
+      } as TElement & { giphyId: string; width?: number });
+      remaining = remaining.slice(gifMatch[0].length);
       continue;
     }
 

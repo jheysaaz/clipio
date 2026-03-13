@@ -152,6 +152,18 @@ export default defineConfig({
           branches: 75,
           statements: 80,
         },
+        "src/storage/backends/media.ts": {
+          lines: 85,
+          functions: 85,
+          branches: 80,
+          statements: 85,
+        },
+        "src/lib/giphy.ts": {
+          lines: 85,
+          functions: 85,
+          branches: 80,
+          statements: 85,
+        },
         "src/utils/usageTracking.ts": {
           lines: 85,
           functions: 85,

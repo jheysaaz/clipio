@@ -7,6 +7,8 @@ import {
   Code,
   Link,
   Unlink,
+  ImageIcon,
+  Film,
 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
@@ -16,7 +18,15 @@ import type { TElement } from "platejs";
 import { LINK_ELEMENT } from "../types";
 import { i18n } from "#i18n";
 
-export function FloatingToolbar() {
+interface FloatingToolbarProps {
+  onInsertImage?: () => void;
+  onInsertGif?: () => void;
+}
+
+export function FloatingToolbar({
+  onInsertImage,
+  onInsertGif,
+}: FloatingToolbarProps) {
   const editor = useEditorRef();
   const editorId = editor.uid || "plate-editor";
   const focusedEditorId = editorId;
@@ -30,6 +40,9 @@ export function FloatingToolbar() {
     focusedEditorId,
     hideToolbar: false,
     showWhenReadOnly: false,
+    floatingOptions: {
+      strategy: "fixed",
+    },
   });
 
   const { ref, props, hidden } = useFloatingToolbar(floatingState);
@@ -283,6 +296,35 @@ export function FloatingToolbar() {
               <Link className="h-3.5 w-3.5" strokeWidth={2} />
             )}
           </Button>
+          {(onInsertImage || onInsertGif) && (
+            <div className="w-px h-4 bg-border mx-0.5" />
+          )}
+          {onInsertImage && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={onInsertImage}
+              title={i18n.t("editor.toolbar.insertImage")}
+              aria-label={i18n.t("editor.toolbar.insertImage")}
+              type="button"
+            >
+              <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} />
+            </Button>
+          )}
+          {onInsertGif && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={onInsertGif}
+              title={i18n.t("editor.toolbar.insertGif")}
+              aria-label={i18n.t("editor.toolbar.insertGif")}
+              type="button"
+            >
+              <Film className="h-3.5 w-3.5" strokeWidth={2} />
+            </Button>
+          )}
         </>
       )}
     </div>

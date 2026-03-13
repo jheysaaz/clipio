@@ -1,4 +1,4 @@
-extName: "Clipio: Gestor de Fragmentos"
+extName: "Clipio — Gestor de Fragmentos"
 extDescription: "Una potente extensión de navegador para gestionar e insertar fragmentos de texto con velocidad y aumentar tu productividad."
 
 common:
@@ -6,6 +6,7 @@ common:
   showSidebar: Mostrar barra lateral
   cancel: Cancelar
   closeModal: Cerrar
+  save: Guardar
 
 dashboard:
   searchPlaceholder: Buscar fragmentos...
@@ -79,6 +80,11 @@ snippetDetail:
     message: '¿Estás seguro de que quieres eliminar "$1"? Esta acción no se puede deshacer.'
     confirm: Eliminar
     cancel: Cancelar
+  unsavedChanges:
+    title: Cambios sin guardar
+    message: Tienes cambios sin guardar. Si cambias de fragmento ahora, perderás los cambios.
+    discard: Descartar cambios
+    keepEditing: Seguir editando
   errors:
     failedToCopy: Error al copiar al portapapeles
     failedToSave: Error al guardar el fragmento. Por favor, inténtalo de nuevo.
@@ -99,6 +105,8 @@ options:
     importExport: Importar y Exportar
     feedback: Comentarios
     appearance: Apariencia
+    images: Imágenes
+    developers: Desarrolladores
   theme:
     darkMode: Modo oscuro
     lightMode: Modo claro
@@ -128,6 +136,18 @@ options:
     title: General
     description: Los ajustes generales aparecerán aquí en una actualización futura.
     comingSoon: Próximamente
+    blockedSites:
+      title: Sitios bloqueados
+      description: La expansión de fragmentos de Clipio está desactivada en estos sitios. Haz clic derecho en cualquier página → Clipio → Ocultar en este sitio para añadir desde el navegador.
+      addPlaceholder: "Ej: ejemplo.com o *.slack.com"
+      addButton: Añadir sitio
+      empty: Aún no hay sitios bloqueados.
+      remove: Eliminar
+      removed: Sitio eliminado
+      added: Sitio añadido
+      errorDuplicate: Este sitio ya está bloqueado.
+      errorInvalid: Introduce un dominio válido (ej. ejemplo.com o *.slack.com).
+      wildcardTip: "Usa *.ejemplo.com para bloquear todos los subdominios de un sitio (p. ej. *.slack.com bloquea app.slack.com, team.slack.com, etc.)."
   feedback:
     title: Comentarios
     description: ¡Ayúdanos a mejorar Clipio compartiendo tus opiniones, sugerencias o reportes de errores! ¡Tus comentarios son valiosos!
@@ -153,7 +173,7 @@ options:
     cardAction: Enviar comentarios
   importExport:
     title: Importar y Exportar
-    description: Importa fragmentos desde exportaciones de Clipio o TextBlaze, o descarga una copia de seguridad de tu biblioteca actual.
+    description: Importa fragmentos desde exportaciones de Clipio u otras herramientas, o descarga una copia de seguridad de tu biblioteca actual.
     exportCard:
       title: Exportar fragmentos
       description: Descarga tu biblioteca de fragmentos como un archivo JSON. Compatible con Clipio en cualquier dispositivo.
@@ -161,7 +181,7 @@ options:
       exported: "¡Exportado!"
     importCard:
       title: Importar fragmentos
-      description: Importa desde un archivo de exportación de Clipio o TextBlaze. Los conflictos y marcadores no compatibles se resuelven paso a paso.
+      description: Importa desde un archivo de exportación de Clipio u otras herramientas. Los conflictos y marcadores no compatibles se resuelven paso a paso.
       button: Importar
       successMessage:
         1: "✓ 1 fragmento importado correctamente."
@@ -175,6 +195,44 @@ options:
       action: Exportar una copia de seguridad →
   errors:
     failedExport: Error al exportar los fragmentos.
+  images:
+    title: Imágenes
+    description: Administra todas las imágenes almacenadas en tus fragmentos.
+    empty: Aún no hay imágenes almacenadas. Las imágenes se añaden cuando las insertas en un fragmento.
+    loading: Cargando imágenes...
+    totalStorage: Almacenamiento total de imágenes
+    viewList: Vista de lista
+    viewGrid: Vista de cuadrícula
+    deleteButton: Eliminar
+    deleteConfirmTitle: "¿Eliminar imagen?"
+    deleteConfirmMessage: "Eliminar esta imagen romperá $1 fragmento(s) que la referencian. Esta acción no se puede deshacer."
+    deleteConfirmMessageNoRefs: Esta acción no se puede deshacer.
+    referencedBy: "Usada en: $1"
+    noReferences: No se usa en ningún fragmento
+    dimensions: "$1 × $2"
+    errors:
+      failedToLoad: Error al cargar las imágenes.
+      failedToDelete: Error al eliminar la imagen. Por favor, inténtalo de nuevo.
+      failedToSaveDescription: Error al guardar la descripción. Por favor, inténtalo de nuevo.
+    altText:
+      label: Descripción
+      placeholder: Añade una descripción (se usa como texto alternativo)
+      saved: Descripción guardada
+  developers:
+    title: Desarrolladores
+    description: Configuraciones avanzadas para usuarios avanzados y desarrolladores.
+    giphyApiKey:
+      title: Clave API de Giphy
+      description: Reemplaza la clave API de Giphy predeterminada con la tuya. Deja vacío para usar la clave incluida.
+      placeholder: Introduce tu clave API de Giphy
+      reset: Restablecer valor predeterminado
+      saved: Clave API guardada
+    blockedSites:
+      title: Sitios bloqueados
+      description: La expansión de fragmentos de Clipio está desactivada en estos sitios.
+      empty: "No hay sitios bloqueados. Haz clic derecho en cualquier página → Clipio → Ocultar en este sitio."
+      remove: Eliminar
+      removed: Sitio eliminado de la lista de bloqueo
 
 importWizard:
   steps:
@@ -183,7 +241,7 @@ importWizard:
     conflicts: Conflictos
     confirm: Confirmar
   upload:
-    dropHere: Suelta un archivo JSON aquí
+    dropHere: Suelta un archivo JSON o ZIP aquí
     clickToBrowse: o haz clic para buscar
     clickToChange: Haz clic para cambiar el archivo
     detectedFormat: "Formato detectado:"
@@ -219,6 +277,8 @@ importWizard:
     newShortcutPlaceholder: nuevo/atajo
   confirm:
     snippetsToImport: Fragmentos a importar
+    imagesIncluded: Imágenes incluidas
+    missingImagesWarning: "Algunas imágenes del ZIP no se pudieron encontrar y faltarán después de la importación."
     overwritingExisting: Sobreescribiendo existentes
     importedWithRename: Importado con atajo renombrado
     skippedConflicts: "Omitidos (conflictos)"
@@ -252,6 +312,8 @@ editor:
     removeLink: Eliminar enlace
     confirmLink: Insertar enlace
     urlPlaceholder: "https://..."
+    insertImage: Insertar imagen
+    insertGif: Insertar GIF
   slashMenu:
     header: Comandos
     noMatches: Sin comandos coincidentes
@@ -268,9 +330,47 @@ editor:
     datepicker:
       label: Elegir fecha
       description: Elegir cualquier fecha del calendario
+    image:
+      label: Imagen
+      description: Insertar una imagen desde tu dispositivo
+    gif:
+      label: GIF
+      description: Buscar e insertar un GIF de Giphy
 
 contextMenu:
   saveSelection: Guardar selección como fragmento
   createSnippet: Crear nuevo fragmento
   openDashboard: Abrir Clipio
   giveFeedback: Enviar comentarios
+  hideOnThisSite: Ocultar en este sitio
+
+gifPicker:
+  searchPlaceholder: Buscar GIFs...
+  trending: Tendencias
+  noResults: No se encontraron GIFs para "$1"
+  loading: Cargando GIFs...
+  loadMore: Cargar más
+  retry: Reintentar
+  error: Error al cargar GIFs. Por favor, inténtalo de nuevo.
+  poweredBy: Desarrollado por GIPHY
+  apiKeyMissing: Clave API de Giphy no configurada. Agrégala en Opciones > Desarrolladores.
+
+imagePlaceholder:
+  loading: Cargando imagen...
+  error: Imagen no encontrada
+  tooltip: Imagen ($1)
+
+gifPlaceholder:
+  error: GIF no disponible
+  retry: Reintentar
+  poweredBy: Desarrollado por GIPHY
+
+mediaControls:
+  delete: Eliminar
+  resize: Arrastra para cambiar el tamaño
+
+imageUpload:
+  tooLarge: "La imagen es demasiado grande. El tamaño máximo es $1 MB."
+  unsupportedType: "Tipo de archivo no compatible. Usa JPEG, PNG, WebP o GIF."
+  storageFull: "El almacenamiento de imágenes está lleno. Elimina algunas imágenes para liberar espacio."
+  failed: Error al guardar la imagen. Por favor, inténtalo de nuevo.
