@@ -26,3 +26,4 @@ export const bulkSaveSnippets = (snippets: import("~/types").Snippet[]) =>
   manager.bulkSaveSnippets(snippets);
 export const tryRecoverFromBackup = () => manager.tryRecoverFromBackup();
 export const clearSyncDataLostFlag = () => manager.clearSyncDataLostFlag();
+export const clearIDBBackup = () => manager.clearIDBBackup();

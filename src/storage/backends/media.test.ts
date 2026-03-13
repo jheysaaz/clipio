@@ -467,6 +467,38 @@ describe("compressMedia", () => {
     vi.unstubAllGlobals();
   });
 
+  it("replaces JPEG with smaller WebP when OffscreenCanvas is available", async () => {
+    // Same code path as PNG — compressMedia treats JPEG identically
+    const entry = await saveMedia(makeBlob(100, "image/jpeg"));
+
+    const smallerBlob = new Blob([new Uint8Array(10)], { type: "image/webp" });
+    const mockBitmap = { width: 10, height: 10, close: vi.fn() };
+    const mockCtx = { drawImage: vi.fn() };
+    const mockCanvas = {
+      getContext: vi.fn(() => mockCtx),
+      convertToBlob: vi.fn(async () => smallerBlob),
+    };
+
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => mockBitmap)
+    );
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      vi.fn(function () {
+        return mockCanvas;
+      })
+    );
+
+    await compressMedia(entry.id);
+
+    const after = await getMedia(entry.id);
+    expect(after!.mimeType).toBe("image/webp");
+    expect(after!.size).toBe(10);
+
+    vi.unstubAllGlobals();
+  });
+
   it("skips replacement when WebP result is not smaller", async () => {
     const entry = await saveMedia(makeBlob(100, "image/png"));
 

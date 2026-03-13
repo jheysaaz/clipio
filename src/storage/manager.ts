@@ -155,6 +155,15 @@ export class StorageManager {
     await this.persistSnippets(snippets);
   }
 
+  /**
+   * Clear all snippets from the IndexedDB backup store.
+   * Used by the Developers section to let power users wipe the IDB backup
+   * without affecting the primary sync/local storage.
+   */
+  async clearIDBBackup(): Promise<void> {
+    await this.idb.clear();
+  }
+
   // -------------------------------------------------------------------------
   // Export / Import
   // -------------------------------------------------------------------------

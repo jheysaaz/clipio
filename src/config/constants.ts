@@ -42,6 +42,15 @@ export const TIMING = {
 /** Runtime message type for dev-only Sentry test (content script). */
 export const SENTRY_TEST_MESSAGE_TYPE = "clipio-test-sentry" as const;
 
+/** Runtime message type for content-script ping/health-check (always-on). */
+export const CONTENT_SCRIPT_PING_MESSAGE_TYPE = "clipio-ping" as const;
+
+/** Alarm name for the periodic update check (fires every 6 hours). */
+export const UPDATE_CHECK_ALARM_NAME = "clipio-update-check" as const;
+
+/** How often to check for updates (minutes). */
+export const UPDATE_CHECK_INTERVAL_MINUTES = 360 as const;
+
 /** Context-menu item IDs. */
 export const CONTEXT_MENU = {
   PARENT: "clipio-parent",

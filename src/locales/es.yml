@@ -42,6 +42,9 @@ dashboard:
       action:
         1: Restaurar 1 fragmento
         n: Restaurar $1 fragmentos
+    updateAvailable:
+      body: "Hay una nueva versión de Clipio disponible: $1"
+      action: Ver lanzamiento
   errors:
     failedToLoad: Error al cargar los fragmentos.
     failedToCreate: Error al crear el fragmento. Por favor, inténtalo de nuevo.
@@ -233,6 +236,38 @@ options:
       empty: "No hay sitios bloqueados. Haz clic derecho en cualquier página → Clipio → Ocultar en este sitio."
       remove: Eliminar
       removed: Sitio eliminado de la lista de bloqueo
+    versionUpdate:
+      title: Versión y actualizaciones
+      description: Versión instalada actualmente y actualizaciones disponibles.
+      currentVersion: "Versión: $1"
+      updateAvailable: "Nueva versión disponible: $1"
+      openRelease: Ver lanzamiento
+      upToDate: Al día
+    contentScriptHealth:
+      title: Estado del script de contenido
+      description: Hacer ping al script de contenido de la pestaña activa para verificar que está en ejecución.
+      pingButton: Hacer ping al script
+      pinging: Enviando ping...
+      pong: Pong — el script de contenido está activo
+      errorNoTab: No se encontró pestaña activa
+      errorNoContentScript: No se encontró script de contenido en esta pestaña
+      errorGeneric: Ping fallido
+    storageMode:
+      title: Modo de almacenamiento y cuota
+      description: Backend de almacenamiento actual y uso estimado de la cuota de sincronización.
+      mode: "Backend activo: $1"
+      syncUsed: "Sincronización usada: $1 / $2 bytes"
+    topUsage:
+      title: Top 5 de uso
+      description: Los cinco fragmentos más usados por número de inserciones.
+      empty: Sin datos de uso todavía.
+      count: "$1 usos"
+    clearIdb:
+      title: Limpiar copia de seguridad IDB
+      description: Eliminar el almacén de copia de seguridad de fragmentos de IndexedDB. Úsalo para restablecer la copia de seguridad local tras una reinstalación limpia.
+      button: Limpiar copia de seguridad
+      confirm: Confirmar limpieza
+      cleared: Limpiado
 
 importWizard:
   steps:
@@ -374,3 +409,8 @@ imageUpload:
   unsupportedType: "Tipo de archivo no compatible. Usa JPEG, PNG, WebP o GIF."
   storageFull: "El almacenamiento de imágenes está lleno. Elimina algunas imágenes para liberar espacio."
   failed: Error al guardar la imagen. Por favor, inténtalo de nuevo.
+
+background:
+  updateAvailable:
+    title: Actualización de Clipio disponible
+    message: "La versión $1 ya está disponible. Haz clic para ver el lanzamiento."

@@ -122,7 +122,16 @@ export const mockStorageLocal = {
 export const mockRuntime = {
   id: "test-extension-id",
   sendMessage: vi.fn(async () => undefined),
+  getManifest: vi.fn(() => ({
+    name: "Clipio",
+    version: "0.0.0",
+    manifest_version: 3,
+  })),
   onMessage: {
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+  },
+  onInstalled: {
     addListener: vi.fn(),
     removeListener: vi.fn(),
   },
@@ -201,6 +210,7 @@ export function resetBrowserMocks() {
   mockStorageLocal.getBytesInUse.mockClear();
 
   mockRuntime.sendMessage.mockClear();
+  mockRuntime.getManifest.mockClear();
   mockRuntime.onMessage.addListener.mockClear();
   mockRuntime.onMessage.removeListener.mockClear();
 }

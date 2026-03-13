@@ -42,6 +42,9 @@ dashboard:
       action:
         1: Restore 1 snippet
         n: Restore $1 snippets
+    updateAvailable:
+      body: "A new version of Clipio is available: $1"
+      action: View release
   errors:
     failedToLoad: Failed to load snippets.
     failedToCreate: Failed to create snippet. Please try again.
@@ -233,6 +236,38 @@ options:
       empty: "No sites blocked. Right-click on any page → Clipio → Hide on this site."
       remove: Remove
       removed: Site removed from blocklist
+    versionUpdate:
+      title: Extension Version & Update
+      description: Current installed version and available updates.
+      currentVersion: "Version: $1"
+      updateAvailable: "New version available: $1"
+      openRelease: View release
+      upToDate: Up to date
+    contentScriptHealth:
+      title: Content Script Health
+      description: Ping the active tab's content script to verify it is running.
+      pingButton: Ping content script
+      pinging: Pinging...
+      pong: Pong — content script is active
+      errorNoTab: No active tab found
+      errorNoContentScript: No content script found in this tab
+      errorGeneric: Ping failed
+    storageMode:
+      title: Storage Mode & Quota
+      description: Current storage backend and estimated sync quota usage.
+      mode: "Active backend: $1"
+      syncUsed: "Sync used: $1 / $2 bytes"
+    topUsage:
+      title: Top 5 Usage
+      description: The five most-used snippets by insertion count.
+      empty: No usage data yet.
+      count: "$1 uses"
+    clearIdb:
+      title: Clear IDB Backup
+      description: Wipe the IndexedDB snippets backup store. Use this to reset the local backup after a clean reinstall.
+      button: Clear backup
+      confirm: Confirm clear
+      cleared: Cleared
 
 importWizard:
   steps:
@@ -374,3 +409,8 @@ imageUpload:
   unsupportedType: "Unsupported file type. Please use JPEG, PNG, WebP, or GIF."
   storageFull: "Image storage is full. Delete some images to free up space."
   failed: Failed to save image. Please try again.
+
+background:
+  updateAvailable:
+    title: Clipio update available
+    message: "Version $1 is now available. Click to view the release."

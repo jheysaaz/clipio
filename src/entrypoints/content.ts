@@ -1,4 +1,8 @@
-import { TIMING, SENTRY_TEST_MESSAGE_TYPE } from "~/config/constants";
+import {
+  TIMING,
+  SENTRY_TEST_MESSAGE_TYPE,
+  CONTENT_SCRIPT_PING_MESSAGE_TYPE,
+} from "~/config/constants";
 import {
   cachedSnippetsItem,
   confettiEnabledItem,
@@ -49,6 +53,29 @@ export default defineContentScript({
     // ── Sentry (content script) ───────────────────────────────────────
     // Relay transport forwards envelopes via background when host CSP blocks fetch.
     initSentry("content", { transport: makeRelayTransport });
+
+    // ── Always-on ping handler ────────────────────────────────────────
+    // Responds to health-check pings from the options page / background.
+    // This is NOT dev-only so the Developers > Content Script Health card works
+    // in production.
+    browser.runtime.onMessage.addListener(
+      (
+        message: unknown,
+        _sender: unknown,
+        sendResponse: (r: unknown) => void
+      ): boolean | undefined => {
+        if (
+          typeof message === "object" &&
+          message !== null &&
+          (message as { type?: string }).type ===
+            CONTENT_SCRIPT_PING_MESSAGE_TYPE
+        ) {
+          sendResponse({ pong: true });
+          return true;
+        }
+        return undefined;
+      }
+    );
 
     // Dev only: test Sentry capture (message from options or keyboard shortcut)
     if ((import.meta.env.MODE as string) !== "production") {

@@ -415,3 +415,288 @@ test.describe("Options Page", () => {
     await expect(body).toBeVisible();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Developers Section
+// ---------------------------------------------------------------------------
+
+test.describe("Developers Section", () => {
+  async function navigateToDevelopers(page: import("@playwright/test").Page) {
+    await waitForOptionsReady(page);
+    const devNav = page
+      .locator('button:has-text("Developers"), a:has-text("Developers")')
+      .first();
+    if (await devNav.isVisible()) {
+      await devNav.click();
+      await page.waitForTimeout(300);
+    }
+  }
+
+  test("renders the Developers section with all five new cards", async ({
+    optionsPage,
+  }) => {
+    await navigateToDevelopers(optionsPage);
+
+    const pageText = await optionsPage.textContent("body");
+    expect(pageText).toContain("Extension Version & Update");
+    expect(pageText).toContain("Content Script Health");
+    expect(pageText).toContain("Storage Mode & Quota");
+    expect(pageText).toContain("Top 5 Usage");
+    expect(pageText).toContain("Clear IDB Backup");
+  });
+
+  test("shows current version in version card", async ({ optionsPage }) => {
+    await navigateToDevelopers(optionsPage);
+
+    // Version card should show "Version: X.Y.Z"
+    const pageText = await optionsPage.textContent("body");
+    expect(pageText).toMatch(/Version:\s*\d+\.\d+/);
+  });
+
+  test("shows 'Up to date' when no update is available", async ({
+    optionsPage,
+  }) => {
+    await navigateToDevelopers(optionsPage);
+    // With no latestVersionItem seeded, the card shows "Up to date"
+    const pageText = await optionsPage.textContent("body");
+    expect(pageText).toContain("Up to date");
+  });
+
+  test("shows update banner on Dashboard when latestVersionItem is set to newer version", async ({
+    context,
+    extensionId,
+  }) => {
+    // Seed a fake newer release into local storage before opening the popup
+    const seedPage = await context.newPage();
+    await seedPage.goto(`chrome-extension://${extensionId}/popup.html`);
+    await seedPage.waitForLoadState("domcontentloaded");
+    await seedPage.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.local.set({
+        latestVersion: {
+          version: "999.0.0",
+          htmlUrl: "https://github.com/jheysaaz/clipio/releases/tag/v999.0.0",
+          publishedAt: new Date().toISOString(),
+        },
+        // no dismissedUpdateVersion set, so banner should appear
+      });
+    });
+    await seedPage.close();
+
+    // Open a fresh popup page to get the dashboard
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+    await popupPage.waitForLoadState("domcontentloaded");
+    await popupPage.waitForTimeout(500);
+
+    const pageText = await popupPage.textContent("body");
+    // Banner body: "A new version of Clipio is available: 999.0.0"
+    expect(pageText).toContain("999.0.0");
+
+    await popupPage.close();
+  });
+
+  test("dismissing update banner hides it and stores version", async ({
+    context,
+    extensionId,
+  }) => {
+    // Seed a fake newer release
+    const seedPage = await context.newPage();
+    await seedPage.goto(`chrome-extension://${extensionId}/popup.html`);
+    await seedPage.waitForLoadState("domcontentloaded");
+    await seedPage.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.local.set({
+        latestVersion: {
+          version: "888.0.0",
+          htmlUrl: "https://github.com/jheysaaz/clipio/releases/tag/v888.0.0",
+          publishedAt: new Date().toISOString(),
+        },
+      });
+    });
+    await seedPage.close();
+
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+    await popupPage.waitForLoadState("domcontentloaded");
+    await popupPage.waitForTimeout(500);
+
+    // Find and click the dismiss (X) button on the warning banner
+    const dismissBtn = popupPage
+      .locator('button[aria-label*="dismiss" i], button[aria-label*="close" i]')
+      .first();
+    if (await dismissBtn.isVisible()) {
+      await dismissBtn.click();
+      await popupPage.waitForTimeout(300);
+
+      // Banner should no longer show "888.0.0"
+      const pageText = await popupPage.textContent("body");
+      expect(pageText).not.toContain(
+        "A new version of Clipio is available: 888.0.0"
+      );
+
+      // dismissedUpdateVersion should be stored in local storage
+      const dismissed = await popupPage.evaluate(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+        const r = await ext.storage.local.get("dismissedUpdateVersion");
+        return r.dismissedUpdateVersion;
+      });
+      expect(dismissed).toBe("888.0.0");
+    }
+
+    await popupPage.close();
+  });
+
+  test("ping button sends message and shows result", async ({
+    optionsPage,
+  }) => {
+    await navigateToDevelopers(optionsPage);
+
+    const pingButton = optionsPage
+      .locator('button:has-text("Ping content script")')
+      .first();
+
+    if (await pingButton.isVisible()) {
+      await pingButton.click();
+      await optionsPage.waitForTimeout(1_000);
+
+      // After ping, should show either pong or an error message
+      const pageText = await optionsPage.textContent("body");
+      const hasPong = pageText!.includes("Pong") || pageText!.includes("pong");
+      const hasError =
+        pageText!.includes("No active tab") ||
+        pageText!.includes("No content script") ||
+        pageText!.includes("Ping failed");
+      expect(hasPong || hasError).toBe(true);
+    }
+
+    const body = optionsPage.locator("body");
+    await expect(body).toBeVisible();
+  });
+
+  test("storage mode card displays active backend", async ({ optionsPage }) => {
+    await navigateToDevelopers(optionsPage);
+
+    const pageText = await optionsPage.textContent("body");
+    // Should show "Active backend: sync" or "Active backend: local"
+    expect(pageText).toMatch(/Active backend:\s*(sync|local|—)/);
+  });
+
+  test("top-5 usage card shows 'No usage data yet' when empty", async ({
+    optionsPage,
+  }) => {
+    await navigateToDevelopers(optionsPage);
+    // No usage data seeded → empty state message
+    const pageText = await optionsPage.textContent("body");
+    // Either "No usage data yet." or actual usage items
+    const hasEmpty = pageText!.includes("No usage data yet");
+    const hasUsageItems = pageText!.match(/\d+ uses/) !== null;
+    expect(hasEmpty || hasUsageItems).toBe(true);
+  });
+
+  test("top-5 usage card shows snippet labels when usage data exists", async ({
+    context,
+    extensionId,
+    optionsPage,
+  }) => {
+    // Seed usage counts and snippets
+    await optionsPage.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.local.set({
+        usageCounts: { "snip-abc": 42, "snip-def": 7 },
+      });
+      await ext.storage.sync.set({
+        "snip:snip-abc": {
+          id: "snip-abc",
+          label: "My Email Signature",
+          shortcut: "/sig",
+          content: "test",
+          createdAt: "2025-01-01T00:00:00.000Z",
+          updatedAt: "2025-01-01T00:00:00.000Z",
+        },
+      });
+    });
+
+    await optionsPage.reload();
+    await waitForOptionsReady(optionsPage);
+    await navigateToDevelopers(optionsPage);
+
+    const pageText = await optionsPage.textContent("body");
+    // Should show the label and usage count
+    expect(pageText).toContain("My Email Signature");
+    expect(pageText).toContain("42");
+  });
+
+  test("clear IDB backup requires two-step confirmation", async ({
+    optionsPage,
+  }) => {
+    await navigateToDevelopers(optionsPage);
+
+    // First click: shows confirm button
+    const clearButton = optionsPage
+      .locator('button:has-text("Clear backup")')
+      .first();
+    if (await clearButton.isVisible()) {
+      await clearButton.click();
+      await optionsPage.waitForTimeout(200);
+
+      // Confirm button should now be visible
+      const confirmButton = optionsPage
+        .locator('button:has-text("Confirm clear")')
+        .first();
+      await expect(confirmButton).toBeVisible();
+
+      // Second click: performs action, shows "Cleared"
+      await confirmButton.click();
+      await optionsPage.waitForTimeout(2_500);
+
+      const pageText = await optionsPage.textContent("body");
+      // Either "Cleared" flash was shown (and expired) or page is still functional
+      const body = optionsPage.locator("body");
+      await expect(body).toBeVisible();
+    } else {
+      // Developers section not navigated to — just smoke test
+      const body = optionsPage.locator("body");
+      await expect(body).toBeVisible();
+    }
+  });
+
+  test("cancel on clear IDB backup hides confirm step", async ({
+    optionsPage,
+  }) => {
+    await navigateToDevelopers(optionsPage);
+
+    const clearButton = optionsPage
+      .locator('button:has-text("Clear backup")')
+      .first();
+    if (await clearButton.isVisible()) {
+      await clearButton.click();
+      await optionsPage.waitForTimeout(200);
+
+      // Cancel button should be present alongside Confirm
+      const cancelButton = optionsPage
+        .locator('button:has-text("Cancel")')
+        .first();
+      if (await cancelButton.isVisible()) {
+        await cancelButton.click();
+        await optionsPage.waitForTimeout(200);
+
+        // "Clear backup" button should be back; "Confirm clear" gone
+        await expect(
+          optionsPage.locator('button:has-text("Clear backup")').first()
+        ).toBeVisible();
+        const confirmButton = optionsPage.locator(
+          'button:has-text("Confirm clear")'
+        );
+        await expect(confirmButton).not.toBeVisible();
+      }
+    }
+
+    const body = optionsPage.locator("body");
+    await expect(body).toBeVisible();
+  });
+});

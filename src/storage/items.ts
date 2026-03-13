@@ -114,3 +114,29 @@ export const blockedSitesItem = storage.defineItem<string[]>(
   "local:blockedSites",
   { defaultValue: [] }
 );
+
+// ---------------------------------------------------------------------------
+// Update notifications
+// ---------------------------------------------------------------------------
+
+/** Latest available release info fetched from GitHub API. Null if never checked or up-to-date. */
+export const latestVersionItem = storage.defineItem<{
+  version: string;
+  htmlUrl: string;
+  publishedAt: string;
+} | null>("local:latestVersion", { defaultValue: null });
+
+/** ISO timestamp of the last successful update check. */
+export const latestVersionCheckedAtItem = storage.defineItem<string | null>(
+  "local:latestVersionCheckedAt",
+  { defaultValue: null }
+);
+
+/**
+ * The latest version the user has explicitly dismissed.
+ * When this equals latestVersion.version, the banner is suppressed.
+ */
+export const dismissedUpdateVersionItem = storage.defineItem<string>(
+  "local:dismissedUpdateVersion",
+  { defaultValue: "" }
+);

@@ -164,6 +164,12 @@ export default defineConfig({
           branches: 80,
           statements: 85,
         },
+        "src/lib/update-checker.ts": {
+          lines: 90,
+          functions: 90,
+          branches: 85,
+          statements: 90,
+        },
         "src/utils/usageTracking.ts": {
           lines: 85,
           functions: 85,

@@ -1,8 +1,13 @@
-import { CONTEXT_MENU } from "~/config/constants";
+import {
+  CONTEXT_MENU,
+  UPDATE_CHECK_ALARM_NAME,
+  UPDATE_CHECK_INTERVAL_MINUTES,
+} from "~/config/constants";
 import {
   contextMenuDraftItem,
   syncDataLostItem,
   blockedSitesItem,
+  latestVersionItem,
 } from "~/storage/items";
 import { initSentry, captureError, captureMessage } from "~/lib/sentry";
 import { registerSentryRelayListener } from "~/lib/sentry-relay";
@@ -13,6 +18,7 @@ import {
   type MediaGetDataUrlResponse,
 } from "~/lib/messages";
 import { getMedia } from "~/storage/backends/media";
+import { checkForUpdate } from "~/lib/update-checker";
 
 const SNIPPET_PREFIX = "snip:";
 
@@ -22,6 +28,61 @@ export default defineBackground(() => {
   // Register relay listener so content scripts can forward Sentry events
   // through the background when the host page's CSP blocks direct fetch.
   registerSentryRelayListener();
+
+  // ---------------------------------------------------------------------------
+  // Update checker — startup check + periodic alarm
+  // ---------------------------------------------------------------------------
+  // Check for updates immediately on startup, then every 6 hours via alarm.
+  checkForUpdate().catch((err: unknown) => {
+    captureError(err, { action: "checkForUpdate.startup" });
+  });
+
+  browser.alarms.create(UPDATE_CHECK_ALARM_NAME, {
+    delayInMinutes: UPDATE_CHECK_INTERVAL_MINUTES,
+    periodInMinutes: UPDATE_CHECK_INTERVAL_MINUTES,
+  });
+
+  browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name !== UPDATE_CHECK_ALARM_NAME) return;
+    checkForUpdate().catch((err: unknown) => {
+      captureError(err, { action: "checkForUpdate.alarm" });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Update notification — fire a browser notification when a new version is found
+  // ---------------------------------------------------------------------------
+  // Watch for changes to latestVersionItem and show a notification when it
+  // transitions from null → a release object.
+  latestVersionItem.watch((newValue) => {
+    if (!newValue) return;
+    try {
+      browser.notifications.create("clipio-update", {
+        type: "basic",
+        iconUrl: browser.runtime.getURL("/icon/128.png"),
+        title: i18n.t("background.updateAvailable.title"),
+        message: i18n.t("background.updateAvailable.message", [
+          newValue.version,
+        ]),
+      });
+    } catch (err) {
+      captureError(err, { action: "updateNotification.create" });
+    }
+  });
+
+  browser.notifications.onClicked.addListener((notificationId) => {
+    if (notificationId !== "clipio-update") return;
+    latestVersionItem
+      .getValue()
+      .then((release) => {
+        if (release?.htmlUrl) {
+          browser.tabs.create({ url: release.htmlUrl });
+        }
+      })
+      .catch((err: unknown) => {
+        captureError(err, { action: "updateNotification.click" });
+      });
+  });
 
   // ---------------------------------------------------------------------------
   // Media blob → data URL bridge
@@ -81,7 +142,18 @@ export default defineBackground(() => {
   // ---------------------------------------------------------------------------
   // On install / update
   // ---------------------------------------------------------------------------
-  browser.runtime.onInstalled.addListener(() => {
+  browser.runtime.onInstalled.addListener((details) => {
+    // On extension update: clear the cached latest-version so the checker
+    // re-fetches against the new installed version, and log to Sentry.
+    if (details.reason === "update") {
+      latestVersionItem.setValue(null).catch((err: unknown) => {
+        captureError(err, { action: "onInstalled.clearLatestVersion" });
+      });
+      captureMessage("Extension updated", "info", {
+        previousVersion: details.previousVersion,
+      });
+    }
+
     // Redirect to a farewell / recovery reminder page when uninstalled
     browser.runtime.setUninstallURL(
       "https://github.com/jheysaaz/clipio#uninstalled"

@@ -147,6 +147,13 @@ describe("getGiphyApiKey", () => {
     const key = await getGiphyApiKey();
     expect(key).toBe("");
   });
+
+  it("falls back to env default when giphyApiKeyItem.getValue throws", async () => {
+    mockGiphyApiKey.getValue.mockRejectedValueOnce(new Error("IDB error"));
+    const key = await getGiphyApiKey();
+    // Should not throw — falls through to default
+    expect(key).toBe("env-default-giphy-key");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -350,6 +357,124 @@ describe("getById", () => {
     global.fetch = vi.fn().mockRejectedValueOnce(original);
     const err = await getById("id").catch((e) => e);
     expect(err).toBe(original);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mapGif fallback branches (tested via search/trending which call mapGif)
+// ---------------------------------------------------------------------------
+
+describe("mapGif fallback branches", () => {
+  it("falls back previewUrl to buildGifPreviewUrl when fixedSmall.url is absent", async () => {
+    const item = {
+      id: "fallback1",
+      title: "Fallback GIF",
+      images: {
+        // fixed_width_small exists but has no url
+        fixed_width_small: {
+          webp: "https://media.giphy.com/media/fallback1/100w.webp",
+        },
+        original: {
+          url: "https://media.giphy.com/media/fallback1/giphy.gif",
+          width: "200",
+          height: "150",
+        },
+      },
+    };
+    mockFetchSuccess([item]);
+    const result = await search("fallback");
+    const gif = result.gifs[0];
+    expect(gif.previewUrl).toBe(buildGifPreviewUrl("fallback1"));
+  });
+
+  it("falls back previewWebpUrl to fixedSmall.url when fixedSmall.webp is absent", async () => {
+    const item = {
+      id: "fallback2",
+      title: "Fallback WebP GIF",
+      images: {
+        fixed_width_small: {
+          url: "https://media.giphy.com/media/fallback2/100w.gif",
+        },
+        original: {
+          url: "https://media.giphy.com/media/fallback2/giphy.gif",
+          width: "200",
+          height: "150",
+        },
+      },
+    };
+    mockFetchSuccess([item]);
+    const result = await search("fallback");
+    const gif = result.gifs[0];
+    expect(gif.previewWebpUrl).toBe(
+      "https://media.giphy.com/media/fallback2/100w.gif"
+    );
+  });
+
+  it("falls back previewWebpUrl to buildGifPreviewUrl when both webp and url are absent", async () => {
+    const item = {
+      id: "fallback3",
+      title: "No Preview GIF",
+      images: {
+        fixed_width_small: {}, // neither url nor webp
+        original: {
+          url: "https://media.giphy.com/media/fallback3/giphy.gif",
+          width: "200",
+          height: "150",
+        },
+      },
+    };
+    mockFetchSuccess([item]);
+    const result = await search("fallback");
+    const gif = result.gifs[0];
+    expect(gif.previewWebpUrl).toBe(buildGifPreviewUrl("fallback3"));
+  });
+
+  it("falls back originalUrl to buildGifUrl when original.url is absent", async () => {
+    const item = {
+      id: "fallback4",
+      title: "No Original URL GIF",
+      images: {
+        fixed_width_small: {
+          url: "https://media.giphy.com/media/fallback4/100w.gif",
+          webp: "https://media.giphy.com/media/fallback4/100w.webp",
+        },
+        original: { width: "200", height: "150" }, // no url
+      },
+    };
+    mockFetchSuccess([item]);
+    const result = await search("fallback");
+    const gif = result.gifs[0];
+    expect(gif.originalUrl).toBe(buildGifUrl("fallback4"));
+  });
+
+  it("handles completely missing images object — all fallbacks fire", async () => {
+    const item = { id: "fallback5", title: "No Images GIF" }; // no images key at all
+    mockFetchSuccess([item]);
+    const result = await search("fallback");
+    const gif = result.gifs[0];
+    expect(gif.previewUrl).toBe(buildGifPreviewUrl("fallback5"));
+    expect(gif.previewWebpUrl).toBe(buildGifPreviewUrl("fallback5"));
+    expect(gif.originalUrl).toBe(buildGifUrl("fallback5"));
+    expect(gif.width).toBe(0);
+    expect(gif.height).toBe(0);
+  });
+
+  it("uses 100 as fallback for previewWidth/previewHeight when absent", async () => {
+    const item = {
+      id: "fallback6",
+      title: "No Dimensions GIF",
+      images: {
+        fixed_width_small: {
+          url: "https://media.giphy.com/media/fallback6/100w.gif",
+        },
+        original: { url: "https://media.giphy.com/media/fallback6/giphy.gif" },
+      },
+    };
+    mockFetchSuccess([item]);
+    const result = await search("fallback");
+    const gif = result.gifs[0];
+    expect(gif.previewWidth).toBe(100);
+    expect(gif.previewHeight).toBe(100);
   });
 });
 

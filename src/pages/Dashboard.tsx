@@ -48,6 +48,8 @@ import {
   dismissedUninstallWarningItem,
   syncDataLostItem,
   contextMenuDraftItem,
+  latestVersionItem,
+  dismissedUpdateVersionItem,
 } from "~/storage/items";
 import { captureError } from "~/lib/sentry";
 import { selectNewest } from "~/lib/snippetUtils";
@@ -74,6 +76,12 @@ export default function Dashboard() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const [updateRelease, setUpdateRelease] = useState<{
+    version: string;
+    htmlUrl: string;
+    publishedAt: string;
+  } | null>(null);
+  const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const isResizing = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const detailHasChanges = useRef(false);
@@ -179,6 +187,24 @@ export default function Dashboard() {
       } catch (err) {
         console.error("[Clipio] Flag check failed:", err);
         captureError(err, { action: "flagCheck" });
+      }
+    })();
+  }, []);
+
+  // Check for available update banner
+  useEffect(() => {
+    (async () => {
+      try {
+        const [release, dismissed] = await Promise.all([
+          latestVersionItem.getValue(),
+          dismissedUpdateVersionItem.getValue(),
+        ]);
+        if (release && release.version !== dismissed) {
+          setUpdateRelease(release);
+          setShowUpdateBanner(true);
+        }
+      } catch (err) {
+        captureError(err, { action: "loadUpdateBanner" });
       }
     })();
   }, []);
@@ -387,6 +413,26 @@ export default function Dashboard() {
           onDismiss={() => setQuotaWarning(false)}
         >
           {i18n.t("dashboard.warnings.quotaFull.body")}
+        </WarningBanner>
+      )}
+
+      {/* Update available banner */}
+      {showUpdateBanner && updateRelease && (
+        <WarningBanner
+          action={{
+            label: i18n.t("dashboard.warnings.updateAvailable.action"),
+            onClick: () => browser.tabs.create({ url: updateRelease.htmlUrl }),
+          }}
+          onDismiss={() => {
+            dismissedUpdateVersionItem
+              .setValue(updateRelease.version)
+              .catch(console.warn);
+            setShowUpdateBanner(false);
+          }}
+        >
+          {i18n.t("dashboard.warnings.updateAvailable.body", [
+            updateRelease.version,
+          ])}
         </WarningBanner>
       )}
 

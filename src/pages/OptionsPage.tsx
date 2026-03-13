@@ -33,6 +33,8 @@ import {
   LayoutGrid,
   Globe,
   Plus,
+  ExternalLink,
+  Loader2,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { Button } from "~/components/ui/button";
@@ -46,8 +48,17 @@ import { InlineError } from "~/components/ui/inline-error";
 
 import { Label } from "~/components/ui/label";
 const ImportWizard = lazy(() => import("~/components/ImportWizard"));
-import { exportSnippets, getSnippets, getStorageStatus } from "~/storage";
-import { SYNC_QUOTA, MEDIA_LIMITS } from "~/config/constants";
+import {
+  exportSnippets,
+  getSnippets,
+  getStorageStatus,
+  clearIDBBackup,
+} from "~/storage";
+import {
+  SYNC_QUOTA,
+  MEDIA_LIMITS,
+  CONTENT_SCRIPT_PING_MESSAGE_TYPE,
+} from "~/config/constants";
 import {
   listMedia,
   getMedia,
@@ -60,6 +71,9 @@ import {
   dismissedUninstallWarningItem,
   giphyApiKeyItem,
   blockedSitesItem,
+  latestVersionItem,
+  usageCountsItem,
+  dismissedUpdateVersionItem,
 } from "~/storage/items";
 import { i18n } from "#i18n";
 import { captureError, captureMessage, sendUserFeedback } from "~/lib/sentry";
@@ -1085,10 +1099,93 @@ function DevelopersSection() {
   const [giphyKeySaved, setGiphyKeySaved] = useState(false);
   const [giphyKeyError, setGiphyKeyError] = useState<string | null>(null);
 
+  // Card 2: Version & Update
+  const [currentVersion] = useState(
+    () => browser.runtime.getManifest().version
+  );
+  const [latestRelease, setLatestRelease] = useState<{
+    version: string;
+    htmlUrl: string;
+    publishedAt: string;
+  } | null>(null);
+  const [dismissedVersion, setDismissedVersion] = useState("");
+
+  // Card 3: Content Script Health
+  const [pingStatus, setPingStatus] = useState<
+    "idle" | "pinging" | "pong" | "error"
+  >("idle");
+  const [pingError, setPingError] = useState("");
+
+  // Card 4: Storage Mode & Quota
+  const [storageMode, setStorageMode] = useState<string>("—");
+  const [syncUsed, setSyncUsed] = useState<number | null>(null);
+
+  // Card 5: Top 5 Usage
+  const [topUsage, setTopUsage] = useState<
+    { id: string; label: string; count: number }[]
+  >([]);
+  const [usageLoaded, setUsageLoaded] = useState(false);
+
+  // Card 6: Clear IDB Backup
+  const [clearConfirming, setClearConfirming] = useState(false);
+  const [clearCleared, setClearCleared] = useState(false);
+
   useEffect(() => {
     giphyApiKeyItem
       .getValue()
       .then((val) => setGiphyKey(val ?? ""))
+      .catch(console.warn);
+  }, []);
+
+  // Load version / update data
+  useEffect(() => {
+    latestVersionItem
+      .getValue()
+      .then((v) => setLatestRelease(v))
+      .catch(console.warn);
+    dismissedUpdateVersionItem
+      .getValue()
+      .then((v) => setDismissedVersion(v))
+      .catch(console.warn);
+  }, []);
+
+  // Load storage status
+  useEffect(() => {
+    getStorageStatus()
+      .then((status) => {
+        setStorageMode(status.mode);
+      })
+      .catch(console.warn);
+    // Estimate sync bytes used via Blob size of all sync keys
+    browser.storage.sync
+      .get(null)
+      .then((items) => {
+        const bytes = Object.entries(items).reduce((sum, [k, v]) => {
+          return sum + new Blob([JSON.stringify(k) + JSON.stringify(v)]).size;
+        }, 0);
+        setSyncUsed(bytes);
+      })
+      .catch(console.warn);
+  }, []);
+
+  // Load top-5 usage
+  useEffect(() => {
+    Promise.all([usageCountsItem.getValue(), getSnippets()])
+      .then(([counts, snippets]) => {
+        const entries = Object.entries(counts)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 5)
+          .map(([id, count]) => {
+            const snippet = snippets.find((s) => s.id === id);
+            return {
+              id,
+              label: snippet?.label ?? snippet?.shortcut ?? id,
+              count,
+            };
+          });
+        setTopUsage(entries);
+        setUsageLoaded(true);
+      })
       .catch(console.warn);
   }, []);
 
@@ -1113,6 +1210,55 @@ function DevelopersSection() {
       setTimeout(() => setGiphyKeySaved(false), 2000);
     } catch (err) {
       captureError(err, { action: "resetGiphyApiKey" });
+    }
+  };
+
+  // Card 3: Ping content script
+  const handlePing = async () => {
+    setPingStatus("pinging");
+    setPingError("");
+    try {
+      const tabs = await browser.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      const tab = tabs[0];
+      if (!tab?.id) {
+        setPingStatus("error");
+        setPingError(
+          i18n.t("options.developers.contentScriptHealth.errorNoTab")
+        );
+        return;
+      }
+      const response = await browser.tabs
+        .sendMessage(tab.id, { type: CONTENT_SCRIPT_PING_MESSAGE_TYPE })
+        .catch(() => null);
+      if (response && (response as { pong?: boolean }).pong) {
+        setPingStatus("pong");
+      } else {
+        setPingStatus("error");
+        setPingError(
+          i18n.t("options.developers.contentScriptHealth.errorNoContentScript")
+        );
+      }
+    } catch {
+      setPingStatus("error");
+      setPingError(
+        i18n.t("options.developers.contentScriptHealth.errorGeneric")
+      );
+    }
+  };
+
+  // Card 6: Clear IDB backup
+  const handleClearIdb = async () => {
+    try {
+      await clearIDBBackup();
+      setClearConfirming(false);
+      setClearCleared(true);
+      setTimeout(() => setClearCleared(false), 2000);
+    } catch (err) {
+      captureError(err, { action: "clearIDBBackup" });
+      setClearConfirming(false);
     }
   };
 
@@ -1183,6 +1329,193 @@ function DevelopersSection() {
             className="rounded-lg border border-red-200 dark:border-red-800"
           />
         )}
+      </div>
+
+      {/* Card 2: Extension Version & Update */}
+      <div className="rounded-xl border p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-medium text-foreground">
+            {i18n.t("options.developers.versionUpdate.title")}
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {i18n.t("options.developers.versionUpdate.description")}
+          </p>
+        </div>
+        <p className="text-sm text-foreground">
+          {i18n.t("options.developers.versionUpdate.currentVersion", [
+            currentVersion,
+          ])}
+        </p>
+        {latestRelease && latestRelease.version !== dismissedVersion && (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-amber-600 dark:text-amber-400">
+              {i18n.t("options.developers.versionUpdate.updateAvailable", [
+                latestRelease.version,
+              ])}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 shrink-0"
+              onClick={() =>
+                browser.tabs.create({ url: latestRelease.htmlUrl })
+              }
+            >
+              <ExternalLink className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+              {i18n.t("options.developers.versionUpdate.openRelease")}
+            </Button>
+          </div>
+        )}
+        {(!latestRelease || latestRelease.version === dismissedVersion) && (
+          <p className="text-xs text-muted-foreground">
+            {i18n.t("options.developers.versionUpdate.upToDate")}
+          </p>
+        )}
+      </div>
+
+      {/* Card 3: Content Script Health */}
+      <div className="rounded-xl border p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-medium text-foreground">
+            {i18n.t("options.developers.contentScriptHealth.title")}
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {i18n.t("options.developers.contentScriptHealth.description")}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9 shrink-0"
+            onClick={handlePing}
+            disabled={pingStatus === "pinging"}
+          >
+            {pingStatus === "pinging" ? (
+              <>
+                <Loader2
+                  className="h-3.5 w-3.5 mr-1.5 animate-spin"
+                  strokeWidth={1.5}
+                />
+                {i18n.t("options.developers.contentScriptHealth.pinging")}
+              </>
+            ) : (
+              i18n.t("options.developers.contentScriptHealth.pingButton")
+            )}
+          </Button>
+          {pingStatus === "pong" && (
+            <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+              <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
+              {i18n.t("options.developers.contentScriptHealth.pong")}
+            </span>
+          )}
+          {pingStatus === "error" && (
+            <span className="text-xs text-destructive">{pingError}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Card 4: Storage Mode & Quota */}
+      <div className="rounded-xl border p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-medium text-foreground">
+            {i18n.t("options.developers.storageMode.title")}
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {i18n.t("options.developers.storageMode.description")}
+          </p>
+        </div>
+        <p className="text-sm text-foreground">
+          {i18n.t("options.developers.storageMode.mode", [storageMode])}
+        </p>
+        {syncUsed !== null && (
+          <p className="text-xs text-muted-foreground">
+            {i18n.t("options.developers.storageMode.syncUsed", [
+              String(syncUsed),
+              String(SYNC_QUOTA.TOTAL_BYTES),
+            ])}
+          </p>
+        )}
+      </div>
+
+      {/* Card 5: Top 5 Usage */}
+      <div className="rounded-xl border p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-medium text-foreground">
+            {i18n.t("options.developers.topUsage.title")}
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {i18n.t("options.developers.topUsage.description")}
+          </p>
+        </div>
+        {usageLoaded && topUsage.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            {i18n.t("options.developers.topUsage.empty")}
+          </p>
+        )}
+        {topUsage.length > 0 && (
+          <ol className="space-y-1">
+            {topUsage.map(({ id, label, count }) => (
+              <li
+                key={id}
+                className="flex items-center justify-between text-sm"
+              >
+                <span className="truncate text-foreground">{label}</span>
+                <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                  {i18n.t("options.developers.topUsage.count", [String(count)])}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+
+      {/* Card 6: Clear IDB Backup */}
+      <div className="rounded-xl border p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-medium text-foreground">
+            {i18n.t("options.developers.clearIdb.title")}
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {i18n.t("options.developers.clearIdb.description")}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {clearCleared ? (
+            <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+              <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
+              {i18n.t("options.developers.clearIdb.cleared")}
+            </span>
+          ) : clearConfirming ? (
+            <>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-9 shrink-0"
+                onClick={handleClearIdb}
+              >
+                {i18n.t("options.developers.clearIdb.confirm")}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-9 shrink-0"
+                onClick={() => setClearConfirming(false)}
+              >
+                {i18n.t("common.cancel")}
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 shrink-0"
+              onClick={() => setClearConfirming(true)}
+            >
+              {i18n.t("options.developers.clearIdb.button")}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Dev only: Test Sentry (options + content script) */}
