@@ -182,7 +182,7 @@ function makeMediaMeta(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
 
 function buildZipFile(entries: Record<string, Uint8Array>): File {
   const zipped = zipSync(entries);
-  return new File([zipped], "test.clipio.zip", {
+  return new File([zipped.buffer as ArrayBuffer], "test.clipio.zip", {
     type: "application/zip",
   });
 }
