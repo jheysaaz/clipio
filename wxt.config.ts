@@ -58,6 +58,7 @@ export default defineConfig({
       "contextMenus",
       "alarms",
       "notifications",
+      "tabs",
     ],
     // Allow all extension contexts (including content scripts) to reach Sentry.
     // The DSN uses the US ingest cluster (*.ingest.us.sentry.io); keeping the

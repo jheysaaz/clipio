@@ -1218,11 +1218,21 @@ function DevelopersSection() {
     setPingStatus("pinging");
     setPingError("");
     try {
-      const tabs = await browser.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-      const tab = tabs[0];
+      // Query all active tabs across all windows, then pick the most-recently
+      // focused one that is a real web page (not an extension or browser page).
+      // Using `currentWindow: true` would return the options tab itself, which
+      // has no content script.
+      const tabs = await browser.tabs.query({ active: true });
+      const webTab = tabs.find(
+        (t) =>
+          t.url &&
+          !t.url.startsWith("chrome://") &&
+          !t.url.startsWith("chrome-extension://") &&
+          !t.url.startsWith("about:") &&
+          !t.url.startsWith("edge://") &&
+          !t.url.startsWith("moz-extension://")
+      );
+      const tab = webTab ?? tabs.find((t) => t.id !== undefined);
       if (!tab?.id) {
         setPingStatus("error");
         setPingError(
@@ -1271,6 +1281,12 @@ function DevelopersSection() {
         <p className="text-sm text-muted-foreground">
           {i18n.t("options.developers.description")}
         </p>
+      </div>
+
+      {/* Experimental warning banner */}
+      <div className="flex gap-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-400">
+        <span className="mt-px shrink-0 text-base leading-none">⚠</span>
+        <span>{i18n.t("options.developers.experimentalWarning")}</span>
       </div>
 
       {/* Giphy API Key card */}
