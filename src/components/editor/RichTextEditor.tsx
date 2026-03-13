@@ -58,6 +58,7 @@ import { LinkElementComponent } from "./components/LinkElement";
 import { FloatingToolbar } from "./components/FloatingToolbar";
 import { SlashCommandMenu } from "./components/SlashCommandMenu";
 import { GifPicker } from "./components/GifPicker";
+import { ImagePicker } from "./components/ImagePicker";
 import { saveMedia, compressMedia } from "~/storage/backends/media";
 import { MEDIA_LIMITS } from "~/config/constants";
 import { captureError, captureMessage } from "~/lib/sentry";
@@ -102,6 +103,12 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
     // GIF picker state
     const [showGifPicker, setShowGifPicker] = useState(false);
     const [gifPickerRange, setGifPickerRange] = useState<
+      import("platejs").TRange | null
+    >(null);
+
+    // Image picker state
+    const [showImagePicker, setShowImagePicker] = useState(false);
+    const [imagePickerRange, setImagePickerRange] = useState<
       import("platejs").TRange | null
     >(null);
 
@@ -556,6 +563,73 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
       editor.tf.focus();
     }, [editor]);
 
+    // Open Image picker from slash menu
+    const handleOpenImagePicker = useCallback(() => {
+      // Capture slash context before closing menu
+      pendingSlashContext.current = {
+        range: slashMenuRange,
+        query: slashSearchQuery,
+        manual: manualTrigger,
+      };
+
+      setShowSlashMenu(false);
+      setSlashMenuRange(null);
+      setSlashSearchQuery("");
+      setManualTrigger(false);
+
+      setImagePickerRange(editor.selection);
+      setShowImagePicker(true);
+    }, [editor, slashMenuRange, slashSearchQuery, manualTrigger]);
+
+    // Handle image selected from picker (by mediaId)
+    const handleSelectImage = useCallback(
+      (mediaId: string) => {
+        const ctx = pendingSlashContext.current;
+        if (ctx) {
+          deleteSlashTrigger(ctx.manual, ctx.range, ctx.query);
+          pendingSlashContext.current = null;
+        }
+
+        editor.tf.insertNodes({
+          type: IMAGE_PLACEHOLDER,
+          mediaId,
+          children: [{ text: "" }],
+        } as TElement);
+
+        editor.tf.move({ unit: "offset" });
+
+        setShowImagePicker(false);
+        setImagePickerRange(null);
+
+        setTimeout(() => {
+          editor.tf.focus();
+        }, 0);
+      },
+      [editor, deleteSlashTrigger]
+    );
+
+    // Handle "Upload new" button inside the picker — delegates to the file-based flow
+    const handlePickerUploadNew = useCallback(
+      (file?: File) => {
+        setShowImagePicker(false);
+        setImagePickerRange(null);
+
+        if (file) {
+          handleFileSelected(file);
+        } else {
+          fileInputRef.current?.click();
+        }
+      },
+      [handleFileSelected]
+    );
+
+    const handleCloseImagePicker = useCallback(() => {
+      pendingSlashContext.current = null;
+      setShowImagePicker(false);
+      setImagePickerRange(null);
+      editor.tf.focus();
+    }, [editor]);
+
     // Intercept cmd+c: serialize the current selection fragment to Markdown and
     // write rich HTML + plain text to the clipboard. Falls back to native browser
     // copy behavior when there is no selection (editor not focused / no fragment).
@@ -649,6 +723,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
                 onInsertDate={handleInsertDate}
                 onInsertCursor={handleInsertCursor}
                 onInsertDatepicker={handleInsertDatepicker}
+                onOpenImagePicker={handleOpenImagePicker}
                 onInsertImage={handleInsertImage}
                 onInsertGif={handleInsertGif}
                 onClose={handleCloseSlashMenu}
@@ -663,6 +738,14 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
                 onSelectGif={handleSelectGif}
                 onClose={handleCloseGifPicker}
                 targetRange={gifPickerRange}
+              />
+            )}
+            {showImagePicker && (
+              <ImagePicker
+                onSelectImage={handleSelectImage}
+                onUploadNew={handlePickerUploadNew}
+                onClose={handleCloseImagePicker}
+                targetRange={imagePickerRange}
               />
             )}
           </div>

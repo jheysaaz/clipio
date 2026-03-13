@@ -17,7 +17,8 @@ export function SlashCommandMenu({
   onInsertDate,
   onInsertCursor,
   onInsertDatepicker,
-  onInsertImage,
+  onOpenImagePicker,
+  onInsertImage: _onInsertImage,
   onInsertGif,
   onClose,
   targetRange,
@@ -70,7 +71,7 @@ export function SlashCommandMenu({
         label: i18n.t("editor.slashMenu.image.label"),
         description: i18n.t("editor.slashMenu.image.description"),
         icon: ImageIcon,
-        action: onInsertImage,
+        action: onOpenImagePicker,
         disabled: false,
       },
       {
@@ -98,7 +99,7 @@ export function SlashCommandMenu({
     onInsertDate,
     onInsertCursor,
     onInsertDatepicker,
-    onInsertImage,
+    onOpenImagePicker,
     onInsertGif,
   ]);
 

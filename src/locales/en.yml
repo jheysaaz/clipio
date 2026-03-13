@@ -224,6 +224,7 @@ options:
   developers:
     title: Developers
     description: Advanced settings for power users and developers.
+    experimentalWarning: This section is intended for experimental users only. Settings here are unstable and changes could break your setup or cause data loss.
     giphyApiKey:
       title: Giphy API Key
       description: Override the default Giphy API key with your own. Leave empty to use the bundled key.
@@ -409,6 +410,15 @@ imageUpload:
   unsupportedType: "Unsupported file type. Please use JPEG, PNG, WebP, or GIF."
   storageFull: "Image storage is full. Delete some images to free up space."
   failed: Failed to save image. Please try again.
+
+imagePicker:
+  searchPlaceholder: Search images...
+  uploadNew: Upload new image
+  empty: No images yet. Upload one to get started.
+  noResults: No images match "$1"
+  dropHere: Drop image here
+  dragging: Drop to upload
+  ariaLabel: Image picker
 
 background:
   updateAvailable:

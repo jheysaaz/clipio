@@ -224,6 +224,7 @@ options:
   developers:
     title: Desarrolladores
     description: Configuraciones avanzadas para usuarios avanzados y desarrolladores.
+    experimentalWarning: Esta sección está destinada únicamente a usuarios experimentales. Los ajustes aquí son inestables y los cambios podrían romper tu configuración o causar pérdida de datos.
     giphyApiKey:
       title: Clave API de Giphy
       description: Reemplaza la clave API de Giphy predeterminada con la tuya. Deja vacío para usar la clave incluida.
@@ -409,6 +410,15 @@ imageUpload:
   unsupportedType: "Tipo de archivo no compatible. Usa JPEG, PNG, WebP o GIF."
   storageFull: "El almacenamiento de imágenes está lleno. Elimina algunas imágenes para liberar espacio."
   failed: Error al guardar la imagen. Por favor, inténtalo de nuevo.
+
+imagePicker:
+  searchPlaceholder: Buscar imágenes...
+  uploadNew: Subir nueva imagen
+  empty: Aún no hay imágenes. Sube una para comenzar.
+  noResults: No se encontraron imágenes para "$1"
+  dropHere: Suelta la imagen aquí
+  dragging: Suelta para subir
+  ariaLabel: Selector de imágenes
 
 background:
   updateAvailable:
