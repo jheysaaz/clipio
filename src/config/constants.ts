@@ -17,7 +17,8 @@ export const IDB_CONFIG = {
   DB_NAME: "clipio-backup",
   STORE_NAME: "snippets",
   MEDIA_STORE_NAME: "media",
-  VERSION: 2,
+  /** v1: snippets store | v2: media store | v3: hash index on media */
+  VERSION: 3,
 } as const;
 
 export const MEDIA_LIMITS = {

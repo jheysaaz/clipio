@@ -30,6 +30,8 @@ export interface MediaMetadata {
   createdAt: string;
   /** Optional user-supplied description (used as the image alt text). */
   alt?: string;
+  /** SHA-256 hex digest of the stored blob bytes (added in IDB v3). */
+  hash?: string;
 }
 
 export interface MediaEntry extends MediaMetadata {
@@ -53,6 +55,50 @@ async function readDimensions(
   }
 }
 
+/**
+ * Compute the SHA-256 hex digest of a Blob's bytes.
+ */
+export async function computeHash(blob: Blob): Promise<string> {
+  const arrayBuffer = await blob.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest("SHA-256", arrayBuffer);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * Find the first media entry whose stored `hash` matches the given SHA-256 hex.
+ * Returns null if not found or on IDB error.
+ */
+export async function findByHash(hash: string): Promise<MediaMetadata | null> {
+  try {
+    const db = await openDB();
+    return await new Promise<MediaMetadata | null>((resolve, reject) => {
+      const tx = db.transaction(IDB_CONFIG.MEDIA_STORE_NAME, "readonly");
+      const store = tx.objectStore(IDB_CONFIG.MEDIA_STORE_NAME);
+      // The "hash" index was added in IDB v3; fall back to null if absent.
+      if (!store.indexNames.contains("hash")) {
+        resolve(null);
+        return;
+      }
+      const req = store.index("hash").get(hash);
+      req.onsuccess = () => {
+        if (!req.result) {
+          resolve(null);
+          return;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { blob: _blob, ...meta } = req.result as MediaEntry;
+        resolve(meta as MediaMetadata);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    captureError(err, { action: "media.findByHash" });
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -60,6 +106,9 @@ async function readDimensions(
 /**
  * Validate, store, and return a new MediaEntry.
  * Throws on validation failures (size, type, quota). Never throws on IDB errors.
+ *
+ * Deduplication: if an entry with the same SHA-256 hash already exists, it is
+ * returned immediately without consuming quota or writing a new entry.
  */
 export async function saveMedia(file: File | Blob): Promise<MediaEntry> {
   const mimeType = file.type;
@@ -86,7 +135,17 @@ export async function saveMedia(file: File | Blob): Promise<MediaEntry> {
     throw new Error("media.errors.tooLarge");
   }
 
-  // Validate total quota
+  // Deduplication: compute hash and check for an existing entry.
+  const hash = await computeHash(file);
+  const existing = await findByHash(hash);
+  if (existing) {
+    // Silent reuse — fetch full entry (with blob) and return it.
+    const full = await getMedia(existing.id);
+    if (full) return full;
+    // Unlikely: metadata found but blob missing — fall through to save new.
+  }
+
+  // Validate total quota (only for new entries)
   const currentTotal = await getTotalSize();
   if (currentTotal + file.size > MEDIA_LIMITS.MAX_TOTAL_SIZE) {
     captureMessage("Media storage full", "warning", {
@@ -109,6 +168,7 @@ export async function saveMedia(file: File | Blob): Promise<MediaEntry> {
     size: file.size,
     originalSize: file.size,
     createdAt,
+    hash,
     blob: file,
   };
 
@@ -131,14 +191,25 @@ export async function saveMedia(file: File | Blob): Promise<MediaEntry> {
 /**
  * Restore a media entry from a ZIP import, preserving its original ID.
  * Skips validation (size/type) since the data was previously validated on export.
+ *
+ * Deduplication: if an entry with the same hash (any ID) already exists,
+ * the restore is skipped to avoid storing duplicate bytes.
  * Throws on IDB errors.
  */
 export async function restoreMediaEntry(entry: MediaEntry): Promise<void> {
+  // Compute hash for the incoming blob if not already set.
+  const hash = entry.hash ?? (await computeHash(entry.blob));
+  const entryWithHash: MediaEntry = { ...entry, hash };
+
+  // Skip if a same-hash entry already exists (idempotent import).
+  const existing = await findByHash(hash);
+  if (existing) return;
+
   try {
     const db = await openDB();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(IDB_CONFIG.MEDIA_STORE_NAME, "readwrite");
-      tx.objectStore(IDB_CONFIG.MEDIA_STORE_NAME).put(entry);
+      tx.objectStore(IDB_CONFIG.MEDIA_STORE_NAME).put(entryWithHash);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
@@ -313,12 +384,14 @@ export async function compressMedia(id: string): Promise<void> {
 
     // Only update if smaller
     if (webpBlob.size < entry.size) {
+      const webpHash = await computeHash(webpBlob);
       const db = await openDB();
       const updated: MediaEntry = {
         ...entry,
         blob: webpBlob,
         mimeType: "image/webp",
         size: webpBlob.size,
+        hash: webpHash,
       };
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(IDB_CONFIG.MEDIA_STORE_NAME, "readwrite");

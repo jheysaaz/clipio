@@ -12,6 +12,11 @@
  * All public methods are wrapped in try/catch and will **never throw**.
  * Failures are silently logged so the backup layer can never block or
  * break the primary storage flow.
+ *
+ * Schema history:
+ *   v1 → creates "snippets" object store
+ *   v2 → adds "media" object store
+ *   v3 → adds non-unique "hash" index on "media" store (content-hash dedup)
  */
 
 import { IDB_CONFIG } from "~/config/constants";
@@ -20,11 +25,11 @@ import type { Snippet } from "~/types";
 import { captureError } from "~/lib/sentry";
 
 /**
- * Shared IndexedDB opener. Handles all version migrations:
- *   v1 → creates "snippets" store
- *   v2 → adds "media" store
- *
+ * Shared IndexedDB opener. Handles all version migrations.
  * Exported so MediaStore can reuse the same DB connection logic.
+ *
+ * After the DB is opened at v3, an async backfill assigns SHA-256 hashes to
+ * any existing media entries that were stored before v3.
  */
 export function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -47,11 +52,83 @@ export function openDB(): Promise<IDBDatabase> {
           db.createObjectStore(IDB_CONFIG.MEDIA_STORE_NAME, { keyPath: "id" });
         }
       }
+
+      // v3: add "hash" index to media store for content-based deduplication.
+      // The index is non-unique because two entries may share a hash only
+      // transiently (e.g. during a backfill race). multiEntry: false.
+      if (oldVersion < 3) {
+        // The media store is guaranteed to exist by this point (created in v2
+        // or above, or just created in this same transaction for v0→v3).
+        const mediaStore = event.currentTarget
+          ? (event.target as IDBOpenDBRequest).transaction!.objectStore(
+              IDB_CONFIG.MEDIA_STORE_NAME
+            )
+          : null;
+        if (mediaStore && !mediaStore.indexNames.contains("hash")) {
+          mediaStore.createIndex("hash", "hash", { unique: false });
+        }
+      }
     };
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      // Kick off async backfill for entries that pre-date v3 (no hash field).
+      // We do NOT await this — it runs in the background and never blocks callers.
+      backfillMediaHashes(db).catch((err) =>
+        captureError(err, { action: "idb.backfillMediaHashes" })
+      );
+      resolve(db);
+    };
     request.onerror = () => reject(request.error);
   });
+}
+
+/**
+ * Assign SHA-256 hashes to media entries that are missing the `hash` field.
+ * Called once per DB open after a v3 upgrade (or on any open if there are
+ * un-hashed entries from a failed previous backfill run).
+ *
+ * This is fire-and-forget: errors are captured to Sentry but never thrown.
+ */
+async function backfillMediaHashes(db: IDBDatabase): Promise<void> {
+  // Read all media entries
+  const entries: Array<{ id: string; blob: Blob; hash?: string }> =
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_CONFIG.MEDIA_STORE_NAME, "readonly");
+      const req = tx.objectStore(IDB_CONFIG.MEDIA_STORE_NAME).getAll();
+      req.onsuccess = () =>
+        resolve(req.result as Array<{ id: string; blob: Blob; hash?: string }>);
+      req.onerror = () => reject(req.error);
+    });
+
+  // Filter to only those lacking a hash
+  const needsHash = entries.filter((e) => !e.hash && e.blob instanceof Blob);
+  if (needsHash.length === 0) return;
+
+  for (const entry of needsHash) {
+    try {
+      const arrayBuffer = await entry.blob.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest("SHA-256", arrayBuffer);
+      const hashHex = Array.from(new Uint8Array(hashBuffer))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(IDB_CONFIG.MEDIA_STORE_NAME, "readwrite");
+        tx.objectStore(IDB_CONFIG.MEDIA_STORE_NAME).put({
+          ...entry,
+          hash: hashHex,
+        });
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch (err) {
+      captureError(err, {
+        action: "idb.backfillMediaHashes.entry",
+        id: entry.id,
+      });
+    }
+  }
 }
 
 export class IndexedDBBackend implements StorageBackend {

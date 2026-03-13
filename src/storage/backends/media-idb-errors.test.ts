@@ -109,9 +109,7 @@ beforeEach(() => {
 describe("saveMedia IDB error paths", () => {
   it("calls captureError and re-throws when IDB transaction fails", async () => {
     // saveMedia validates first, so provide a valid small blob
-    // We also need getTotalSize to work — it calls listMedia → openDB.
-    // Make first openDB call (getTotalSize) return a DB with empty getAll,
-    // then the second call (actual save) return a failing DB.
+    // Call order: findByHash (dedup check), getTotalSize (listMedia), saveMedia write
     const emptyDB = {
       transaction: vi.fn(() => {
         const tx = {
@@ -139,8 +137,37 @@ describe("saveMedia IDB error paths", () => {
       }),
     } as unknown as IDBDatabase;
 
-    // First call: getTotalSize (listMedia), second call: the saveMedia write
+    // findByHash DB: returns null (no duplicate found)
+    const findByHashDB = {
+      transaction: vi.fn(() => {
+        const tx = {
+          objectStore: vi.fn(() => ({
+            indexNames: { contains: vi.fn(() => true) },
+            index: vi.fn(() => ({
+              get: vi.fn(() => {
+                const req = {
+                  onsuccess: null as null | (() => void),
+                  onerror: null as null | (() => void),
+                  result: undefined,
+                };
+                Promise.resolve().then(() => {
+                  if (req.onsuccess) req.onsuccess();
+                });
+                return req;
+              }),
+            })),
+          })),
+          oncomplete: null as null | (() => void),
+          onerror: null as null | (() => void),
+          error: null,
+        };
+        return tx;
+      }),
+    } as unknown as IDBDatabase;
+
+    // Call order: findByHash, getTotalSize→listMedia, saveMedia write
     vi.mocked(openDB)
+      .mockResolvedValueOnce(findByHashDB) // findByHash (dedup check)
       .mockResolvedValueOnce(emptyDB) // getTotalSize→listMedia
       .mockResolvedValueOnce(makeFailingDB()); // saveMedia write
 
@@ -388,6 +415,34 @@ describe("readDimensions success path", () => {
       vi.fn(async () => mockBitmap)
     );
 
+    // findByHash DB: supports store.index("hash").get(...) → returns null (no duplicate)
+    const findByHashDB = {
+      transaction: vi.fn(() => {
+        const tx = {
+          objectStore: vi.fn(() => ({
+            indexNames: { contains: vi.fn(() => true) },
+            index: vi.fn(() => ({
+              get: vi.fn(() => {
+                const req = {
+                  onsuccess: null as null | (() => void),
+                  onerror: null as null | (() => void),
+                  result: undefined,
+                };
+                Promise.resolve().then(() => {
+                  if (req.onsuccess) req.onsuccess();
+                });
+                return req;
+              }),
+            })),
+          })),
+          oncomplete: null as null | (() => void),
+          onerror: null as null | (() => void),
+          error: null,
+        };
+        return tx;
+      }),
+    } as unknown as IDBDatabase;
+
     // getTotalSize needs a working listMedia → use empty getAll DB
     const emptyListDB = {
       transaction: vi.fn(() => {
@@ -433,6 +488,7 @@ describe("readDimensions success path", () => {
     } as unknown as IDBDatabase;
 
     vi.mocked(openDB)
+      .mockResolvedValueOnce(findByHashDB) // findByHash (dedup check)
       .mockResolvedValueOnce(emptyListDB) // getTotalSize → listMedia
       .mockResolvedValueOnce(writeSuccessDB); // saveMedia write
 

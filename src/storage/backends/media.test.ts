@@ -18,6 +18,8 @@ import {
   listMedia,
   getTotalSize,
   compressMedia,
+  computeHash,
+  findByHash,
 } from "./media";
 import type { MediaEntry } from "./media";
 import { MEDIA_LIMITS } from "~/config/constants";
@@ -83,9 +85,9 @@ describe("saveMedia", () => {
     expect(entry.size).toBe(512);
   });
 
-  it("assigns a unique UUID to each saved entry", async () => {
+  it("assigns a unique UUID to each saved entry with different bytes", async () => {
     const a = await saveMedia(makeBlob(100, "image/png"));
-    const b = await saveMedia(makeBlob(100, "image/png"));
+    const b = await saveMedia(makeBlob(200, "image/png")); // different size → different hash
     expect(a.id).not.toBe(b.id);
   });
 
@@ -138,21 +140,25 @@ describe("saveMedia", () => {
     const fakeDB = new IDBFactory();
     (globalThis as unknown as Record<string, unknown>).indexedDB = fakeDB;
 
-    // Open DB and insert a fake large-sized entry
+    // Open DB at v3 (with hash index) to avoid triggering a v2→v3 upgrade
+    // and the associated backfill which can hang in happy-dom.
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const req = fakeDB.open("clipio-backup", 2);
+      const req = fakeDB.open("clipio-backup", 3);
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains("snippets"))
           db.createObjectStore("snippets", { keyPath: "id" });
-        if (!db.objectStoreNames.contains("media"))
-          db.createObjectStore("media", { keyPath: "id" });
+        if (!db.objectStoreNames.contains("media")) {
+          const ms = db.createObjectStore("media", { keyPath: "id" });
+          ms.createIndex("hash", "hash", { unique: false });
+        }
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
 
-    // Insert a fake entry with a large size field (the actual blob can be small)
+    // Insert a fake entry with a large size field (the actual blob can be small).
+    // Provide a hash so backfillMediaHashes skips it.
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction("media", "readwrite");
       tx.objectStore("media").put({
@@ -163,6 +169,7 @@ describe("saveMedia", () => {
         size: MEDIA_LIMITS.MAX_TOTAL_SIZE - 100, // just under total limit
         originalSize: MEDIA_LIMITS.MAX_TOTAL_SIZE - 100,
         createdAt: new Date().toISOString(),
+        hash: "fake-large-entry-hash", // pre-filled to skip backfill
         blob: new Blob([new Uint8Array(1)], { type: "image/png" }),
       });
       tx.oncomplete = () => resolve();
@@ -176,10 +183,13 @@ describe("saveMedia", () => {
   });
 
   it("supports all SUPPORTED_TYPES", async () => {
+    // Use different sizes so each file has a unique hash (avoids dedup collisions).
+    let size = 100;
     for (const mimeType of MEDIA_LIMITS.SUPPORTED_TYPES) {
-      const file = makeBlob(100, mimeType);
+      const file = makeBlob(size, mimeType);
       const entry = await saveMedia(file);
       expect(entry.mimeType).toBe(mimeType);
+      size += 100;
     }
   });
 });
@@ -208,7 +218,7 @@ describe("restoreMediaEntry", () => {
     expect(fetched!.mimeType).toBe("image/webp");
   });
 
-  it("overwrites an existing entry with the same ID", async () => {
+  it("overwrites an existing entry with the same ID (different bytes)", async () => {
     const blob = makeBlob(32, "image/png");
     const first: MediaEntry = {
       id: "overwrite-id",
@@ -221,7 +231,15 @@ describe("restoreMediaEntry", () => {
       blob,
     };
     await restoreMediaEntry(first);
-    const updated: MediaEntry = { ...first, mimeType: "image/jpeg" };
+
+    // Use different bytes so the hash differs — dedup should not block this
+    const blob2 = makeBlob(48, "image/jpeg");
+    const updated: MediaEntry = {
+      ...first,
+      blob: blob2,
+      mimeType: "image/jpeg",
+      size: 48,
+    };
     await restoreMediaEntry(updated);
     const fetched = await getMedia("overwrite-id");
     expect(fetched!.mimeType).toBe("image/jpeg");
@@ -328,8 +346,8 @@ describe("deleteMedia", () => {
 describe("deleteMediaBatch", () => {
   it("removes all specified entries in one call", async () => {
     const a = await saveMedia(makeBlob(10, "image/png"));
-    const b = await saveMedia(makeBlob(10, "image/jpeg"));
-    const c = await saveMedia(makeBlob(10, "image/webp"));
+    const b = await saveMedia(makeBlob(20, "image/jpeg")); // different size → unique hash
+    const c = await saveMedia(makeBlob(30, "image/webp")); // different size → unique hash
 
     await deleteMediaBatch([a.id, b.id]);
 
@@ -556,5 +574,270 @@ describe("compressMedia", () => {
     expect(mockCanvas.convertToBlob).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();
+  });
+
+  it("updates the hash field after WebP compression", async () => {
+    const entry = await saveMedia(makeBlob(100, "image/png"));
+    const originalHash = entry.hash;
+
+    const smallerBlob = new Blob([new Uint8Array(10)], { type: "image/webp" });
+    const mockBitmap = { width: 10, height: 10, close: vi.fn() };
+    const mockCtx = { drawImage: vi.fn() };
+    const mockCanvas = {
+      getContext: vi.fn(() => mockCtx),
+      convertToBlob: vi.fn(async () => smallerBlob),
+    };
+
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => mockBitmap)
+    );
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      vi.fn(function () {
+        return mockCanvas;
+      })
+    );
+
+    await compressMedia(entry.id);
+
+    const after = await getMedia(entry.id);
+    expect(after!.hash).toBeDefined();
+    // The hash must change because the blob bytes changed
+    expect(after!.hash).not.toBe(originalHash);
+
+    vi.unstubAllGlobals();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeHash
+// ---------------------------------------------------------------------------
+
+describe("computeHash", () => {
+  it("returns a 64-character hex string", async () => {
+    const blob = makeBlob(32, "image/png");
+    const hash = await computeHash(blob);
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("returns the same hash for identical bytes", async () => {
+    const bytes = new Uint8Array([1, 2, 3, 4, 5]);
+    const a = new Blob([bytes], { type: "image/png" });
+    const b = new Blob([bytes], { type: "image/png" });
+    expect(await computeHash(a)).toBe(await computeHash(b));
+  });
+
+  it("returns different hashes for different bytes", async () => {
+    const a = new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" });
+    const b = new Blob([new Uint8Array([4, 5, 6])], { type: "image/png" });
+    expect(await computeHash(a)).not.toBe(await computeHash(b));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findByHash
+// ---------------------------------------------------------------------------
+
+describe("findByHash", () => {
+  it("returns null when no entry with that hash exists", async () => {
+    const result = await findByHash("a".repeat(64));
+    expect(result).toBeNull();
+  });
+
+  it("returns metadata for a matching entry", async () => {
+    const file = makeBlob(64, "image/png");
+    const saved = await saveMedia(file);
+    expect(saved.hash).toBeDefined();
+
+    const found = await findByHash(saved.hash!);
+    expect(found).not.toBeNull();
+    expect(found!.id).toBe(saved.id);
+    // No blob on metadata
+    expect("blob" in found!).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// saveMedia — deduplication
+// ---------------------------------------------------------------------------
+
+describe("saveMedia (deduplication)", () => {
+  it("returns the existing entry when the same bytes are uploaded twice", async () => {
+    const bytes = new Uint8Array([10, 20, 30, 40]);
+    const fileA = new Blob([bytes], { type: "image/png" });
+    const fileB = new Blob([bytes], { type: "image/png" });
+
+    const first = await saveMedia(fileA);
+    const second = await saveMedia(fileB);
+
+    // Same ID — no new entry was created
+    expect(second.id).toBe(first.id);
+  });
+
+  it("does not increment total size when a duplicate is uploaded", async () => {
+    const bytes = new Uint8Array([7, 8, 9]);
+    const fileA = new Blob([bytes], { type: "image/png" });
+    const fileB = new Blob([bytes], { type: "image/png" });
+
+    await saveMedia(fileA);
+    const sizeAfterFirst = await getTotalSize();
+
+    await saveMedia(fileB);
+    const sizeAfterSecond = await getTotalSize();
+
+    expect(sizeAfterSecond).toBe(sizeAfterFirst);
+  });
+
+  it("does not create a duplicate entry in listMedia for the same bytes", async () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    await saveMedia(new Blob([bytes], { type: "image/png" }));
+    await saveMedia(new Blob([bytes], { type: "image/png" }));
+
+    const list = await listMedia();
+    expect(list).toHaveLength(1);
+  });
+
+  it("stores a new entry for different bytes", async () => {
+    await saveMedia(new Blob([new Uint8Array([1])], { type: "image/png" }));
+    await saveMedia(new Blob([new Uint8Array([2])], { type: "image/png" }));
+
+    const list = await listMedia();
+    expect(list).toHaveLength(2);
+  });
+
+  it("persists the hash field on a newly saved entry", async () => {
+    const file = makeBlob(64, "image/jpeg");
+    const entry = await saveMedia(file);
+    expect(entry.hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("skips quota check for duplicate uploads (does not throw storageFull)", async () => {
+    // Fill storage just under the limit using a fake entry
+    const { IDBFactory } = await import("fake-indexeddb");
+    const fakeDB = new IDBFactory();
+    (globalThis as unknown as Record<string, unknown>).indexedDB = fakeDB;
+
+    // Open at v3 with media store + hash index
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = fakeDB.open("clipio-backup", 3);
+      req.onupgradeneeded = () => {
+        const d = req.result;
+        if (!d.objectStoreNames.contains("snippets"))
+          d.createObjectStore("snippets", { keyPath: "id" });
+        if (!d.objectStoreNames.contains("media")) {
+          const ms = d.createObjectStore("media", { keyPath: "id" });
+          ms.createIndex("hash", "hash", { unique: false });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+
+    const { MEDIA_LIMITS: ML } = await import("~/config/constants");
+
+    // Insert a fake large-sized sentinel entry (small blob, large size field)
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("media", "readwrite");
+      tx.objectStore("media").put({
+        id: "sentinel",
+        mimeType: "image/png",
+        width: 1,
+        height: 1,
+        size: ML.MAX_TOTAL_SIZE - 1,
+        originalSize: ML.MAX_TOTAL_SIZE - 1,
+        createdAt: new Date().toISOString(),
+        hash: "sentinel-hash",
+        blob: new Blob([new Uint8Array(1)], { type: "image/png" }),
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+
+    // First upload of a unique small file — should throw storageFull
+    const uniqueFile = new Blob([new Uint8Array([42, 43])], {
+      type: "image/png",
+    });
+    await expect(saveMedia(uniqueFile)).rejects.toThrow(
+      "media.errors.storageFull"
+    );
+
+    // Now save it once ignoring quota (we'll seed it directly into IDB)
+    const hash = await computeHash(uniqueFile);
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("media", "readwrite");
+      tx.objectStore("media").put({
+        id: "pre-existing",
+        mimeType: "image/png",
+        width: 1,
+        height: 1,
+        size: 2,
+        originalSize: 2,
+        createdAt: new Date().toISOString(),
+        hash,
+        blob: uniqueFile,
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+
+    // Re-upload the same bytes — dedup path should NOT throw storageFull
+    const duplicate = new Blob([new Uint8Array([42, 43])], {
+      type: "image/png",
+    });
+    const result = await saveMedia(duplicate);
+    expect(result.id).toBe("pre-existing");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// restoreMediaEntry — deduplication
+// ---------------------------------------------------------------------------
+
+describe("restoreMediaEntry (deduplication)", () => {
+  it("skips restore when a same-hash entry already exists", async () => {
+    const bytes = new Uint8Array([5, 6, 7]);
+    const blob = new Blob([bytes], { type: "image/webp" });
+
+    const original: MediaEntry = {
+      id: "original-id",
+      mimeType: "image/webp",
+      width: 1,
+      height: 1,
+      size: bytes.length,
+      originalSize: bytes.length,
+      createdAt: "2025-01-01T00:00:00.000Z",
+      blob,
+    };
+    await restoreMediaEntry(original);
+
+    // Attempt to restore a different ID with the same blob bytes
+    const duplicate: MediaEntry = {
+      ...original,
+      id: "duplicate-id",
+    };
+    await restoreMediaEntry(duplicate);
+
+    // The duplicate ID must NOT exist
+    expect(await getMedia("duplicate-id")).toBeNull();
+    // The original still exists
+    expect(await getMedia("original-id")).not.toBeNull();
+  });
+
+  it("persists the hash field on a newly restored entry", async () => {
+    const blob = makeBlob(32, "image/jpeg");
+    const entry: MediaEntry = {
+      id: "restore-hash-test",
+      mimeType: "image/jpeg",
+      width: 1,
+      height: 1,
+      size: 32,
+      originalSize: 32,
+      createdAt: "2025-01-01T00:00:00.000Z",
+      blob,
+    };
+    await restoreMediaEntry(entry);
+    const fetched = await getMedia("restore-hash-test");
+    expect(fetched!.hash).toMatch(/^[0-9a-f]{64}$/);
   });
 });
