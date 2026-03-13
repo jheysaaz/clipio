@@ -1,5 +1,12 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { Clipboard, Calendar, MousePointer2, CalendarDays } from "lucide-react";
+import {
+  Clipboard,
+  Calendar,
+  MousePointer2,
+  CalendarDays,
+  ImageIcon,
+  Film,
+} from "lucide-react";
 import { cn } from "~/lib/utils";
 import { useVirtualFloating, offset, flip, shift } from "@platejs/floating";
 import type { SlashCommandMenuProps } from "../types";
@@ -10,6 +17,8 @@ export function SlashCommandMenu({
   onInsertDate,
   onInsertCursor,
   onInsertDatepicker,
+  onInsertImage,
+  onInsertGif,
   onClose,
   targetRange,
   searchQuery,
@@ -56,6 +65,22 @@ export function SlashCommandMenu({
         action: onInsertDatepicker,
         disabled: false,
       },
+      {
+        id: "image",
+        label: i18n.t("editor.slashMenu.image.label"),
+        description: i18n.t("editor.slashMenu.image.description"),
+        icon: ImageIcon,
+        action: onInsertImage,
+        disabled: false,
+      },
+      {
+        id: "gif",
+        label: i18n.t("editor.slashMenu.gif.label"),
+        description: i18n.t("editor.slashMenu.gif.description"),
+        icon: Film,
+        action: onInsertGif,
+        disabled: false,
+      },
     ];
 
     if (!searchQuery) return allCommands;
@@ -73,6 +98,8 @@ export function SlashCommandMenu({
     onInsertDate,
     onInsertCursor,
     onInsertDatepicker,
+    onInsertImage,
+    onInsertGif,
   ]);
 
   useEffect(() => {
@@ -149,6 +176,7 @@ export function SlashCommandMenu({
   const floating = useVirtualFloating({
     getBoundingClientRect,
     open: true,
+    strategy: "fixed",
     middleware: [
       offset(4),
       flip({ fallbackPlacements: ["top-start", "bottom-end", "top-end"] }),
@@ -225,56 +253,58 @@ export function SlashCommandMenu({
           {i18n.t("editor.slashMenu.noMatches")}
         </div>
       ) : (
-        commands.map((command, index) => {
-          const Icon = command.icon;
-          return (
-            <button
-              key={command.id}
-              id={`slash-cmd-${command.id}`}
-              type="button"
-              role="option"
-              aria-selected={selectedIndex === index}
-              aria-disabled={command.disabled}
-              disabled={command.disabled}
-              className={cn(
-                "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-left transition-colors",
-                command.disabled
-                  ? "opacity-50 cursor-not-allowed"
-                  : selectedIndex === index
-                    ? "bg-accent"
-                    : "hover:bg-accent"
-              )}
-              onClick={() => !command.disabled && command.action()}
-              onMouseEnter={() => setSelectedIndex(index)}
-            >
-              <div
+        <div className="overflow-y-auto max-h-[280px]">
+          {commands.map((command, index) => {
+            const Icon = command.icon;
+            return (
+              <button
+                key={command.id}
+                id={`slash-cmd-${command.id}`}
+                type="button"
+                role="option"
+                aria-selected={selectedIndex === index}
+                aria-disabled={command.disabled}
+                disabled={command.disabled}
                 className={cn(
-                  "flex items-center justify-center w-6 h-6 rounded",
+                  "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-left transition-colors",
                   command.disabled
-                    ? "bg-muted text-muted-foreground"
-                    : "bg-accent text-accent-foreground"
+                    ? "opacity-50 cursor-not-allowed"
+                    : selectedIndex === index
+                      ? "bg-accent"
+                      : "hover:bg-accent"
                 )}
+                onClick={() => !command.disabled && command.action()}
+                onMouseEnter={() => setSelectedIndex(index)}
               >
-                <Icon className="h-3.5 w-3.5" strokeWidth={2} />
-              </div>
-              <div className="flex-1 min-w-0">
                 <div
                   className={cn(
-                    "font-medium",
+                    "flex items-center justify-center w-6 h-6 rounded",
                     command.disabled
-                      ? "text-muted-foreground"
-                      : "text-foreground"
+                      ? "bg-muted text-muted-foreground"
+                      : "bg-accent text-accent-foreground"
                   )}
                 >
-                  {command.label}
+                  <Icon className="h-3.5 w-3.5" strokeWidth={2} />
                 </div>
-                <div className="text-xs text-muted-foreground truncate">
-                  {command.description}
+                <div className="flex-1 min-w-0">
+                  <div
+                    className={cn(
+                      "font-medium",
+                      command.disabled
+                        ? "text-muted-foreground"
+                        : "text-foreground"
+                    )}
+                  >
+                    {command.label}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {command.description}
+                  </div>
                 </div>
-              </div>
-            </button>
-          );
-        })
+              </button>
+            );
+          })}
+        </div>
       )}
     </div>
   );

@@ -9,6 +9,7 @@ import {
   findSnippetMatch,
   formatDate,
   processSnippetContent,
+  escapeHtmlAttr,
   type ContentSnippet,
 } from "./content-helpers";
 
@@ -351,5 +352,246 @@ describe("processSnippetContent", () => {
       () => "hello"
     );
     expect(result.content).toContain("hello");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// processSnippetContent — image & gif placeholders
+// ---------------------------------------------------------------------------
+
+describe("processSnippetContent — image & gif placeholders", () => {
+  const noClipboard = () => "";
+
+  // ── Plain text mode ───────────────────────────────────────────────────────
+
+  it("replaces {{image:id}} with '[image]' in plain text mode", () => {
+    const result = processSnippetContent(
+      "See: {{image:abc123}}",
+      false,
+      noClipboard
+    );
+    expect(result.content).toBe("See: [image]");
+  });
+
+  it("replaces multiple {{image:id}} placeholders in plain text mode", () => {
+    const result = processSnippetContent(
+      "{{image:aaa}} and {{image:bbb}}",
+      false,
+      noClipboard
+    );
+    expect(result.content).toBe("[image] and [image]");
+  });
+
+  it("replaces {{gif:id}} with default Giphy URL in plain text mode", () => {
+    const result = processSnippetContent(
+      "GIF: {{gif:abc123}}",
+      false,
+      noClipboard
+    );
+    expect(result.content).toContain("abc123");
+    expect(result.content).toContain("giphy.com");
+  });
+
+  it("uses custom resolveGif in plain text mode", () => {
+    const result = processSnippetContent(
+      "{{gif:myId}}",
+      false,
+      noClipboard,
+      undefined,
+      (id) => `https://example.com/${id}.gif`
+    );
+    expect(result.content).toBe("https://example.com/myId.gif");
+  });
+
+  // ── HTML mode ─────────────────────────────────────────────────────────────
+
+  it("resolves {{image:id}} to <img src> in HTML mode with resolveMedia", () => {
+    const result = processSnippetContent(
+      "{{image:abc-123-def}}",
+      true,
+      noClipboard,
+      (_id) => ({ src: "blob:http://localhost/fake-url" })
+    );
+    expect(result.content).toContain('src="blob:http://localhost/fake-url"');
+    expect(result.content).not.toContain("data-clipio-media");
+  });
+
+  it("omits image from HTML when resolveMedia returns null", () => {
+    const result = processSnippetContent(
+      "before {{image:abc-123-def}} after",
+      true,
+      noClipboard,
+      (_id) => null
+    );
+    expect(result.content).not.toContain("data-clipio-media");
+    expect(result.content).not.toContain("<img");
+    expect(result.content).toContain("before");
+    expect(result.content).toContain("after");
+  });
+
+  it("keeps <img src> for GIFs in HTML mode (already resolved by markdownToHtml)", () => {
+    const result = processSnippetContent("{{gif:giphy123}}", true, noClipboard);
+    expect(result.content).toContain("giphy123");
+    expect(result.content).toContain("<img");
+  });
+
+  it("passes through without resolveMedia (image left with data-clipio-media attr)", () => {
+    const result = processSnippetContent(
+      "{{image:abc-123-def}}",
+      true,
+      noClipboard
+      // no resolveMedia
+    );
+    // Without resolver, the data-clipio-media attribute remains as-is
+    expect(result.content).toContain("data-clipio-media");
+  });
+
+  it("existing tests remain backward compatible (no resolveMedia/Gif args)", () => {
+    const result = processSnippetContent("**bold**", true, noClipboard);
+    expect(result.content).toBe("<strong>bold</strong>");
+  });
+
+  // ── Image-only snippet guard (content.ts line 517) ────────────────────────
+  // The fix changes the guard from `!getPlainTextFromHtml(processedContent)`
+  // (which is true for image-only HTML) to `!processedContent?.trim()`.
+  // These tests verify that processSnippetContent returns a non-empty HTML
+  // string for image-only snippets so the guard passes.
+  // Note: markdownInlineToHtml matches {{image:<uuid>}} where uuid is [a-f0-9-]+.
+
+  it("returns non-empty HTML string for image-only snippet (guard must not drop it)", () => {
+    const result = processSnippetContent(
+      "{{image:abc123de-fa01-4567-89ab-cdef01234567}}",
+      true,
+      noClipboard,
+      (_id) => ({ src: "data:image/png;base64,abc==" })
+    );
+    // The HTML string itself must be non-empty — the fixed guard checks this
+    expect(result.content.trim()).not.toBe("");
+    expect(result.content).toContain("<img");
+  });
+
+  it("resolved image-only snippet HTML contains the data URL src", () => {
+    const dataUrl = "data:image/png;base64,iVBOR==";
+    const result = processSnippetContent(
+      "{{image:abc123de-fa01-4567-89ab-cdef01234567}}",
+      true,
+      noClipboard,
+      (_id) => ({ src: dataUrl })
+    );
+    expect(result.content).toContain(`src="${dataUrl}"`);
+  });
+
+  // spec: width suffix in placeholder is preserved in the resolved <img> style
+  it("preserves image width in HTML mode when placeholder has a width suffix", () => {
+    const result = processSnippetContent(
+      "{{image:abc123de-fa01-4567-89ab-cdef01234567:320}}",
+      true,
+      noClipboard,
+      (_id) => ({ src: "blob:http://localhost/fake-url" })
+    );
+    expect(result.content).toContain("width:320px");
+    expect(result.content).toContain('src="blob:http://localhost/fake-url"');
+  });
+
+  // spec: image without width suffix still gets max-width:100% fallback style
+  it("applies default max-width style when image placeholder has no width suffix", () => {
+    const result = processSnippetContent(
+      "{{image:abc123de-fa01-4567-89ab-cdef01234567}}",
+      true,
+      noClipboard,
+      (_id) => ({ src: "blob:http://localhost/fake-url" })
+    );
+    expect(result.content).toContain("max-width:100%");
+    expect(result.content).not.toContain("width:undefinedpx");
+  });
+
+  // spec: alt text from media metadata is injected into <img alt="...">
+  it("injects alt text into resolved <img> tag", () => {
+    const result = processSnippetContent(
+      "{{image:abc123de-fa01-4567-89ab-cdef01234567}}",
+      true,
+      noClipboard,
+      (_id) => ({ src: "blob:http://localhost/fake-url", alt: "My screenshot" })
+    );
+    expect(result.content).toContain('alt="My screenshot"');
+  });
+
+  // spec: double-quotes in alt text are escaped
+  it("escapes double quotes in alt text", () => {
+    const result = processSnippetContent(
+      "{{image:abc123de-fa01-4567-89ab-cdef01234567}}",
+      true,
+      noClipboard,
+      (_id) => ({ src: "blob:http://localhost/fake-url", alt: 'Say "hello"' })
+    );
+    expect(result.content).toContain("Say &quot;hello&quot;");
+  });
+
+  // spec: no alt attribute emitted when alt is absent
+  it("omits alt attribute when media has no alt", () => {
+    const result = processSnippetContent(
+      "{{image:abc123de-fa01-4567-89ab-cdef01234567}}",
+      true,
+      noClipboard,
+      (_id) => ({ src: "blob:http://localhost/fake-url" })
+    );
+    expect(result.content).not.toContain('alt="');
+  });
+
+  // spec: single-quotes in alt are escaped to prevent attribute injection
+  it("escapes single quotes in alt text", () => {
+    const result = processSnippetContent(
+      "{{image:abc123de-fa01-4567-89ab-cdef01234567}}",
+      true,
+      noClipboard,
+      (_id) => ({ src: "blob:http://localhost/fake-url", alt: "it's here" })
+    );
+    expect(result.content).toContain("it&#39;s here");
+    expect(result.content).not.toContain("it's here");
+  });
+
+  // spec: < and > in alt are escaped to prevent HTML injection
+  it("escapes angle brackets in alt text", () => {
+    const result = processSnippetContent(
+      "{{image:abc123de-fa01-4567-89ab-cdef01234567}}",
+      true,
+      noClipboard,
+      (_id) => ({
+        src: "blob:http://localhost/fake-url",
+        alt: "<script>alert(1)</script>",
+      })
+    );
+    expect(result.content).toContain("&lt;script&gt;");
+    expect(result.content).not.toContain("<script>");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// escapeHtmlAttr
+// ---------------------------------------------------------------------------
+
+describe("escapeHtmlAttr", () => {
+  it("escapes double quotes", () => {
+    expect(escapeHtmlAttr('say "hi"')).toBe("say &quot;hi&quot;");
+  });
+
+  it("escapes single quotes", () => {
+    expect(escapeHtmlAttr("it's")).toBe("it&#39;s");
+  });
+
+  it("escapes less-than and greater-than", () => {
+    expect(escapeHtmlAttr("<b>bold</b>")).toBe("&lt;b&gt;bold&lt;/b&gt;");
+  });
+
+  it("escapes ampersands first to prevent double-escaping", () => {
+    expect(escapeHtmlAttr("a & b")).toBe("a &amp; b");
+  });
+
+  it("returns empty string unchanged", () => {
+    expect(escapeHtmlAttr("")).toBe("");
+  });
+
+  it("returns plain text unchanged", () => {
+    expect(escapeHtmlAttr("hello world")).toBe("hello world");
   });
 });

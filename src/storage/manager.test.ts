@@ -75,6 +75,11 @@ vi.mock("./items", () => ({
   syncDataLostItem: mockSyncDataLost,
 }));
 
+vi.mock("~/storage/backends/media", () => ({
+  getMedia: vi.fn(async () => null),
+  listMedia: vi.fn(async () => []),
+}));
+
 vi.mock("~/lib/exporters/clipio", () => ({
   buildClipioExport: vi.fn((snippets: Snippet[]) => ({
     version: 1,
@@ -82,6 +87,18 @@ vi.mock("~/lib/exporters/clipio", () => ({
     exportedAt: new Date().toISOString(),
     snippets,
   })),
+  buildClipioExportV2: vi.fn((snippets: Snippet[], media: unknown[]) => ({
+    version: 2,
+    format: "clipio",
+    exportedAt: new Date().toISOString(),
+    snippets,
+    media,
+  })),
+  buildClipioZip: vi.fn(
+    async () => new Blob(["zip"], { type: "application/zip" })
+  ),
+  snippetsContainMedia: vi.fn(() => false),
+  extractMediaIds: vi.fn(() => []),
 }));
 
 // ---------------------------------------------------------------------------

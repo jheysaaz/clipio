@@ -11,6 +11,26 @@
  */
 
 import { markdownToHtml, markdownToPlainText } from "./markdown";
+import { buildGifUrl } from "./giphy";
+
+// ---------------------------------------------------------------------------
+// Security helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Escapes a string for safe use inside an HTML attribute value (double- or
+ * single-quoted).  Prevents attribute-injection and XSS when content from
+ * user-controlled sources (e.g. image alt text stored in IDB) is interpolated
+ * into a raw HTML string that will later be assigned to `innerHTML`.
+ */
+export function escapeHtmlAttr(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -152,12 +172,16 @@ export function formatDate(format: string, dateStr?: string): string {
  * @param content - Raw Clipio Markdown content from the snippet.
  * @param asHtml - When true, converts output to HTML for contenteditable.
  * @param readClipboard - Function that reads the current clipboard text.
+ * @param resolveMedia - Optional: given a media ID, returns `{ src, alt }` (or null to omit).
+ * @param resolveGif - Optional: given a Giphy ID, returns the GIF URL (defaults to buildGifUrl).
  * @returns Processed content string and cursor offset (null if no {{cursor}}).
  */
 export function processSnippetContent(
   content: string,
   asHtml: boolean,
-  readClipboard: () => string
+  readClipboard: () => string,
+  resolveMedia?: (id: string) => { src: string; alt?: string | null } | null,
+  resolveGif?: (id: string) => string
 ): ProcessedContent {
   let processedContent = content;
   let cursorOffset: number | null = null;
@@ -193,7 +217,30 @@ export function processSnippetContent(
 
   if (asHtml) {
     // Convert markdown → HTML ({{cursor}} survives escaping intact)
+    // markdownToHtml already handles {{gif:id}} → <img src="giphy-url">
+    // and {{image:id}} → <img data-clipio-media="id"> (no src yet)
     processedContent = markdownToHtml(processedContent);
+
+    // 4. Image placeholders — inject actual object URL src into <img data-clipio-media="id">
+    if (resolveMedia) {
+      processedContent = processedContent.replace(
+        /<img[^>]*data-clipio-media="([^"]+)"[^>]*>/g,
+        (match, id: string) => {
+          const resolved = resolveMedia(id);
+          if (!resolved) return ""; // omit unresolvable images
+          // Preserve the style attribute (may carry width:NNNpx) from markdownToHtml output
+          const styleMatch = match.match(/style="([^"]*)"/);
+          const style = styleMatch
+            ? styleMatch[1]
+            : "max-width:100%;height:auto;";
+          const altAttr = resolved.alt
+            ? ` alt="${escapeHtmlAttr(resolved.alt)}"`
+            : "";
+          return `<img src="${resolved.src}"${altAttr} style="${style}" />`;
+        }
+      );
+    }
+
     // Replace first {{cursor}} with a marker element for cursor positioning
     processedContent = processedContent.replace(
       /\{\{cursor\}\}/,
@@ -203,7 +250,23 @@ export function processSnippetContent(
     processedContent = processedContent.replace(/\{\{cursor\}\}/g, "");
     // cursorOffset stays null for HTML mode (cursor is handled via DOM marker)
   } else {
-    // Plain text mode: strip markdown and handle cursor offset
+    // Plain text mode
+
+    // 4. Image placeholders → "[image]"
+    processedContent = processedContent.replace(
+      /\{\{image:[^}]+\}\}/g,
+      "[image]"
+    );
+
+    // 5. GIF placeholders → Giphy URL
+    processedContent = processedContent.replace(
+      /\{\{gif:([^}]+)\}\}/g,
+      (_match, id: string) => {
+        return resolveGif ? resolveGif(id) : buildGifUrl(id);
+      }
+    );
+
+    // Strip markdown and handle cursor offset
     const cursorMatch = processedContent.match(/\{\{cursor\}\}/);
     if (cursorMatch && cursorMatch.index !== undefined) {
       // Compute the plain-text offset of everything before the cursor marker
@@ -215,6 +278,14 @@ export function processSnippetContent(
       processedBefore = processedBefore.replace(
         /\{\{datepicker:\d{4}-\d{2}-\d{2}\}\}/g,
         ""
+      );
+      processedBefore = processedBefore.replace(
+        /\{\{image:[^}]+\}\}/g,
+        "[image]"
+      );
+      processedBefore = processedBefore.replace(
+        /\{\{gif:([^}]+)\}\}/g,
+        (_m, id: string) => (resolveGif ? resolveGif(id) : buildGifUrl(id))
       );
       cursorOffset = markdownToPlainText(processedBefore).length;
 

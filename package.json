@@ -1,8 +1,8 @@
 {
   "name": "clipio",
-  "displayName": "Clipio: Snippets Manager",
+  "displayName": "Clipio — Snippets Manager",
   "description": "A powerful browser extension for managing and inserting snippets with lightning speed and increase your productivity.",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",
@@ -44,6 +44,7 @@
     "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "fflate": "^0.8.2",
     "lucide-react": "^0.577.0",
     "platejs": "^52.3.4",
     "react": "^19.2.4",

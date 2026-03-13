@@ -19,14 +19,33 @@ import type { StorageBackend } from "../types";
 import type { Snippet } from "~/types";
 import { captureError } from "~/lib/sentry";
 
-function openDB(): Promise<IDBDatabase> {
+/**
+ * Shared IndexedDB opener. Handles all version migrations:
+ *   v1 → creates "snippets" store
+ *   v2 → adds "media" store
+ *
+ * Exported so MediaStore can reuse the same DB connection logic.
+ */
+export function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(IDB_CONFIG.DB_NAME, IDB_CONFIG.VERSION);
 
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(IDB_CONFIG.STORE_NAME)) {
-        db.createObjectStore(IDB_CONFIG.STORE_NAME, { keyPath: "id" });
+      const oldVersion = event.oldVersion;
+
+      // v1: create snippets store (first install or upgrade from nothing)
+      if (oldVersion < 1) {
+        if (!db.objectStoreNames.contains(IDB_CONFIG.STORE_NAME)) {
+          db.createObjectStore(IDB_CONFIG.STORE_NAME, { keyPath: "id" });
+        }
+      }
+
+      // v2: add media store
+      if (oldVersion < 2) {
+        if (!db.objectStoreNames.contains(IDB_CONFIG.MEDIA_STORE_NAME)) {
+          db.createObjectStore(IDB_CONFIG.MEDIA_STORE_NAME, { keyPath: "id" });
+        }
       }
     };
 

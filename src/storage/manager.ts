@@ -17,7 +17,15 @@ import { IndexedDBBackend } from "./backends/indexeddb";
 import { StorageQuotaError } from "./types";
 import type { StorageMode, StorageStatus } from "./types";
 import type { Snippet } from "~/types";
-import { buildClipioExport } from "~/lib/exporters/clipio";
+import {
+  buildClipioExport,
+  buildClipioExportV2,
+  buildClipioZip,
+  snippetsContainMedia,
+  extractMediaIds,
+} from "~/lib/exporters/clipio";
+import { getMedia, listMedia } from "~/storage/backends/media";
+import type { MediaMetadata } from "~/storage/backends/media";
 import { captureError } from "~/lib/sentry";
 import { storageModeItem, syncDataLostItem } from "./items";
 
@@ -153,6 +161,39 @@ export class StorageManager {
 
   async exportSnippets(): Promise<void> {
     const snippets = await this.getSnippets();
+
+    if (snippetsContainMedia(snippets)) {
+      // v2: ZIP export with embedded images
+      try {
+        const mediaIds = extractMediaIds(snippets);
+        const allMeta = await listMedia();
+        const referencedMeta = allMeta.filter((m) => mediaIds.includes(m.id));
+
+        const blobs = new Map<string, Blob>();
+        for (const meta of referencedMeta) {
+          const entry = await getMedia(meta.id);
+          if (entry?.blob) {
+            blobs.set(meta.id, entry.blob);
+          }
+        }
+
+        const payload = buildClipioExportV2(snippets, referencedMeta);
+        const zipBlob = await buildClipioZip(payload, blobs);
+        const url = URL.createObjectURL(zipBlob);
+
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `clipio-snippets-${new Date().toISOString().slice(0, 10)}.clipio.zip`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+        return;
+      } catch (err) {
+        captureError(err, { action: "export.zip" });
+        // Fall through to JSON export as a fallback
+      }
+    }
+
+    // v1: plain JSON export (no images, or ZIP failed)
     const payload = buildClipioExport(snippets);
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json" });

@@ -20,6 +20,8 @@ function stripMarkdown(content: string): string {
   text = text.replace(/\{\{date:([a-z]+)\}\}/g, "{{today}}");
   text = text.replace(/\{\{cursor\}\}/g, "{{cursor}}");
   text = text.replace(/\{\{datepicker:(\d{4}-\d{2}-\d{2})\}\}/g, "{{date}}");
+  text = text.replace(/\{\{image:[a-f0-9-]+\}\}/g, "[image]");
+  text = text.replace(/\{\{gif:[a-zA-Z0-9]+\}\}/g, "[GIF]");
   // Also handle any legacy HTML tags
   text = text.replace(/<[^>]*>/g, "");
   // Decode common HTML entities

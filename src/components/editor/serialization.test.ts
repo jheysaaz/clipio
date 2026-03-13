@@ -15,6 +15,8 @@ import {
   DATE_PLACEHOLDER,
   CURSOR_PLACEHOLDER,
   DATEPICKER_PLACEHOLDER,
+  IMAGE_PLACEHOLDER,
+  GIF_PLACEHOLDER,
   LINK_ELEMENT,
 } from "./types";
 import type { TElement, TText } from "platejs";
@@ -52,6 +54,22 @@ const linkNode = (url: string, label: string): TElement =>
     type: LINK_ELEMENT,
     url,
     children: [{ text: label }],
+  }) as TElement;
+
+const imageNode = (mediaId: string, width?: number): TElement =>
+  ({
+    type: IMAGE_PLACEHOLDER,
+    mediaId,
+    ...(width ? { width } : {}),
+    children: [{ text: "" }],
+  }) as TElement;
+
+const gifNode = (giphyId: string, width?: number): TElement =>
+  ({
+    type: GIF_PLACEHOLDER,
+    giphyId,
+    ...(width ? { width } : {}),
+    children: [{ text: "" }],
   }) as TElement;
 
 // ---------------------------------------------------------------------------
@@ -132,6 +150,21 @@ describe("serializeToMarkdown", () => {
     expect(
       serializeToMarkdown([p([linkNode("https://example.com", "Click here")])])
     ).toBe("[Click here](https://example.com)");
+  });
+
+  // spec: IMAGE_PLACEHOLDER → {{image:<mediaId>}}
+  it("serializes image placeholder", () => {
+    const mediaId = "550e8400-e29b-41d4-a716-446655440000";
+    expect(serializeToMarkdown([p([imageNode(mediaId)])])).toBe(
+      `{{image:${mediaId}}}`
+    );
+  });
+
+  // spec: GIF_PLACEHOLDER → {{gif:<giphyId>}}
+  it("serializes gif placeholder", () => {
+    expect(serializeToMarkdown([p([gifNode("abc123XYZ")])])).toBe(
+      "{{gif:abc123XYZ}}"
+    );
   });
 
   // spec: multiple paragraphs joined with \n
@@ -360,6 +393,23 @@ describe("deserializeContent (markdown path)", () => {
     expect(firstChild.date).toBe("2025-06-15");
   });
 
+  // spec: MUST create IMAGE_PLACEHOLDER with mediaId prop
+  it("deserializes {{image:<uuid>}} placeholder", () => {
+    const mediaId = "550e8400-e29b-41d4-a716-446655440000";
+    const result = deserializeContent(`{{image:${mediaId}}}`);
+    const firstChild = result[0].children[0] as TElement & { mediaId: string };
+    expect(firstChild.type).toBe(IMAGE_PLACEHOLDER);
+    expect(firstChild.mediaId).toBe(mediaId);
+  });
+
+  // spec: MUST create GIF_PLACEHOLDER with giphyId prop
+  it("deserializes {{gif:<giphyId>}} placeholder", () => {
+    const result = deserializeContent("{{gif:abc123XYZ}}");
+    const firstChild = result[0].children[0] as TElement & { giphyId: string };
+    expect(firstChild.type).toBe(GIF_PLACEHOLDER);
+    expect(firstChild.giphyId).toBe("abc123XYZ");
+  });
+
   // spec: MUST create LINK_ELEMENT for [label](url)
   it("deserializes [label](url) as link element", () => {
     const result = deserializeContent("[Click here](https://example.com)");
@@ -456,9 +506,114 @@ describe("serialize → deserialize → serialize round-trip", () => {
     );
   });
 
-  it("round-trips multi-line content", () => {
-    const md = "First line\nSecond line\nThird line";
+  it("round-trips image placeholder", () => {
+    const md = "{{image:550e8400-e29b-41d4-a716-446655440000}}";
     expect(roundTrip(md)).toBe(md);
+  });
+
+  it("round-trips gif placeholder", () => {
+    expect(roundTrip("{{gif:abc123XYZ}}")).toBe("{{gif:abc123XYZ}}");
+  });
+
+  it("round-trips image placeholder with width", () => {
+    const md = "{{image:550e8400-e29b-41d4-a716-446655440000:200}}";
+    expect(roundTrip(md)).toBe(md);
+  });
+
+  it("round-trips gif placeholder with width", () => {
+    expect(roundTrip("{{gif:abc123XYZ:350}}")).toBe("{{gif:abc123XYZ:350}}");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Width suffix — serialize / deserialize
+// ---------------------------------------------------------------------------
+
+describe("image/gif width suffix", () => {
+  const mediaId = "550e8400-e29b-41d4-a716-446655440000";
+
+  // ── serialize ──────────────────────────────────────────────────────────────
+
+  it("serializes image node without width as {{image:<id>}}", () => {
+    expect(serializeToMarkdown([p([imageNode(mediaId)])])).toBe(
+      `{{image:${mediaId}}}`
+    );
+  });
+
+  it("serializes image node with width as {{image:<id>:<width>}}", () => {
+    expect(serializeToMarkdown([p([imageNode(mediaId, 200)])])).toBe(
+      `{{image:${mediaId}:200}}`
+    );
+  });
+
+  it("serializes gif node without width as {{gif:<id>}}", () => {
+    expect(serializeToMarkdown([p([gifNode("abc123XYZ")])])).toBe(
+      "{{gif:abc123XYZ}}"
+    );
+  });
+
+  it("serializes gif node with width as {{gif:<id>:<width>}}", () => {
+    expect(serializeToMarkdown([p([gifNode("abc123XYZ", 350)])])).toBe(
+      "{{gif:abc123XYZ:350}}"
+    );
+  });
+
+  // ── deserialize ────────────────────────────────────────────────────────────
+
+  it("deserializes {{image:<id>}} without width — no width prop", () => {
+    const result = deserializeContent(`{{image:${mediaId}}}`);
+    const node = result[0].children[0] as TElement & {
+      mediaId: string;
+      width?: number;
+    };
+    expect(node.type).toBe(IMAGE_PLACEHOLDER);
+    expect(node.mediaId).toBe(mediaId);
+    expect(node.width).toBeUndefined();
+  });
+
+  it("deserializes {{image:<id>:200}} with width prop = 200", () => {
+    const result = deserializeContent(`{{image:${mediaId}:200}}`);
+    const node = result[0].children[0] as TElement & {
+      mediaId: string;
+      width?: number;
+    };
+    expect(node.type).toBe(IMAGE_PLACEHOLDER);
+    expect(node.mediaId).toBe(mediaId);
+    expect(node.width).toBe(200);
+  });
+
+  it("deserializes {{gif:<id>}} without width — no width prop", () => {
+    const result = deserializeContent("{{gif:abc123XYZ}}");
+    const node = result[0].children[0] as TElement & {
+      giphyId: string;
+      width?: number;
+    };
+    expect(node.type).toBe(GIF_PLACEHOLDER);
+    expect(node.giphyId).toBe("abc123XYZ");
+    expect(node.width).toBeUndefined();
+  });
+
+  it("deserializes {{gif:<id>:350}} with width prop = 350", () => {
+    const result = deserializeContent("{{gif:abc123XYZ:350}}");
+    const node = result[0].children[0] as TElement & {
+      giphyId: string;
+      width?: number;
+    };
+    expect(node.type).toBe(GIF_PLACEHOLDER);
+    expect(node.giphyId).toBe("abc123XYZ");
+    expect(node.width).toBe(350);
+  });
+
+  // ── mixed content ──────────────────────────────────────────────────────────
+
+  it("deserializes text mixed with image+width placeholder", () => {
+    const result = deserializeContent(`Hello {{image:${mediaId}:120}} world`);
+    const children = result[0].children as Array<
+      TElement & { mediaId?: string; width?: number }
+    >;
+    const imgNode = children.find((c) => c.type === IMAGE_PLACEHOLDER);
+    expect(imgNode).toBeDefined();
+    expect(imgNode!.width).toBe(120);
   });
 });
 
@@ -536,6 +691,25 @@ describe("markdownToHtml", () => {
     const result = markdownToHtml("[Click](example.com)");
     expect(result).toContain('href="https://example.com"');
   });
+
+  // spec: {{image:<id>}} → <img data-clipio-media="<id>" ...>
+  it("converts image placeholder to img tag with data-clipio-media", () => {
+    const mediaId = "550e8400-e29b-41d4-a716-446655440000";
+    const result = markdownToHtml(`{{image:${mediaId}}}`);
+    expect(result).toContain(`data-clipio-media="${mediaId}"`);
+    expect(result).toContain("<img");
+    expect(result).toContain('alt="image"');
+  });
+
+  // spec: {{gif:<id>}} → <img src="https://media.giphy.com/media/<id>/giphy.gif" ...>
+  it("converts gif placeholder to img tag with giphy URL", () => {
+    const result = markdownToHtml("{{gif:abc123XYZ}}");
+    expect(result).toContain(
+      'src="https://media.giphy.com/media/abc123XYZ/giphy.gif"'
+    );
+    expect(result).toContain("<img");
+    expect(result).toContain('alt="GIF"');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -597,5 +771,16 @@ describe("markdownToPlainText", () => {
   it("strips all marks from mixed content", () => {
     const result = markdownToPlainText("Hello **world** and _everyone_!");
     expect(result).toBe("Hello world and everyone!");
+  });
+
+  // spec: MUST convert {{image:<id>}} → [image]
+  it("converts image placeholder to [image]", () => {
+    const mediaId = "550e8400-e29b-41d4-a716-446655440000";
+    expect(markdownToPlainText(`{{image:${mediaId}}}`)).toBe("[image]");
+  });
+
+  // spec: MUST convert {{gif:<id>}} → [GIF]
+  it("converts gif placeholder to [GIF]", () => {
+    expect(markdownToPlainText("{{gif:abc123XYZ}}")).toBe("[GIF]");
   });
 });

@@ -17,6 +17,7 @@ export default defineConfig({
     host_permissions: [
       "https://*.ingest.us.sentry.io/*",
       "https://*.ingest.sentry.io/*",
+      "https://api.giphy.com/*",
     ],
     browser_specific_settings: {
       gecko: {

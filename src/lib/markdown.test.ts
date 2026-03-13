@@ -211,6 +211,45 @@ describe("markdownInlineToHtml", () => {
     const result = markdownInlineToHtml("[Click](example.com)");
     expect(result).toContain('href="https://example.com"');
   });
+
+  // spec: {{image:<uuid>}} → img with data-clipio-media and default style
+  it("converts image placeholder to img tag with data-clipio-media", () => {
+    const uuid = "550e8400-e29b-41d4-a716-446655440000";
+    const result = markdownInlineToHtml(`{{image:${uuid}}}`);
+    expect(result).toContain(`data-clipio-media="${uuid}"`);
+    expect(result).toContain('alt="image"');
+    expect(result).toContain("max-width:100%");
+    expect(result).not.toMatch(/style="[^"]*\bwidth:\d+px/);
+  });
+
+  // spec: {{image:<uuid>:<width>}} → img includes width style
+  it("converts image placeholder with width to img with width style", () => {
+    const uuid = "550e8400-e29b-41d4-a716-446655440000";
+    const result = markdownInlineToHtml(`{{image:${uuid}:200}}`);
+    expect(result).toContain(`data-clipio-media="${uuid}"`);
+    expect(result).toContain("width:200px");
+    expect(result).toContain("max-width:100%");
+  });
+
+  // spec: {{gif:<id>}} → img with giphy CDN src and default style
+  it("converts gif placeholder to img tag with giphy src", () => {
+    const result = markdownInlineToHtml("{{gif:xT9IgG50Lgn6WDJyBW}}");
+    expect(result).toContain(
+      'src="https://media.giphy.com/media/xT9IgG50Lgn6WDJyBW/giphy.gif"'
+    );
+    expect(result).toContain('alt="GIF"');
+    expect(result).not.toMatch(/style="[^"]*\bwidth:\d+px/);
+  });
+
+  // spec: {{gif:<id>:<width>}} → img includes width style
+  it("converts gif placeholder with width to img with width style", () => {
+    const result = markdownInlineToHtml("{{gif:xT9IgG50Lgn6WDJyBW:350}}");
+    expect(result).toContain(
+      'src="https://media.giphy.com/media/xT9IgG50Lgn6WDJyBW/giphy.gif"'
+    );
+    expect(result).toContain("width:350px");
+    expect(result).toContain("max-width:100%");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -306,6 +345,30 @@ describe("markdownToPlainText", () => {
 
   it("passes cursor placeholder through", () => {
     expect(markdownToPlainText("{{cursor}}")).toBe("{{cursor}}");
+  });
+
+  // spec: {{image:...}} → [image]
+  it("converts image placeholder to [image]", () => {
+    expect(
+      markdownToPlainText("{{image:550e8400-e29b-41d4-a716-446655440000}}")
+    ).toBe("[image]");
+  });
+
+  // spec: {{image:...:width}} → [image]
+  it("converts image placeholder with width to [image]", () => {
+    expect(
+      markdownToPlainText("{{image:550e8400-e29b-41d4-a716-446655440000:200}}")
+    ).toBe("[image]");
+  });
+
+  // spec: {{gif:...}} → [GIF]
+  it("converts gif placeholder to [GIF]", () => {
+    expect(markdownToPlainText("{{gif:xT9IgG50Lgn6WDJyBW}}")).toBe("[GIF]");
+  });
+
+  // spec: {{gif:...:width}} → [GIF]
+  it("converts gif placeholder with width to [GIF]", () => {
+    expect(markdownToPlainText("{{gif:xT9IgG50Lgn6WDJyBW:350}}")).toBe("[GIF]");
   });
 
   // Combined

@@ -16,10 +16,6 @@ import { Alert, AlertDescription, AlertAction } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { RichTextEditor, type RichTextEditorRef } from "~/components/editor";
-import {
-  markdownToHtml,
-  markdownToPlainText,
-} from "~/components/editor/serialization";
 import { Separator } from "~/components/ui/separator";
 import ConfirmDialog from "~/components/ConfirmDialog";
 import { Badge } from "~/components/ui/badge";
@@ -31,6 +27,8 @@ import {
   incrementSnippetUsage,
 } from "~/utils/usageTracking";
 import { i18n } from "#i18n";
+import { captureError } from "~/lib/sentry";
+import { copyMarkdownAsRichText } from "~/lib/copyMarkdownAsRichText";
 
 interface SnippetDetailViewProps {
   snippet: Snippet;
@@ -40,6 +38,7 @@ interface SnippetDetailViewProps {
   onToggleSidebar?: () => void;
   uninstallWarning?: boolean;
   onDismissUninstallWarning?: () => void;
+  onHasChanges?: (hasChanges: boolean) => void;
 }
 
 export default function SnippetDetailView({
@@ -50,6 +49,7 @@ export default function SnippetDetailView({
   onToggleSidebar,
   uninstallWarning,
   onDismissUninstallWarning,
+  onHasChanges,
 }: SnippetDetailViewProps) {
   const [editedContent, setEditedContent] = useState(snippet.content);
   const [editedTags, setEditedTags] = useState<string[]>(snippet.tags || []);
@@ -79,22 +79,23 @@ export default function SnippetDetailView({
     loadUsageCount();
   }, [snippet.id]);
 
+  // Notify parent when dirty state changes
+  useEffect(() => {
+    onHasChanges?.(hasChanges);
+  }, [hasChanges]);
+
   const loadUsageCount = async () => {
-    const count = await getSnippetUsageCount(snippet.id);
-    setUsageCount(count);
+    try {
+      const count = await getSnippetUsageCount(snippet.id);
+      setUsageCount(count);
+    } catch (err) {
+      captureError(err, { action: "loadUsageCount", snippetId: snippet.id });
+    }
   };
 
   const handleCopy = async () => {
     try {
-      const plainText = markdownToPlainText(editedContent);
-      const html = markdownToHtml(editedContent);
-
-      // Write both plain text and HTML to clipboard for rich paste support
-      const clipboardItem = new ClipboardItem({
-        "text/plain": new Blob([plainText], { type: "text/plain" }),
-        "text/html": new Blob([html], { type: "text/html" }),
-      });
-      await navigator.clipboard.write([clipboardItem]);
+      await copyMarkdownAsRichText(editedContent);
 
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -103,7 +104,7 @@ export default function SnippetDetailView({
       const newCount = await incrementSnippetUsage(snippet.id);
       setUsageCount(newCount);
     } catch (err) {
-      console.error("Failed to copy:", err);
+      captureError(err, { action: "copy.snippet", snippetId: snippet.id });
       setActionError(i18n.t("snippetDetail.errors.failedToCopy"));
     }
   };
@@ -124,6 +125,7 @@ export default function SnippetDetailView({
       setTimeout(() => setIsSaved(false), 2000);
     } catch (error) {
       console.error("Error saving snippet:", error);
+      captureError(error, { action: "saveSnippet", snippetId: snippet.id });
       setActionError(i18n.t("snippetDetail.errors.failedToSave"));
     } finally {
       setIsSaving(false);
@@ -136,6 +138,7 @@ export default function SnippetDetailView({
       await onDelete(snippet.id);
     } catch (error) {
       console.error("Error deleting snippet:", error);
+      captureError(error, { action: "deleteSnippet", snippetId: snippet.id });
       setActionError(i18n.t("snippetDetail.errors.failedToDelete"));
     } finally {
       setIsDeleting(false);
@@ -254,6 +257,9 @@ export default function SnippetDetailView({
           value={editedContent}
           onChange={setEditedContent}
           placeholder={i18n.t("snippetDetail.editorPlaceholder")}
+          onCopyError={() =>
+            setActionError(i18n.t("snippetDetail.errors.failedToCopy"))
+          }
         />
       </div>
 
