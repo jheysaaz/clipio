@@ -9,6 +9,8 @@ import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   saveMedia,
+  restoreMediaEntry,
+  updateMediaAlt,
   getMedia,
   getMediaBlob,
   deleteMedia,
@@ -17,6 +19,7 @@ import {
   getTotalSize,
   compressMedia,
 } from "./media";
+import type { MediaEntry } from "./media";
 import { MEDIA_LIMITS } from "~/config/constants";
 
 // ---------------------------------------------------------------------------
@@ -178,6 +181,85 @@ describe("saveMedia", () => {
       const entry = await saveMedia(file);
       expect(entry.mimeType).toBe(mimeType);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// restoreMediaEntry
+// ---------------------------------------------------------------------------
+
+describe("restoreMediaEntry", () => {
+  it("stores an entry with a pre-existing ID (round-trip)", async () => {
+    const blob = makeBlob(64, "image/webp");
+    const entry: MediaEntry = {
+      id: "restore-test-id",
+      mimeType: "image/webp",
+      width: 10,
+      height: 10,
+      size: 64,
+      originalSize: 64,
+      createdAt: "2025-01-01T00:00:00.000Z",
+      blob,
+    };
+    await restoreMediaEntry(entry);
+    const fetched = await getMedia("restore-test-id");
+    expect(fetched).not.toBeNull();
+    expect(fetched!.id).toBe("restore-test-id");
+    expect(fetched!.mimeType).toBe("image/webp");
+  });
+
+  it("overwrites an existing entry with the same ID", async () => {
+    const blob = makeBlob(32, "image/png");
+    const first: MediaEntry = {
+      id: "overwrite-id",
+      mimeType: "image/png",
+      width: 1,
+      height: 1,
+      size: 32,
+      originalSize: 32,
+      createdAt: "2025-01-01T00:00:00.000Z",
+      blob,
+    };
+    await restoreMediaEntry(first);
+    const updated: MediaEntry = { ...first, mimeType: "image/jpeg" };
+    await restoreMediaEntry(updated);
+    const fetched = await getMedia("overwrite-id");
+    expect(fetched!.mimeType).toBe("image/jpeg");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// updateMediaAlt
+// ---------------------------------------------------------------------------
+
+describe("updateMediaAlt", () => {
+  it("sets alt text on an existing entry", async () => {
+    const saved = await saveMedia(makeBlob(64, "image/png"));
+    await updateMediaAlt(saved.id, "A beautiful sunset");
+    const fetched = await getMedia(saved.id);
+    expect(fetched!.alt).toBe("A beautiful sunset");
+  });
+
+  it("trims whitespace from alt text", async () => {
+    const saved = await saveMedia(makeBlob(64, "image/png"));
+    await updateMediaAlt(saved.id, "  trimmed  ");
+    const fetched = await getMedia(saved.id);
+    expect(fetched!.alt).toBe("trimmed");
+  });
+
+  it("sets alt to undefined when given empty/whitespace-only string", async () => {
+    const saved = await saveMedia(makeBlob(64, "image/png"));
+    await updateMediaAlt(saved.id, "initial");
+    await updateMediaAlt(saved.id, "   ");
+    const fetched = await getMedia(saved.id);
+    expect(fetched!.alt).toBeUndefined();
+  });
+
+  it("is a no-op for a non-existent id", async () => {
+    // Should not throw
+    await expect(
+      updateMediaAlt("no-such-id", "some text")
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -348,5 +430,99 @@ describe("compressMedia", () => {
     // Restore
     (globalThis as unknown as Record<string, unknown>).OffscreenCanvas =
       original;
+  });
+
+  it("replaces PNG with smaller WebP when OffscreenCanvas is available", async () => {
+    // Save a PNG entry with a 100-byte size
+    const entry = await saveMedia(makeBlob(100, "image/png"));
+
+    // Smaller blob (10 bytes) → replacement should happen
+    const smallerBlob = new Blob([new Uint8Array(10)], { type: "image/webp" });
+    const mockBitmap = { width: 10, height: 10, close: vi.fn() };
+    const mockCtx = { drawImage: vi.fn() };
+    const mockCanvas = {
+      getContext: vi.fn(() => mockCtx),
+      convertToBlob: vi.fn(async () => smallerBlob),
+    };
+
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => mockBitmap)
+    );
+    // Use a proper constructor function so `new OffscreenCanvas(...)` works
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      vi.fn(function () {
+        return mockCanvas;
+      })
+    );
+
+    await compressMedia(entry.id);
+
+    // After compression the entry should be stored as WebP
+    const after = await getMedia(entry.id);
+    expect(after!.mimeType).toBe("image/webp");
+    expect(after!.size).toBe(10);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("skips replacement when WebP result is not smaller", async () => {
+    const entry = await saveMedia(makeBlob(100, "image/png"));
+
+    const mockBitmap = { width: 10, height: 10, close: vi.fn() };
+    const mockCtx = { drawImage: vi.fn() };
+    // Return a LARGER blob — should not replace
+    const largerBlob = new Blob([new Uint8Array(200)], { type: "image/webp" });
+    const mockCanvas = {
+      getContext: vi.fn(() => mockCtx),
+      convertToBlob: vi.fn(async () => largerBlob),
+    };
+
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => mockBitmap)
+    );
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      vi.fn(function () {
+        return mockCanvas;
+      })
+    );
+
+    await compressMedia(entry.id);
+
+    // Entry should remain unchanged (PNG, not WebP)
+    const after = await getMedia(entry.id);
+    expect(after!.mimeType).toBe("image/png");
+
+    vi.unstubAllGlobals();
+  });
+
+  it("handles null canvas context gracefully", async () => {
+    const entry = await saveMedia(makeBlob(100, "image/png"));
+
+    const mockBitmap = { width: 10, height: 10, close: vi.fn() };
+    const mockCanvas = {
+      getContext: vi.fn(() => null), // null ctx — should return early
+      convertToBlob: vi.fn(),
+    };
+
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => mockBitmap)
+    );
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      vi.fn(function () {
+        return mockCanvas;
+      })
+    );
+
+    await expect(compressMedia(entry.id)).resolves.toBeUndefined();
+    expect(mockBitmap.close).toHaveBeenCalled();
+    expect(mockCanvas.convertToBlob).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
   });
 });

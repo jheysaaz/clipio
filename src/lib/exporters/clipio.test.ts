@@ -320,4 +320,18 @@ describe("buildClipioZip", () => {
     const unzipped = unzipSync(new Uint8Array(buffer));
     expect(Object.keys(unzipped)).toContain(`media/${id}.gif`);
   });
+
+  it("uses .png extension for image/png blobs (default branch)", async () => {
+    const { unzipSync } = await import("fflate");
+    const id = "550e8400-e29b-41d4-a716-446655440003";
+    const meta = makeMeta({ id, mimeType: "image/png" });
+    const exportData = buildClipioExportV2([], [meta]);
+    const fakeBlob = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], {
+      type: "image/png",
+    });
+    const blob = await buildClipioZip(exportData, new Map([[id, fakeBlob]]));
+    const buffer = await blob.arrayBuffer();
+    const unzipped = unzipSync(new Uint8Array(buffer));
+    expect(Object.keys(unzipped)).toContain(`media/${id}.png`);
+  });
 });

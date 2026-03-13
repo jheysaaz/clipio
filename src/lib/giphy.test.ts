@@ -265,6 +265,30 @@ describe("trending", () => {
     mockFetchError(429);
     await expect(trending()).rejects.toThrow(GiphyRateLimitError);
   });
+
+  it("wraps unexpected errors in GiphyNetworkError", async () => {
+    mockFetchNetworkError();
+    await expect(trending()).rejects.toThrow(GiphyNetworkError);
+  });
+
+  it("wraps non-Error thrown values in GiphyNetworkError with 'Unknown network error'", async () => {
+    global.fetch = vi.fn().mockRejectedValueOnce("a plain string error");
+    const err = await trending().catch((e) => e);
+    expect(err).toBeInstanceOf(GiphyNetworkError);
+    expect(err.message).toBe("Unknown network error");
+  });
+
+  it("uses 0 as fallback when pagination fields are absent", async () => {
+    // Return response with no pagination field at all
+    global.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [], pagination: {} }),
+    });
+    const result = await trending();
+    expect(result.totalCount).toBe(0);
+    expect(result.offset).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -314,6 +338,18 @@ describe("getById", () => {
   it("throws GiphyRateLimitError on 429", async () => {
     mockFetchError(429);
     await expect(getById("id")).rejects.toThrow(GiphyRateLimitError);
+  });
+
+  it("wraps unexpected fetch errors in GiphyNetworkError", async () => {
+    mockFetchNetworkError();
+    await expect(getById("id")).rejects.toThrow(GiphyNetworkError);
+  });
+
+  it("re-throws GiphyNetworkError as-is (not double-wrapped)", async () => {
+    const original = new GiphyNetworkError("original");
+    global.fetch = vi.fn().mockRejectedValueOnce(original);
+    const err = await getById("id").catch((e) => e);
+    expect(err).toBe(original);
   });
 });
 

@@ -344,7 +344,7 @@ describe("StorageManager", () => {
   // ── exportSnippets ──────────────────────────────────────────────────────
 
   describe("exportSnippets", () => {
-    it("creates a download link and clicks it", async () => {
+    it("creates a JSON download link and clicks it (no media)", async () => {
       const snippets = [makeSnippet()];
       mockSyncBackend.getSnippets.mockResolvedValue(snippets);
 
@@ -361,6 +361,78 @@ describe("StorageManager", () => {
       expect(mockClick).toHaveBeenCalled();
       expect(mockAnchor.download).toMatch(/^clipio-snippets-/);
       expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
+    });
+
+    it("produces a ZIP download when snippets contain media", async () => {
+      const { snippetsContainMedia, extractMediaIds } =
+        await import("~/lib/exporters/clipio");
+      const { listMedia, getMedia } = await import("~/storage/backends/media");
+
+      // Make snippetsContainMedia return true for this test
+      vi.mocked(snippetsContainMedia).mockReturnValue(true);
+      vi.mocked(extractMediaIds).mockReturnValue(["media-id-1"]);
+      vi.mocked(listMedia).mockResolvedValue([
+        {
+          id: "media-id-1",
+          mimeType: "image/png",
+          width: 1,
+          height: 1,
+          size: 10,
+          originalSize: 10,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      vi.mocked(getMedia).mockResolvedValue({
+        id: "media-id-1",
+        mimeType: "image/png",
+        width: 1,
+        height: 1,
+        size: 10,
+        originalSize: 10,
+        createdAt: new Date().toISOString(),
+        blob: new Blob([new Uint8Array(10)], { type: "image/png" }),
+      });
+
+      const snippets = [makeSnippet()];
+      mockSyncBackend.getSnippets.mockResolvedValue(snippets);
+
+      const mockClick = vi.fn();
+      const mockAnchor = { href: "", download: "", click: mockClick };
+      vi.spyOn(document, "createElement").mockReturnValue(
+        mockAnchor as unknown as HTMLElement
+      );
+      vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:zip-url");
+      vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+
+      await manager.exportSnippets();
+
+      expect(mockClick).toHaveBeenCalled();
+      expect(mockAnchor.download).toMatch(/\.clipio\.zip$/);
+    });
+
+    it("falls back to JSON export when ZIP build throws", async () => {
+      const { snippetsContainMedia, buildClipioZip } =
+        await import("~/lib/exporters/clipio");
+
+      vi.mocked(snippetsContainMedia).mockReturnValue(true);
+      vi.mocked(buildClipioZip).mockRejectedValue(new Error("ZIP failed"));
+
+      const snippets = [makeSnippet()];
+      mockSyncBackend.getSnippets.mockResolvedValue(snippets);
+
+      const mockClick = vi.fn();
+      const mockAnchor = { href: "", download: "", click: mockClick };
+      vi.spyOn(document, "createElement").mockReturnValue(
+        mockAnchor as unknown as HTMLElement
+      );
+      vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fallback-url");
+      vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+
+      await manager.exportSnippets();
+
+      // Should still click (fallback JSON export)
+      expect(mockClick).toHaveBeenCalled();
+      expect(mockAnchor.download).toMatch(/^clipio-snippets-.*\.json$/);
     });
   });
 
