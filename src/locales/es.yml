@@ -35,6 +35,9 @@ dashboard:
     quotaFull:
       body: Almacenamiento de sincronización lleno — los fragmentos se guardan solo localmente.
       action: Exportar copia de seguridad →
+    syncPaused:
+      body: Sincronización pausada — los fragmentos se guardan localmente (cambiado manualmente).
+      action: Ajustes de almacenamiento →
     recovery:
       body:
         1: "Tus fragmentos sincronizados se perdieron (cierre de sesión detectado). 1 fragmento en copia de seguridad."
@@ -59,6 +62,8 @@ newSnippet:
   shortcut: Atajo
   shortcutPlaceholder: "Ej: /firma"
   shortcutError: El atajo no puede contener espacios
+  shortcutErrorDuplicate: 'El atajo "$1" ya está en uso por "$2". Elige un atajo diferente.'
+  shortcutErrorPrefix: 'El atajo "$1" entra en conflicto con "$2" — uno puede impedir que el otro se expanda.'
   content: Contenido
   contentPlaceholder: Escribe el contenido de tu fragmento...
   footer: Nuevo fragmento
@@ -255,14 +260,38 @@ options:
       errorGeneric: Ping fallido
     storageMode:
       title: Modo de almacenamiento y cuota
-      description: Backend de almacenamiento actual y uso estimado de la cuota de sincronización.
+      description: Backend de almacenamiento actual y uso estimado de cuota de sincronización.
       mode: "Backend activo: $1"
       syncUsed: "Sincronización usada: $1 / $2 bytes"
+      switchToSync: Cambiar a sincronización
+      switchToLocal: Cambiar a local
+      switching: Cambiando...
+      switched: "¡Cambiado!"
+      confirmSwitchToSync: Confirmar cambio a sincronización
+      confirmSwitchToLocal: Confirmar cambio a local
+      switchError: Error al cambiar el backend de almacenamiento. Por favor, inténtalo de nuevo.
+    typingTimeout:
+      title: Tiempo de espera al escribir
+      description: "Cuánto tiempo espera Clipio después de que dejas de escribir antes de intentar expandir un fragmento. Menos = más rápido pero puede expandirse a mitad de palabra. Por defecto: 300 ms."
+      label: "$1 ms"
+      reset: Restablecer valor por defecto
+      saved: Guardado
     topUsage:
       title: Top 5 de uso
-      description: Los cinco fragmentos más usados por número de inserciones.
-      empty: Sin datos de uso todavía.
+      description: Los cinco fragmentos más utilizados por recuento de inserciones.
+      empty: Aún no hay datos de uso.
       count: "$1 usos"
+    debugMode:
+      title: Modo depuración
+      description: Registra la actividad de la extensión en la consola y este panel. Puede afectar el rendimiento. Solo para diagnóstico.
+      toggle: Activar registro de depuración
+      clearLog: Borrar registro
+      copyLog: Copiar registro
+      copiedLog: "¡Copiado!"
+      emptyLog: Aún no hay entradas en el registro.
+      contextContent: contenido
+      contextBackground: fondo
+      contextStorage: almacenamiento
     clearIdb:
       title: Limpiar copia de seguridad IDB
       description: Eliminar el almacén de copia de seguridad de fragmentos de IndexedDB. Úsalo para restablecer la copia de seguridad local tras una reinstalación limpia.

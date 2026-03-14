@@ -19,6 +19,7 @@ import {
 } from "~/lib/messages";
 import { getMedia } from "~/storage/backends/media";
 import { checkForUpdate } from "~/lib/update-checker";
+import { debugLog } from "~/lib/debug";
 
 const SNIPPET_PREFIX = "snip:";
 
@@ -43,7 +44,9 @@ export default defineBackground(() => {
   });
 
   browser.alarms.onAlarm.addListener((alarm) => {
+    debugLog("background", "alarm:fired", { name: alarm.name }).catch(() => {});
     if (alarm.name !== UPDATE_CHECK_ALARM_NAME) return;
+    debugLog("background", "update:check:start", {}).catch(() => {});
     checkForUpdate().catch((err: unknown) => {
       captureError(err, { action: "checkForUpdate.alarm" });
     });
@@ -103,6 +106,9 @@ export default defineBackground(() => {
       ) {
         return;
       }
+      debugLog("background", "message:received", {
+        type: (message as MediaGetDataUrlRequest).type,
+      }).catch(() => {});
       // Only accept messages from our own extension (content scripts or popup).
       // Reject requests from external web pages that may know the extension ID.
       if (sender.id !== browser.runtime.id) {

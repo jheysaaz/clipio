@@ -35,6 +35,9 @@ dashboard:
     quotaFull:
       body: Sync storage full — snippets saved locally only.
       action: Export backup →
+    syncPaused:
+      body: Sync paused — snippets are saved locally (switched manually).
+      action: Storage settings →
     recovery:
       body:
         1: "Your synced snippets were lost (sign-out detected). 1 snippet in backup."
@@ -59,6 +62,8 @@ newSnippet:
   shortcut: Shortcut
   shortcutPlaceholder: "e.g., /sig"
   shortcutError: Shortcut cannot contain spaces
+  shortcutErrorDuplicate: 'Shortcut "$1" is already used by "$2". Choose a different shortcut.'
+  shortcutErrorPrefix: 'Shortcut "$1" conflicts with "$2" — one may prevent the other from expanding.'
   content: Content
   contentPlaceholder: Enter your snippet content...
   footer: New snippet
@@ -258,11 +263,35 @@ options:
       description: Current storage backend and estimated sync quota usage.
       mode: "Active backend: $1"
       syncUsed: "Sync used: $1 / $2 bytes"
+      switchToSync: Switch to sync
+      switchToLocal: Switch to local
+      switching: Switching...
+      switched: Switched!
+      confirmSwitchToSync: Confirm switch to sync
+      confirmSwitchToLocal: Confirm switch to local
+      switchError: Failed to switch storage backend. Please try again.
+    typingTimeout:
+      title: Typing Timeout
+      description: "How long Clipio waits after you stop typing before attempting to expand a snippet. Lower = faster but may expand mid-word. Default: 300 ms."
+      label: "$1 ms"
+      reset: Reset to default
+      saved: Saved
     topUsage:
       title: Top 5 Usage
       description: The five most-used snippets by insertion count.
       empty: No usage data yet.
       count: "$1 uses"
+    debugMode:
+      title: Debug Mode
+      description: Logs extension activity to the console and this panel. May impact performance. For troubleshooting only.
+      toggle: Enable debug logging
+      clearLog: Clear log
+      copyLog: Copy log
+      copiedLog: Copied!
+      emptyLog: No log entries yet.
+      contextContent: content
+      contextBackground: background
+      contextStorage: storage
     clearIdb:
       title: Clear IDB Backup
       description: Wipe the IndexedDB snippets backup store. Use this to reset the local backup after a clean reinstall.

@@ -35,6 +35,9 @@ import {
   Plus,
   ExternalLink,
   Loader2,
+  Bug,
+  RotateCcw,
+  Copy,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { Button } from "~/components/ui/button";
@@ -53,7 +56,9 @@ import {
   getSnippets,
   getStorageStatus,
   clearIDBBackup,
+  forceSetStorageMode,
 } from "~/storage";
+import type { StorageMode } from "~/storage";
 import {
   SYNC_QUOTA,
   MEDIA_LIMITS,
@@ -74,7 +79,12 @@ import {
   latestVersionItem,
   usageCountsItem,
   dismissedUpdateVersionItem,
+  typingTimeoutItem,
+  debugModeItem,
+  debugLogItem,
+  type DebugLogEntry,
 } from "~/storage/items";
+import { TIMING } from "~/config/constants";
 import { i18n } from "#i18n";
 import { captureError, captureMessage, sendUserFeedback } from "~/lib/sentry";
 import { SENTRY_TEST_MESSAGE_TYPE } from "~/config/constants";
@@ -251,6 +261,7 @@ interface StorageStats {
   syncBytesUsed: number;
   localEstimatedBytes: number;
   mode: "sync" | "local";
+  localReason: "quota" | "manual";
   loading: boolean;
 }
 
@@ -260,6 +271,7 @@ function useStorageStats(): StorageStats {
     syncBytesUsed: 0,
     localEstimatedBytes: 0,
     mode: "sync",
+    localReason: "quota",
     loading: true,
   });
 
@@ -277,6 +289,7 @@ function useStorageStats(): StorageStats {
           syncBytesUsed: syncBytes,
           localEstimatedBytes: JSON.stringify(snippets).length,
           mode: status.mode,
+          localReason: status.localReason,
           loading: false,
         });
       })
@@ -455,9 +468,14 @@ function GeneralSection({
                   : "[&>div]:bg-indigo-500 dark:[&>div]:bg-indigo-400"
               )}
             />
-            {stats.mode === "local" && (
+            {stats.mode === "local" && stats.localReason === "quota" && (
               <p className="text-[11px] text-amber-600 dark:text-amber-400">
                 {i18n.t("options.overview.quotaExceeded")}
+              </p>
+            )}
+            {stats.mode === "local" && stats.localReason === "manual" && (
+              <p className="text-[11px] text-muted-foreground">
+                {i18n.t("dashboard.warnings.syncPaused.body")}
               </p>
             )}
           </div>
@@ -1093,6 +1111,34 @@ function FeedbackSection() {
 // Section: Developers
 // ---------------------------------------------------------------------------
 
+/**
+ * Sanitise debug log entries loaded from storage.
+ *
+ * Old/corrupted entries may have non-string values in `context`, `event`,
+ * or `detail` (e.g. an object instead of a string).  This normaliser
+ * coerces every text field to a safe string so React never receives a raw
+ * object as a child node.  Entries that are too broken to salvage are
+ * dropped entirely.
+ */
+function normalizeDebugEntries(entries: DebugLogEntry[]): DebugLogEntry[] {
+  return entries
+    .filter(
+      (e): e is DebugLogEntry =>
+        e != null && typeof e === "object" && typeof e.ts === "number"
+    )
+    .map((e) => ({
+      ts: e.ts,
+      context:
+        typeof e.context === "string" &&
+        ["content", "background", "storage"].includes(e.context)
+          ? (e.context as DebugLogEntry["context"])
+          : "content",
+      event: typeof e.event === "string" ? e.event : JSON.stringify(e.event),
+      detail:
+        typeof e.detail === "string" ? e.detail : JSON.stringify(e.detail),
+    }));
+}
+
 function DevelopersSection() {
   // Giphy API Key
   const [giphyKey, setGiphyKey] = useState("");
@@ -1117,14 +1163,33 @@ function DevelopersSection() {
   const [pingError, setPingError] = useState("");
 
   // Card 4: Storage Mode & Quota
-  const [storageMode, setStorageMode] = useState<string>("—");
+  const [storageMode, setStorageMode] = useState<StorageMode>("sync");
   const [syncUsed, setSyncUsed] = useState<number | null>(null);
+  const [switchConfirming, setSwitchConfirming] = useState<StorageMode | null>(
+    null
+  );
+  const [switching, setSwitching] = useState(false);
+  const [switchSwitched, setSwitchSwitched] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
+
+  // Card: Typing Timeout
+  const [typingTimeout, setTypingTimeout] = useState<number>(
+    TIMING.TYPING_TIMEOUT
+  );
+  const [timeoutSaved, setTimeoutSaved] = useState(false);
+  const timeoutSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Card 5: Top 5 Usage
   const [topUsage, setTopUsage] = useState<
-    { id: string; label: string; count: number }[]
+    { id: string; label: string; shortcut: string; count: number }[]
   >([]);
   const [usageLoaded, setUsageLoaded] = useState(false);
+
+  // Card: Debug Mode
+  const [debugEnabled, setDebugEnabled] = useState(false);
+  const [debugLog, setDebugLog] = useState<DebugLogEntry[]>([]);
+  const [copiedLog, setCopiedLog] = useState(false);
+  const debugLogRef = useRef<HTMLDivElement>(null);
 
   // Card 6: Clear IDB Backup
   const [clearConfirming, setClearConfirming] = useState(false);
@@ -1168,6 +1233,14 @@ function DevelopersSection() {
       .catch(console.warn);
   }, []);
 
+  // Load typing timeout
+  useEffect(() => {
+    typingTimeoutItem
+      .getValue()
+      .then((val) => setTypingTimeout(val))
+      .catch(console.warn);
+  }, []);
+
   // Load top-5 usage
   useEffect(() => {
     Promise.all([usageCountsItem.getValue(), getSnippets()])
@@ -1180,6 +1253,7 @@ function DevelopersSection() {
             return {
               id,
               label: snippet?.label ?? snippet?.shortcut ?? id,
+              shortcut: snippet?.shortcut ?? "",
               count,
             };
           });
@@ -1188,6 +1262,41 @@ function DevelopersSection() {
       })
       .catch(console.warn);
   }, []);
+
+  // Load debug mode state and log entries
+  useEffect(() => {
+    debugModeItem
+      .getValue()
+      .then((val) => setDebugEnabled(val))
+      .catch(console.warn);
+    debugLogItem
+      .getValue()
+      .then((entries) => {
+        const normalized = normalizeDebugEntries(entries);
+        setDebugLog(normalized);
+        // Persist the normalized form back so stale object-detail entries
+        // don't cause future crashes after a browser restart.
+        if (normalized.some((e, i) => e.detail !== entries[i]?.detail)) {
+          debugLogItem.setValue(normalized).catch(() => {});
+        }
+      })
+      .catch(console.warn);
+
+    // Watch for live log updates
+    const unwatch = debugLogItem.watch((entries) => {
+      setDebugLog(normalizeDebugEntries(entries));
+    });
+    return () => {
+      unwatch();
+    };
+  }, []);
+
+  // Auto-scroll debug log panel to bottom when new entries arrive
+  useEffect(() => {
+    if (debugLogRef.current) {
+      debugLogRef.current.scrollTop = debugLogRef.current.scrollHeight;
+    }
+  }, [debugLog]);
 
   const handleSaveGiphyKey = async () => {
     try {
@@ -1210,6 +1319,89 @@ function DevelopersSection() {
       setTimeout(() => setGiphyKeySaved(false), 2000);
     } catch (err) {
       captureError(err, { action: "resetGiphyApiKey" });
+    }
+  };
+
+  // Card: Typing Timeout — persist with a debounced save indicator
+  const handleTimeoutChange = (newVal: number) => {
+    setTypingTimeout(newVal);
+    if (timeoutSaveTimer.current) clearTimeout(timeoutSaveTimer.current);
+    timeoutSaveTimer.current = setTimeout(async () => {
+      try {
+        await typingTimeoutItem.setValue(newVal);
+        setTimeoutSaved(true);
+        setTimeout(() => setTimeoutSaved(false), 2000);
+      } catch (err) {
+        captureError(err, { action: "saveTypingTimeout" });
+      }
+    }, 400);
+  };
+
+  const handleTimeoutReset = async () => {
+    const def = TIMING.TYPING_TIMEOUT;
+    setTypingTimeout(def);
+    try {
+      await typingTimeoutItem.setValue(def);
+      setTimeoutSaved(true);
+      setTimeout(() => setTimeoutSaved(false), 2000);
+    } catch (err) {
+      captureError(err, { action: "resetTypingTimeout" });
+    }
+  };
+
+  // Card 4: Force storage switch
+  const handleForceSwitch = async (target: StorageMode) => {
+    setSwitching(true);
+    setSwitchError(null);
+    try {
+      await forceSetStorageMode(target);
+      setStorageMode(target);
+      setSwitchSwitched(true);
+      setSwitchConfirming(null);
+      setTimeout(() => setSwitchSwitched(false), 2000);
+    } catch (err) {
+      captureError(err, { action: "forceSetStorageMode", target });
+      setSwitchError(i18n.t("options.developers.storageMode.switchError"));
+      setSwitchConfirming(null);
+    } finally {
+      setSwitching(false);
+    }
+  };
+
+  // Card: Debug Mode toggle
+  const handleDebugToggle = async () => {
+    const next = !debugEnabled;
+    setDebugEnabled(next);
+    try {
+      await debugModeItem.setValue(next);
+    } catch (err) {
+      captureError(err, { action: "setDebugMode" });
+    }
+  };
+
+  const handleClearDebugLog = async () => {
+    try {
+      await debugLogItem.setValue([]);
+      setDebugLog([]);
+    } catch (err) {
+      captureError(err, { action: "clearDebugLog" });
+    }
+  };
+
+  const handleCopyDebugLog = async () => {
+    if (debugLog.length === 0) return;
+    const text = debugLog
+      .map((e) => {
+        const time = new Date(e.ts).toISOString();
+        return `[${time}] [${e.context}] ${e.event} ${e.detail}`;
+      })
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedLog(true);
+      setTimeout(() => setCopiedLog(false), 2000);
+    } catch (err) {
+      captureError(err, { action: "copyDebugLog" });
     }
   };
 
@@ -1452,6 +1644,119 @@ function DevelopersSection() {
             ])}
           </p>
         )}
+        {/* Force switch buttons */}
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          {switchSwitched ? (
+            <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+              <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
+              {i18n.t("options.developers.storageMode.switched")}
+            </span>
+          ) : switchConfirming ? (
+            <>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-9 shrink-0"
+                disabled={switching}
+                onClick={() => handleForceSwitch(switchConfirming)}
+              >
+                {switching
+                  ? i18n.t("options.developers.storageMode.switching")
+                  : switchConfirming === "local"
+                    ? i18n.t(
+                        "options.developers.storageMode.confirmSwitchToLocal"
+                      )
+                    : i18n.t(
+                        "options.developers.storageMode.confirmSwitchToSync"
+                      )}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-9 shrink-0"
+                disabled={switching}
+                onClick={() => setSwitchConfirming(null)}
+              >
+                {i18n.t("common.cancel")}
+              </Button>
+            </>
+          ) : (
+            <>
+              {storageMode !== "sync" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 shrink-0"
+                  onClick={() => setSwitchConfirming("sync")}
+                >
+                  <Cloud className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+                  {i18n.t("options.developers.storageMode.switchToSync")}
+                </Button>
+              )}
+              {storageMode !== "local" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 shrink-0"
+                  onClick={() => setSwitchConfirming("local")}
+                >
+                  <HardDrive className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+                  {i18n.t("options.developers.storageMode.switchToLocal")}
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+        {switchError && (
+          <p className="text-xs text-destructive">{switchError}</p>
+        )}
+      </div>
+
+      {/* Card: Typing Timeout */}
+      <div className="rounded-xl border p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-medium text-foreground">
+            {i18n.t("options.developers.typingTimeout.title")}
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {i18n.t("options.developers.typingTimeout.description")}
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          <input
+            type="range"
+            min={50}
+            max={2000}
+            step={50}
+            value={typingTimeout}
+            onChange={(e) => handleTimeoutChange(Number(e.target.value))}
+            className="flex-1 h-2 accent-primary cursor-pointer"
+            aria-label={i18n.t("options.developers.typingTimeout.title")}
+          />
+          <span className="text-sm font-mono w-20 text-right shrink-0 text-foreground">
+            {i18n.t("options.developers.typingTimeout.label", [
+              String(typingTimeout),
+            ])}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 shrink-0"
+            onClick={handleTimeoutReset}
+            disabled={typingTimeout === TIMING.TYPING_TIMEOUT}
+          >
+            <RotateCcw className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+            {i18n.t("options.developers.typingTimeout.reset")}
+          </Button>
+          {timeoutSaved && (
+            <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+              <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
+              {i18n.t("options.developers.typingTimeout.saved")}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Card 5: Top 5 Usage */}
@@ -1470,19 +1775,134 @@ function DevelopersSection() {
           </p>
         )}
         {topUsage.length > 0 && (
-          <ol className="space-y-1">
-            {topUsage.map(({ id, label, count }) => (
+          <ul className="space-y-2">
+            {topUsage.map(({ id, label, shortcut, count }) => (
               <li
                 key={id}
-                className="flex items-center justify-between text-sm"
+                className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
               >
-                <span className="truncate text-foreground">{label}</span>
-                <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="truncate text-sm text-foreground">
+                    {label}
+                  </span>
+                  {shortcut && (
+                    <span className="shrink-0 font-mono text-xs bg-muted text-muted-foreground rounded px-1.5 py-0.5 border border-border">
+                      {shortcut}
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground shrink-0">
                   {i18n.t("options.developers.topUsage.count", [String(count)])}
                 </span>
               </li>
             ))}
-          </ol>
+          </ul>
+        )}
+      </div>
+
+      {/* Card: Debug Mode */}
+      <div className="rounded-xl border p-5 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
+              <Bug className="h-4 w-4" strokeWidth={1.5} />
+              {i18n.t("options.developers.debugMode.title")}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {i18n.t("options.developers.debugMode.description")}
+            </p>
+          </div>
+          {/* Native checkbox styled as a toggle */}
+          <label className="relative inline-flex items-center cursor-pointer shrink-0">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={debugEnabled}
+              onChange={handleDebugToggle}
+              aria-label={i18n.t("options.developers.debugMode.toggle")}
+            />
+            <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
+          </label>
+        </div>
+
+        {debugEnabled && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-muted-foreground">
+                {i18n.t("options.developers.debugMode.toggle")}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  onClick={handleCopyDebugLog}
+                  disabled={debugLog.length === 0}
+                  title={i18n.t("options.developers.debugMode.copyLog")}
+                >
+                  {copiedLog ? (
+                    <>
+                      <Check className="h-3 w-3 mr-1" strokeWidth={1.5} />
+                      {i18n.t("options.developers.debugMode.copiedLog")}
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3 w-3 mr-1" strokeWidth={1.5} />
+                      {i18n.t("options.developers.debugMode.copyLog")}
+                    </>
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  onClick={handleClearDebugLog}
+                  disabled={debugLog.length === 0}
+                >
+                  {i18n.t("options.developers.debugMode.clearLog")}
+                </Button>
+              </div>
+            </div>
+
+            <div
+              ref={debugLogRef}
+              className="h-48 overflow-y-auto rounded-md border border-border bg-muted/30 p-2 space-y-1 font-mono text-xs"
+            >
+              {debugLog.length === 0 ? (
+                <p className="text-muted-foreground py-2 text-center">
+                  {i18n.t("options.developers.debugMode.emptyLog")}
+                </p>
+              ) : (
+                debugLog.map((entry, i) => {
+                  const time = new Date(entry.ts).toTimeString().slice(0, 12);
+                  const ctxColor =
+                    entry.context === "content"
+                      ? "text-blue-500"
+                      : entry.context === "background"
+                        ? "text-purple-500"
+                        : "text-amber-500";
+                  return (
+                    <div key={i} className="flex gap-2 leading-5">
+                      <span className="shrink-0 text-muted-foreground">
+                        {time}
+                      </span>
+                      <span className={cn("shrink-0 font-semibold", ctxColor)}>
+                        [{entry.context}]
+                      </span>
+                      <span className="shrink-0 text-foreground">
+                        {entry.event}
+                      </span>
+                      <span className="truncate text-muted-foreground">
+                        {typeof entry.detail === "string"
+                          ? entry.detail
+                          : JSON.stringify(entry.detail)}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
         )}
       </div>
 

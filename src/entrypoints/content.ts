@@ -7,7 +7,25 @@ import {
   cachedSnippetsItem,
   confettiEnabledItem,
   blockedSitesItem,
+  typingTimeoutItem,
 } from "~/storage/items";
+import { debugLog as _debugLog } from "~/lib/debug";
+
+/**
+ * Content-script wrapper around debugLog that automatically appends the
+ * current page's origin + pathname (no query string / hash to avoid leaking
+ * sensitive data) to every detail object.
+ */
+function debugLog(
+  event: string,
+  detail: Record<string, unknown> = {}
+): Promise<void> {
+  const loc = window.location;
+  return _debugLog("content", event, {
+    page: loc.origin + loc.pathname,
+    ...detail,
+  });
+}
 import { incrementSnippetUsage } from "~/utils/usageTracking";
 import confetti from "canvas-confetti";
 import { initSentry, captureError, captureMessage } from "~/lib/sentry";
@@ -242,7 +260,7 @@ export default defineContentScript({
 
     let snippets: Snippet[] = [];
     let typingTimer: ReturnType<typeof setTimeout> | null = null;
-    const TYPING_TIMEOUT = TIMING.TYPING_TIMEOUT;
+    let TYPING_TIMEOUT: number = TIMING.TYPING_TIMEOUT; // overridable via typingTimeoutItem
     let isExtensionValid = true;
     let confettiEnabled = true; // default on; overridden from storage in initialize()
     let justExpanded = false; // guard to skip redundant input events after expansion
@@ -253,6 +271,7 @@ export default defineContentScript({
 
     function rebuildShortcutIndex() {
       shortcutIndex = buildShortcutIndex(snippets);
+      debugLog("index:rebuild", { count: snippets.length }).catch(() => {});
     }
 
     // Check if extension context is still valid
@@ -477,9 +496,23 @@ export default defineContentScript({
 
       const cursorPosition = element.selectionStart || element.value.length;
       const match = findSnippetMatch(element.value, cursorPosition);
-      if (!match) return;
+      if (!match) {
+        debugLog("expand:no-match", {
+          text: element.value.slice(-20),
+          cursorPos: cursorPosition,
+          elementType: element.tagName.toLowerCase(),
+        }).catch(() => {});
+        return;
+      }
 
       const { snippet, startPos, endPos } = match;
+      debugLog("expand:match", {
+        shortcut: snippet.shortcut,
+        label: snippet.label,
+        elementType: element.tagName.toLowerCase(),
+      }).catch(() => {});
+
+      const t0 = Date.now();
       const { content: processedContent, cursorOffset } =
         await processSnippetContent(snippet.content, false);
 
@@ -511,6 +544,12 @@ export default defineContentScript({
         processedContent,
         startPos
       );
+      debugLog("expand:done", {
+        shortcut: snippet.shortcut,
+        stuck: insertionStuck,
+        durationMs: Date.now() - t0,
+      }).catch(() => {});
+
       if (confettiEnabled && insertionStuck) {
         const pos = getCursorScreenPosition(element);
         showConfetti(pos.x, pos.y);
@@ -555,6 +594,14 @@ export default defineContentScript({
     ) {
       const { snippet, startPos, endPos } = match;
       const text = textNode.textContent || "";
+
+      debugLog("expand:match", {
+        shortcut: snippet.shortcut,
+        label: snippet.label,
+        elementType: "contenteditable",
+      }).catch(() => {});
+
+      const t0 = Date.now();
       const { content: processedContent } = await processSnippetContent(
         snippet.content,
         true
@@ -568,6 +615,13 @@ export default defineContentScript({
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = processedContent;
 
+      // Locate the cursor marker inside tempDiv BEFORE moving nodes into the
+      // fragment — this scopes the lookup to the current insertion only and
+      // prevents picking up a stale marker left by a previous expansion.
+      const cursorMarker = tempDiv.querySelector(
+        '[data-clipio-cursor="true"]'
+      ) as HTMLElement | null;
+
       const textBefore = text.substring(0, startPos);
       const textAfter = text.substring(endPos);
 
@@ -579,8 +633,7 @@ export default defineContentScript({
       const parent = textNode.parentNode;
       if (parent) parent.replaceChild(fragment, textNode);
 
-      // Handle cursor positioning via marker element
-      const cursorMarker = element.querySelector('[data-clipio-cursor="true"]');
+      // Handle cursor positioning via the marker found above (now live in the DOM)
       if (cursorMarker) {
         const sel = window.getSelection();
         if (sel) {
@@ -602,6 +655,12 @@ export default defineContentScript({
         element,
         processedContent
       );
+      debugLog("expand:done", {
+        shortcut: snippet.shortcut,
+        stuck: insertionStuck,
+        durationMs: Date.now() - t0,
+      }).catch(() => {});
+
       if (confettiEnabled && insertionStuck) {
         const pos = getCursorScreenPosition(element);
         showConfetti(pos.x, pos.y);
@@ -616,7 +675,7 @@ export default defineContentScript({
     }
 
     // Handle keydown to expand immediately on Space or Tab
-    function handleKeyDown(event: KeyboardEvent) {
+    async function handleKeyDown(event: KeyboardEvent) {
       if (!isExtensionValid || isBlocked) return;
       const target = event.target;
       if (!target || !(target instanceof HTMLElement)) return;
@@ -647,7 +706,12 @@ export default defineContentScript({
           const match = findSnippetMatch(text, range.startOffset);
           if (match) {
             event.preventDefault();
-            expandSnippetInContentEditable(target, textNode, range, match);
+            await expandSnippetInContentEditable(
+              target,
+              textNode,
+              range,
+              match
+            );
           }
         }
       }
@@ -703,6 +767,13 @@ export default defineContentScript({
         captureMessage("Failed to read blocked sites", "warning", {
           action: "initialize",
         });
+      }
+
+      // Read user-configured typing timeout (falls back to TIMING.TYPING_TIMEOUT)
+      try {
+        TYPING_TIMEOUT = await typingTimeoutItem.getValue();
+      } catch {
+        // Use the compile-time default if storage is unavailable
       }
 
       await loadSnippets();
@@ -763,6 +834,15 @@ export default defineContentScript({
       blockedSitesItem.watch((newSites: string[]) => {
         if (!checkExtensionContext()) return;
         isBlocked = isHostnameBlocked(window.location.hostname, newSites);
+      });
+
+      // Watch typing timeout — apply changes from Developers tab without reload
+      typingTimeoutItem.watch((newTimeout: number) => {
+        if (!checkExtensionContext()) return;
+        TYPING_TIMEOUT = newTimeout;
+        debugLog("config:typingTimeout", {
+          timeout: newTimeout,
+        }).catch(() => {});
       });
     }
 

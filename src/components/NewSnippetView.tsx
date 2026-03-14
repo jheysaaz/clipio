@@ -6,7 +6,8 @@ import { RichTextEditor } from "~/components/editor";
 import { Label } from "~/components/ui/label";
 import { Separator } from "~/components/ui/separator";
 import { InlineError } from "~/components/ui/inline-error";
-import type { SnippetFormData } from "~/types";
+import type { Snippet, SnippetFormData } from "~/types";
+import { detectShortcutConflict } from "~/lib/snippetUtils";
 import { i18n } from "#i18n";
 
 interface NewSnippetViewProps {
@@ -19,6 +20,7 @@ interface NewSnippetViewProps {
   onClearCreateError?: () => void;
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
+  existingSnippets?: Snippet[];
 }
 
 export default function NewSnippetView({
@@ -31,6 +33,7 @@ export default function NewSnippetView({
   onClearCreateError,
   sidebarOpen = true,
   onToggleSidebar,
+  existingSnippets = [],
 }: NewSnippetViewProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -39,12 +42,30 @@ export default function NewSnippetView({
   ) => {
     const { name, value } = e.target;
 
-    // Validate shortcut - no spaces allowed
-    if (name === "shortcut" && value.includes(" ")) {
-      setErrors({ ...errors, shortcut: i18n.t("newSnippet.shortcutError") });
-      return;
-    } else if (name === "shortcut") {
-      setErrors({ ...errors, shortcut: "" });
+    if (name === "shortcut") {
+      // No spaces allowed
+      if (value.includes(" ")) {
+        setErrors({ ...errors, shortcut: i18n.t("newSnippet.shortcutError") });
+        return;
+      }
+
+      // Check for exact duplicate or prefix conflict
+      const conflict = detectShortcutConflict(value, existingSnippets);
+      if (conflict) {
+        const message =
+          conflict.type === "exact"
+            ? i18n.t("newSnippet.shortcutErrorDuplicate", [
+                value,
+                conflict.conflictingSnippet.label,
+              ])
+            : i18n.t("newSnippet.shortcutErrorPrefix", [
+                value,
+                conflict.conflictingSnippet.shortcut,
+              ]);
+        setErrors({ ...errors, shortcut: message });
+      } else {
+        setErrors({ ...errors, shortcut: "" });
+      }
     }
 
     onDraftChange({ ...draftSnippet, [name]: value });

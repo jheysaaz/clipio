@@ -70,6 +70,7 @@ export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const [quotaWarning, setQuotaWarning] = useState(false);
+  const [syncPausedWarning, setSyncPausedWarning] = useState(false);
   const [showUninstallWarning, setShowUninstallWarning] = useState(false);
   const [recoverySnippets, setRecoverySnippets] = useState<Snippet[]>([]);
   const [showRecoveryBanner, setShowRecoveryBanner] = useState(false);
@@ -130,7 +131,11 @@ export default function Dashboard() {
 
         // Check if we're already in local-fallback mode
         const status = await getStorageStatus();
-        if (status.quotaExceeded) setQuotaWarning(true);
+        if (status.quotaExceeded) {
+          setQuotaWarning(true);
+        } else if (status.mode === "local" && status.localReason === "manual") {
+          setSyncPausedWarning(true);
+        }
       } catch (err) {
         console.error("[Clipio] Failed to load snippets:", err);
         captureError(err, { action: "loadSnippets" });
@@ -403,7 +408,7 @@ export default function Dashboard() {
         onDismiss={() => setRecoveryError(null)}
       />
 
-      {/* Quota warning banner */}
+      {/* Quota warning banner — only shown when sync quota was actually exceeded */}
       {quotaWarning && (
         <WarningBanner
           action={{
@@ -413,6 +418,19 @@ export default function Dashboard() {
           onDismiss={() => setQuotaWarning(false)}
         >
           {i18n.t("dashboard.warnings.quotaFull.body")}
+        </WarningBanner>
+      )}
+
+      {/* Sync paused banner — shown when user manually switched to local */}
+      {syncPausedWarning && (
+        <WarningBanner
+          action={{
+            label: i18n.t("dashboard.warnings.syncPaused.action"),
+            onClick: () => browser.runtime.openOptionsPage(),
+          }}
+          onDismiss={() => setSyncPausedWarning(false)}
+        >
+          {i18n.t("dashboard.warnings.syncPaused.body")}
         </WarningBanner>
       )}
 
@@ -629,6 +647,7 @@ export default function Dashboard() {
                 onClearCreateError={() => setCreateError(null)}
                 sidebarOpen={sidebarOpen}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                existingSnippets={snippets}
               />
             </Suspense>
           ) : selectedSnippet ? (

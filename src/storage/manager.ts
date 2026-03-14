@@ -27,7 +27,12 @@ import {
 import { getMedia, listMedia } from "~/storage/backends/media";
 import type { MediaMetadata } from "~/storage/backends/media";
 import { captureError } from "~/lib/sentry";
-import { storageModeItem, syncDataLostItem } from "./items";
+import { debugLog } from "~/lib/debug";
+import {
+  storageModeItem,
+  storageModeReasonItem,
+  syncDataLostItem,
+} from "./items";
 
 export class StorageManager {
   private sync = new SyncBackend();
@@ -52,7 +57,52 @@ export class StorageManager {
 
   async getStorageStatus(): Promise<StorageStatus> {
     const mode = await this.getMode();
-    return { mode, quotaExceeded: mode === "local" };
+    const localReason = await storageModeReasonItem.getValue();
+    return {
+      mode,
+      quotaExceeded: mode === "local" && localReason === "quota",
+      localReason,
+    };
+  }
+
+  /**
+   * Force a switch to the given storage backend, migrating all snippets
+   * from the current backend to the target backend first so no data is lost.
+   *
+   * Steps:
+   *   1. If already on the requested mode, no-op.
+   *   2. Read snippets from the current backend.
+   *   3. Write them to the target backend.
+   *   4. Update the mode flag.
+   *   5. Refresh the content-script cache.
+   */
+  async forceSetMode(mode: StorageMode): Promise<void> {
+    const current = await this.getMode();
+    if (current === mode) return;
+
+    // Read from whichever backend is currently active
+    const snippets =
+      current === "local"
+        ? await this.local.getSnippets()
+        : await this.sync.getSnippets();
+
+    // Write to the target backend
+    if (mode === "local") {
+      await this.local.saveSnippets(snippets);
+    } else {
+      await this.sync.saveSnippets(snippets);
+    }
+
+    await this.setMode(mode);
+    // Record reason so the UI can distinguish a manual switch from a quota overflow
+    await storageModeReasonItem.setValue(mode === "local" ? "manual" : "quota");
+    await updateContentScriptCache(snippets);
+
+    // Shadow-write the migrated data to IDB backup
+    this.idb.saveSnippets(snippets).catch((err) => {
+      console.warn("[Clipio] IDB backup write failed after mode switch:", err);
+      captureError(err, { action: "forceSetMode.idbBackup" });
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -72,6 +122,7 @@ export class StorageManager {
         // Sync is unreadable — fall back silently
         captureError(error, { action: "getSnippets", fallback: "local" });
         await this.setMode("local");
+        await storageModeReasonItem.setValue("quota");
         return this.local.getSnippets();
       }
       throw error;
@@ -103,6 +154,11 @@ export class StorageManager {
   private async persistSnippets(snippets: Snippet[]): Promise<void> {
     const mode = await this.getMode();
 
+    debugLog("storage", "persist:write", {
+      backend: mode,
+      count: snippets.length,
+    }).catch(() => {});
+
     if (mode === "local") {
       await this.local.saveSnippets(snippets);
     } else {
@@ -112,6 +168,7 @@ export class StorageManager {
         if (error instanceof StorageQuotaError) {
           // Switch to local permanently for this session and beyond
           await this.setMode("local");
+          await storageModeReasonItem.setValue("quota");
           await this.local.saveSnippets(snippets);
           // Re-throw so callers can surface the warning to the user once
           throw error;
@@ -135,23 +192,35 @@ export class StorageManager {
   // -------------------------------------------------------------------------
 
   async saveSnippet(snippet: Snippet): Promise<void> {
+    debugLog("storage", "snippet:save", {
+      id: snippet.id,
+      shortcut: snippet.shortcut,
+    }).catch(() => {});
     const snippets = await this.getSnippets();
     await this.persistSnippets([...snippets, snippet]);
   }
 
   async updateSnippet(updated: Snippet): Promise<void> {
+    debugLog("storage", "snippet:update", {
+      id: updated.id,
+      shortcut: updated.shortcut,
+    }).catch(() => {});
     const snippets = await this.getSnippets();
     const next = snippets.map((s) => (s.id === updated.id ? updated : s));
     await this.persistSnippets(next);
   }
 
   async deleteSnippet(id: string): Promise<void> {
+    debugLog("storage", "snippet:delete", { id }).catch(() => {});
     const snippets = await this.getSnippets();
     const next = snippets.filter((s) => s.id !== id);
     await this.persistSnippets(next);
   }
 
   async bulkSaveSnippets(snippets: Snippet[]): Promise<void> {
+    debugLog("storage", "snippet:bulkSave", { count: snippets.length }).catch(
+      () => {}
+    );
     await this.persistSnippets(snippets);
   }
 
@@ -161,6 +230,7 @@ export class StorageManager {
    * without affecting the primary sync/local storage.
    */
   async clearIDBBackup(): Promise<void> {
+    debugLog("storage", "idb:clear", {}).catch(() => {});
     await this.idb.clear();
   }
 

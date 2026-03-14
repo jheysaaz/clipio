@@ -34,6 +34,17 @@ export const storageModeItem = storage.defineItem<"sync" | "local">(
   { defaultValue: "sync" }
 );
 
+/**
+ * Why the extension is currently in local mode.
+ *   "quota"  — auto-switched because browser.storage.sync quota was exceeded
+ *   "manual" — the user explicitly switched via the Developers section
+ * Only meaningful when storageModeItem === "local".
+ */
+export const storageModeReasonItem = storage.defineItem<"quota" | "manual">(
+  "local:storageModeReason",
+  { defaultValue: "quota" }
+);
+
 // ---------------------------------------------------------------------------
 // UI flags
 // ---------------------------------------------------------------------------
@@ -112,6 +123,44 @@ export const giphyApiKeyItem = storage.defineItem<string>("local:giphyApiKey", {
  */
 export const blockedSitesItem = storage.defineItem<string[]>(
   "local:blockedSites",
+  { defaultValue: [] }
+);
+
+/**
+ * User-configurable debounce delay (ms) for snippet expansion after typing stops.
+ * Range: 50–2000ms. Default: 300ms (matches TIMING.TYPING_TIMEOUT).
+ */
+export const typingTimeoutItem = storage.defineItem<number>(
+  "local:typingTimeout",
+  { defaultValue: 300 }
+);
+
+/**
+ * Whether verbose debug logging is enabled.
+ * When true, extension activity is logged to the console and the in-page panel.
+ */
+export const debugModeItem = storage.defineItem<boolean>("local:debugMode", {
+  defaultValue: false,
+});
+
+/** A single entry in the debug log circular buffer. */
+export interface DebugLogEntry {
+  /** Unix timestamp (Date.now()). */
+  ts: number;
+  /** Which part of the extension produced this entry. */
+  context: "content" | "background" | "storage";
+  /** Short event name, e.g. "expand:match". */
+  event: string;
+  /** Human-readable detail string (JSON-serialised where appropriate). */
+  detail: string;
+}
+
+/**
+ * Circular buffer of recent debug log entries (capped at 100).
+ * Written by content script and background worker; read by the Options page.
+ */
+export const debugLogItem = storage.defineItem<DebugLogEntry[]>(
+  "local:debugLog",
   { defaultValue: [] }
 );
 

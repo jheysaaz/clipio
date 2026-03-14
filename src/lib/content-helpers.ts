@@ -269,16 +269,11 @@ export function processSnippetContent(
     // Strip markdown and handle cursor offset
     const cursorMatch = processedContent.match(/\{\{cursor\}\}/);
     if (cursorMatch && cursorMatch.index !== undefined) {
-      // Compute the plain-text offset of everything before the cursor marker
-      const beforeCursor = content.substring(0, cursorMatch.index);
-      // Remove placeholders from the before-cursor fragment (same substitutions as above)
+      // Slice processedContent (clipboard/date substitutions already applied)
+      // so the index correctly reflects the post-substitution string length.
+      const beforeCursor = processedContent.substring(0, cursorMatch.index);
+      // Apply the remaining placeholder substitutions to the before-cursor fragment
       let processedBefore = beforeCursor;
-      processedBefore = processedBefore.replace(/\{\{clipboard\}\}/g, "");
-      processedBefore = processedBefore.replace(/\{\{date:[a-z]+\}\}/g, "");
-      processedBefore = processedBefore.replace(
-        /\{\{datepicker:\d{4}-\d{2}-\d{2}\}\}/g,
-        ""
-      );
       processedBefore = processedBefore.replace(
         /\{\{image:[^}]+\}\}/g,
         "[image]"

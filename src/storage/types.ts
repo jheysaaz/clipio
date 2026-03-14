@@ -49,10 +49,17 @@ export interface StorageStatus {
   /** Which backend is currently being used. */
   mode: StorageMode;
   /**
-   * True when the extension fell back from sync to local because the
-   * browser.storage.sync quota was exceeded.
+   * True when the extension is in local mode because sync quota was exceeded
+   * (auto-fallback). False when the user manually force-switched to local.
    */
   quotaExceeded: boolean;
+  /**
+   * Why the extension is in local mode.
+   * Only meaningful when mode === "local".
+   *   "quota"  — quota overflow (auto-fallback)
+   *   "manual" — user-initiated force-switch from Developers section
+   */
+  localReason: "quota" | "manual";
 }
 
 // ---------------------------------------------------------------------------

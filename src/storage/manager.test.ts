@@ -19,6 +19,7 @@ const {
   mockUpdateContentScriptCache,
   mockStorageMode,
   mockSyncDataLost,
+  mockStorageModeReason,
 } = vi.hoisted(() => ({
   mockSyncBackend: {
     getSnippets: vi.fn(),
@@ -48,6 +49,12 @@ const {
     removeValue: vi.fn(),
     watch: vi.fn(),
   },
+  mockStorageModeReason: {
+    getValue: vi.fn().mockResolvedValue("quota"),
+    setValue: vi.fn().mockResolvedValue(undefined),
+    removeValue: vi.fn(),
+    watch: vi.fn(),
+  },
 }));
 
 vi.mock("./backends/sync", () => ({
@@ -73,6 +80,12 @@ vi.mock("./backends/indexeddb", () => ({
 vi.mock("./items", () => ({
   storageModeItem: mockStorageMode,
   syncDataLostItem: mockSyncDataLost,
+  storageModeReasonItem: mockStorageModeReason,
+}));
+
+// debugLog is a no-op in tests — it's a separate unit with its own test file
+vi.mock("~/lib/debug", () => ({
+  debugLog: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("~/storage/backends/media", () => ({
@@ -123,6 +136,8 @@ describe("StorageManager", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockStorageMode.getValue.mockResolvedValue("sync");
+    mockStorageModeReason.getValue.mockResolvedValue("quota");
+    mockStorageModeReason.setValue.mockResolvedValue(undefined);
     mockSyncBackend.getSnippets.mockResolvedValue([]);
     mockSyncBackend.saveSnippets.mockResolvedValue(undefined);
     mockLocalBackend.getSnippets.mockResolvedValue([]);
@@ -265,14 +280,35 @@ describe("StorageManager", () => {
   describe("getStorageStatus", () => {
     it("returns mode:sync, quotaExceeded:false in sync mode", async () => {
       mockStorageMode.getValue.mockResolvedValue("sync");
+      mockStorageModeReason.getValue.mockResolvedValue("quota");
       const status = await manager.getStorageStatus();
-      expect(status).toEqual({ mode: "sync", quotaExceeded: false });
+      expect(status).toEqual({
+        mode: "sync",
+        quotaExceeded: false,
+        localReason: "quota",
+      });
     });
 
-    it("returns mode:local, quotaExceeded:true in local mode", async () => {
+    it("returns mode:local, quotaExceeded:true when reason is quota", async () => {
       mockStorageMode.getValue.mockResolvedValue("local");
+      mockStorageModeReason.getValue.mockResolvedValue("quota");
       const status = await manager.getStorageStatus();
-      expect(status).toEqual({ mode: "local", quotaExceeded: true });
+      expect(status).toEqual({
+        mode: "local",
+        quotaExceeded: true,
+        localReason: "quota",
+      });
+    });
+
+    it("returns mode:local, quotaExceeded:false when reason is manual", async () => {
+      mockStorageMode.getValue.mockResolvedValue("local");
+      mockStorageModeReason.getValue.mockResolvedValue("manual");
+      const status = await manager.getStorageStatus();
+      expect(status).toEqual({
+        mode: "local",
+        quotaExceeded: false,
+        localReason: "manual",
+      });
     });
   });
 
@@ -479,6 +515,60 @@ describe("StorageManager", () => {
       await expect(manager.importSnippets(file)).rejects.toThrow(
         "No valid snippets found in the file."
       );
+    });
+  });
+
+  // ── forceSetMode ─────────────────────────────────────────────────────────
+
+  describe("forceSetMode", () => {
+    // spec: no-op when already on the requested mode
+    it("is a no-op when already on the target mode", async () => {
+      mockStorageMode.getValue.mockResolvedValue("sync");
+      await manager.forceSetMode("sync");
+      expect(mockSyncBackend.getSnippets).not.toHaveBeenCalled();
+      expect(mockLocalBackend.saveSnippets).not.toHaveBeenCalled();
+      expect(mockStorageMode.setValue).not.toHaveBeenCalled();
+    });
+
+    // spec: migrates snippets from sync → local, sets mode flag, updates cache
+    it("migrates snippets from sync to local and switches mode", async () => {
+      const snippets = [makeSnippet({ id: "s1" }), makeSnippet({ id: "s2" })];
+      mockStorageMode.getValue.mockResolvedValue("sync");
+      mockSyncBackend.getSnippets.mockResolvedValue(snippets);
+
+      await manager.forceSetMode("local");
+
+      expect(mockSyncBackend.getSnippets).toHaveBeenCalled();
+      expect(mockLocalBackend.saveSnippets).toHaveBeenCalledWith(snippets);
+      expect(mockStorageMode.setValue).toHaveBeenCalledWith("local");
+      expect(mockUpdateContentScriptCache).toHaveBeenCalledWith(snippets);
+    });
+
+    // spec: migrates snippets from local → sync, sets mode flag, updates cache
+    it("migrates snippets from local to sync and switches mode", async () => {
+      const snippets = [makeSnippet({ id: "s3" })];
+      mockStorageMode.getValue.mockResolvedValue("local");
+      mockLocalBackend.getSnippets.mockResolvedValue(snippets);
+
+      await manager.forceSetMode("sync");
+
+      expect(mockLocalBackend.getSnippets).toHaveBeenCalled();
+      expect(mockSyncBackend.saveSnippets).toHaveBeenCalledWith(snippets);
+      expect(mockStorageMode.setValue).toHaveBeenCalledWith("sync");
+      expect(mockUpdateContentScriptCache).toHaveBeenCalledWith(snippets);
+    });
+
+    // spec: shadows the migrated data to IDB backup (fire-and-forget)
+    it("writes migrated snippets to IDB backup after switch", async () => {
+      const snippets = [makeSnippet()];
+      mockStorageMode.getValue.mockResolvedValue("sync");
+      mockSyncBackend.getSnippets.mockResolvedValue(snippets);
+
+      await manager.forceSetMode("local");
+
+      // IDB write is fire-and-forget — give microtasks a tick to settle
+      await Promise.resolve();
+      expect(mockIdbBackend.saveSnippets).toHaveBeenCalledWith(snippets);
     });
   });
 });

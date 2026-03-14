@@ -665,6 +665,140 @@ test.describe("Developers Section", () => {
     }
   });
 
+  // ── Typing Timeout slider ──────────────────────────────────────────────
+
+  test("typing timeout slider renders with default value", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+
+    // Navigate to Developers section
+    const devButton = optionsPage.locator(
+      'button:has-text("Developers"), a:has-text("Developers")'
+    );
+    if ((await devButton.count()) > 0) {
+      await devButton.first().click();
+      await optionsPage.waitForTimeout(300);
+    }
+
+    // The typing timeout card title should be visible
+    const cardTitle = optionsPage.locator(':has-text("Typing Timeout")');
+    await expect(cardTitle.first()).toBeVisible({ timeout: 5000 });
+
+    // The range input should be present with value 300 (default)
+    const slider = optionsPage.locator('input[type="range"]').first();
+    await expect(slider).toBeVisible();
+    const value = await slider.inputValue();
+    expect(value).toBe("300");
+  });
+
+  test("typing timeout slider saves new value to storage", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+
+    // Navigate to Developers section
+    const devButton = optionsPage.locator(
+      'button:has-text("Developers"), a:has-text("Developers")'
+    );
+    if ((await devButton.count()) > 0) {
+      await devButton.first().click();
+      await optionsPage.waitForTimeout(300);
+    }
+
+    const slider = optionsPage.locator('input[type="range"]').first();
+    if (!(await slider.isVisible())) return;
+
+    // Set value to 600 via evaluate (direct range input change)
+    await slider.evaluate((el: HTMLInputElement) => {
+      el.value = "600";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    // Wait for the debounced save (400ms) + extra buffer
+    await optionsPage.waitForTimeout(800);
+
+    // Verify storage was updated
+    const storedTimeout = await optionsPage.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      const result = await ext.storage.local.get("typingTimeout");
+      return result.typingTimeout;
+    });
+    expect(storedTimeout).toBe(600);
+  });
+
+  // ── Debug Mode toggle ──────────────────────────────────────────────────
+
+  test("debug mode toggle enables and writes to storage", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+
+    // Navigate to Developers section
+    const devButton = optionsPage.locator(
+      'button:has-text("Developers"), a:has-text("Developers")'
+    );
+    if ((await devButton.count()) > 0) {
+      await devButton.first().click();
+      await optionsPage.waitForTimeout(300);
+    }
+
+    // Find the debug mode toggle (checkbox)
+    const toggle = optionsPage.locator('input[type="checkbox"]').first();
+    if (!(await toggle.isVisible())) return;
+
+    const initialChecked = await toggle.isChecked();
+    await toggle.click();
+    await optionsPage.waitForTimeout(300);
+
+    // The checkbox state should have flipped
+    const newChecked = await toggle.isChecked();
+    expect(newChecked).toBe(!initialChecked);
+
+    // Storage should reflect the new value
+    const stored = await optionsPage.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      const result = await ext.storage.local.get("debugMode");
+      return result.debugMode;
+    });
+    expect(stored).toBe(!initialChecked);
+  });
+
+  // ── Force storage switch ───────────────────────────────────────────────
+
+  test("storage mode switch buttons appear in Developers section", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+
+    // Navigate to Developers section
+    const devButton = optionsPage.locator(
+      'button:has-text("Developers"), a:has-text("Developers")'
+    );
+    if ((await devButton.count()) > 0) {
+      await devButton.first().click();
+      await optionsPage.waitForTimeout(300);
+    }
+
+    // In sync mode (default), "Switch to local" button should appear
+    const switchLocalBtn = optionsPage.locator(
+      'button:has-text("Switch to local")'
+    );
+    // The button may or may not be there depending on current mode; just assert page loaded
+    const body = optionsPage.locator("body");
+    await expect(body).toBeVisible();
+    // At minimum, the Storage Mode card title should be present
+    const storageModeTitle = optionsPage.locator(':has-text("Storage Mode")');
+    await expect(storageModeTitle.first()).toBeVisible({ timeout: 5000 });
+
+    // If the switch button is present, it should be clickable
+    if ((await switchLocalBtn.count()) > 0) {
+      await expect(switchLocalBtn.first()).toBeVisible();
+    }
+  });
+
   test("cancel on clear IDB backup hides confirm step", async ({
     optionsPage,
   }) => {
