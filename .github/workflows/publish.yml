@@ -149,6 +149,14 @@ jobs:
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
           WXT_SENTRY_DSN: ${{ secrets.WXT_SENTRY_DSN }}
 
+      - name: Upload Chrome ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-zip
+          path: .output/*-chrome.zip
+          retention-days: 7
+          if-no-files-found: error
+
       - name: Zip Firefox extension
         run: pnpm zip:firefox
         env:
@@ -156,13 +164,6 @@ jobs:
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
           WXT_SENTRY_DSN: ${{ secrets.WXT_SENTRY_DSN }}
-
-      - name: Upload Chrome ZIP artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: chrome-zip
-          path: .output/*-chrome.zip
-          retention-days: 7
 
       - name: Upload Firefox ZIP artifacts
         uses: actions/upload-artifact@v4
@@ -172,6 +173,7 @@ jobs:
             .output/*-firefox.zip
             .output/*-sources.zip
           retention-days: 7
+          if-no-files-found: error
 
   submit:
     name: Submit to Stores
