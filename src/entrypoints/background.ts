@@ -248,10 +248,24 @@ export default defineBackground(() => {
       });
     }
 
-    // Redirect to a farewell / recovery reminder page when uninstalled
-    browser.runtime.setUninstallURL(
-      "https://github.com/jheysaaz/clipio#uninstalled"
-    );
+    // Redirect to a farewell / recovery reminder page when uninstalled.
+    // Uses WXT_WEBSITE_URL (e.g. https://clipio.xyz) and the browser's UI
+    // locale (en | es) to build a localised URL: /{locale}/uninstall
+    {
+      const websiteUrl = import.meta.env.WXT_WEBSITE_URL as string | undefined;
+      if (websiteUrl) {
+        const rawLocale =
+          typeof browser.i18n?.getUILanguage === "function"
+            ? browser.i18n.getUILanguage()
+            : "en";
+        const locale = (
+          ONBOARDING_SUPPORTED_LOCALES as readonly string[]
+        ).includes(rawLocale)
+          ? rawLocale
+          : "en";
+        browser.runtime.setUninstallURL(`${websiteUrl}/${locale}/uninstall`);
+      }
+    }
 
     // Register context-menu items under a parent "Clipio" dropdown
     browser.contextMenus

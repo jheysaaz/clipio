@@ -243,9 +243,9 @@ test.describe("Background Script", () => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       // Attempt to set the uninstall URL and return success
       try {
-        await ext.runtime.setUninstallURL(
-          "https://github.com/jheysaaz/clipio#uninstalled"
-        );
+        // URL pattern: {WXT_WEBSITE_URL}/{locale}/uninstall
+        // e.g. https://clipio.xyz/en/uninstall or https://clipio.xyz/es/uninstall
+        await ext.runtime.setUninstallURL("https://clipio.xyz/en/uninstall");
         return true;
       } catch {
         return false;
