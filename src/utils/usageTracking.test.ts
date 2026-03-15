@@ -10,23 +10,30 @@ import {
   incrementSnippetUsage,
   resetSnippetUsage,
   clearAllUsageCounts,
+  incrementTotalInsertions,
 } from "./usageTracking";
 
 // ---------------------------------------------------------------------------
 // Mock the storage item and sentry
 // ---------------------------------------------------------------------------
 
-const { mockUsageCounts } = vi.hoisted(() => ({
+const { mockUsageCounts, mockTotalInsertions } = vi.hoisted(() => ({
   mockUsageCounts: {
     getValue: vi.fn(),
     setValue: vi.fn(),
     removeValue: vi.fn(),
     watch: vi.fn(),
   },
+  mockTotalInsertions: {
+    getValue: vi.fn(),
+    setValue: vi.fn(),
+    watch: vi.fn(),
+  },
 }));
 
 vi.mock("~/storage/items", () => ({
   usageCountsItem: mockUsageCounts,
+  totalSnippetInsertionsItem: mockTotalInsertions,
 }));
 
 vi.mock("~/lib/sentry", () => ({
@@ -201,5 +208,40 @@ describe("clearAllUsageCounts", () => {
   it("does not throw when storage throws", async () => {
     mockUsageCounts.removeValue.mockRejectedValue(new Error("Error"));
     await expect(clearAllUsageCounts()).resolves.not.toThrow();
+  });
+});
+
+describe("incrementTotalInsertions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // spec: MUST increment totalSnippetInsertionsItem by 1
+  it("reads current value and writes incremented value", async () => {
+    mockTotalInsertions.getValue.mockResolvedValue(5);
+    mockTotalInsertions.setValue.mockResolvedValue(undefined);
+    await incrementTotalInsertions();
+    expect(mockTotalInsertions.setValue).toHaveBeenCalledWith(6);
+  });
+
+  // spec: MUST start from 0 when storage returns 0
+  it("increments from 0 to 1", async () => {
+    mockTotalInsertions.getValue.mockResolvedValue(0);
+    mockTotalInsertions.setValue.mockResolvedValue(undefined);
+    await incrementTotalInsertions();
+    expect(mockTotalInsertions.setValue).toHaveBeenCalledWith(1);
+  });
+
+  // spec: MUST swallow errors silently (fire-and-forget safety)
+  it("does not throw when getValue rejects", async () => {
+    mockTotalInsertions.getValue.mockRejectedValue(new Error("read error"));
+    await expect(incrementTotalInsertions()).resolves.not.toThrow();
+  });
+
+  // spec: MUST swallow errors silently (fire-and-forget safety)
+  it("does not throw when setValue rejects", async () => {
+    mockTotalInsertions.getValue.mockResolvedValue(3);
+    mockTotalInsertions.setValue.mockRejectedValue(new Error("write error"));
+    await expect(incrementTotalInsertions()).resolves.not.toThrow();
   });
 });

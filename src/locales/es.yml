@@ -179,6 +179,12 @@ options:
     cardTitle: Comparte tus comentarios
     cardDescription: Ayúdanos a mejorar Clipio con tus opiniones y sugerencias.
     cardAction: Enviar comentarios
+    donationAction: Apoyar Clipio
+    donationTitle: Si Clipio te ahorra tiempo, considera apoyar su desarrollo.
+    reviewBannerTitle: "¿Disfrutas Clipio?"
+    reviewBannerDescription: Una reseña rápida ayuda a otros a descubrir Clipio y motiva el desarrollo continuo.
+    reviewBannerAction: Valorar en la tienda
+    reviewBannerDismiss: Descartar
   importExport:
     title: Importar y Exportar
     description: Importa fragmentos desde exportaciones de Clipio u otras herramientas, o descarga una copia de seguridad de tu biblioteca actual.
@@ -453,3 +459,6 @@ background:
   updateAvailable:
     title: Actualización de Clipio disponible
     message: "La versión $1 ya está disponible. Haz clic para ver el lanzamiento."
+  reviewPrompt:
+    title: "¿Disfrutas Clipio?"
+    message: "Llevas un tiempo usando Clipio. ¡Una reseña rápida ayuda a que otros lo descubran!"

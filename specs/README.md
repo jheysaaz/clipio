@@ -33,6 +33,7 @@ Specs are the source of truth for what each module is supposed to do.
 | `sentry-scrub.spec.md`      | `src/lib/sentry-scrub.ts`                | 90%             |
 | `storage.spec.md`           | `src/storage/`                           | 80%             |
 | `usage-tracking.spec.md`    | `src/utils/usageTracking.ts`             | 85%             |
+| `review-prompt.spec.md`     | `src/lib/review-prompt.ts`               | 90%             |
 
 ## Spec Template
 

@@ -141,8 +141,21 @@ internals.
 
 ### `StorageManager.getStorageStatus(): Promise<StorageStatus>`
 
-- MUST return `{ mode: "sync", quotaExceeded: false }` when mode is `"sync"`.
-- MUST return `{ mode: "local", quotaExceeded: true }` when mode is `"local"`.
+- MUST return `{ mode, quotaExceeded, localReason }` where:
+  - `mode` is the current `storageModeItem` value (`"sync"` or `"local"`).
+  - `quotaExceeded` is `true` only when `mode === "local"` AND
+    `localReason === "quota"` (auto-fallback from quota overflow).
+  - `localReason` is `"quota"` (auto-fallback) or `"manual"` (user force-switch).
+
+### `StorageManager.forceSetMode(mode: StorageMode): Promise<void>`
+
+- MUST be a no-op when `mode` equals the current mode.
+- MUST read all snippets from the currently active backend.
+- MUST write them to the target backend (data migration).
+- MUST update `storageModeItem` to the new mode.
+- MUST set `storageModeReasonItem` to `"manual"`.
+- MUST refresh the content-script cache via `updateContentScriptCache`.
+- MUST shadow-write to IndexedDB backup (fire-and-forget).
 
 ### `StorageManager.tryRecoverFromBackup(): Promise<Snippet[]>`
 
@@ -152,6 +165,12 @@ internals.
 ### `StorageManager.clearSyncDataLostFlag(): Promise<void>`
 
 - MUST call `syncDataLostItem.removeValue()`.
+
+### `StorageManager.clearIDBBackup(): Promise<void>`
+
+- MUST delegate to `IndexedDBBackend.clear()`.
+- Used by the Developers section to wipe the IDB backup without affecting
+  primary sync/local storage.
 
 ---
 
@@ -169,11 +188,20 @@ All backends depend on browser APIs:
 - `SyncBackend` → `browser.storage.sync`
 - `LocalBackend` → WXT `storage.defineItem` (wraps `browser.storage.local`)
 - `IndexedDBBackend` → `indexedDB` global
+- `storageModeItem` — `src/storage/items.ts`
+- `storageModeReasonItem` — `src/storage/items.ts`
+- `syncDataLostItem` — `src/storage/items.ts`
+
+The following developer/diagnostic storage items have behavioral contracts
+documented in `specs/developers-section.spec.md`:
+`typingTimeoutItem`, `debugModeItem`, `debugLogItem`.
 
 In tests, all browser APIs must be mocked. See `tests/mocks/browser.ts`.
 
 ## Change History
 
-| Date       | Change       | Author |
-| ---------- | ------------ | ------ |
-| 2026-03-11 | Initial spec | —      |
+| Date       | Change                                                   | Author |
+| ---------- | -------------------------------------------------------- | ------ |
+| 2026-03-11 | Initial spec                                             | —      |
+| 2026-03-14 | Add forceSetMode, clearIDBBackup, storageModeReasonItem; | —      |
+|            | fix getStorageStatus return shape                        |        |

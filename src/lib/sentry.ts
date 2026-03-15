@@ -30,6 +30,7 @@ import type { Transport, BaseTransportOptions } from "@sentry/core";
 import type { SeverityLevel } from "@sentry/core";
 import { scrubBreadcrumb, scrubEvent } from "./sentry-scrub";
 import type { ErrorEvent } from "@sentry/browser";
+import { lastSentryErrorAtItem } from "~/storage/items";
 
 export type SentryContext = "background" | "popup" | "options" | "content";
 
@@ -134,11 +135,18 @@ export function initSentry(
 /**
  * Capture a thrown error with optional extra context.
  * Uses the extension scope so the event goes to our project.
+ * Also records a timestamp locally (lastSentryErrorAtItem) so the
+ * review-prompt eligibility check can suppress the prompt after recent errors,
+ * even when Sentry itself is disabled (no DSN).
  */
 export function captureError(
   error: unknown,
   extra?: Record<string, unknown> & { action?: string }
 ): void {
+  // Always record the error timestamp for review-prompt suppression,
+  // regardless of whether Sentry is enabled. Fire-and-forget.
+  lastSentryErrorAtItem.setValue(new Date().toISOString()).catch(() => {});
+
   if (!extensionScope) return;
   if (extra?.action) {
     extensionScope.setTag("action", extra.action);

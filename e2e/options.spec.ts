@@ -607,7 +607,7 @@ test.describe("Developers Section", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.local.set({
-        usageCounts: { "snip-abc": 42, "snip-def": 7 },
+        snippetUsageCount: { "snip-abc": 42, "snip-def": 7 },
       });
       await ext.storage.sync.set({
         "snip:snip-abc": {
@@ -671,15 +671,7 @@ test.describe("Developers Section", () => {
     optionsPage,
   }) => {
     await waitForOptionsReady(optionsPage);
-
-    // Navigate to Developers section
-    const devButton = optionsPage.locator(
-      'button:has-text("Developers"), a:has-text("Developers")'
-    );
-    if ((await devButton.count()) > 0) {
-      await devButton.first().click();
-      await optionsPage.waitForTimeout(300);
-    }
+    await navigateToDevelopers(optionsPage);
 
     // The typing timeout card title should be visible
     const cardTitle = optionsPage.locator(':has-text("Typing Timeout")');
@@ -696,29 +688,18 @@ test.describe("Developers Section", () => {
     optionsPage,
   }) => {
     await waitForOptionsReady(optionsPage);
-
-    // Navigate to Developers section
-    const devButton = optionsPage.locator(
-      'button:has-text("Developers"), a:has-text("Developers")'
-    );
-    if ((await devButton.count()) > 0) {
-      await devButton.first().click();
-      await optionsPage.waitForTimeout(300);
-    }
+    await navigateToDevelopers(optionsPage);
 
     const slider = optionsPage.locator('input[type="range"]').first();
     if (!(await slider.isVisible())) return;
 
-    // Set value to 600 via evaluate (direct range input change)
-    await slider.evaluate((el: HTMLInputElement) => {
-      el.value = "600";
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    // Use Playwright fill() to set a range value — triggers React onChange
+    await slider.fill("600");
 
     // Wait for the debounced save (400ms) + extra buffer
-    await optionsPage.waitForTimeout(800);
+    await optionsPage.waitForTimeout(1000);
 
-    // Verify storage was updated
+    // Verify storage was updated (WXT stores "local:typingTimeout" as key "typingTimeout")
     const storedTimeout = await optionsPage.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
@@ -734,23 +715,19 @@ test.describe("Developers Section", () => {
     optionsPage,
   }) => {
     await waitForOptionsReady(optionsPage);
+    await navigateToDevelopers(optionsPage);
 
-    // Navigate to Developers section
-    const devButton = optionsPage.locator(
-      'button:has-text("Developers"), a:has-text("Developers")'
+    // The sr-only checkbox is hidden behind a decorative overlay div.
+    // Click the parent <label> which properly toggles the checkbox.
+    const toggle = optionsPage.locator(
+      'input[type="checkbox"][aria-label="Enable debug logging"]'
     );
-    if ((await devButton.count()) > 0) {
-      await devButton.first().click();
-      await optionsPage.waitForTimeout(300);
-    }
-
-    // Find the debug mode toggle (checkbox)
-    const toggle = optionsPage.locator('input[type="checkbox"]').first();
-    if (!(await toggle.isVisible())) return;
+    const toggleLabel = toggle.locator("xpath=ancestor::label");
+    if (!(await toggleLabel.isVisible())) return;
 
     const initialChecked = await toggle.isChecked();
-    await toggle.click();
-    await optionsPage.waitForTimeout(300);
+    await toggleLabel.click();
+    await optionsPage.waitForTimeout(500);
 
     // The checkbox state should have flipped
     const newChecked = await toggle.isChecked();
@@ -772,15 +749,7 @@ test.describe("Developers Section", () => {
     optionsPage,
   }) => {
     await waitForOptionsReady(optionsPage);
-
-    // Navigate to Developers section
-    const devButton = optionsPage.locator(
-      'button:has-text("Developers"), a:has-text("Developers")'
-    );
-    if ((await devButton.count()) > 0) {
-      await devButton.first().click();
-      await optionsPage.waitForTimeout(300);
-    }
+    await navigateToDevelopers(optionsPage);
 
     // In sync mode (default), "Switch to local" button should appear
     const switchLocalBtn = optionsPage.locator(
@@ -832,5 +801,220 @@ test.describe("Developers Section", () => {
 
     const body = optionsPage.locator("body");
     await expect(body).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Review Prompt Banner
+// ---------------------------------------------------------------------------
+
+test.describe("Review Prompt Banner", () => {
+  // spec: review-prompt.spec.md#options-page-banner
+
+  test("banner is hidden when reviewPromptState is pending (default)", async ({
+    context,
+    extensionId,
+  }) => {
+    // spec: review-prompt.spec.md#options-page-banner
+    // No storage seeding — default state is "pending"
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+    await page.waitForLoadState("domcontentloaded");
+    await waitForOptionsReady(page);
+
+    const pageText = await page.textContent("body");
+    expect(pageText).not.toContain("Enjoying Clipio?");
+
+    await page.close();
+  });
+
+  test("banner shows when reviewPromptState is shown and no recent error", async ({
+    context,
+    extensionId,
+    storageHelper,
+  }) => {
+    // spec: review-prompt.spec.md#options-page-banner
+    // Seed state before opening options page
+    await storageHelper.setLocal("reviewPromptState", "shown");
+
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+    await page.waitForLoadState("domcontentloaded");
+    await waitForOptionsReady(page);
+
+    const pageText = await page.textContent("body");
+    expect(pageText).toContain("Enjoying Clipio?");
+    expect(pageText).toContain("Rate on the Store");
+
+    await page.close();
+  });
+
+  test("banner is hidden when state is shown but lastSentryErrorAt is within 24h", async ({
+    context,
+    extensionId,
+    storageHelper,
+  }) => {
+    // spec: review-prompt.spec.md#options-page-banner
+    const recentError = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1 hour ago
+    await storageHelper.setLocal("reviewPromptState", "shown");
+    await storageHelper.setLocal("lastSentryErrorAt", recentError);
+
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+    await page.waitForLoadState("domcontentloaded");
+    await waitForOptionsReady(page);
+
+    const pageText = await page.textContent("body");
+    expect(pageText).not.toContain("Enjoying Clipio?");
+
+    await page.close();
+  });
+
+  test("banner shows when state is shown and lastSentryErrorAt is older than 24h", async ({
+    context,
+    extensionId,
+    storageHelper,
+  }) => {
+    // spec: review-prompt.spec.md#options-page-banner
+    const oldError = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(); // 25 hours ago
+    await storageHelper.setLocal("reviewPromptState", "shown");
+    await storageHelper.setLocal("lastSentryErrorAt", oldError);
+
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+    await page.waitForLoadState("domcontentloaded");
+    await waitForOptionsReady(page);
+
+    const pageText = await page.textContent("body");
+    expect(pageText).toContain("Enjoying Clipio?");
+
+    await page.close();
+  });
+
+  test("dismissing the banner hides it and writes dismissed state to storage", async ({
+    context,
+    extensionId,
+    storageHelper,
+  }) => {
+    // spec: review-prompt.spec.md#options-page-banner
+    await storageHelper.setLocal("reviewPromptState", "shown");
+
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+    await page.waitForLoadState("domcontentloaded");
+    await waitForOptionsReady(page);
+
+    // Banner should be visible before dismiss
+    await expect(page.locator('text="Enjoying Clipio?"').first()).toBeVisible({
+      timeout: 5_000,
+    });
+
+    // The review banner is the blue Alert containing "Enjoying Clipio?"
+    // Scope the dismiss button search to that banner to avoid hitting the
+    // uninstall warning dismiss (amber banner) which also has aria-label="Dismiss"
+    const reviewBanner = page
+      .locator('text="Enjoying Clipio?"')
+      .locator("..")
+      .locator("..");
+    const dismissBtn = reviewBanner
+      .locator('button[aria-label="Dismiss"]')
+      .first();
+    await dismissBtn.click();
+    await page.waitForTimeout(500);
+
+    // Banner should disappear
+    const pageText = await page.textContent("body");
+    expect(pageText).not.toContain("Enjoying Clipio?");
+
+    // Storage should reflect "dismissed"
+    const storedState = await storageHelper.getLocal("reviewPromptState");
+    expect(storedState).toBe("dismissed");
+
+    await page.close();
+  });
+
+  test("clicking Rate on the Store hides banner and writes rated state to storage", async ({
+    context,
+    extensionId,
+    storageHelper,
+  }) => {
+    // spec: review-prompt.spec.md#options-page-banner
+    await storageHelper.setLocal("reviewPromptState", "shown");
+
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+    await page.waitForLoadState("domcontentloaded");
+    await waitForOptionsReady(page);
+
+    // Banner should be visible
+    await expect(page.locator('text="Enjoying Clipio?"').first()).toBeVisible({
+      timeout: 5_000,
+    });
+
+    // Intercept the new tab so the test does not navigate away
+    const newPagePromise = context
+      .waitForEvent("page", { timeout: 3_000 })
+      .catch(() => null);
+
+    // Click the "Rate on the Store" button
+    const rateBtn = page
+      .locator('button:has-text("Rate on the Store")')
+      .first();
+    await rateBtn.click();
+    await page.waitForTimeout(500);
+
+    // Close any newly opened tab so the context stays clean
+    const newTab = await newPagePromise;
+    if (newTab) await newTab.close().catch(() => {});
+
+    // Banner should disappear
+    const pageText = await page.textContent("body");
+    expect(pageText).not.toContain("Enjoying Clipio?");
+
+    // Storage should reflect "rated"
+    const storedState = await storageHelper.getLocal("reviewPromptState");
+    expect(storedState).toBe("rated");
+
+    await page.close();
+  });
+
+  test("banner is hidden when reviewPromptState is dismissed", async ({
+    context,
+    extensionId,
+    storageHelper,
+  }) => {
+    // spec: review-prompt.spec.md#options-page-banner
+    // Terminal state — banner must never reappear
+    await storageHelper.setLocal("reviewPromptState", "dismissed");
+
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+    await page.waitForLoadState("domcontentloaded");
+    await waitForOptionsReady(page);
+
+    const pageText = await page.textContent("body");
+    expect(pageText).not.toContain("Enjoying Clipio?");
+
+    await page.close();
+  });
+
+  test("banner is hidden when reviewPromptState is rated", async ({
+    context,
+    extensionId,
+    storageHelper,
+  }) => {
+    // spec: review-prompt.spec.md#options-page-banner
+    // Terminal state — banner must never reappear
+    await storageHelper.setLocal("reviewPromptState", "rated");
+
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+    await page.waitForLoadState("domcontentloaded");
+    await waitForOptionsReady(page);
+
+    const pageText = await page.textContent("body");
+    expect(pageText).not.toContain("Enjoying Clipio?");
+
+    await page.close();
   });
 });

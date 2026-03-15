@@ -95,7 +95,7 @@ export class StorageManager {
 
     await this.setMode(mode);
     // Record reason so the UI can distinguish a manual switch from a quota overflow
-    await storageModeReasonItem.setValue(mode === "local" ? "manual" : "quota");
+    await storageModeReasonItem.setValue("manual");
     await updateContentScriptCache(snippets);
 
     // Shadow-write the migrated data to IDB backup

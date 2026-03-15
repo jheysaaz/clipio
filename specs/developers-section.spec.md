@@ -12,7 +12,7 @@ labelled as advanced or diagnostic. The section is accessible via the
 
 ## Scope
 
-**In scope (10 cards):**
+**In scope (9 cards):**
 
 1. **Giphy API Key** — already exists; override the bundled key.
 2. **Extension Version & Update** — show current version; link to release page if update available.
@@ -141,11 +141,19 @@ console and an in-page scrollable log panel.
 - Each log row MUST display: timestamp (HH:MM:SS.mmm), context badge (color-coded),
   event name, detail string
 - MUST provide a "Clear log" button that sets `debugLogItem` to `[]`
+- MUST provide a "Copy log" button that copies all entries to the clipboard
+  as newline-separated text (one line per entry in ISO-timestamp format)
+- MUST show a "Copied!" flash for 2 seconds after successful copy
 - MUST show "No log entries yet." when the log is empty
+- MUST sanitise debug log entries loaded from storage: coerce `context`,
+  `event`, and `detail` to strings; drop entries without a valid `ts` field
 
 **`debugLog()` utility (`src/lib/debug.ts`):**
 
 - MUST be a no-op (no storage writes, no console output) when `debugModeItem` is false
+- MUST cache the debug-mode flag in memory (initialised on first call via
+  `debugModeItem.getValue()`, kept current via `debugModeItem.watch()`);
+  when off, the function returns synchronously with zero async work
 - WHEN enabled: MUST append a `DebugLogEntry` to `debugLogItem` and call `console.debug`
 - The buffer MUST be capped at 100 entries (FIFO — oldest entry dropped when full)
 - MUST silently ignore storage read or write failures (never throws)
@@ -196,6 +204,7 @@ All user-visible strings MUST be added to `src/locales/en.yml` under
 - `latestVersionItem` — `src/storage/items.ts`
 - `usageCountsItem` — `src/storage/items.ts`
 - `typingTimeoutItem` — `src/storage/items.ts`
+- `storageModeReasonItem` — `src/storage/items.ts`
 - `debugModeItem` / `debugLogItem` / `DebugLogEntry` — `src/storage/items.ts`
 - `getStorageStatus()` — `src/storage/index.ts`
 - `forceSetStorageMode()` — `src/storage/index.ts`

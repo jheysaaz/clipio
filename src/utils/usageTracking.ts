@@ -4,7 +4,7 @@
  */
 
 import { captureError } from "~/lib/sentry";
-import { usageCountsItem } from "~/storage/items";
+import { usageCountsItem, totalSnippetInsertionsItem } from "~/storage/items";
 
 /**
  * Get usage count for all snippets
@@ -69,5 +69,22 @@ export const clearAllUsageCounts = async (): Promise<void> => {
     await usageCountsItem.removeValue();
   } catch (error) {
     console.error("Failed to clear usage counts:", error);
+  }
+};
+
+/**
+ * Increment the global total snippet insertion counter.
+ * Called each time any snippet is expanded by the content script.
+ * This counter is used by the review-prompt eligibility check to ensure
+ * the user has meaningfully used the extension before being asked for a review.
+ * Fire-and-forget — never disrupts snippet expansion on failure.
+ */
+export const incrementTotalInsertions = async (): Promise<void> => {
+  try {
+    const current = await totalSnippetInsertionsItem.getValue();
+    await totalSnippetInsertionsItem.setValue(current + 1);
+  } catch (error) {
+    // Intentionally swallowed — this counter is best-effort
+    console.error("Failed to increment total insertions:", error);
   }
 };

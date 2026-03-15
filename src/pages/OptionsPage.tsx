@@ -38,6 +38,7 @@ import {
   Bug,
   RotateCcw,
   Copy,
+  Heart,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { Button } from "~/components/ui/button";
@@ -82,12 +83,15 @@ import {
   typingTimeoutItem,
   debugModeItem,
   debugLogItem,
+  reviewPromptStateItem,
+  lastSentryErrorAtItem,
   type DebugLogEntry,
 } from "~/storage/items";
 import { TIMING } from "~/config/constants";
 import { i18n } from "#i18n";
 import { captureError, captureMessage, sendUserFeedback } from "~/lib/sentry";
 import { SENTRY_TEST_MESSAGE_TYPE } from "~/config/constants";
+import { setReviewPromptState, getStoreReviewUrl } from "~/lib/review-prompt";
 
 // ---------------------------------------------------------------------------
 // Sidebar nav items
@@ -620,13 +624,24 @@ function GeneralSection({
               {i18n.t("options.feedback.cardDescription")}
             </p>
           </div>
-          <Button
-            size="sm"
-            onClick={() => onNavigate?.("feedback")}
-            className="shrink-0"
-          >
-            {i18n.t("options.feedback.cardAction")}
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                browser.tabs.create({
+                  url: "https://github.com/sponsors/jheysaaz",
+                })
+              }
+              title={i18n.t("options.feedback.donationTitle")}
+            >
+              <Heart className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+              {i18n.t("options.feedback.donationAction")}
+            </Button>
+            <Button size="sm" onClick={() => onNavigate?.("feedback")}>
+              {i18n.t("options.feedback.cardAction")}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
@@ -1954,6 +1969,49 @@ function DevelopersSection() {
         </div>
       </div>
 
+      {/* Dev only: Test review prompt */}
+      {(import.meta.env.MODE as string) !== "production" && (
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-6 space-y-3">
+          <h3 className="text-sm font-semibold text-foreground">
+            Development – Test Review Prompt
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Simulate the full review prompt flow — fires the real browser
+            notification and transitions state to "shown". Click the
+            notification to complete the "rated" flow. Only visible in
+            development.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                await setReviewPromptState("shown");
+                browser.notifications.create("clipio-review", {
+                  type: "basic",
+                  iconUrl: browser.runtime.getURL("/icon/128.png"),
+                  title: i18n.t("background.reviewPrompt.title"),
+                  message: i18n.t("background.reviewPrompt.message"),
+                });
+              }}
+            >
+              Simulate notification
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                await setReviewPromptState("pending");
+              }}
+            >
+              Reset to pending
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Dev only: Test Sentry (options + content script) */}
       {(import.meta.env.MODE as string) !== "production" && (
         <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-6 space-y-3">
@@ -2837,6 +2895,26 @@ export default function OptionsPage() {
       .catch(console.warn);
   }, []);
 
+  // Review banner — shown when reviewPromptState is "shown" and no recent error
+  const [showReviewBanner, setShowReviewBanner] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      reviewPromptStateItem.getValue(),
+      lastSentryErrorAtItem.getValue(),
+    ])
+      .then(([state, lastErrorAt]) => {
+        if (state !== "shown") return;
+        if (lastErrorAt) {
+          const errorAgeMs = Date.now() - new Date(lastErrorAt).getTime();
+          const twentyFourHoursMs = 24 * 60 * 60 * 1000;
+          if (errorAgeMs < twentyFourHoursMs) return;
+        }
+        setShowReviewBanner(true);
+      })
+      .catch(console.warn);
+  }, []);
+
   // Resizable sidebar
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   const isResizing = useRef(false);
@@ -3054,6 +3132,41 @@ export default function OptionsPage() {
                 >
                   <X className="size-3.5" strokeWidth={2} />
                 </button>
+              </AlertAction>
+            </Alert>
+          )}
+          {showReviewBanner && (
+            <Alert className="mb-6 border-blue-200 bg-blue-50 text-blue-800 [&>svg]:text-blue-500 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300 dark:[&>svg]:text-blue-400">
+              <Heart className="h-4 w-4" strokeWidth={1.5} />
+              <AlertDescription className="text-blue-800 dark:text-blue-300">
+                <span className="font-medium">
+                  {i18n.t("options.feedback.reviewBannerTitle")}
+                </span>{" "}
+                {i18n.t("options.feedback.reviewBannerDescription")}
+              </AlertDescription>
+              <AlertAction>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      browser.tabs.create({ url: getStoreReviewUrl() });
+                      setReviewPromptState("rated").catch(console.warn);
+                      setShowReviewBanner(false);
+                    }}
+                    className="text-xs font-medium text-blue-700 dark:text-blue-300 hover:underline"
+                  >
+                    {i18n.t("options.feedback.reviewBannerAction")}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setReviewPromptState("dismissed").catch(console.warn);
+                      setShowReviewBanner(false);
+                    }}
+                    className="opacity-50 hover:opacity-100 transition-opacity"
+                    aria-label={i18n.t("options.feedback.reviewBannerDismiss")}
+                  >
+                    <X className="size-3.5" strokeWidth={2} />
+                  </button>
+                </div>
               </AlertAction>
             </Alert>
           )}

@@ -189,3 +189,76 @@ export const dismissedUpdateVersionItem = storage.defineItem<string>(
   "local:dismissedUpdateVersion",
   { defaultValue: "" }
 );
+
+// ---------------------------------------------------------------------------
+// Onboarding
+// ---------------------------------------------------------------------------
+
+/**
+ * Set to true once the onboarding redirect has been triggered on first install.
+ * Prevents re-opening the onboarding page on subsequent installs in development.
+ */
+export const onboardingCompletedItem = storage.defineItem<boolean>(
+  "local:onboardingCompleted",
+  { defaultValue: false }
+);
+
+// ---------------------------------------------------------------------------
+// Review prompt
+// ---------------------------------------------------------------------------
+
+/**
+ * ISO timestamp recorded once when the extension is first installed.
+ * Used by the review-prompt eligibility check to ensure the user has had
+ * enough time with the extension before being asked for a review.
+ */
+export const extensionInstalledAtItem = storage.defineItem<string | null>(
+  "local:extensionInstalledAt",
+  { defaultValue: null }
+);
+
+/**
+ * Running counter of total snippet expansions across all snippets.
+ * Incremented by the content script each time any snippet is expanded.
+ * Used by the review-prompt eligibility check.
+ */
+export const totalSnippetInsertionsItem = storage.defineItem<number>(
+  "local:totalSnippetInsertions",
+  { defaultValue: 0 }
+);
+
+/**
+ * Lifecycle state of the review prompt.
+ *   "pending"   — prompt has not been shown yet (initial state)
+ *   "shown"     — prompt was shown (background alarm fired, conditions met)
+ *   "dismissed" — user explicitly closed the prompt without rating
+ *   "rated"     — user clicked the rating link; prompt is permanently suppressed
+ */
+export type ReviewPromptState = "pending" | "shown" | "dismissed" | "rated";
+
+export const reviewPromptStateItem = storage.defineItem<ReviewPromptState>(
+  "local:reviewPromptState",
+  { defaultValue: "pending" }
+);
+
+/**
+ * ISO timestamp until which the review prompt is snoozed.
+ * Set when recent Sentry errors are detected to avoid asking for a review
+ * while the extension is misbehaving.
+ */
+export const reviewPromptSnoozedUntilItem = storage.defineItem<string | null>(
+  "local:reviewPromptSnoozedUntil",
+  { defaultValue: null }
+);
+
+/**
+ * ISO timestamp of the most recent captureError() call.
+ * Written by src/lib/sentry.ts as a fire-and-forget side-effect.
+ * Read by the review-prompt eligibility check to suppress the prompt
+ * when the extension has recently encountered errors.
+ * Works unconditionally, even when Sentry DSN is absent.
+ */
+export const lastSentryErrorAtItem = storage.defineItem<string | null>(
+  "local:lastSentryErrorAt",
+  { defaultValue: null }
+);

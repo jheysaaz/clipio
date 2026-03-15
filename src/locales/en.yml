@@ -179,6 +179,12 @@ options:
     cardTitle: Share Your Feedback
     cardDescription: Help us improve Clipio with your thoughts and suggestions.
     cardAction: Send Feedback
+    donationAction: Support Clipio
+    donationTitle: If Clipio saves you time, consider supporting its development.
+    reviewBannerTitle: "Enjoying Clipio?"
+    reviewBannerDescription: A quick review helps others discover Clipio and motivates continued development.
+    reviewBannerAction: Rate on the Store
+    reviewBannerDismiss: Dismiss
   importExport:
     title: Import & Export
     description: Import snippets from Clipio or another tools exports, or download a backup of your current library.
@@ -453,3 +459,6 @@ background:
   updateAvailable:
     title: Clipio update available
     message: "Version $1 is now available. Click to view the release."
+  reviewPrompt:
+    title: "Enjoying Clipio?"
+    message: "You've been using Clipio for a while. A quick review helps others discover it!"

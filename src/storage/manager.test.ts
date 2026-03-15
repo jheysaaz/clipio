@@ -350,6 +350,19 @@ describe("StorageManager", () => {
       await new Promise((r) => setTimeout(r, 10));
       consoleSpy.mockRestore();
     });
+
+    it("does not throw when debugLog rejects (fire-and-forget catch)", async () => {
+      // Exercises the .catch(() => {}) no-op callbacks on debugLog calls
+      const { debugLog } = await import("~/lib/debug");
+      vi.mocked(debugLog).mockRejectedValue(new Error("debug error"));
+      const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      await manager.saveSnippet(makeSnippet());
+      // Allow fire-and-forget microtasks to flush
+      await new Promise((r) => setTimeout(r, 10));
+      consoleSpy.mockRestore();
+      // Restore debugLog to default resolved for subsequent tests
+      vi.mocked(debugLog).mockResolvedValue(undefined);
+    });
   });
 
   // ── saveSnippet in local mode ───────────────────────────────────────────
@@ -569,6 +582,30 @@ describe("StorageManager", () => {
       // IDB write is fire-and-forget — give microtasks a tick to settle
       await Promise.resolve();
       expect(mockIdbBackend.saveSnippets).toHaveBeenCalledWith(snippets);
+    });
+
+    // spec: IDB backup failure is swallowed and does not propagate
+    it("does not throw when IDB backup write fails after mode switch", async () => {
+      const snippets = [makeSnippet()];
+      mockStorageMode.getValue.mockResolvedValue("sync");
+      mockSyncBackend.getSnippets.mockResolvedValue(snippets);
+      mockIdbBackend.saveSnippets.mockRejectedValue(new Error("IDB error"));
+
+      // forceSetMode should complete without throwing
+      await expect(manager.forceSetMode("local")).resolves.not.toThrow();
+      // Flush microtasks so the .catch() callback runs
+      await Promise.resolve();
+    });
+  });
+
+  // ── clearIDBBackup ────────────────────────────────────────────────────────
+
+  describe("clearIDBBackup", () => {
+    // spec: delegates to IndexedDBBackend.clear()
+    it("calls idb.clear()", async () => {
+      mockIdbBackend.clear.mockResolvedValue(undefined);
+      await manager.clearIDBBackup();
+      expect(mockIdbBackend.clear).toHaveBeenCalled();
     });
   });
 });

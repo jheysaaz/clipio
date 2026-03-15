@@ -99,13 +99,45 @@ snippet.createdAt === snippet.updatedAt; // → true
 `createSnippet` does not validate its input. Callers are responsible for ensuring
 form fields are non-empty before calling this function.
 
+---
+
+## Shortcut Conflict Detection
+
+> Source: `src/lib/snippetUtils.ts`
+
+### `detectShortcutConflict(candidate, existingSnippets, excludeId?): ShortcutConflict | null`
+
+Checks whether a candidate shortcut conflicts with any existing snippet's
+shortcut. Used by the snippet creation form (`NewSnippetView`) to block saving
+when a conflict is detected.
+
+**Two conflict types:**
+
+| Type     | Condition                         | Example                  |
+| -------- | --------------------------------- | ------------------------ |
+| `exact`  | `candidate === existing.shortcut` | `/comp` vs `/comp`       |
+| `prefix` | one starts with the other         | `/comp` vs `/compatible` |
+
+**Behavior:**
+
+- MUST return `null` when `candidate` is empty
+- MUST return `null` when `existingSnippets` is empty
+- MUST return `{ type: "exact", conflictingSnippet }` on exact match
+- MUST return `{ type: "prefix", conflictingSnippet }` when candidate is a
+  prefix of an existing shortcut or vice versa
+- MUST skip the snippet matching `excludeId` (for future edit support)
+- MUST return the first conflict found (array iteration order)
+- Comparison MUST be case-sensitive
+
 ## Dependencies
 
 - `crypto.randomUUID()` — available in all modern browsers and Node ≥ 15.
   No mocking required for tests (the test environment provides it).
+- `Snippet` type — `src/types/index.ts`
 
 ## Change History
 
-| Date       | Change       | Author |
-| ---------- | ------------ | ------ |
-| 2026-03-11 | Initial spec | —      |
+| Date       | Change                                         | Author |
+| ---------- | ---------------------------------------------- | ------ |
+| 2026-03-11 | Initial spec                                   | —      |
+| 2026-03-14 | Add shortcut conflict detection (snippetUtils) | —      |

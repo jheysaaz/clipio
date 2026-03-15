@@ -52,6 +52,39 @@ export const UPDATE_CHECK_ALARM_NAME = "clipio-update-check" as const;
 /** How often to check for updates (minutes). */
 export const UPDATE_CHECK_INTERVAL_MINUTES = 360 as const;
 
+// ---------------------------------------------------------------------------
+// Review prompt
+// ---------------------------------------------------------------------------
+
+/** Alarm name for the periodic review-prompt eligibility check (fires every 6 hours). */
+export const REVIEW_CHECK_ALARM_NAME = "clipio-review-check" as const;
+
+/** How often to run the review-prompt eligibility check (minutes). */
+export const REVIEW_CHECK_INTERVAL_MINUTES = 360 as const;
+
+/** Minimum days since install before the review prompt can be shown. */
+export const REVIEW_MIN_DAYS = 7 as const;
+
+/** Minimum total snippet expansions before the review prompt can be shown. */
+export const REVIEW_MIN_INSERTIONS = 20 as const;
+
+/**
+ * Hours to snooze the review prompt when a recent Sentry error is detected.
+ * The prompt is rescheduled this many hours into the future.
+ */
+export const REVIEW_ERROR_SNOOZE_HOURS = 24 as const;
+
+// ---------------------------------------------------------------------------
+// Onboarding
+// ---------------------------------------------------------------------------
+
+/**
+ * Locale codes supported by the clipio.xyz onboarding page.
+ * Used to select the correct /{locale}/onboarding path.
+ * Any browser locale not in this list falls back to "en".
+ */
+export const ONBOARDING_SUPPORTED_LOCALES = ["en", "es"] as const;
+
 /** Context-menu item IDs. */
 export const CONTEXT_MENU = {
   PARENT: "clipio-parent",

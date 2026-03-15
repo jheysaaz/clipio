@@ -2,12 +2,18 @@ import {
   CONTEXT_MENU,
   UPDATE_CHECK_ALARM_NAME,
   UPDATE_CHECK_INTERVAL_MINUTES,
+  REVIEW_CHECK_ALARM_NAME,
+  REVIEW_CHECK_INTERVAL_MINUTES,
+  ONBOARDING_SUPPORTED_LOCALES,
 } from "~/config/constants";
 import {
   contextMenuDraftItem,
   syncDataLostItem,
   blockedSitesItem,
   latestVersionItem,
+  onboardingCompletedItem,
+  extensionInstalledAtItem,
+  reviewPromptStateItem,
 } from "~/storage/items";
 import { initSentry, captureError, captureMessage } from "~/lib/sentry";
 import { registerSentryRelayListener } from "~/lib/sentry-relay";
@@ -20,6 +26,11 @@ import {
 import { getMedia } from "~/storage/backends/media";
 import { checkForUpdate } from "~/lib/update-checker";
 import { debugLog } from "~/lib/debug";
+import {
+  shouldShowReviewPrompt,
+  setReviewPromptState,
+  getStoreReviewUrl,
+} from "~/lib/review-prompt";
 
 const SNIPPET_PREFIX = "snip:";
 
@@ -43,13 +54,35 @@ export default defineBackground(() => {
     periodInMinutes: UPDATE_CHECK_INTERVAL_MINUTES,
   });
 
+  browser.alarms.create(REVIEW_CHECK_ALARM_NAME, {
+    delayInMinutes: REVIEW_CHECK_INTERVAL_MINUTES,
+    periodInMinutes: REVIEW_CHECK_INTERVAL_MINUTES,
+  });
+
   browser.alarms.onAlarm.addListener((alarm) => {
     debugLog("background", "alarm:fired", { name: alarm.name }).catch(() => {});
-    if (alarm.name !== UPDATE_CHECK_ALARM_NAME) return;
-    debugLog("background", "update:check:start", {}).catch(() => {});
-    checkForUpdate().catch((err: unknown) => {
-      captureError(err, { action: "checkForUpdate.alarm" });
-    });
+    if (alarm.name === UPDATE_CHECK_ALARM_NAME) {
+      debugLog("background", "update:check:start", {}).catch(() => {});
+      checkForUpdate().catch((err: unknown) => {
+        captureError(err, { action: "checkForUpdate.alarm" });
+      });
+    } else if (alarm.name === REVIEW_CHECK_ALARM_NAME) {
+      shouldShowReviewPrompt()
+        .then((shouldShow) => {
+          if (!shouldShow) return;
+          return setReviewPromptState("shown").then(() => {
+            browser.notifications.create("clipio-review", {
+              type: "basic",
+              iconUrl: browser.runtime.getURL("/icon/128.png"),
+              title: i18n.t("background.reviewPrompt.title"),
+              message: i18n.t("background.reviewPrompt.message"),
+            });
+          });
+        })
+        .catch((err: unknown) => {
+          captureError(err, { action: "reviewPrompt.alarm" });
+        });
+    }
   });
 
   // ---------------------------------------------------------------------------
@@ -74,17 +107,24 @@ export default defineBackground(() => {
   });
 
   browser.notifications.onClicked.addListener((notificationId) => {
-    if (notificationId !== "clipio-update") return;
-    latestVersionItem
-      .getValue()
-      .then((release) => {
-        if (release?.htmlUrl) {
-          browser.tabs.create({ url: release.htmlUrl });
-        }
-      })
-      .catch((err: unknown) => {
-        captureError(err, { action: "updateNotification.click" });
+    if (notificationId === "clipio-update") {
+      latestVersionItem
+        .getValue()
+        .then((release) => {
+          if (release?.htmlUrl) {
+            browser.tabs.create({ url: release.htmlUrl });
+          }
+        })
+        .catch((err: unknown) => {
+          captureError(err, { action: "updateNotification.click" });
+        });
+    } else if (notificationId === "clipio-review") {
+      const storeUrl = getStoreReviewUrl();
+      browser.tabs.create({ url: storeUrl });
+      setReviewPromptState("rated").catch((err: unknown) => {
+        captureError(err, { action: "reviewNotification.click" });
       });
+    }
   });
 
   // ---------------------------------------------------------------------------
@@ -149,6 +189,54 @@ export default defineBackground(() => {
   // On install / update
   // ---------------------------------------------------------------------------
   browser.runtime.onInstalled.addListener((details) => {
+    // On first install: record the install timestamp (for review-prompt eligibility)
+    // and redirect to the onboarding page if the website is reachable.
+    if (details.reason === "install") {
+      const installedAt = new Date().toISOString();
+      extensionInstalledAtItem.setValue(installedAt).catch((err: unknown) => {
+        captureError(err, { action: "onInstalled.recordInstalledAt" });
+      });
+
+      onboardingCompletedItem
+        .getValue()
+        .then((completed) => {
+          if (completed) return;
+          const websiteUrl = import.meta.env.WXT_WEBSITE_URL as
+            | string
+            | undefined;
+          if (!websiteUrl) return;
+
+          const rawLocale =
+            typeof browser.i18n?.getUILanguage === "function"
+              ? browser.i18n.getUILanguage()
+              : "en";
+          const locale = (
+            ONBOARDING_SUPPORTED_LOCALES as readonly string[]
+          ).includes(rawLocale)
+            ? rawLocale
+            : "en";
+
+          const onboardingUrl = `${websiteUrl}/${locale}/onboarding?ext`;
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 5_000);
+          fetch(onboardingUrl, { method: "HEAD", signal: controller.signal })
+            .then((res) => {
+              clearTimeout(timeout);
+              if (!res.ok) return;
+              return browser.tabs.create({ url: onboardingUrl }).then(() => {
+                onboardingCompletedItem.setValue(true).catch(() => {});
+              });
+            })
+            .catch(() => {
+              // Fail silently — no Sentry, no notification
+              clearTimeout(timeout);
+            });
+        })
+        .catch(() => {
+          // Fail silently
+        });
+    }
+
     // On extension update: clear the cached latest-version so the checker
     // re-fetches against the new installed version, and log to Sentry.
     if (details.reason === "update") {

@@ -26,7 +26,10 @@ function debugLog(
     ...detail,
   });
 }
-import { incrementSnippetUsage } from "~/utils/usageTracking";
+import {
+  incrementSnippetUsage,
+  incrementTotalInsertions,
+} from "~/utils/usageTracking";
 import confetti from "canvas-confetti";
 import { initSentry, captureError, captureMessage } from "~/lib/sentry";
 import { makeRelayTransport } from "~/lib/sentry-relay";
@@ -561,6 +564,7 @@ export default defineContentScript({
         console.error("Failed to increment snippet usage:", err);
         captureError(err, { action: "incrementUsage", snippetId: snippet.id });
       });
+      incrementTotalInsertions().catch(() => {});
     }
 
     // ── Event handlers ───────────────────────────────────────────────
@@ -672,6 +676,7 @@ export default defineContentScript({
         console.error("Failed to increment snippet usage:", err);
         captureError(err, { action: "incrementUsage", snippetId: snippet.id });
       });
+      incrementTotalInsertions().catch(() => {});
     }
 
     // Handle keydown to expand immediately on Space or Tab
@@ -771,7 +776,8 @@ export default defineContentScript({
 
       // Read user-configured typing timeout (falls back to TIMING.TYPING_TIMEOUT)
       try {
-        TYPING_TIMEOUT = await typingTimeoutItem.getValue();
+        const stored = await typingTimeoutItem.getValue();
+        TYPING_TIMEOUT = Math.max(50, Math.min(2000, stored));
       } catch {
         // Use the compile-time default if storage is unavailable
       }
@@ -839,7 +845,7 @@ export default defineContentScript({
       // Watch typing timeout — apply changes from Developers tab without reload
       typingTimeoutItem.watch((newTimeout: number) => {
         if (!checkExtensionContext()) return;
-        TYPING_TIMEOUT = newTimeout;
+        TYPING_TIMEOUT = Math.max(50, Math.min(2000, newTimeout));
         debugLog("config:typingTimeout", {
           timeout: newTimeout,
         }).catch(() => {});
