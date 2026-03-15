@@ -149,6 +149,9 @@ jobs:
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
           WXT_SENTRY_DSN: ${{ secrets.WXT_SENTRY_DSN }}
 
+      - name: List .output directory
+        run: ls -la .output/
+
       - name: Upload Chrome ZIP artifact
         uses: actions/upload-artifact@v4
         with:
