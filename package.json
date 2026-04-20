@@ -2,7 +2,7 @@
   "name": "clipio",
   "displayName": "Clipio — Snippets Manager",
   "description": "A powerful browser extension for managing and inserting snippets with lightning speed and increase your productivity.",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev-with-qa.mjs",
