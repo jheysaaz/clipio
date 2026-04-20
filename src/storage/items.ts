@@ -262,3 +262,33 @@ export const lastSentryErrorAtItem = storage.defineItem<string | null>(
   "local:lastSentryErrorAt",
   { defaultValue: null }
 );
+
+// ---------------------------------------------------------------------------
+// Snippet preview
+// ---------------------------------------------------------------------------
+
+/** Whether the snippet preview/filter UI is enabled in content script. */
+export const snippetPreviewEnabledItem = storage.defineItem<boolean>(
+  "local:snippetPreviewEnabled",
+  { defaultValue: true }
+);
+
+/**
+ * Global prefix character that triggers the snippet preview UI.
+ * When typed after a word boundary, shows the preview menu.
+ * Default: "/" (forward slash).
+ */
+export const snippetPreviewPrefixItem = storage.defineItem<string>(
+  "local:snippetPreviewPrefix",
+  { defaultValue: "/" }
+);
+
+/**
+ * Keyboard shortcut to manually open the snippet preview UI.
+ * Format: "Ctrl+Shift+Space" or "Cmd+Shift+Space" on Mac.
+ * Default: "Ctrl+Shift+Space" (but UI will show platform-specific default).
+ */
+export const snippetPreviewShortcutItem = storage.defineItem<string>(
+  "local:snippetPreviewShortcut",
+  { defaultValue: "Ctrl+Shift+Space" }
+);

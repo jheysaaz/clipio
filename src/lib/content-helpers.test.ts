@@ -353,6 +353,34 @@ describe("processSnippetContent", () => {
     );
     expect(result.content).toContain("hello");
   });
+
+  // spec: content-expansion.spec.md#behavior-when-ashtml--true
+  it("keeps non-empty HTML output for edited markdown+placeholder snippets", () => {
+    const result = processSnippetContent(
+      "**Dear** {{clipboard}} _team_",
+      true,
+      () => "Clipio"
+    );
+
+    expect(result.content.trim()).not.toBe("");
+    expect(result.content).toContain("<strong>Dear</strong>");
+    expect(result.content).toContain("<em>team</em>");
+    expect(result.content).toContain("Clipio");
+  });
+
+  // spec: content-expansion.spec.md#behavior-when-ashtml--true
+  it("renders edited markdown with cursor placeholder in HTML mode", () => {
+    const result = processSnippetContent(
+      "Hi **there** {{cursor}} and _welcome_",
+      true,
+      noClipboard
+    );
+
+    expect(result.content.trim()).not.toBe("");
+    expect(result.content).toContain("<strong>there</strong>");
+    expect(result.content).toContain("<em>welcome</em>");
+    expect(result.content).toContain('data-clipio-cursor="true"');
+  });
 });
 
 // ---------------------------------------------------------------------------

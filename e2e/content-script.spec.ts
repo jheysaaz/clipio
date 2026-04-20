@@ -386,3 +386,292 @@ test.describe("Content Script Expansion", () => {
     expect(value).toContain("Hello, World!");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Preview Feature Tests
+// ---------------------------------------------------------------------------
+
+test.describe("Snippet Preview Feature", () => {
+  test("shows preview when typing trigger prefix", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [
+      helloSnippet(),
+      dateSnippet(),
+    ]);
+
+    const input = testPage.locator('[data-testid="text-input"]');
+    await input.click();
+
+    // Type the trigger prefix
+    await testPage.keyboard.type("/", { delay: 30 });
+
+    // Wait for preview to appear
+    await testPage.waitForTimeout(200);
+
+    // Check if preview container exists and is positioned
+    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
+    await expect(previewContainer).toBeAttached();
+
+    // Get the bounding box to check if it has dimensions
+    const boundingBox = await previewContainer.boundingBox();
+
+    // Check if it has non-zero dimensions (alternative to toBeVisible for Shadow DOM)
+    expect(boundingBox).not.toBeNull();
+    expect(boundingBox!.width).toBeGreaterThan(0);
+    expect(boundingBox!.height).toBeGreaterThan(0);
+
+    // Check if Clipio branding header is present
+    const header = previewContainer.locator(".clipio-preview-header");
+    await expect(header).toBeVisible();
+    await expect(header).toContainText("Clipio Snippets");
+
+    // Check if snippets are listed
+    const snippetItems = previewContainer.locator(".clipio-preview-item");
+    expect(await snippetItems.count()).toBeGreaterThan(0);
+  });
+
+  test("filters snippets by query when typing after prefix", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [
+      helloSnippet(),
+      dateSnippet(),
+    ]);
+
+    const input = testPage.locator('[data-testid="text-input"]');
+    await input.click();
+
+    // Type the trigger prefix + query
+    await testPage.keyboard.type("/hello", { delay: 30 });
+
+    // Wait for preview to update
+    await testPage.waitForTimeout(200);
+
+    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
+    await expect(previewContainer).toBeVisible();
+
+    // Should only show filtered results (hello snippet)
+    const snippetItems = previewContainer.locator(".clipio-preview-item");
+    const count = await snippetItems.count();
+    expect(count).toBeLessThanOrEqual(2); // hello should match
+
+    // Check that the snippet name or shortcut contains "hello"
+    const firstItem = snippetItems.first();
+    const itemText = await firstItem.textContent();
+    expect(itemText?.toLowerCase()).toMatch(/hello/);
+  });
+
+  test("hides preview when no matches", async ({ testPage, storageHelper }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    const input = testPage.locator('[data-testid="text-input"]');
+    await input.click();
+
+    // Type prefix with non-matching query
+    await testPage.keyboard.type("/xyz123", { delay: 30 });
+
+    // Wait for preview to process
+    await testPage.waitForTimeout(200);
+
+    // Preview should be hidden when no matches
+    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
+    await expect(previewContainer).not.toBeVisible();
+  });
+
+  test("navigates preview with keyboard", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [
+      helloSnippet(),
+      dateSnippet(),
+    ]);
+
+    const input = testPage.locator('[data-testid="text-input"]');
+    await input.click();
+
+    // Type the trigger prefix to show preview
+    await testPage.keyboard.type("/", { delay: 30 });
+    await testPage.waitForTimeout(200);
+
+    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
+    await expect(previewContainer).toBeVisible();
+
+    // First item should be selected by default
+    const firstItem = previewContainer.locator(".clipio-preview-item").first();
+    await expect(firstItem).toHaveClass(/selected/);
+
+    // Navigate down with arrow key
+    await testPage.keyboard.press("ArrowDown");
+    await testPage.waitForTimeout(100);
+
+    // Second item should now be selected
+    const secondItem = previewContainer.locator(".clipio-preview-item").nth(1);
+    await expect(secondItem).toHaveClass(/selected/);
+
+    // Navigate back up
+    await testPage.keyboard.press("ArrowUp");
+    await testPage.waitForTimeout(100);
+
+    // First item should be selected again
+    await expect(firstItem).toHaveClass(/selected/);
+  });
+
+  test("selects snippet with Enter key", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    const helloSnip = helloSnippet();
+    await setupTestPage(testPage, storageHelper, [helloSnip]);
+
+    const input = testPage.locator('[data-testid="text-input"]');
+    await input.click();
+
+    // Type the trigger prefix
+    await testPage.keyboard.type("/", { delay: 30 });
+    await testPage.waitForTimeout(200);
+
+    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
+    await expect(previewContainer).toBeVisible();
+
+    // Press Enter to select the first snippet
+    await testPage.keyboard.press("Enter");
+    await testPage.waitForTimeout(200);
+
+    // Preview should be hidden after selection
+    await expect(previewContainer).not.toBeVisible();
+
+    // Input should contain the expanded snippet content
+    const value = await input.inputValue();
+    expect(value).toContain(helloSnip.content);
+  });
+
+  test("closes preview with Escape key", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    const input = testPage.locator('[data-testid="text-input"]');
+    await input.click();
+
+    // Type the trigger prefix
+    await testPage.keyboard.type("/", { delay: 30 });
+    await testPage.waitForTimeout(200);
+
+    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
+    await expect(previewContainer).toBeVisible();
+
+    // Press Escape to close
+    await testPage.keyboard.press("Escape");
+    await testPage.waitForTimeout(100);
+
+    // Preview should be hidden
+    await expect(previewContainer).not.toBeVisible();
+
+    // Input should still contain the trigger prefix (not expanded)
+    const value = await input.inputValue();
+    expect(value).toBe("/");
+  });
+
+  test("shows manual preview with keyboard shortcut", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [
+      helloSnippet(),
+      dateSnippet(),
+    ]);
+
+    const input = testPage.locator('[data-testid="text-input"]');
+    await input.click();
+
+    // Use keyboard shortcut to manually trigger preview
+    await testPage.keyboard.press("Control+Shift+Space");
+    await testPage.waitForTimeout(200);
+
+    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
+    await expect(previewContainer).toBeVisible();
+
+    // Should show all snippets when manually triggered
+    const snippetItems = previewContainer.locator(".clipio-preview-item");
+    expect(await snippetItems.count()).toBeGreaterThanOrEqual(2);
+  });
+
+  test("works in textarea elements", async ({ testPage, storageHelper }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    const textarea = testPage.locator('[data-testid="textarea-field"]');
+    await textarea.click();
+
+    // Type the trigger prefix
+    await testPage.keyboard.type("/", { delay: 30 });
+    await testPage.waitForTimeout(200);
+
+    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
+    await expect(previewContainer).toBeVisible();
+
+    // Select snippet with Enter
+    await testPage.keyboard.press("Enter");
+    await testPage.waitForTimeout(200);
+
+    // Textarea should contain expanded content
+    const value = await textarea.inputValue();
+    expect(value).toContain("Hello, World!");
+  });
+
+  test("works in contenteditable elements", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    const contenteditable = testPage.locator(
+      '[data-testid="contenteditable-field"]'
+    );
+    await contenteditable.click();
+
+    // Type the trigger prefix
+    await testPage.keyboard.type("/", { delay: 30 });
+    await testPage.waitForTimeout(200);
+
+    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
+    await expect(previewContainer).toBeVisible();
+
+    // Select snippet with Enter
+    await testPage.keyboard.press("Enter");
+    await testPage.waitForTimeout(200);
+
+    // Contenteditable should contain expanded content
+    const text = await contenteditable.textContent();
+    expect(text).toContain("Hello, World!");
+  });
+
+  test("hides preview when focus leaves input", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    const input = testPage.locator('[data-testid="text-input"]');
+    await input.click();
+
+    // Type the trigger prefix
+    await testPage.keyboard.type("/", { delay: 30 });
+    await testPage.waitForTimeout(200);
+
+    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
+    await expect(previewContainer).toBeVisible();
+
+    // Click somewhere else to lose focus
+    const textarea = testPage.locator('[data-testid="textarea-field"]');
+    await textarea.click();
+    await testPage.waitForTimeout(100);
+
+    // Preview should be hidden when focus is lost
+    await expect(previewContainer).not.toBeVisible();
+  });
+});

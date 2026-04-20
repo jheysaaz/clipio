@@ -33,9 +33,31 @@ import {
 } from "~/lib/review-prompt";
 
 const SNIPPET_PREFIX = "snip:";
+const DEV_QA_OPENED_KEY = "__clipioDevQaOpened__";
+const DEV_QA_URL = "http://localhost:7777/manual-qa.html";
 
 export default defineBackground(() => {
   initSentry("background");
+
+  // Dev-only: open the manual QA harness once per dev session.
+  if ((import.meta.env.MODE as string) !== "production") {
+    browser.storage.session
+      .get(DEV_QA_OPENED_KEY)
+      .then((result) => {
+        if (result[DEV_QA_OPENED_KEY]) return;
+        return browser.tabs
+          .create({ url: DEV_QA_URL, active: true })
+          .then(() =>
+            browser.storage.session.set({ [DEV_QA_OPENED_KEY]: true })
+          )
+          .catch(() => {
+            // Non-fatal: server may not be running yet.
+          });
+      })
+      .catch(() => {
+        // Non-fatal.
+      });
+  }
 
   // Register relay listener so content scripts can forward Sentry events
   // through the background when the host page's CSP blocks direct fetch.

@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clipio Manual QA Harness</title>
+    <style>
+      :root {
+        --bg: #f5f5f5;
+        --surface: #ffffff;
+        --text: #111111;
+        --muted: #666666;
+        --line: #d9d9d9;
+        --accent: #111111;
+        --ok: #111111;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0d0d0d;
+          --surface: #111111;
+          --text: #f5f5f5;
+          --muted: #aaaaaa;
+          --line: #2a2a2a;
+          --accent: #f5f5f5;
+          --ok: #f5f5f5;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 20px;
+        font-family: ui-monospace, Menlo, Consolas, "SF Mono", monospace;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      h1,
+      h2 {
+        margin: 0;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 340px minmax(540px, 1fr);
+        gap: 16px;
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px;
+      }
+
+      .checklist {
+        margin: 10px 0 0;
+        padding-left: 16px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .status {
+        margin-top: 10px;
+        color: var(--ok);
+        font-size: 12px;
+      }
+
+      .actions {
+        margin-top: 12px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      button {
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--text);
+        font: inherit;
+        font-size: 12px;
+        padding: 7px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+
+      button.primary {
+        background: var(--accent);
+        color: var(--bg);
+        border-color: var(--accent);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      input[type="text"],
+      input[type="password"],
+      textarea,
+      [contenteditable="true"] {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 9px;
+        min-height: 38px;
+        font: inherit;
+        font-size: 13px;
+        color: var(--text);
+        background: var(--surface);
+        outline: none;
+      }
+
+      textarea {
+        min-height: 92px;
+        resize: vertical;
+      }
+
+      [contenteditable="true"] {
+        min-height: 92px;
+      }
+
+      [contenteditable="true"]:focus,
+      input:focus,
+      textarea:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(127, 127, 127, 0.22);
+      }
+
+      .muted {
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .wide {
+        grid-column: span 2;
+      }
+
+      @media (max-width: 980px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .wide {
+          grid-column: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <section class="card">
+        <h1>Clipio Manual QA</h1>
+        <p class="muted">
+          Use this page to validate snippet expansion in diverse field types,
+          especially contenteditable behavior after editing snippet content.
+        </p>
+
+        <h2 style="margin-top: 10px; font-size: 14px">Suggested shortcuts</h2>
+        <ul class="checklist">
+          <li><strong>/hello</strong> plain text baseline</li>
+          <li>
+            <strong>/md</strong> markdown (<code>**bold**</code>,
+            <code>_italic_</code>)
+          </li>
+          <li><strong>/cursor</strong> cursor placement placeholder</li>
+          <li><strong>/clip</strong> clipboard placeholder</li>
+          <li><strong>/date</strong> date placeholder</li>
+          <li>Repeat after editing snippet content from popup</li>
+        </ul>
+
+        <div class="actions">
+          <button class="primary" data-testid="qa-clear" id="qa-clear">
+            Clear Fields
+          </button>
+          <button data-testid="qa-focus-input" id="qa-focus-input">
+            Focus Text Input
+          </button>
+          <button data-testid="qa-focus-ce" id="qa-focus-ce">
+            Focus CE Basic
+          </button>
+        </div>
+
+        <div class="status" data-testid="qa-status" id="qa-status">Ready.</div>
+      </section>
+
+      <section class="card">
+        <div class="grid">
+          <div class="field">
+            <label for="qa-input">Text Input</label>
+            <input
+              id="qa-input"
+              data-testid="qa-input"
+              type="text"
+              autocomplete="off"
+              placeholder="Type /hello then wait or press Tab/Space"
+            />
+          </div>
+
+          <div class="field">
+            <label for="qa-password">Password (negative test)</label>
+            <input
+              id="qa-password"
+              data-testid="qa-password"
+              type="password"
+              placeholder="Should not expand"
+            />
+          </div>
+
+          <div class="field wide">
+            <label for="qa-textarea">Textarea</label>
+            <textarea
+              id="qa-textarea"
+              data-testid="qa-textarea"
+              autocomplete="off"
+              placeholder="Try multiline snippets and placeholders"
+            ></textarea>
+          </div>
+
+          <div class="field">
+            <label>Contenteditable (basic)</label>
+            <div
+              id="qa-ce-basic"
+              data-testid="qa-ce-basic"
+              contenteditable="true"
+              role="textbox"
+              aria-multiline="true"
+            ></div>
+          </div>
+
+          <div class="field">
+            <label>Contenteditable (nested wrappers)</label>
+            <div data-testid="qa-ce-nested-wrapper" class="muted">
+              <div
+                style="
+                  border: 1px dashed var(--line);
+                  border-radius: 8px;
+                  padding: 8px;
+                "
+              >
+                <div
+                  id="qa-ce-nested"
+                  data-testid="qa-ce-nested"
+                  contenteditable="true"
+                  role="textbox"
+                  aria-multiline="true"
+                ></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field wide">
+            <label>Contenteditable (prefilled rich-ish HTML)</label>
+            <div
+              id="qa-ce-rich"
+              data-testid="qa-ce-rich"
+              contenteditable="true"
+              role="textbox"
+              aria-multiline="true"
+            >
+              <p>Prefix text before shortcut.</p>
+              <p><strong>Bold context</strong> and <em>italic context</em>.</p>
+            </div>
+          </div>
+
+          <div class="field wide">
+            <label for="qa-readonly">Readonly input (negative test)</label>
+            <input
+              id="qa-readonly"
+              data-testid="qa-readonly"
+              type="text"
+              readonly
+              value="readonly"
+            />
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const editableSelectors = [
+        "#qa-input",
+        "#qa-textarea",
+        "#qa-ce-basic",
+        "#qa-ce-nested",
+        "#qa-ce-rich",
+      ];
+
+      const statusEl = document.getElementById("qa-status");
+
+      function setStatus(text) {
+        if (statusEl) statusEl.textContent = text;
+      }
+
+      document.getElementById("qa-clear")?.addEventListener("click", () => {
+        editableSelectors.forEach((selector) => {
+          const el = document.querySelector(selector);
+          if (!el) return;
+          if (
+            el instanceof HTMLInputElement ||
+            el instanceof HTMLTextAreaElement
+          ) {
+            el.value = "";
+          } else {
+            el.textContent = "";
+          }
+        });
+        setStatus("Fields cleared.");
+      });
+
+      document
+        .getElementById("qa-focus-input")
+        ?.addEventListener("click", () => {
+          document.getElementById("qa-input")?.focus();
+          setStatus("Focused text input.");
+        });
+
+      document.getElementById("qa-focus-ce")?.addEventListener("click", () => {
+        const el = document.getElementById("qa-ce-basic");
+        el?.focus();
+        setStatus("Focused basic contenteditable.");
+      });
+
+      window.__manualQaPageReady = true;
+    </script>
+  </body>
+</html>

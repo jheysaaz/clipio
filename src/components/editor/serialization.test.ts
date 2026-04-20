@@ -523,6 +523,12 @@ describe("serialize → deserialize → serialize round-trip", () => {
   it("round-trips gif placeholder with width", () => {
     expect(roundTrip("{{gif:abc123XYZ:350}}")).toBe("{{gif:abc123XYZ:350}}");
   });
+
+  // spec: content-expansion.spec.md#behavior-when-ashtml--true
+  it("round-trips edited markdown with placeholders used by contenteditable expansion", () => {
+    const md = "**Dear** {{clipboard}} _team_ {{cursor}}";
+    expect(roundTrip(md)).toBe(md);
+  });
 });
 
 // ---------------------------------------------------------------------------

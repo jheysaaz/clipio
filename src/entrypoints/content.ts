@@ -8,6 +8,9 @@ import {
   confettiEnabledItem,
   blockedSitesItem,
   typingTimeoutItem,
+  snippetPreviewEnabledItem,
+  snippetPreviewPrefixItem,
+  snippetPreviewShortcutItem,
 } from "~/storage/items";
 import { debugLog as _debugLog } from "~/lib/debug";
 
@@ -46,6 +49,14 @@ import {
   type MediaGetDataUrlResponse,
 } from "~/lib/messages";
 import { buildGifUrl } from "~/lib/giphy";
+import {
+  fuzzyMatchSnippets,
+  calculatePreviewPosition,
+  detectPreviewTrigger,
+  type FilteredSnippet,
+  type PreviewSettings,
+} from "~/lib/preview-helpers";
+import { snippetPreviewUI } from "~/lib/snippet-preview-ui";
 
 /**
  * Returns true if `hostname` is covered by any entry in `blockedPatterns`.
@@ -268,6 +279,18 @@ export default defineContentScript({
     let confettiEnabled = true; // default on; overridden from storage in initialize()
     let justExpanded = false; // guard to skip redundant input events after expansion
     let isBlocked = false; // true when current hostname is in blockedSites
+
+    // ── Preview state ──────────────────────────────────────────────────
+    let previewSettings: PreviewSettings = {
+      enabled: true,
+      triggerPrefix: "/",
+      keyboardShortcut: "Ctrl+Shift+Space",
+    };
+    let lastTriggerState: {
+      text: string;
+      cursorPos: number;
+      element: HTMLElement;
+    } | null = null;
 
     // ── Shortcut lookup index ──────────────────────────────────────────
     let shortcutIndex: ShortcutIndex = { map: new Map(), lengths: [] };
@@ -509,6 +532,7 @@ export default defineContentScript({
       }
 
       const { snippet, startPos, endPos } = match;
+      hidePreview();
       debugLog("expand:match", {
         shortcut: snippet.shortcut,
         label: snippet.label,
@@ -581,10 +605,27 @@ export default defineContentScript({
         !(
           target instanceof HTMLInputElement ||
           target instanceof HTMLTextAreaElement
-        ) ||
-        !target.value
+        )
       )
         return;
+
+      if (!target.value) {
+        if (typingTimer) clearTimeout(typingTimer);
+        hidePreview();
+        return;
+      }
+
+      // Handle preview trigger detection
+      if (previewSettings.enabled) {
+        const cursorPos = target.selectionStart || 0;
+        console.log("[Clipio Preview] Input detected:", {
+          value: target.value,
+          cursorPos,
+          enabled: previewSettings.enabled,
+        });
+        handlePreviewTriggerDetection(target, target.value, cursorPos);
+      }
+
       if (typingTimer) clearTimeout(typingTimer);
       typingTimer = setTimeout(() => expandSnippet(target), TYPING_TIMEOUT);
     }
@@ -597,6 +638,7 @@ export default defineContentScript({
       match: { snippet: Snippet; startPos: number; endPos: number }
     ) {
       const { snippet, startPos, endPos } = match;
+      hidePreview();
       const text = textNode.textContent || "";
 
       debugLog("expand:match", {
@@ -614,7 +656,24 @@ export default defineContentScript({
       // Allow image-only snippets through — getPlainTextFromHtml returns ""
       // for HTML with no text nodes (e.g. a single <img>), which would
       // incorrectly drop valid image-only snippets.
-      if (!processedContent?.trim()) return;
+      if (!processedContent?.trim()) {
+        captureMessage(
+          "Contenteditable expansion skipped: empty processed content",
+          "warning",
+          {
+            action: "expandSnippetInContentEditable",
+            snippetId: snippet.id,
+            shortcut: snippet.shortcut,
+            host: window.location.hostname,
+          }
+        );
+        debugLog("expand:skipped", {
+          reason: "empty-processed-content",
+          shortcut: snippet.shortcut,
+          elementType: "contenteditable",
+        }).catch(() => {});
+        return;
+      }
 
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = processedContent;
@@ -731,6 +790,24 @@ export default defineContentScript({
       }
       const target = event.target as HTMLElement;
       if (!target.isContentEditable) return;
+
+      // Handle preview trigger detection
+      if (previewSettings.enabled) {
+        const selection = window.getSelection();
+        const cursorPos = selection ? selection.focusOffset : 0;
+        handlePreviewTriggerDetection(
+          target,
+          target.textContent || "",
+          cursorPos
+        );
+      }
+
+      if (!(target.textContent || "")) {
+        if (typingTimer) clearTimeout(typingTimer);
+        hidePreview();
+        return;
+      }
+
       if (typingTimer) clearTimeout(typingTimer);
       typingTimer = setTimeout(async () => {
         const selection = window.getSelection();
@@ -782,8 +859,282 @@ export default defineContentScript({
         // Use the compile-time default if storage is unavailable
       }
 
+      // Load preview settings
+      try {
+        previewSettings.enabled = await snippetPreviewEnabledItem.getValue();
+        previewSettings.triggerPrefix =
+          await snippetPreviewPrefixItem.getValue();
+        previewSettings.keyboardShortcut =
+          await snippetPreviewShortcutItem.getValue();
+      } catch (err) {
+        captureMessage("Failed to load preview settings", "warning", {
+          action: "initialize",
+        });
+      }
+
       await loadSnippets();
 
+      // Initialize preview UI
+      snippetPreviewUI.init();
+      snippetPreviewUI.setEventHandlers(
+        handlePreviewSnippetSelection,
+        hidePreview
+      );
+
+      registerRuntimeListeners();
+    }
+
+    // ── Preview Helper Functions ──────────────────────────────────────
+
+    function showPreview(
+      element: HTMLElement,
+      filteredSnippets: FilteredSnippet[],
+      query: string
+    ): void {
+      console.log("[Clipio Preview] showPreview called:", {
+        enabled: previewSettings.enabled,
+        hasUI: !!snippetPreviewUI,
+        snippetCount: filteredSnippets.length,
+      });
+
+      if (!previewSettings.enabled || !snippetPreviewUI) {
+        return;
+      }
+
+      const position = calculatePreviewPosition(element);
+      console.log("[Clipio Preview] Position calculated:", position);
+
+      snippetPreviewUI.show(position, filteredSnippets);
+      console.log("[Clipio Preview] UI show called");
+    }
+
+    function hidePreview(): void {
+      snippetPreviewUI.hide();
+      lastTriggerState = null;
+    }
+
+    function handlePreviewKeyboard(event: KeyboardEvent): boolean {
+      if (!previewSettings.enabled || !snippetPreviewUI.isVisible()) {
+        return false;
+      }
+
+      return snippetPreviewUI.handleKeyDown(event);
+    }
+
+    function handlePreviewTriggerDetection(
+      element: HTMLElement,
+      text: string,
+      cursorPos: number
+    ): void {
+      console.log("[Clipio Preview] Trigger detection:", {
+        enabled: previewSettings.enabled,
+        text,
+        cursorPos,
+        prefix: previewSettings.triggerPrefix,
+      });
+
+      if (!previewSettings.enabled) return;
+
+      if (!text || cursorPos <= 0) {
+        hidePreview();
+        return;
+      }
+
+      const triggerResult = detectPreviewTrigger(
+        text,
+        cursorPos,
+        previewSettings
+      );
+
+      console.log("[Clipio Preview] Trigger result:", triggerResult);
+
+      if (!triggerResult) {
+        hidePreview();
+        return;
+      }
+
+      const { query } = triggerResult;
+
+      // For empty query (just prefix), show all snippets; otherwise filter
+      const filteredSnippets =
+        query === ""
+          ? snippets.map((snippet) => ({
+              snippet,
+              relevanceScore: 1,
+              highlightRanges: [],
+            }))
+          : fuzzyMatchSnippets(query, snippets);
+
+      console.log("[Clipio Preview] Filtered snippets:", {
+        query,
+        count: filteredSnippets.length,
+        totalSnippets: snippets.length,
+      });
+
+      if (filteredSnippets.length === 0) {
+        hidePreview();
+        return;
+      }
+
+      // Store current state for snippet insertion
+      lastTriggerState = { text, cursorPos, element };
+      showPreview(element, filteredSnippets, query);
+    }
+
+    function handlePreviewSnippetSelection(selectedSnippet: FilteredSnippet) {
+      if (!lastTriggerState) return;
+
+      const { text, cursorPos, element } = lastTriggerState;
+      const triggerResult = detectPreviewTrigger(
+        text,
+        cursorPos,
+        previewSettings
+      );
+
+      if (!triggerResult) return;
+
+      const { startPos, endPos } = triggerResult;
+
+      // Insert the snippet using existing expansion logic
+      if (
+        element instanceof HTMLInputElement ||
+        element instanceof HTMLTextAreaElement
+      ) {
+        insertSnippetInInput(element, selectedSnippet, startPos, endPos);
+      } else if (element.isContentEditable) {
+        insertSnippetInContentEditable(
+          element,
+          selectedSnippet,
+          startPos,
+          endPos
+        );
+      }
+
+      hidePreview();
+    }
+
+    async function insertSnippetInInput(
+      element: HTMLInputElement | HTMLTextAreaElement,
+      filteredSnippet: FilteredSnippet,
+      startPos: number,
+      endPos: number
+    ) {
+      const snippet = filteredSnippet.snippet;
+      const beforeText = element.value.substring(0, startPos);
+      const afterText = element.value.substring(endPos);
+
+      try {
+        const { content: processedContent } = await processSnippetContent(
+          snippet.content
+        );
+
+        element.value = beforeText + processedContent + afterText;
+        const newCursorPos = beforeText.length + processedContent.length;
+        element.setSelectionRange(newCursorPos, newCursorPos);
+
+        // Trigger change event
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+
+        // Track usage
+        await incrementSnippetUsage(snippet.id);
+        await incrementTotalInsertions();
+
+        // Show confetti if enabled
+        if (confettiEnabled) {
+          const rect = element.getBoundingClientRect();
+          const pos = {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+          };
+          showConfetti(pos.x, pos.y);
+        }
+
+        // Mark as just expanded to prevent redundant triggers
+        justExpanded = true;
+      } catch (error) {
+        captureError(error, { action: "insertSnippetInInput" });
+      }
+    }
+
+    async function insertSnippetInContentEditable(
+      element: HTMLElement,
+      filteredSnippet: FilteredSnippet,
+      startPos: number,
+      endPos: number
+    ) {
+      const snippet = filteredSnippet.snippet;
+
+      try {
+        const { content: processedContent } = await processSnippetContent(
+          snippet.content
+        );
+
+        if (!processedContent?.trim()) {
+          captureMessage(
+            "Preview insertion skipped: empty processed content",
+            "warning",
+            {
+              action: "insertSnippetInContentEditable",
+              snippetId: snippet.id,
+              shortcut: snippet.shortcut,
+              host: window.location.hostname,
+            }
+          );
+          debugLog("preview:insert-skipped", {
+            reason: "empty-processed-content",
+            shortcut: snippet.shortcut,
+            snippetId: snippet.id,
+          }).catch(() => {});
+          return;
+        }
+
+        // Get text content for manipulation
+        const textContent = element.textContent || "";
+        const beforeText = textContent.substring(0, startPos);
+        const afterText = textContent.substring(endPos);
+
+        // Replace content
+        element.textContent = beforeText + processedContent + afterText;
+
+        // Set cursor position
+        const range = document.createRange();
+        const sel = window.getSelection();
+        if (sel && element.firstChild) {
+          const newCursorPos = beforeText.length + processedContent.length;
+          range.setStart(
+            element.firstChild,
+            Math.min(newCursorPos, element.textContent?.length || 0)
+          );
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+
+        // Trigger input event
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+
+        // Track usage
+        await incrementSnippetUsage(snippet.id);
+        await incrementTotalInsertions();
+
+        // Show confetti if enabled
+        if (confettiEnabled) {
+          const rect = element.getBoundingClientRect();
+          const pos = {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+          };
+          showConfetti(pos.x, pos.y);
+        }
+
+        // Mark as just expanded to prevent redundant triggers
+        justExpanded = true;
+      } catch (error) {
+        captureError(error, { action: "insertSnippetInContentEditable" });
+      }
+    }
+
+    function registerRuntimeListeners() {
       document.addEventListener(
         "input",
         (event) => {
@@ -800,6 +1151,66 @@ export default defineContentScript({
       document.addEventListener(
         "keydown",
         (event) => {
+          // Handle preview keyboard navigation first
+          if (handlePreviewKeyboard(event)) {
+            return; // Preview handled the event
+          }
+
+          // Handle global preview keyboard shortcut
+          if (previewSettings.enabled) {
+            const shortcut = previewSettings.keyboardShortcut.toLowerCase();
+            const hasCtrl = shortcut.includes("ctrl")
+              ? event.ctrlKey || event.metaKey
+              : !event.ctrlKey && !event.metaKey;
+            const hasShift = shortcut.includes("shift")
+              ? event.shiftKey
+              : !event.shiftKey;
+            const hasAlt = shortcut.includes("alt")
+              ? event.altKey
+              : !event.altKey;
+            const keyMatch = event.key === " " || event.code === "Space";
+
+            const isShortcutMatch = hasCtrl && hasShift && hasAlt && keyMatch;
+
+            if (isShortcutMatch) {
+              const target = event.target as HTMLElement;
+              if (
+                target.tagName === "INPUT" ||
+                target.tagName === "TEXTAREA" ||
+                target.isContentEditable
+              ) {
+                event.preventDefault();
+                const text =
+                  target.tagName === "INPUT" || target.tagName === "TEXTAREA"
+                    ? (target as HTMLInputElement | HTMLTextAreaElement).value
+                    : target.textContent || "";
+                const cursorPos =
+                  target.tagName === "INPUT" || target.tagName === "TEXTAREA"
+                    ? (target as HTMLInputElement | HTMLTextAreaElement)
+                        .selectionStart || 0
+                    : 0; // For contentEditable, would need more complex cursor position detection
+
+                // Manual shortcut intentionally opens preview even on empty input.
+                if (!text) {
+                  const allSnippets = snippets.map((snippet) => ({
+                    snippet,
+                    relevanceScore: 1,
+                    highlightRanges: [],
+                  }));
+                  if (allSnippets.length > 0) {
+                    lastTriggerState = { text, cursorPos, element: target };
+                    showPreview(target, allSnippets, "");
+                  } else {
+                    hidePreview();
+                  }
+                } else {
+                  handlePreviewTriggerDetection(target, text, cursorPos);
+                }
+                return;
+              }
+            }
+          }
+
           const target = event.target as HTMLElement;
           if (
             target.tagName === "INPUT" ||
@@ -820,6 +1231,7 @@ export default defineContentScript({
             clearTimeout(typingTimer);
             typingTimer = null;
           }
+          hidePreview();
         },
         true
       );
@@ -849,6 +1261,31 @@ export default defineContentScript({
         debugLog("config:typingTimeout", {
           timeout: newTimeout,
         }).catch(() => {});
+      });
+
+      // Watch preview settings — apply changes from Options without reload
+      snippetPreviewEnabledItem.watch((newEnabled: boolean) => {
+        if (!checkExtensionContext()) return;
+        previewSettings.enabled = newEnabled;
+        if (!newEnabled) {
+          hidePreview();
+        }
+      });
+
+      snippetPreviewPrefixItem.watch((newPrefix: string) => {
+        if (!checkExtensionContext()) return;
+        previewSettings.triggerPrefix = newPrefix;
+        hidePreview(); // Hide current preview as trigger may have changed
+      });
+
+      snippetPreviewShortcutItem.watch((newShortcut: string) => {
+        if (!checkExtensionContext()) return;
+        previewSettings.keyboardShortcut = newShortcut;
+      });
+
+      // Cleanup preview UI on page unload
+      window.addEventListener("beforeunload", () => {
+        snippetPreviewUI.cleanup();
       });
     }
 

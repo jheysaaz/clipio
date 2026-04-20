@@ -178,6 +178,7 @@ pure and testable without DOM access.
 **Behavior when `asHtml === true`:**
 
 - MUST convert the processed Markdown to HTML using `markdownToHtml`.
+- MUST preserve non-empty edited snippet content (including markdown marks and placeholders) so contenteditable insertion is not silently skipped.
 - MUST replace the first `{{cursor}}` with `<span id="clipio-cursor-marker" data-clipio-cursor="true"></span>`.
 - MUST remove any remaining `{{cursor}}` occurrences after the first.
 - MUST return `cursorOffset: null`.
@@ -203,6 +204,13 @@ pure and testable without DOM access.
 - `formatDate` MUST NOT throw for any format string or date string.
 - `processSnippetContent` MUST NOT throw for any content string.
 
+## Runtime Integration Notes (Content Script)
+
+The content script (`src/entrypoints/content.ts`) integrates these helpers.
+
+- Document-level event listeners and storage watchers MUST be registered exactly once during initialization.
+- Contenteditable expansion failures caused by empty post-processed output MUST emit a diagnostic warning (debug + Sentry message) rather than failing silently.
+
 ## Dependencies
 
 - `markdownToHtml` and `markdownToPlainText` from `src/lib/markdown.ts`.
@@ -212,6 +220,7 @@ pure and testable without DOM access.
 
 ## Change History
 
-| Date       | Change       | Author |
-| ---------- | ------------ | ------ |
-| 2026-03-11 | Initial spec | —      |
+| Date       | Change                                                                                                 | Author |
+| ---------- | ------------------------------------------------------------------------------------------------------ | ------ |
+| 2026-03-11 | Initial spec                                                                                           | —      |
+| 2026-04-19 | Add edited-snippet contenteditable reliability and runtime diagnostics/listener lifecycle requirements | —      |
