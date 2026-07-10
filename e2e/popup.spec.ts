@@ -405,4 +405,22 @@ test.describe("Popup (Dashboard)", () => {
     // Either 0 snippets (deleted) or still 1 (button not found) — just ensure no crash
     expect(syncKeys.length).toBeLessThanOrEqual(1);
   });
+
+  // -------------------------------------------------------------------------
+  // Accessibility checks
+  // -------------------------------------------------------------------------
+
+  test("popup has no critical accessibility violations", async ({
+    popupPage,
+  }) => {
+    // spec: ROADMAP_v1.5.md#testing
+    // Use axe-core to scan for WCAG violations
+    const { injectAxe, checkA11y } = await import("@axe-core/playwright");
+    await injectAxe(popupPage);
+    const results = await checkA11y(popupPage, undefined, {
+      // Report everything but only fail on critical/serious
+      includedImpacts: ["critical", "serious"],
+    });
+    expect(results.violations.length).toBe(0);
+  });
 });

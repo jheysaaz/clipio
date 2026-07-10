@@ -1017,4 +1017,21 @@ test.describe("Review Prompt Banner", () => {
 
     await page.close();
   });
+
+  // -------------------------------------------------------------------------
+  // Accessibility checks
+  // -------------------------------------------------------------------------
+
+  test("options page has no critical accessibility violations", async ({
+    optionsPage,
+  }) => {
+    // spec: ROADMAP_v1.5.md#testing
+    // Use axe-core to scan for WCAG violations
+    const { injectAxe, checkA11y } = await import("@axe-core/playwright");
+    await injectAxe(optionsPage);
+    const results = await checkA11y(optionsPage, undefined, {
+      includedImpacts: ["critical", "serious"],
+    });
+    expect(results.violations.length).toBe(0);
+  });
 });
