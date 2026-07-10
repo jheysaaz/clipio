@@ -5,6 +5,7 @@ import "~/app.css";
 import Dashboard from "@/pages/Dashboard";
 import { ThemeProvider } from "@/hooks/ThemeContext";
 import { initSentry, captureError } from "@/lib/sentry";
+import { Toaster } from "@/components/ui/toaster";
 
 initSentry("popup");
 
@@ -32,6 +33,7 @@ function App() {
     >
       <ThemeProvider>
         <Dashboard />
+        <Toaster />
       </ThemeProvider>
     </ErrorBoundary>
   );

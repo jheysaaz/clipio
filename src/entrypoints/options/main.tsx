@@ -5,6 +5,7 @@ import "~/app.css";
 import OptionsPage from "@/pages/OptionsPage";
 import { ThemeProvider } from "@/hooks/ThemeContext";
 import { initSentry, captureError } from "@/lib/sentry";
+import { Toaster } from "@/components/ui/toaster";
 
 initSentry("options");
 
@@ -32,6 +33,7 @@ function App() {
     >
       <ThemeProvider>
         <OptionsPage />
+        <Toaster />
       </ThemeProvider>
     </ErrorBoundary>
   );

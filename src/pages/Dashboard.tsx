@@ -25,6 +25,7 @@ const SnippetDetailView = lazy(() => import("~/components/SnippetDetailView"));
 const NewSnippetView = lazy(() => import("~/components/NewSnippetView"));
 import { Alert, AlertDescription, AlertAction } from "@/components/ui/alert";
 import { InlineError } from "@/components/ui/inline-error";
+import { toast } from "sonner";
 
 import type { Snippet, SnippetFormData } from "@/types";
 import { createSnippet } from "@/types";
@@ -83,10 +84,6 @@ export default function Dashboard() {
     publishedAt: string;
   } | null>(null);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const clearStatusAfterDelay = useRef<
-    ReturnType<typeof setTimeout> | undefined
-  >(undefined);
   const isResizing = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const detailHasChanges = useRef(false);
@@ -125,14 +122,6 @@ export default function Dashboard() {
       document.removeEventListener("mouseup", handleMouseUp);
     };
   }, [handleMouseMove, handleMouseUp]);
-
-  useEffect(() => {
-    return () => {
-      if (clearStatusAfterDelay.current) {
-        clearTimeout(clearStatusAfterDelay.current);
-      }
-    };
-  }, []);
 
   const handleResizeKeyDown = useCallback((e: React.KeyboardEvent) => {
     const step = 20;
@@ -285,11 +274,7 @@ export default function Dashboard() {
       setSelectedSnippet(newSnippet);
       setIsCreating(false);
       setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
-      setStatusMessage("Snippet saved");
-      clearStatusAfterDelay.current = setTimeout(
-        () => setStatusMessage(null),
-        3000
-      );
+      toast.success("Snippet saved");
     } catch (err) {
       if (err instanceof StorageQuotaError) {
         setQuotaWarning(true);
@@ -301,11 +286,7 @@ export default function Dashboard() {
           setSelectedSnippet(newSnippet);
           setIsCreating(false);
           setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
-          setStatusMessage("Snippet saved");
-          clearStatusAfterDelay.current = setTimeout(
-            () => setStatusMessage(null),
-            3000
-          );
+          toast.success("Snippet saved");
         } catch (retryErr) {
           console.error("[Clipio] Retry after quota error failed:", retryErr);
           captureError(retryErr, { action: "saveSnippetRetry" });
@@ -328,11 +309,7 @@ export default function Dashboard() {
       if (selectedSnippet?.id === snippetId) {
         setSelectedSnippet(selectNewest(newList));
       }
-      setStatusMessage("Snippet deleted");
-      clearStatusAfterDelay.current = setTimeout(
-        () => setStatusMessage(null),
-        3000
-      );
+      toast.success("Snippet deleted");
     } catch (err) {
       console.error("[Clipio] Failed to delete snippet:", err);
       captureError(err, { action: "deleteSnippet" });
@@ -347,11 +324,7 @@ export default function Dashboard() {
         prev.map((s) => (s.id === updated.id ? updated : s))
       );
       if (selectedSnippet?.id === updated.id) setSelectedSnippet(updated);
-      setStatusMessage("Snippet updated");
-      clearStatusAfterDelay.current = setTimeout(
-        () => setStatusMessage(null),
-        3000
-      );
+      toast.success("Snippet updated");
     } catch (err) {
       console.error("[Clipio] Failed to update snippet:", err);
       captureError(err, { action: "updateSnippet" });
@@ -435,16 +408,6 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-full select-none">
-      {/* Accessibility: Status announcements for screen readers */}
-      <div
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        className="sr-only"
-      >
-        {statusMessage}
-      </div>
-
       {/* Sign-out recovery banner */}
       {showRecoveryBanner && (
         <WarningBanner

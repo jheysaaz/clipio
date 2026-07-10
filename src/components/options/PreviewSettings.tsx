@@ -9,13 +9,13 @@ import {
   snippetPreviewShortcutItem,
 } from "@/storage/items";
 import { InfoTooltip } from "./InfoTooltip";
+import { toast } from "sonner";
 
 export function PreviewSettings() {
   const [previewEnabled, setPreviewEnabled] = useState<boolean>(true);
   const [previewPrefix, setPreviewPrefix] = useState<string>("/");
   const [previewShortcut, setPreviewShortcut] =
     useState<string>("Ctrl+Shift+Space");
-  const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -40,8 +40,7 @@ export function PreviewSettings() {
       const newEnabled = !previewEnabled;
       await snippetPreviewEnabledItem.setValue(newEnabled);
       setPreviewEnabled(newEnabled);
-      setStatusMsg(newEnabled ? "Preview enabled" : "Preview disabled");
-      setTimeout(() => setStatusMsg(null), 2000);
+      toast.success(newEnabled ? "Preview enabled" : "Preview disabled");
     } catch (error) {
       console.error("Failed to update preview enabled setting:", error);
     }
@@ -51,8 +50,7 @@ export function PreviewSettings() {
     try {
       await snippetPreviewPrefixItem.setValue(newPrefix);
       setPreviewPrefix(newPrefix);
-      setStatusMsg("Trigger prefix updated");
-      setTimeout(() => setStatusMsg(null), 2000);
+      toast.success("Trigger prefix updated");
     } catch (error) {
       console.error("Failed to update preview prefix:", error);
     }
@@ -62,8 +60,7 @@ export function PreviewSettings() {
     try {
       await snippetPreviewShortcutItem.setValue(newShortcut);
       setPreviewShortcut(newShortcut);
-      setStatusMsg("Keyboard shortcut updated");
-      setTimeout(() => setStatusMsg(null), 2000);
+      toast.success("Keyboard shortcut updated");
     } catch (error) {
       console.error("Failed to update preview shortcut:", error);
     }
@@ -159,16 +156,6 @@ export function PreviewSettings() {
             </span>
           </div>
         </div>
-
-        {statusMsg && (
-          <p
-            className="text-xs text-green-600 dark:text-green-400"
-            role="status"
-            aria-live="polite"
-          >
-            {statusMsg}
-          </p>
-        )}
       </div>
     </div>
   );

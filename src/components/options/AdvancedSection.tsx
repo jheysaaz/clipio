@@ -1,13 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import {
-  Check,
-  Cloud,
-  HardDrive,
-  Loader2,
-  Bug,
-  Copy,
-  RotateCcw,
-} from "lucide-react";
+import { Cloud, HardDrive, Loader2, Bug, Copy, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -36,6 +28,7 @@ import { i18n } from "#i18n";
 import { captureError, captureMessage } from "@/lib/sentry";
 import { SENTRY_TEST_MESSAGE_TYPE } from "@/config/constants";
 import { setReviewPromptState } from "@/lib/review-prompt";
+import { toast } from "sonner";
 
 function normalizeDebugEntries(entries: DebugLogEntry[]): DebugLogEntry[] {
   return entries
@@ -58,12 +51,9 @@ function normalizeDebugEntries(entries: DebugLogEntry[]): DebugLogEntry[] {
 
 export function AdvancedSection() {
   const [giphyKey, setGiphyKey] = useState("");
-  const [giphyKeySaved, setGiphyKeySaved] = useState(false);
   const [giphyKeyError, setGiphyKeyError] = useState<string | null>(null);
 
-  const [pingStatus, setPingStatus] = useState<
-    "idle" | "pinging" | "pong" | "error"
-  >("idle");
+  const [pingStatus, setPingStatus] = useState<"idle" | "pinging">("idle");
   const [pingError, setPingError] = useState("");
 
   const [storageMode, setStorageMode] = useState<StorageMode>("sync");
@@ -72,16 +62,13 @@ export function AdvancedSection() {
     null
   );
   const [switching, setSwitching] = useState(false);
-  const [switchSwitched, setSwitchSwitched] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
 
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [debugLog, setDebugLog] = useState<DebugLogEntry[]>([]);
-  const [copiedLog, setCopiedLog] = useState(false);
   const debugLogRef = useRef<HTMLDivElement>(null);
 
   const [clearConfirming, setClearConfirming] = useState(false);
-  const [clearCleared, setClearCleared] = useState(false);
 
   useEffect(() => {
     giphyApiKeyItem
@@ -140,8 +127,7 @@ export function AdvancedSection() {
   const handleSaveGiphyKey = async () => {
     try {
       await giphyApiKeyItem.setValue(giphyKey.trim());
-      setGiphyKeySaved(true);
-      setTimeout(() => setGiphyKeySaved(false), 2000);
+      toast.success("API key saved");
     } catch (err) {
       captureError(err, { action: "saveGiphyApiKey" });
       setGiphyKeyError(
@@ -154,8 +140,7 @@ export function AdvancedSection() {
     try {
       await giphyApiKeyItem.setValue("");
       setGiphyKey("");
-      setGiphyKeySaved(true);
-      setTimeout(() => setGiphyKeySaved(false), 2000);
+      toast.success("API key reset");
     } catch (err) {
       captureError(err, { action: "resetGiphyApiKey" });
     }
@@ -167,9 +152,8 @@ export function AdvancedSection() {
     try {
       await forceSetStorageMode(target);
       setStorageMode(target);
-      setSwitchSwitched(true);
       setSwitchConfirming(null);
-      setTimeout(() => setSwitchSwitched(false), 2000);
+      toast.success(i18n.t("options.developers.storageMode.switched"));
     } catch (err) {
       captureError(err, { action: "forceSetStorageMode", target });
       setSwitchError(i18n.t("options.developers.storageMode.switchError"));
@@ -208,10 +192,10 @@ export function AdvancedSection() {
       .join("\n");
     try {
       await navigator.clipboard.writeText(text);
-      setCopiedLog(true);
-      setTimeout(() => setCopiedLog(false), 2000);
+      toast.success("Debug log copied");
     } catch (err) {
       captureError(err, { action: "copyDebugLog" });
+      toast.error("Failed to copy debug log");
     }
   };
 
@@ -231,8 +215,8 @@ export function AdvancedSection() {
           !t.url.startsWith("moz-extension://")
       );
       if (!tab?.id) {
-        setPingStatus("error");
-        setPingError(
+        setPingStatus("idle");
+        toast.error(
           i18n.t("options.developers.contentScriptHealth.errorNoTab")
         );
         return;
@@ -241,16 +225,17 @@ export function AdvancedSection() {
         .sendMessage(tab.id, { type: CONTENT_SCRIPT_PING_MESSAGE_TYPE })
         .catch(() => null);
       if (response && (response as { pong?: boolean }).pong) {
-        setPingStatus("pong");
+        setPingStatus("idle");
+        toast.success(i18n.t("options.developers.contentScriptHealth.pong"));
       } else {
-        setPingStatus("error");
-        setPingError(
+        setPingStatus("idle");
+        toast.error(
           i18n.t("options.developers.contentScriptHealth.errorNoContentScript")
         );
       }
     } catch {
-      setPingStatus("error");
-      setPingError(
+      setPingStatus("idle");
+      toast.error(
         i18n.t("options.developers.contentScriptHealth.errorGeneric")
       );
     }
@@ -260,8 +245,7 @@ export function AdvancedSection() {
     try {
       await clearIDBBackup();
       setClearConfirming(false);
-      setClearCleared(true);
-      setTimeout(() => setClearCleared(false), 2000);
+      toast.success(i18n.t("options.developers.clearIdb.cleared"));
     } catch (err) {
       captureError(err, { action: "clearIDBBackup" });
       setClearConfirming(false);
@@ -311,17 +295,7 @@ export function AdvancedSection() {
             onClick={handleSaveGiphyKey}
             className="shrink-0 h-9"
           >
-            {giphyKeySaved ? (
-              <>
-                <Check
-                  className="h-3.5 w-3.5 mr-1.5 text-green-400"
-                  strokeWidth={1.5}
-                />
-                {i18n.t("options.developers.giphyApiKey.saved")}
-              </>
-            ) : (
-              i18n.t("common.save")
-            )}
+            {i18n.t("common.save")}
           </Button>
           <Button
             size="sm"
@@ -372,25 +346,6 @@ export function AdvancedSection() {
               i18n.t("options.developers.contentScriptHealth.pingButton")
             )}
           </Button>
-          {pingStatus === "pong" && (
-            <span
-              role="status"
-              aria-live="polite"
-              className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"
-            >
-              <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
-              {i18n.t("options.developers.contentScriptHealth.pong")}
-            </span>
-          )}
-          {pingStatus === "error" && (
-            <span
-              role="status"
-              aria-live="polite"
-              className="text-xs text-destructive"
-            >
-              {pingError}
-            </span>
-          )}
         </div>
       </div>
 
@@ -416,16 +371,7 @@ export function AdvancedSection() {
           </p>
         )}
         <div className="flex flex-wrap items-center gap-3 pt-1">
-          {switchSwitched ? (
-            <span
-              role="status"
-              aria-live="polite"
-              className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"
-            >
-              <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
-              {i18n.t("options.developers.storageMode.switched")}
-            </span>
-          ) : switchConfirming ? (
+          {switchConfirming ? (
             <>
               <Button
                 size="sm"
@@ -482,13 +428,7 @@ export function AdvancedSection() {
           )}
         </div>
         {switchError && (
-          <p
-            role="status"
-            aria-live="polite"
-            className="text-xs text-destructive"
-          >
-            {switchError}
-          </p>
+          <p className="text-xs text-destructive">{switchError}</p>
         )}
       </div>
 
@@ -531,17 +471,10 @@ export function AdvancedSection() {
                   disabled={debugLog.length === 0}
                   title={i18n.t("options.developers.debugMode.copyLog")}
                 >
-                  {copiedLog ? (
-                    <>
-                      <Check className="h-3 w-3 mr-1" strokeWidth={1.5} />
-                      {i18n.t("options.developers.debugMode.copiedLog")}
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3 w-3 mr-1" strokeWidth={1.5} />
-                      {i18n.t("options.developers.debugMode.copyLog")}
-                    </>
-                  )}
+                  <>
+                    <Copy className="h-3 w-3 mr-1" strokeWidth={1.5} />
+                    {i18n.t("options.developers.debugMode.copyLog")}
+                  </>
                 </Button>
                 <Button
                   size="sm"
@@ -608,16 +541,7 @@ export function AdvancedSection() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {clearCleared ? (
-            <span
-              role="status"
-              aria-live="polite"
-              className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"
-            >
-              <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
-              {i18n.t("options.developers.clearIdb.cleared")}
-            </span>
-          ) : clearConfirming ? (
+          {clearConfirming ? (
             <>
               <Button
                 size="sm"

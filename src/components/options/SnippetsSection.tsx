@@ -13,6 +13,7 @@ import { captureError } from "@/lib/sentry";
 import { InfoTooltip } from "./InfoTooltip";
 import { SiteFavicon } from "./SiteFavicon";
 import { PreviewSettings } from "./PreviewSettings";
+import { toast } from "sonner";
 
 const ImportWizard = lazy(() => import("@/components/ImportWizard"));
 
@@ -132,16 +133,13 @@ export function SnippetsSection() {
 
   // --- Import/Export ---
   const [showImportWizard, setShowImportWizard] = useState(false);
-  const [importedCount, setImportedCount] = useState<number | null>(null);
-  const [exportedFeedback, setExportedFeedback] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const importButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleExport = async () => {
     try {
       await exportSnippets();
-      setExportedFeedback(true);
-      setTimeout(() => setExportedFeedback(false), 3000);
+      toast.success("Snippets exported");
     } catch (err) {
       console.error("[Clipio] Export failed:", err);
       captureError(err, { action: "exportSnippets" });
@@ -336,23 +334,8 @@ export function SnippetsSection() {
                 onClick={handleExport}
                 className="shrink-0"
               >
-                {exportedFeedback ? (
-                  <>
-                    <Check
-                      className="h-3.5 w-3.5 mr-1.5 text-green-600"
-                      strokeWidth={1.5}
-                    />
-                    {i18n.t("options.importExport.exportCard.exported")}
-                  </>
-                ) : (
-                  <>
-                    <Download
-                      className="h-3.5 w-3.5 mr-1.5"
-                      strokeWidth={1.5}
-                    />
-                    {i18n.t("options.importExport.exportCard.button")}
-                  </>
-                )}
+                <Download className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+                {i18n.t("options.importExport.exportCard.button")}
               </Button>
             </div>
           </div>
@@ -378,7 +361,6 @@ export function SnippetsSection() {
                 ref={importButtonRef}
                 size="sm"
                 onClick={() => {
-                  setImportedCount(null);
                   setShowImportWizard(true);
                 }}
                 className="shrink-0"
@@ -386,19 +368,6 @@ export function SnippetsSection() {
                 {i18n.t("options.importExport.importCard.button")}
               </Button>
             </div>
-
-            {importedCount !== null && (
-              <p
-                aria-live="polite"
-                role="status"
-                className="text-xs text-green-600 dark:text-green-400"
-              >
-                {i18n.t(
-                  "options.importExport.importCard.successMessage",
-                  importedCount
-                )}
-              </p>
-            )}
 
             <div className="pt-2 border-t flex flex-wrap gap-1.5">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium self-center">
@@ -476,7 +445,12 @@ export function SnippetsSection() {
                   importButtonRef.current?.focus();
                 }}
                 onImportComplete={(count) => {
-                  setImportedCount(count);
+                  toast.success(
+                    i18n.t(
+                      "options.importExport.importCard.successMessage",
+                      count
+                    )
+                  );
                   setShowImportWizard(false);
                   importButtonRef.current?.focus();
                 }}
