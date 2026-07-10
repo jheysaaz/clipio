@@ -12,6 +12,7 @@ import {
   SquareSlash,
   AlertTriangle,
 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { Alert, AlertDescription, AlertAction } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -167,9 +168,9 @@ export default function SnippetDetailView({
           }
         >
           {sidebarOpen ? (
-            <PanelLeftClose className="h-3.5 w-3.5" strokeWidth={1.5} />
+            <Icon icon={PanelLeftClose} />
           ) : (
-            <PanelLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
+            <Icon icon={PanelLeft} />
           )}
         </Button>
         <div className="flex-1" />
@@ -182,7 +183,7 @@ export default function SnippetDetailView({
           title={i18n.t("snippetDetail.deleteSnippet")}
           aria-label={i18n.t("snippetDetail.deleteSnippet")}
         >
-          <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+          <Icon icon={Trash2} />
         </Button>
         <Button
           variant="ghost"
@@ -198,9 +199,9 @@ export default function SnippetDetailView({
           aria-pressed={copied}
         >
           {copied ? (
-            <Check className="h-3.5 w-3.5 text-green-600" strokeWidth={1.5} />
+            <Icon icon={Check} className="text-green-600" />
           ) : (
-            <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+            <Icon icon={Copy} />
           )}
         </Button>
         <Button
@@ -211,7 +212,7 @@ export default function SnippetDetailView({
           title={i18n.t("snippetDetail.insertCommand")}
           aria-label={i18n.t("snippetDetail.insertCommand")}
         >
-          <SquareSlash className="h-3.5 w-3.5" strokeWidth={1.5} />
+          <Icon icon={SquareSlash} />
         </Button>
         <Separator orientation="vertical" className="h-5 mx-1" />
         {/* Screen-reader live region for save status */}
@@ -227,15 +228,12 @@ export default function SnippetDetailView({
         >
           {isSaved ? (
             <>
-              <Check
-                className="h-3.5 w-3.5 mr-1.5 text-green-300"
-                strokeWidth={1.5}
-              />
+              <Icon icon={Check} className="text-green-300 mr-1.5" />
               {i18n.t("snippetDetail.savedLabel")}
             </>
           ) : (
             <>
-              <Save className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+              <Icon icon={Save} className="mr-1.5" />
               {isSaving
                 ? i18n.t("snippetDetail.saving")
                 : i18n.t("snippetDetail.save")}
@@ -277,7 +275,7 @@ export default function SnippetDetailView({
                 className="opacity-50 hover:opacity-100 transition-opacity"
                 aria-label="Dismiss"
               >
-                <X className="size-3.5" strokeWidth={2} />
+                <Icon icon={X} />
               </button>
             </AlertAction>
           </Alert>
@@ -290,7 +288,7 @@ export default function SnippetDetailView({
       <div className="px-3 py-2.5">
         <div className="flex items-center gap-1.5 flex-wrap">
           <div className="flex items-center gap-1 text-muted-foreground mr-1">
-            <Tag className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+            <Icon icon={Tag} size="sm" />
             <span className="text-[10px] font-medium uppercase tracking-wide">
               {i18n.t("snippetDetail.tags")}
             </span>
@@ -310,7 +308,7 @@ export default function SnippetDetailView({
                 title={`Remove "${tag}"`}
                 aria-label={`Remove "${tag}"`}
               >
-                <X className="h-2.5 w-2.5" strokeWidth={2} />
+                <Icon icon={X} size="sm" />
               </button>
             </Badge>
           ))}
@@ -357,7 +355,7 @@ export default function SnippetDetailView({
               className="h-5 px-2 text-[10px] text-muted-foreground hover:text-foreground border-dashed border-border hover:border-muted-foreground"
               title={i18n.t("snippetDetail.addTagTitle")}
             >
-              <Plus className="h-2.5 w-2.5 mr-0.5" strokeWidth={2} />
+              <Icon icon={Plus} size="sm" className="mr-0.5" />
               {i18n.t("snippetDetail.addTag")}
             </Button>
           )}

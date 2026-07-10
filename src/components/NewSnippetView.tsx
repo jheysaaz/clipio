@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Save, X, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RichTextEditor } from "@/components/editor";
@@ -98,9 +99,9 @@ export default function NewSnippetView({
           }
         >
           {sidebarOpen ? (
-            <PanelLeftClose className="h-3.5 w-3.5" strokeWidth={1.5} />
+            <Icon icon={PanelLeftClose} />
           ) : (
-            <PanelLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
+            <Icon icon={PanelLeft} />
           )}
         </Button>
         <div className="flex-1" />
@@ -112,7 +113,7 @@ export default function NewSnippetView({
           title={i18n.t("newSnippet.cancel")}
           aria-label={i18n.t("newSnippet.cancel")}
         >
-          <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+          <Icon icon={X} />
         </Button>
         <Separator orientation="vertical" className="h-5 mx-1" />
         <Button
@@ -122,7 +123,7 @@ export default function NewSnippetView({
           disabled={!canSave || isSaving}
           className="h-8 text-xs"
         >
-          <Save className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+          <Icon icon={Save} className="mr-1.5" />
           {isSaving
             ? i18n.t("newSnippet.creating")
             : i18n.t("newSnippet.create")}
