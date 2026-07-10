@@ -3,6 +3,7 @@ import {
   useEffect,
   useRef,
   useCallback,
+  useMemo,
   lazy,
   Suspense,
 } from "react";
@@ -338,11 +339,15 @@ export default function Dashboard() {
   // Filtering & keyboard navigation
   // -------------------------------------------------------------------------
 
-  const filteredSnippets: Snippet[] = searchQuery
-    ? fuzzyMatchSnippets(searchQuery, snippets).map(
-        (f) => f.snippet as unknown as Snippet
-      )
-    : [...snippets].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const filteredSnippets: Snippet[] = useMemo(
+    () =>
+      searchQuery
+        ? fuzzyMatchSnippets(searchQuery, snippets).map(
+            (f) => f.snippet as unknown as Snippet
+          )
+        : [...snippets].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    [searchQuery, snippets]
+  );
 
   const handleKeyboardNavigation = useCallback(
     (e: KeyboardEvent) => {
