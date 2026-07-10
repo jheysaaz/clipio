@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { InlineError } from "@/components/ui/inline-error";
-import { exportSnippets } from "@/storage";
+import { exportSnippets, getSnippets } from "@/storage";
+import { snippetsContainMedia } from "@/lib/exporters/clipio";
 import { TIMING } from "@/config/constants";
 import { blockedSitesItem, typingTimeoutItem } from "@/storage/items";
 import { i18n } from "#i18n";
@@ -138,12 +139,22 @@ export function SnippetsSection() {
 
   const handleExport = async () => {
     try {
+      const snippets = await getSnippets();
+      const hasMedia = snippetsContainMedia(snippets);
       await exportSnippets();
-      toast.success("Snippets exported");
+      if (hasMedia) {
+        toast.success("Snippets + images exported");
+      } else {
+        toast.success("Snippets exported");
+      }
     } catch (err) {
       console.error("[Clipio] Export failed:", err);
       captureError(err, { action: "exportSnippets" });
-      setExportError(i18n.t("options.errors.failedExport"));
+      const msg =
+        err instanceof Error
+          ? err.message
+          : i18n.t("options.errors.failedExport");
+      toast.error(msg);
     }
   };
 

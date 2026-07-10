@@ -542,7 +542,11 @@ export default function ImportWizard({
     } catch (e) {
       console.error("[Clipio] Import failed:", e);
       captureError(e, { action: "importSnippets" });
-      setImportError(i18n.t("importWizard.confirm.failedToImport"));
+      const detail =
+        e instanceof Error
+          ? e.message
+          : i18n.t("importWizard.confirm.failedToImport");
+      setImportError(detail);
     } finally {
       setImporting(false);
     }
