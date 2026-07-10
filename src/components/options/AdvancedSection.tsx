@@ -127,7 +127,7 @@ export function AdvancedSection() {
   const handleSaveGiphyKey = async () => {
     try {
       await giphyApiKeyItem.setValue(giphyKey.trim());
-      toast.success("API key saved");
+      toast.success(i18n.t("options.developers.giphyApiKey.saved"));
     } catch (err) {
       captureError(err, { action: "saveGiphyApiKey" });
       setGiphyKeyError(
@@ -140,7 +140,7 @@ export function AdvancedSection() {
     try {
       await giphyApiKeyItem.setValue("");
       setGiphyKey("");
-      toast.success("API key reset");
+      toast.success(i18n.t("options.developers.giphyApiKey.resetSuccess"));
     } catch (err) {
       captureError(err, { action: "resetGiphyApiKey" });
     }
@@ -192,10 +192,10 @@ export function AdvancedSection() {
       .join("\n");
     try {
       await navigator.clipboard.writeText(text);
-      toast.success("Debug log copied");
+      toast.success(i18n.t("options.developers.debugMode.copiedLog"));
     } catch (err) {
       captureError(err, { action: "copyDebugLog" });
-      toast.error("Failed to copy debug log");
+      toast.error(i18n.t("options.developers.debugMode.copyFailed"));
     }
   };
 

@@ -29,6 +29,10 @@ dashboard:
     heading: No snippets yet
     body: Create your first snippet to start saving and reusing text quickly.
     action: Create your first snippet
+  toast:
+    snippetSaved: Snippet saved
+    snippetDeleted: Snippet deleted
+    snippetUpdated: Snippet updated
   detailPlaceholder: Select a snippet to view details
   snippetListLabel: Snippets
   warnings:
@@ -237,6 +241,11 @@ options:
       label: Description
       placeholder: Add a description (used as alt text)
       saved: Description saved
+  previewSettings:
+    enabled: Preview enabled
+    disabled: Preview disabled
+    prefixUpdated: Trigger prefix updated
+    shortcutUpdated: Keyboard shortcut updated
   developers:
     title: Developers
     description: Advanced settings for power users and developers.
@@ -247,6 +256,7 @@ options:
       placeholder: Enter your Giphy API key
       reset: Reset to default
       saved: API key saved
+      resetSuccess: API key reset
     blockedSites:
       title: Blocked Sites
       description: Clipio snippet expansion is disabled on these sites.
@@ -299,6 +309,7 @@ options:
       clearLog: Clear log
       copyLog: Copy log
       copiedLog: Copied!
+      copyFailed: Failed to copy debug log
       emptyLog: No log entries yet.
       contextContent: content
       contextBackground: background

@@ -10,6 +10,7 @@ import {
 } from "@/storage/items";
 import { InfoTooltip } from "./InfoTooltip";
 import { toast } from "sonner";
+import { i18n } from "#i18n";
 
 export function PreviewSettings() {
   const [previewEnabled, setPreviewEnabled] = useState<boolean>(true);
@@ -40,7 +41,11 @@ export function PreviewSettings() {
       const newEnabled = !previewEnabled;
       await snippetPreviewEnabledItem.setValue(newEnabled);
       setPreviewEnabled(newEnabled);
-      toast.success(newEnabled ? "Preview enabled" : "Preview disabled");
+      toast.success(
+        newEnabled
+          ? i18n.t("options.previewSettings.enabled")
+          : i18n.t("options.previewSettings.disabled")
+      );
     } catch (error) {
       console.error("Failed to update preview enabled setting:", error);
     }
@@ -50,7 +55,7 @@ export function PreviewSettings() {
     try {
       await snippetPreviewPrefixItem.setValue(newPrefix);
       setPreviewPrefix(newPrefix);
-      toast.success("Trigger prefix updated");
+      toast.success(i18n.t("options.previewSettings.prefixUpdated"));
     } catch (error) {
       console.error("Failed to update preview prefix:", error);
     }
@@ -60,7 +65,7 @@ export function PreviewSettings() {
     try {
       await snippetPreviewShortcutItem.setValue(newShortcut);
       setPreviewShortcut(newShortcut);
-      toast.success("Keyboard shortcut updated");
+      toast.success(i18n.t("options.previewSettings.shortcutUpdated"));
     } catch (error) {
       console.error("Failed to update preview shortcut:", error);
     }

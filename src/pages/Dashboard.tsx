@@ -276,7 +276,7 @@ export default function Dashboard() {
       setSelectedSnippet(newSnippet);
       setIsCreating(false);
       setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
-      toast.success("Snippet saved");
+      toast.success(i18n.t("dashboard.toast.snippetSaved"));
     } catch (err) {
       if (err instanceof StorageQuotaError) {
         setQuotaWarning(true);
@@ -288,7 +288,7 @@ export default function Dashboard() {
           setSelectedSnippet(newSnippet);
           setIsCreating(false);
           setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
-          toast.success("Snippet saved");
+          toast.success(i18n.t("dashboard.toast.snippetSaved"));
         } catch (retryErr) {
           console.error("[Clipio] Retry after quota error failed:", retryErr);
           captureError(retryErr, { action: "saveSnippetRetry" });
@@ -311,7 +311,7 @@ export default function Dashboard() {
       if (selectedSnippet?.id === snippetId) {
         setSelectedSnippet(selectNewest(newList));
       }
-      toast.success("Snippet deleted");
+      toast.success(i18n.t("dashboard.toast.snippetDeleted"));
     } catch (err) {
       console.error("[Clipio] Failed to delete snippet:", err);
       captureError(err, { action: "deleteSnippet" });
@@ -326,7 +326,7 @@ export default function Dashboard() {
         prev.map((s) => (s.id === updated.id ? updated : s))
       );
       if (selectedSnippet?.id === updated.id) setSelectedSnippet(updated);
-      toast.success("Snippet updated");
+      toast.success(i18n.t("dashboard.toast.snippetUpdated"));
     } catch (err) {
       console.error("[Clipio] Failed to update snippet:", err);
       captureError(err, { action: "updateSnippet" });
