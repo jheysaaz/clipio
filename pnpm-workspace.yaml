@@ -1,6 +1,11 @@
 packages:
   - "."
 
+allowBuilds:
+  '@sentry/cli': true
+  esbuild: true
+  spawn-sync: true
+
 onlyBuiltDependencies:
   - esbuild
   - spawn-sync

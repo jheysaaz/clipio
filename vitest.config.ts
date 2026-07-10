@@ -40,6 +40,7 @@ export default defineConfig({
         "src/assets/**",
         "src/hooks/**",
         "src/pages/**",
+        "src/components/options/**",
         "src/config/**",
         "src/lib/sentry.ts",
         "src/lib/sentry-relay.ts",
@@ -190,6 +191,7 @@ export default defineConfig({
     alias: {
       // Match the WXT/tsconfig "~" path alias → "./src"
       "~": resolve(__dirname, "src"),
+      "@": resolve(__dirname, "src"),
     },
   },
 });
