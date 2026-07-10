@@ -118,7 +118,7 @@ export default function SnippetListItem({
       role="option"
       aria-selected={isSelected}
       className={cn(
-        "w-full justify-start items-start text-left h-auto py-2 px-2.5 rounded-lg transition-colors overflow-hidden relative max-w-full",
+        "w-full justify-start items-start text-left h-auto py-2 px-2.5 rounded-lg transition-colors overflow-hidden relative max-w-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         isSelected
           ? "bg-muted text-foreground border-l-2 border-l-primary"
           : "hover:bg-muted/50 border-l-2 border-l-transparent"
