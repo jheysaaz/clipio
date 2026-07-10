@@ -515,7 +515,7 @@ export function ImagesSection() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="delete-confirm-title"
-            className="bg-background rounded-2xl border shadow-xl w-full max-w-sm p-6 space-y-4"
+            className="bg-background rounded-xl border shadow-xl w-full max-w-sm p-6 space-y-4"
           >
             <div className="flex items-start gap-3">
               <div className="shrink-0 h-8 w-8 rounded-full bg-red-100 dark:bg-red-950/40 flex items-center justify-center">

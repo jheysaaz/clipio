@@ -421,7 +421,7 @@ export function SnippetsSection() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="import-wizard-title"
-            className="bg-background rounded-2xl border shadow-xl w-full max-w-lg p-6 max-h-[min(90vh,640px)] overflow-y-auto"
+            className="bg-background rounded-xl border shadow-xl w-full max-w-lg p-6 max-h-[min(90vh,640px)] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-5">
               <h2

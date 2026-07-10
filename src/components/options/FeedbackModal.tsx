@@ -147,7 +147,7 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
       <div
         role="dialog"
         aria-modal="true"
-        className="bg-background rounded-2xl border shadow-xl w-full max-w-lg max-h-[min(90vh,640px)] overflow-y-auto p-6"
+        className="bg-background rounded-xl border shadow-xl w-full max-w-lg max-h-[min(90vh,640px)] overflow-y-auto p-6"
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
