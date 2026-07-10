@@ -14,7 +14,6 @@ import { mockBrowser } from "./mocks/browser";
 // browser global — WXT and all extension code references `browser.*`
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).browser = mockBrowser;
 
 // ---------------------------------------------------------------------------
@@ -48,6 +47,12 @@ vi.mock("wxt/utils/storage", () => ({
 // ---------------------------------------------------------------------------
 
 vi.mock("~/lib/sentry", () => ({
+  initSentry: vi.fn(),
+  captureError: vi.fn(),
+  captureMessage: vi.fn(),
+}));
+
+vi.mock("~/lib/sentry-content", () => ({
   initSentry: vi.fn(),
   captureError: vi.fn(),
   captureMessage: vi.fn(),

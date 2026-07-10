@@ -35,7 +35,6 @@ export async function seedSnippets(
   snippets: Snippet[]
 ): Promise<void> {
   await page.evaluate(async (snips: Snippet[]) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
     const syncEntries: Record<string, Snippet> = {};
     for (const s of snips) {
@@ -51,7 +50,6 @@ export async function seedSnippets(
  */
 export async function readSyncSnippets(page: Page): Promise<Snippet[]> {
   return page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
     const all = await ext.storage.sync.get(null);
     return Object.entries(all as Record<string, unknown>)
@@ -65,7 +63,6 @@ export async function readSyncSnippets(page: Page): Promise<Snippet[]> {
  */
 export async function readCachedSnippets(page: Page): Promise<Snippet[]> {
   return page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
     const result = await ext.storage.local.get("cachedSnippets");
     return (result.cachedSnippets as Snippet[]) ?? [];
@@ -77,7 +74,6 @@ export async function readCachedSnippets(page: Page): Promise<Snippet[]> {
  */
 export async function clearAllStorage(page: Page): Promise<void> {
   await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
     await ext.storage.sync.clear();
     await ext.storage.local.clear();
@@ -94,7 +90,6 @@ export async function setLocalItem(
 ): Promise<void> {
   await page.evaluate(
     async ([k, v]: [string, unknown]) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.local.set({ [k]: v });
     },
@@ -107,7 +102,6 @@ export async function setLocalItem(
  */
 export async function getLocalItem(page: Page, key: string): Promise<unknown> {
   return page.evaluate(async (k: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
     const result = await ext.storage.local.get(k);
     return result[k];
@@ -123,7 +117,6 @@ export async function fillSyncStorageNearQuota(
   targetBytes = 95_000
 ): Promise<void> {
   await page.evaluate(async (bytes: number) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
     // Each sync item has an 8KB limit; create multiple items to fill quota
     const itemSize = 7_000; // stay just under the 8192 per-item limit

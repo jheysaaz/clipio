@@ -171,6 +171,23 @@ export class IndexedDBBackend implements StorageBackend {
     }
   }
 
+  async getSnippetCount(): Promise<number> {
+    try {
+      const db = await openDB();
+      return await new Promise<number>((resolve, reject) => {
+        const tx = db.transaction(IDB_CONFIG.STORE_NAME, "readonly");
+        const store = tx.objectStore(IDB_CONFIG.STORE_NAME);
+        const request = store.count();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    } catch (error) {
+      console.warn("[Clipio] IndexedDBBackend.getSnippetCount failed:", error);
+      captureError(error, { action: "idb.getSnippetCount" });
+      return 0;
+    }
+  }
+
   async clear(): Promise<void> {
     try {
       const db = await openDB();

@@ -19,11 +19,7 @@
  */
 
 import { captureError } from "@/lib/sentry";
-import {
-  latestVersionItem,
-  latestVersionCheckedAtItem,
-  dismissedUpdateVersionItem,
-} from "@/storage/items";
+import { latestVersionItem, latestVersionCheckedAtItem } from "@/storage/items";
 
 // ---------------------------------------------------------------------------
 // Types

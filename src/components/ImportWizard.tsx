@@ -15,7 +15,6 @@ import {
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
-  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -33,7 +32,7 @@ import { cn } from "@/lib/utils";
 import { getSnippets, getStorageStatus } from "@/storage";
 import { bulkSaveSnippets } from "@/storage";
 import type { Snippet } from "@/types";
-import { createSnippet } from "@/types";
+
 import { detectFormat } from "@/lib/importers/detect";
 import { TextBlazeParser } from "@/lib/importers/textblaze";
 import { ClipioParser, importClipioZip } from "@/lib/importers/clipio";
@@ -101,7 +100,7 @@ function detectConflicts(
     if (!idMatch && !shortcutMatch) continue;
 
     // Determine conflict type
-    let conflictType: ConflictEntry["conflictType"] = "id";
+    let conflictType: ConflictEntry["conflictType"];
     let existing: Snippet;
     if (idMatch && shortcutMatch && idMatch.id === shortcutMatch.id) {
       conflictType = "both";
@@ -328,80 +327,76 @@ export default function ImportWizard({
   // File handling
   // ---------------------------------------------------------------------------
 
-  const processFile = useCallback(
-    (file: File) => {
-      setParseError(null);
-      setFileName(file.name);
+  const processFile = useCallback((file: File) => {
+    setParseError(null);
+    setFileName(file.name);
 
-      // ZIP import path (v2 exports)
-      const isZip =
-        file.name.endsWith(".zip") || file.name.endsWith(".clipio.zip");
-      if (isZip) {
-        setIsZipImport(true);
-        zipMediaBlobsRef.current = new Map();
-        setZipMediaCount(0);
-        setZipMissingMediaWarning(null);
-
-        importClipioZip(file)
-          .then((result) => {
-            zipMediaBlobsRef.current = result.mediaBlobs;
-            setZipMediaCount(result.mediaBlobs.size);
-            if (result.missingMediaIds.length > 0) {
-              setZipMissingMediaWarning(
-                i18n.t("importWizard.confirm.missingImagesWarning")
-              );
-              captureMessage("ZIP import: missing media entries", "warning", {
-                missingIds: result.missingMediaIds,
-              });
-            }
-            setParsedSnippets(result.snippets);
-            setRawJson(null);
-            setDetectedFormat("clipio");
-            setSelectedFormat("clipio");
-            setParseError(null);
-          })
-          .catch((e) => {
-            captureError(e, { action: "importClipioZip" });
-            setParseError(
-              e instanceof Error
-                ? e.message
-                : i18n.t("importWizard.upload.couldNotRead")
-            );
-            setIsZipImport(false);
-          });
-        return;
-      }
-
-      setIsZipImport(false);
+    // ZIP import path (v2 exports)
+    const isZip =
+      file.name.endsWith(".zip") || file.name.endsWith(".clipio.zip");
+    if (isZip) {
+      setIsZipImport(true);
       zipMediaBlobsRef.current = new Map();
       setZipMediaCount(0);
       setZipMissingMediaWarning(null);
 
-      file
-        .text()
-        .then((text) => {
-          let json: unknown;
-          try {
-            json = JSON.parse(text);
-          } catch {
-            setParseError(i18n.t("importWizard.upload.invalidJson"));
-            return;
+      importClipioZip(file)
+        .then((result) => {
+          zipMediaBlobsRef.current = result.mediaBlobs;
+          setZipMediaCount(result.mediaBlobs.size);
+          if (result.missingMediaIds.length > 0) {
+            setZipMissingMediaWarning(
+              i18n.t("importWizard.confirm.missingImagesWarning")
+            );
+            captureMessage("ZIP import: missing media entries", "warning", {
+              missingIds: result.missingMediaIds,
+            });
           }
-
-          setRawJson(json as Record<string, unknown> | unknown[]);
-          const fmt = detectFormat(json);
-          setDetectedFormat(fmt);
-          setSelectedFormat(fmt ?? "");
-
-          if (fmt) {
-            tryParse(json, fmt);
-          }
+          setParsedSnippets(result.snippets);
+          setRawJson(null);
+          setDetectedFormat("clipio");
+          setSelectedFormat("clipio");
+          setParseError(null);
         })
-        .catch(() => setParseError(i18n.t("importWizard.upload.couldNotRead")));
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
+        .catch((e) => {
+          captureError(e, { action: "importClipioZip" });
+          setParseError(
+            e instanceof Error
+              ? e.message
+              : i18n.t("importWizard.upload.couldNotRead")
+          );
+          setIsZipImport(false);
+        });
+      return;
+    }
+
+    setIsZipImport(false);
+    zipMediaBlobsRef.current = new Map();
+    setZipMediaCount(0);
+    setZipMissingMediaWarning(null);
+
+    file
+      .text()
+      .then((text) => {
+        let json: unknown;
+        try {
+          json = JSON.parse(text);
+        } catch {
+          setParseError(i18n.t("importWizard.upload.invalidJson"));
+          return;
+        }
+
+        setRawJson(json as Record<string, unknown> | unknown[]);
+        const fmt = detectFormat(json);
+        setDetectedFormat(fmt);
+        setSelectedFormat(fmt ?? "");
+
+        if (fmt) {
+          tryParse(json, fmt);
+        }
+      })
+      .catch(() => setParseError(i18n.t("importWizard.upload.couldNotRead")));
+  }, []);
 
   function tryParse(json: unknown, format: FormatId) {
     try {

@@ -13,14 +13,13 @@
  * content script entry point only.
  */
 
-import { makeFetchTransport } from "@sentry/browser";
+import { createTransport, serializeEnvelope } from "@sentry/core";
 import type {
   Transport,
   TransportMakeRequestResponse,
   BaseTransportOptions,
   Envelope,
 } from "@sentry/core";
-import { serializeEnvelope } from "@sentry/core";
 
 export const SENTRY_RELAY_MESSAGE_TYPE = "sentry-relay" as const;
 
@@ -89,14 +88,32 @@ export function registerSentryRelayListener(): void {
  * Tries a direct fetch first; on failure relays through the background.
  */
 export function makeRelayTransport(options: BaseTransportOptions): Transport {
-  // Build the "direct" transport (fetch preferred)
-  const directTransport = makeFetchTransport(options);
+  // Build the "direct" transport using a simple fetch-based request
+  const directTransport = createTransport(options, async (request) => {
+    const body =
+      typeof request.body === "string"
+        ? request.body
+        : new TextDecoder().decode(request.body);
+    const response = await fetch(options.url, {
+      body,
+      method: "POST",
+      referrerPolicy: "strict-origin",
+      headers: options.headers,
+    });
+    return {
+      statusCode: response.status,
+      headers: {
+        "x-sentry-rate-limits": response.headers.get("X-Sentry-Rate-Limits"),
+        "retry-after": response.headers.get("Retry-After"),
+      },
+    };
+  });
 
   return {
     send: async (envelope: Envelope): Promise<TransportMakeRequestResponse> => {
       try {
         return await directTransport.send(envelope);
-      } catch (directError) {
+      } catch {
         // Direct fetch was blocked — relay via background service worker
         try {
           const serialized = serializeEnvelope(envelope);

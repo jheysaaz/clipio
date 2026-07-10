@@ -71,28 +71,27 @@ export default function SnippetDetailView({
     JSON.stringify(editedTags) !== JSON.stringify(snippet.tags || []);
   const hasChanges = editedContent.trim() !== snippet.content || tagsChanged;
 
+  const snippetIdRef = useRef(snippet.id);
   useEffect(() => {
-    setEditedContent(snippet.content);
-    setEditedTags(snippet.tags || []);
-    setNewTagInput("");
-    setIsAddingTag(false);
-    setCopied(false);
-    loadUsageCount();
+    if (snippetIdRef.current !== snippet.id) {
+      snippetIdRef.current = snippet.id;
+      setEditedContent(snippet.content);
+      setEditedTags(snippet.tags || []);
+      setNewTagInput("");
+      setIsAddingTag(false);
+      setCopied(false);
+    }
+    getSnippetUsageCount(snippet.id)
+      .then(setUsageCount)
+      .catch((err) => {
+        captureError(err, { action: "loadUsageCount", snippetId: snippet.id });
+      });
   }, [snippet.id]);
 
   // Notify parent when dirty state changes
   useEffect(() => {
     onHasChanges?.(hasChanges);
   }, [hasChanges]);
-
-  const loadUsageCount = async () => {
-    try {
-      const count = await getSnippetUsageCount(snippet.id);
-      setUsageCount(count);
-    } catch (err) {
-      captureError(err, { action: "loadUsageCount", snippetId: snippet.id });
-    }
-  };
 
   const handleCopy = async () => {
     try {

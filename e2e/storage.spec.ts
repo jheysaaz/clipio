@@ -51,7 +51,6 @@ test.describe("Storage Integration", () => {
 
     // Write snippet directly into sync storage
     await page.evaluate(async (snip) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.sync.set({ [`snip:${snip.id}`]: snip });
     }, snippet);
@@ -61,7 +60,6 @@ test.describe("Storage Integration", () => {
     // Open a fresh popup page and verify the snippet is still there
     const page2 = await getExtPage(context, extensionId);
     const stored = await page2.evaluate(async (id: string) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const result = await ext.storage.sync.get(`snip:${id}`);
       return result[`snip:${id}`];
@@ -86,14 +84,12 @@ test.describe("Storage Integration", () => {
     });
 
     await page.evaluate(async (snip) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.sync.set({ [`snip:${snip.id}`]: snip });
     }, snippet);
 
     // Verify the specific key format exists
     const keys = await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const all = await ext.storage.sync.get(null);
       return Object.keys(all as Record<string, unknown>);
@@ -111,7 +107,6 @@ test.describe("Storage Integration", () => {
 
     // Fill sync storage beyond the quota by setting many large items
     const overflowResult = await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const filler = "x".repeat(7_500); // near 8KB per-item limit
       const entries: Record<string, unknown> = {};
@@ -145,7 +140,6 @@ test.describe("Storage Integration", () => {
 
     // Whether quota was hit or not, the storage should be functional
     const storageMode = await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const result = await ext.storage.local.get("storageMode");
       return result.storageMode ?? "sync";
@@ -176,7 +170,6 @@ test.describe("Storage Integration", () => {
 
     // Write to sync AND update the content script cache
     await page.evaluate(async (snip) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.sync.set({ [`snip:${snip.id}`]: snip });
       // Also update the cache (the StorageManager does this after every write)
@@ -187,7 +180,6 @@ test.describe("Storage Integration", () => {
 
     // Read back the cache
     const cache = await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const result = await ext.storage.local.get("cachedSnippets");
       return result.cachedSnippets ?? [];
@@ -260,7 +252,6 @@ test.describe("Storage Integration", () => {
 
     // Switch to local mode
     await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.local.set({ storageMode: "local" });
     });
@@ -269,7 +260,6 @@ test.describe("Storage Integration", () => {
     // Re-open and verify it stayed in local mode
     const page2 = await getExtPage(context, extensionId);
     const mode = await page2.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const result = await ext.storage.local.get("storageMode");
       return result.storageMode;
@@ -294,7 +284,6 @@ test.describe("Storage Integration", () => {
 
     // Write all snippets concurrently
     await page.evaluate(async (snips) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await Promise.all(
         snips.map((s) => ext.storage.sync.set({ [`snip:${s.id}`]: s }))
@@ -303,7 +292,6 @@ test.describe("Storage Integration", () => {
 
     // Read back all keys
     const keys = await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const all = await ext.storage.sync.get(null);
       return Object.keys(all as Record<string, unknown>).filter((k) =>
@@ -331,14 +319,12 @@ test.describe("Storage Integration", () => {
 
     // Seed the old format: all snippets under a single "snippets" key
     await page.evaluate(async (snips) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.sync.set({ snippets: snips });
     }, legacySnippets);
 
     // Simulate StorageManager migration: read old key, write per-key format
     await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const result = await ext.storage.sync.get("snippets");
       const snips = (result.snippets as typeof legacySnippets) ?? [];
@@ -354,7 +340,6 @@ test.describe("Storage Integration", () => {
 
     // Verify per-key format exists
     const newKeys = await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const all = await ext.storage.sync.get(null);
       return Object.keys(all as Record<string, unknown>);

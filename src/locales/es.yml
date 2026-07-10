@@ -281,6 +281,9 @@ options:
       confirmSwitchToSync: Confirmar cambio a sincronización
       confirmSwitchToLocal: Confirmar cambio a local
       switchError: Error al cambiar el backend de almacenamiento. Por favor, inténtalo de nuevo.
+      progressLabel: "Cuota de sincronización: $1% usado"
+      progressEmpty: Sin datos de sincronización
+      localModeHint: Usando almacenamiento local — no sincronizado entre dispositivos
     typingTimeout:
       title: Tiempo de espera al escribir
       description: "Cuánto tiempo espera Clipio después de que dejas de escribir antes de intentar expandir un fragmento. Menos = más rápido pero puede expandirse a mitad de palabra. Por defecto: 300 ms."
@@ -309,6 +312,8 @@ options:
       button: Limpiar copia de seguridad
       confirm: Confirmar limpieza
       cleared: Limpiado
+      status: "Estado de copia: $1 fragmento(s) almacenados"
+      noBackup: "Estado de copia: Vacío (sin fragmentos)"
 
 importWizard:
   steps:

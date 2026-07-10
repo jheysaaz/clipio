@@ -40,7 +40,6 @@ async function seedAndReload(
   snippets: import("../src/types/index.js").Snippet[]
 ) {
   await page.evaluate(async (snips) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
     const syncEntries: Record<string, (typeof snips)[0]> = {};
     for (const s of snips) {
@@ -64,7 +63,6 @@ test.describe("Popup (Dashboard)", () => {
   }) => {
     // Clear any existing snippets
     await popupPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.sync.clear();
       await ext.storage.local.set({ cachedSnippets: [] });
@@ -83,7 +81,6 @@ test.describe("Popup (Dashboard)", () => {
 
   test("creates new snippet via form", async ({ popupPage }) => {
     await popupPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.sync.clear();
       await ext.storage.local.set({ cachedSnippets: [], storageMode: "sync" });
@@ -130,7 +127,6 @@ test.describe("Popup (Dashboard)", () => {
 
     // Verify snippet was stored in sync storage
     const syncSnippets = await popupPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const all = await ext.storage.sync.get(null);
       return Object.keys(all).filter((k) => k.startsWith("snip:"));
@@ -184,7 +180,6 @@ test.describe("Popup (Dashboard)", () => {
   }) => {
     // Set the syncDataLost flag
     await popupPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.local.set({ syncDataLost: true });
     });
@@ -215,7 +210,6 @@ test.describe("Popup (Dashboard)", () => {
   test("consumes context menu draft on popup open", async ({ popupPage }) => {
     const draftText = "Draft text from context menu";
     await popupPage.evaluate(async (draft: string) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.local.set({ contextMenuDraft: draft });
     }, draftText);
@@ -303,7 +297,6 @@ test.describe("Popup (Dashboard)", () => {
   }) => {
     // Fill sync storage near quota threshold by setting many snippets
     await popupPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       // Create snippets that total close to 90KB (the WARN_AT threshold)
       const filler = "x".repeat(7_000); // ~7KB each, under 8KB per-item limit
@@ -396,7 +389,6 @@ test.describe("Popup (Dashboard)", () => {
 
     // Storage verification
     const syncKeys = await popupPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const all = await ext.storage.sync.get(null);
       return Object.keys(all).filter((k) => k.startsWith("snip:"));

@@ -13,7 +13,6 @@ import {
   latestVersionItem,
   onboardingCompletedItem,
   extensionInstalledAtItem,
-  reviewPromptStateItem,
 } from "@/storage/items";
 import { initSentry, captureError, captureMessage } from "@/lib/sentry";
 import { registerSentryRelayListener } from "@/lib/sentry-relay";
@@ -361,7 +360,7 @@ export default defineBackground(() => {
         // if the browser doesn't support openPopup)
         try {
           await (browser.action ?? browser.browserAction).openPopup();
-        } catch (err) {
+        } catch {
           captureMessage("openPopup failed — falling back to tab", "warning", {
             action: "saveSelection",
           });
@@ -374,7 +373,7 @@ export default defineBackground(() => {
       case CONTEXT_MENU.CREATE_SNIPPET: {
         try {
           await (browser.action ?? browser.browserAction).openPopup();
-        } catch (err) {
+        } catch {
           captureMessage("openPopup failed — falling back to tab", "warning", {
             action: "createSnippet",
           });

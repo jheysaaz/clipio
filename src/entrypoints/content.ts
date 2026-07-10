@@ -34,12 +34,10 @@ import {
   incrementTotalInsertions,
 } from "@/utils/usageTracking";
 import confetti from "canvas-confetti";
-import { initSentry, captureError, captureMessage } from "@/lib/sentry";
-import { makeRelayTransport } from "@/lib/sentry-relay";
+import { initSentry, captureError, captureMessage } from "@/lib/sentry-content";
 import {
   buildShortcutIndex,
   findSnippetMatch as findSnippetMatchHelper,
-  formatDate,
   processSnippetContent as processSnippetContentHelper,
   type ContentSnippet,
   type ShortcutIndex,
@@ -84,7 +82,7 @@ export default defineContentScript({
   main() {
     // ── Sentry (content script) ───────────────────────────────────────
     // Relay transport forwards envelopes via background when host CSP blocks fetch.
-    initSentry("content", { transport: makeRelayTransport });
+    initSentry();
 
     // ── Always-on ping handler ────────────────────────────────────────
     // Responds to health-check pings from the options page / background.
@@ -275,7 +273,7 @@ export default defineContentScript({
     let isBlocked = false; // true when current hostname is in blockedSites
 
     // ── Preview state ──────────────────────────────────────────────────
-    let previewSettings: PreviewSettings = {
+    const previewSettings: PreviewSettings = {
       enabled: true,
       triggerPrefix: "/",
       keyboardShortcut: "Ctrl+Shift+Space",
@@ -824,7 +822,7 @@ export default defineContentScript({
       // Read confetti preference
       try {
         confettiEnabled = await confettiEnabledItem.getValue();
-      } catch (err) {
+      } catch {
         captureMessage("Failed to read confetti preference", "warning", {
           action: "initialize",
         });
@@ -834,7 +832,7 @@ export default defineContentScript({
       try {
         const blockedSites = await blockedSitesItem.getValue();
         isBlocked = isHostnameBlocked(window.location.hostname, blockedSites);
-      } catch (err) {
+      } catch {
         captureMessage("Failed to read blocked sites", "warning", {
           action: "initialize",
         });
@@ -855,7 +853,7 @@ export default defineContentScript({
           await snippetPreviewPrefixItem.getValue();
         previewSettings.keyboardShortcut =
           await snippetPreviewShortcutItem.getValue();
-      } catch (err) {
+      } catch {
         captureMessage("Failed to load preview settings", "warning", {
           action: "initialize",
         });
@@ -863,12 +861,14 @@ export default defineContentScript({
 
       await loadSnippets();
 
-      // Initialize preview UI
-      snippetPreviewUI.init();
-      snippetPreviewUI.setEventHandlers(
-        handlePreviewSnippetSelection,
-        hidePreview
-      );
+      // Initialize preview UI only when preview is enabled
+      if (previewSettings.enabled) {
+        snippetPreviewUI.init();
+        snippetPreviewUI.setEventHandlers(
+          handlePreviewSnippetSelection,
+          hidePreview
+        );
+      }
 
       registerRuntimeListeners();
     }
@@ -878,7 +878,7 @@ export default defineContentScript({
     function showPreview(
       element: HTMLElement,
       filteredSnippets: FilteredSnippet[],
-      query: string
+      _query: string
     ): void {
       debugLog("preview:show", {
         snippetCount: filteredSnippets.length,

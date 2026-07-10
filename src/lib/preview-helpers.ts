@@ -295,7 +295,7 @@ export function calculatePreviewPosition(
       y: finalY,
       maxHeight: Math.max(100, maxHeight),
     };
-  } catch (error) {
+  } catch {
     // Fallback for any errors
     return { x: 10, y: 10, maxHeight: 300 };
   }
@@ -478,7 +478,7 @@ export function createPreviewTooltip(content: string): string {
     }
 
     return plainText.substring(0, truncatePos) + "...";
-  } catch (error) {
+  } catch {
     return "(content preview unavailable)";
   }
 }

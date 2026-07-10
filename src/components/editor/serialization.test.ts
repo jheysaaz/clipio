@@ -634,7 +634,6 @@ describe("markdownToHtml", () => {
   });
 
   it("returns empty string for falsy input", () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(markdownToHtml(null as any)).toBe("");
   });
 

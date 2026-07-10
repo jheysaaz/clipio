@@ -167,7 +167,7 @@ export const test = base.extend<ClipioFixtures>({
             for (const s of snips) {
               syncEntries[`snip:${s.id}`] = s;
             }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             const ext =
               (globalThis as any).chrome ?? (globalThis as any).browser;
             await ext.storage.sync.set(syncEntries);
@@ -183,7 +183,6 @@ export const test = base.extend<ClipioFixtures>({
         const page = await getExtPage();
         try {
           return await page.evaluate(async () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const ext =
               (globalThis as any).chrome ?? (globalThis as any).browser;
             const all = await ext.storage.sync.get(null);
@@ -200,7 +199,6 @@ export const test = base.extend<ClipioFixtures>({
         const page = await getExtPage();
         try {
           return await page.evaluate(async () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const ext =
               (globalThis as any).chrome ?? (globalThis as any).browser;
             const result = await ext.storage.local.get("cachedSnippets");
@@ -215,7 +213,6 @@ export const test = base.extend<ClipioFixtures>({
         const page = await getExtPage();
         try {
           await page.evaluate(async () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const ext =
               (globalThis as any).chrome ?? (globalThis as any).browser;
             await ext.storage.sync.clear();
@@ -231,7 +228,6 @@ export const test = base.extend<ClipioFixtures>({
         try {
           await page.evaluate(
             async ([k, v]: [string, unknown]) => {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const ext =
                 (globalThis as any).chrome ?? (globalThis as any).browser;
               await ext.storage.local.set({ [k]: v });
@@ -247,7 +243,6 @@ export const test = base.extend<ClipioFixtures>({
         const page = await getExtPage();
         try {
           return await page.evaluate(async (k: string) => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const ext =
               (globalThis as any).chrome ?? (globalThis as any).browser;
             const result = await ext.storage.local.get(k);

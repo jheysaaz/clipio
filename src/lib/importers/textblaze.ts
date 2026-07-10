@@ -129,7 +129,7 @@ function parseTBSnippet(
   // Skip snippets without a shortcut or label
   if (!shortcut || !label) return null;
 
-  let content = "";
+  let content: string;
   const unsupportedPlaceholders: string[] = [];
 
   if (tbSnippet.type === "html" && tbSnippet.html) {

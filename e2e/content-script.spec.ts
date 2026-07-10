@@ -348,7 +348,6 @@ test.describe("Content Script Expansion", () => {
     };
 
     await extPage.evaluate(async (snip) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.local.set({ cachedSnippets: [snip] });
     }, dynamicSnippet);

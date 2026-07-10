@@ -62,7 +62,6 @@ async function seedSnippets(
 ) {
   const page = await getExtPage(context, extensionId);
   await page.evaluate(async (snips) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
     await ext.storage.sync.clear();
     const entries: Record<string, (typeof snips)[0]> = {};
@@ -262,7 +261,6 @@ test.describe("Image / GIF feature tests", () => {
     const popupPage = await getExtPage(context, extensionId);
 
     const response = await popupPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       return new Promise<unknown>((resolve) => {
         ext.runtime.sendMessage(
@@ -297,7 +295,6 @@ test.describe("Image / GIF feature tests", () => {
     // Now request the media via the background bridge from an extension page
     const popupPage = await getExtPage(context, extensionId);
     const response = await popupPage.evaluate(async (id: string) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       return new Promise<{ dataUrl: string | null; alt?: string | null }>(
         (resolve) => {
@@ -331,7 +328,6 @@ test.describe("Image / GIF feature tests", () => {
 
     const popupPage = await getExtPage(context, extensionId);
     const response = await popupPage.evaluate(async (id: string) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       return new Promise<{ dataUrl: string | null; alt?: string | null }>(
         (resolve) => {

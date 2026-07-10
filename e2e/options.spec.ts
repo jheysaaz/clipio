@@ -33,7 +33,6 @@ async function seedSnippets(
   snippets: import("../src/types/index.js").Snippet[]
 ) {
   await page.evaluate(async (snips) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
     const syncEntries: Record<string, (typeof snips)[0]> = {};
     for (const s of snips) {
@@ -280,7 +279,6 @@ test.describe("Options Page", () => {
 
       // Verify the theme was changed in storage
       const storedTheme = await optionsPage.evaluate(async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
         const result = await ext.storage.local.get("themeMode");
         return result.themeMode;
@@ -327,7 +325,6 @@ test.describe("Options Page", () => {
       await optionsPage.waitForTimeout(300);
 
       const stored = await optionsPage.evaluate(async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
         const result = await ext.storage.local.get("confettiEnabled");
         return result.confettiEnabled;
@@ -471,7 +468,6 @@ test.describe("Developers Section", () => {
     await seedPage.goto(`chrome-extension://${extensionId}/popup.html`);
     await seedPage.waitForLoadState("domcontentloaded");
     await seedPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.local.set({
         latestVersion: {
@@ -506,7 +502,6 @@ test.describe("Developers Section", () => {
     await seedPage.goto(`chrome-extension://${extensionId}/popup.html`);
     await seedPage.waitForLoadState("domcontentloaded");
     await seedPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.local.set({
         latestVersion: {
@@ -539,7 +534,6 @@ test.describe("Developers Section", () => {
 
       // dismissedUpdateVersion should be stored in local storage
       const dismissed = await popupPage.evaluate(async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
         const r = await ext.storage.local.get("dismissedUpdateVersion");
         return r.dismissedUpdateVersion;
@@ -604,7 +598,6 @@ test.describe("Developers Section", () => {
   }) => {
     // Seed usage counts and snippets
     await optionsPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.local.set({
         snippetUsageCount: { "snip-abc": 42, "snip-def": 7 },
@@ -701,7 +694,6 @@ test.describe("Developers Section", () => {
 
     // Verify storage was updated (WXT stores "local:typingTimeout" as key "typingTimeout")
     const storedTimeout = await optionsPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const result = await ext.storage.local.get("typingTimeout");
       return result.typingTimeout;
@@ -735,7 +727,6 @@ test.describe("Developers Section", () => {
 
     // Storage should reflect the new value
     const stored = await optionsPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const result = await ext.storage.local.get("debugMode");
       return result.debugMode;

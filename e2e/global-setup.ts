@@ -29,7 +29,7 @@ export default async function globalSetup() {
     const elapsed = ((Date.now() - start) / 1000).toFixed(1);
     console.log(`[E2E] Extension built in ${elapsed}s`);
   } catch (err) {
-    throw new Error(`Extension build failed: ${err}`);
+    throw new Error(`Extension build failed: ${err}`, { cause: err });
   }
 
   if (!fs.existsSync(outputDir)) {

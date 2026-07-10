@@ -25,7 +25,6 @@ import {
   extractMediaIds,
 } from "@/lib/exporters/clipio";
 import { getMedia, listMedia } from "@/storage/backends/media";
-import type { MediaMetadata } from "@/storage/backends/media";
 import { captureError } from "@/lib/sentry";
 import { debugLog } from "@/lib/debug";
 import {
@@ -137,6 +136,15 @@ export class StorageManager {
    */
   async tryRecoverFromBackup(): Promise<Snippet[]> {
     return this.idb.getSnippets();
+  }
+
+  /**
+   * Returns the number of snippets stored in the IndexedDB backup.
+   * 0 means either no backup exists or the backup is empty.
+   */
+  async getBackupInfo(): Promise<{ snippetCount: number }> {
+    const count = await this.idb.getSnippetCount();
+    return { snippetCount: count };
   }
 
   /**

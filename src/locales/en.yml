@@ -291,6 +291,9 @@ options:
       confirmSwitchToSync: Confirm switch to sync
       confirmSwitchToLocal: Confirm switch to local
       switchError: Failed to switch storage backend. Please try again.
+      progressLabel: "Sync quota: $1% used"
+      progressEmpty: No sync data
+      localModeHint: Using local storage — not synced across devices
     typingTimeout:
       title: Typing Timeout
       description: "How long Clipio waits after you stop typing before attempting to expand a snippet. Lower = faster but may expand mid-word. Default: 300 ms."
@@ -320,6 +323,8 @@ options:
       button: Clear backup
       confirm: Confirm clear
       cleared: Cleared
+      status: "Backup status: $1 snippet(s) stored"
+      noBackup: "Backup status: Empty (no snippets stored)"
 
 importWizard:
   steps:

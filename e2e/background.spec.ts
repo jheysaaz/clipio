@@ -76,7 +76,6 @@ test.describe("Background Script", () => {
 
     // Simulate the context menu "save selection" click via service worker
     await sw.evaluate(async (selectedText: string) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       // Simulate the contextMenus.onClicked handler logic:
       // Store the draft text that would come from selection
@@ -87,7 +86,6 @@ test.describe("Background Script", () => {
     // popup's onMount handler doesn't consume & remove it before we check).
     // We use the service worker itself to read back the stored value.
     const storedDraft = await sw.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const result = await ext.storage.local.get("contextMenuDraft");
       return result.contextMenuDraft;
@@ -136,7 +134,6 @@ test.describe("Background Script", () => {
 
     // Simulate the OPEN_DASHBOARD context menu click
     await sw.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const optionsUrl = ext.runtime.getURL("/options.html");
       await ext.tabs.create({ url: optionsUrl });
@@ -171,7 +168,6 @@ test.describe("Background Script", () => {
       .catch(() => null);
 
     await sw.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const popupUrl = ext.runtime.getURL("/popup.html");
       await ext.tabs.create({ url: popupUrl });
@@ -201,7 +197,6 @@ test.describe("Background Script", () => {
 
     // First, seed several snip: keys into sync storage
     await extPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.sync.set({
         "snip:001": { id: "001", label: "A", shortcut: "/a", content: "aa" },
@@ -212,7 +207,6 @@ test.describe("Background Script", () => {
 
     // Simulate sync wipe: remove all snip: keys at once
     await extPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.sync.remove(["snip:001", "snip:002", "snip:003"]);
     });
@@ -222,7 +216,6 @@ test.describe("Background Script", () => {
 
     // Check if the syncDataLost flag was set by the background
     const syncDataLost = await extPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const result = await ext.storage.local.get("syncDataLost");
       return result.syncDataLost;
@@ -239,7 +232,6 @@ test.describe("Background Script", () => {
     // Verify the uninstall URL was set during service worker initialization.
     // We simulate firing the onInstalled event and check the runtime state.
     const uninstallUrlSet = await sw.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       // Attempt to set the uninstall URL and return success
       try {
@@ -262,7 +254,6 @@ test.describe("Background Script", () => {
 
     // Perform multiple operations to keep the service worker alive
     const result = await sw.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
 
       // Do several storage reads to simulate activity
@@ -285,7 +276,6 @@ test.describe("Background Script", () => {
     const sw = await getServiceWorker(context);
 
     const menuCreationResult = await sw.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       try {
         await ext.contextMenus.removeAll();

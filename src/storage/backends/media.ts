@@ -87,7 +87,6 @@ export async function findByHash(hash: string): Promise<MediaMetadata | null> {
           resolve(null);
           return;
         }
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { blob: _blob, ...meta } = req.result as MediaEntry;
         resolve(meta as MediaMetadata);
       };
@@ -318,7 +317,6 @@ export async function listMedia(): Promise<MediaMetadata[]> {
       req.onsuccess = () => {
         // Strip blobs from the returned entries
         const entries = (req.result as MediaEntry[]).map(
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           ({ blob: _blob, ...meta }) => meta as MediaMetadata
         );
         resolve(entries);

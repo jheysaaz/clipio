@@ -44,7 +44,6 @@ test.describe("Cross-Context Communication", () => {
     // Set up a message listener on the service worker side
     const messageReceivedPromise = sw.evaluate(() => {
       return new Promise<boolean>((resolve) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
         const timeout = setTimeout(() => resolve(false), 3_000);
         ext.runtime.onMessage.addListener((msg: unknown) => {
@@ -68,7 +67,6 @@ test.describe("Cross-Context Communication", () => {
     await page.waitForTimeout(300);
 
     await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       ext.runtime.sendMessage({ __e2eTest: true });
     });
@@ -99,7 +97,6 @@ test.describe("Cross-Context Communication", () => {
 
     // Send the SENTRY_TEST_MESSAGE_TYPE message via the options page
     const sendResult = await optionsPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       try {
         const tabs = await ext.tabs.query({});
@@ -148,7 +145,6 @@ test.describe("Cross-Context Communication", () => {
     });
 
     await extPage.evaluate(async (snip) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       // Write to sync and update the cache (mimics StorageManager behavior)
       await ext.storage.sync.set({ [`snip:${snip.id}`]: snip });
@@ -171,7 +167,6 @@ test.describe("Cross-Context Communication", () => {
     await verifyPage.waitForLoadState("domcontentloaded");
 
     const cacheAfter = await verifyPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const result = await ext.storage.local.get("cachedSnippets");
       return (result.cachedSnippets ?? []) as Array<{ id: string }>;
@@ -213,7 +208,6 @@ test.describe("Cross-Context Communication", () => {
     await popupPage.waitForTimeout(300);
 
     await popupPage.evaluate(async (snip) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.sync.set({ [`snip:${snip.id}`]: snip });
       await ext.storage.local.set({ cachedSnippets: [snip] });
@@ -231,7 +225,6 @@ test.describe("Cross-Context Communication", () => {
     await verifyPage.waitForLoadState("domcontentloaded");
 
     const cache1 = await verifyPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const r = await ext.storage.local.get("cachedSnippets");
       return (r.cachedSnippets ?? []) as Array<{ id: string }>;
@@ -254,7 +247,6 @@ test.describe("Cross-Context Communication", () => {
     // Simulate background setting a flag (e.g., sync wipe detection)
     const sw = await getServiceWorker(context);
     await sw.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.local.set({ __e2eBackgroundFlag: "set-by-background" });
     });
@@ -266,7 +258,6 @@ test.describe("Cross-Context Communication", () => {
     await popupPage.waitForTimeout(300);
 
     const flagValue = await popupPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const result = await ext.storage.local.get("__e2eBackgroundFlag");
       return result.__e2eBackgroundFlag;
@@ -276,7 +267,6 @@ test.describe("Cross-Context Communication", () => {
 
     // Clean up
     await popupPage.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.local.remove("__e2eBackgroundFlag");
     });

@@ -51,7 +51,7 @@ describe("debugLog", () => {
     _resetDebugCache();
     mockDebugModeItem.getValue.mockResolvedValue(false);
     mockDebugLogItem.getValue.mockResolvedValue([]);
-    vi.spyOn(console, "debug").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -64,7 +64,7 @@ describe("debugLog", () => {
     mockDebugModeItem.getValue.mockResolvedValue(false);
     await callDebugLog();
     expect(mockDebugLogItem.setValue).not.toHaveBeenCalled();
-    expect(console.debug).not.toHaveBeenCalled();
+    expect(console.warn).not.toHaveBeenCalled();
   });
 
   // spec: appends an entry when debug mode is on
@@ -85,16 +85,16 @@ describe("debugLog", () => {
     expect(typeof written[0].ts).toBe("number");
   });
 
-  // spec: echoes to console.debug when debug mode is on
-  it("calls console.debug when debug mode is on", async () => {
+  // spec: echoes to console.warn when debug mode is on
+  it("calls console.warn when debug mode is on", async () => {
     mockDebugModeItem.getValue.mockResolvedValue(true);
     mockDebugLogItem.getValue.mockResolvedValue([]);
 
     await callDebugLog("background", "alarm:fired", { name: "test" });
 
-    expect(console.debug).toHaveBeenCalledOnce();
+    expect(console.warn).toHaveBeenCalledOnce();
     expect(
-      (console.debug as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      (console.warn as ReturnType<typeof vi.fn>).mock.calls[0][0]
     ).toContain("[Clipio:background]");
   });
 

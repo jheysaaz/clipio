@@ -94,7 +94,7 @@ export async function debugLog(
     detail: detailStr,
   };
 
-  console.debug(`[Clipio:${context}] ${event}`, detail);
+  console.warn(`[Clipio:${context}] ${event}`, detail);
 
   try {
     const current = await debugLogItem.getValue();
