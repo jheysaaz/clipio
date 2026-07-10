@@ -83,6 +83,7 @@ export default function Dashboard() {
     publishedAt: string;
   } | null>(null);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const isResizing = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const detailHasChanges = useRef(false);
@@ -376,6 +377,16 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-full select-none">
+      {/* Accessibility: Status announcements for screen readers */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {statusMessage}
+      </div>
+
       {/* Sign-out recovery banner */}
       {showRecoveryBanner && (
         <WarningBanner
@@ -484,10 +495,15 @@ export default function Dashboard() {
                 placeholder={i18n.t("dashboard.searchPlaceholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label={i18n.t("dashboard.searchPlaceholder")}
+                aria-describedby="search-help"
                 className="pl-8 pr-12 h-8 text-sm rounded-lg"
               />
               {!searchQuery && (
-                <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 hidden h-5 select-none items-center rounded border bg-muted px-1 font-mono text-[10px] font-medium text-muted-foreground sm:flex">
+                <kbd
+                  id="search-help"
+                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 hidden h-5 select-none items-center rounded border bg-muted px-1 font-mono text-[10px] font-medium text-muted-foreground sm:flex"
+                >
                   {/mac/i.test(navigator.platform) ? "⌘K" : "Ctrl+K"}
                 </kbd>
               )}
@@ -556,6 +572,9 @@ export default function Dashboard() {
                   className="space-y-1 overflow-hidden"
                   role="listbox"
                   aria-label={i18n.t("dashboard.snippetListLabel")}
+                  aria-activedescendant={
+                    selectedSnippet ? `snippet-${selectedSnippet.id}` : ""
+                  }
                 >
                   {/* Draft preview while creating */}
                   {isCreating &&
@@ -577,6 +596,7 @@ export default function Dashboard() {
                     <SnippetListItem
                       key={snippet.id}
                       snippet={snippet}
+                      snippetId={`snippet-${snippet.id}`}
                       isSelected={
                         selectedSnippet?.id === snippet.id && !isCreating
                       }

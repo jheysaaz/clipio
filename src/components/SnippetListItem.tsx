@@ -45,6 +45,7 @@ function getContentPreview(content: string): string {
 
 interface SnippetListItemProps {
   snippet: Snippet;
+  snippetId: string;
   isSelected: boolean;
   onClick: () => void;
   onUpdate?: (updatedSnippet: Snippet) => void;
@@ -52,6 +53,7 @@ interface SnippetListItemProps {
 
 export default function SnippetListItem({
   snippet,
+  snippetId,
   isSelected,
   onClick,
   onUpdate,
@@ -111,6 +113,7 @@ export default function SnippetListItem({
 
   return (
     <Button
+      id={snippetId}
       variant="ghost"
       role="option"
       aria-selected={isSelected}
