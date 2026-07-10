@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   X,
 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import SnippetListItem from "@/components/SnippetListItem";
 import ConfirmDialog from "@/components/ConfirmDialog";
 const SnippetDetailView = lazy(() => import("~/components/SnippetDetailView"));
@@ -508,9 +509,9 @@ export default function Dashboard() {
           {/* Search Bar */}
           <div className="px-2 py-2 border-b">
             <div className="relative">
-              <Search
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground"
-                strokeWidth={1.5}
+              <Icon
+                icon={Search}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
               />
               <Input
                 ref={searchInputRef}
@@ -542,9 +543,10 @@ export default function Dashboard() {
                   role="status"
                   aria-live="polite"
                 >
-                  <Loader2
-                    className="h-6 w-6 animate-spin text-muted-foreground"
-                    strokeWidth={1.5}
+                  <Icon
+                    icon={Loader2}
+                    size="xl"
+                    className="animate-spin text-muted-foreground"
                   />
                   <p className="text-xs text-muted-foreground">
                     {i18n.t("dashboard.loadingSnippets")}
@@ -574,7 +576,7 @@ export default function Dashboard() {
                         className="w-full h-7 text-xs gap-1.5"
                         onClick={handleAddSnippet}
                       >
-                        <Plus className="h-3 w-3" strokeWidth={1.5} />
+                        <Icon icon={Plus} size="sm" />
                         {i18n.t("dashboard.createSnippetButton")}
                       </Button>
                       <Button
@@ -589,7 +591,7 @@ export default function Dashboard() {
                           })
                         }
                       >
-                        <ArrowDownUp className="h-3 w-3" strokeWidth={1.5} />
+                        <Icon icon={ArrowDownUp} size="sm" />
                         {i18n.t("dashboard.importButton")}
                       </Button>
                     </div>
@@ -670,7 +672,7 @@ export default function Dashboard() {
               title={i18n.t("dashboard.settingsAndExport")}
               aria-label={i18n.t("dashboard.settingsAndExport")}
             >
-              <Settings className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <Icon icon={Settings} />
             </Button>
           </div>
         </div>
@@ -681,7 +683,11 @@ export default function Dashboard() {
             <Suspense
               fallback={
                 <div className="flex items-center justify-center flex-1">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <Icon
+                    icon={Loader2}
+                    size="xl"
+                    className="animate-spin text-muted-foreground"
+                  />
                 </div>
               }
             >
@@ -702,7 +708,11 @@ export default function Dashboard() {
             <Suspense
               fallback={
                 <div className="flex items-center justify-center flex-1">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <Icon
+                    icon={Loader2}
+                    size="xl"
+                    className="animate-spin text-muted-foreground"
+                  />
                 </div>
               }
             >
@@ -741,9 +751,9 @@ export default function Dashboard() {
                   }
                 >
                   {sidebarOpen ? (
-                    <PanelLeftClose className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    <Icon icon={PanelLeftClose} />
                   ) : (
-                    <PanelLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    <Icon icon={PanelLeft} />
                   )}
                 </Button>
               </div>
@@ -765,7 +775,7 @@ export default function Dashboard() {
                     onClick={handleAddSnippet}
                     className="h-8 text-xs w-full"
                   >
-                    <Plus className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+                    <Icon icon={Plus} className="mr-1.5" />
                     {i18n.t("dashboard.emptyState.action")}
                   </Button>
                   <Button
@@ -780,7 +790,7 @@ export default function Dashboard() {
                       })
                     }
                   >
-                    <ArrowDownUp className="h-3 w-3" strokeWidth={1.5} />
+                    <Icon icon={ArrowDownUp} size="sm" />
                     {i18n.t("dashboard.importButton")}
                   </Button>
                   <Button
@@ -806,7 +816,7 @@ export default function Dashboard() {
                         className="opacity-50 hover:opacity-100 transition-opacity"
                         aria-label="Dismiss"
                       >
-                        <X className="size-3.5" strokeWidth={2} />
+                        <Icon icon={X} />
                       </button>
                     </AlertAction>
                   </Alert>
@@ -833,9 +843,9 @@ export default function Dashboard() {
                   }
                 >
                   {sidebarOpen ? (
-                    <PanelLeftClose className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    <Icon icon={PanelLeftClose} />
                   ) : (
-                    <PanelLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    <Icon icon={PanelLeft} />
                   )}
                 </Button>
               </div>
@@ -857,7 +867,7 @@ export default function Dashboard() {
                         className="opacity-50 hover:opacity-100 transition-opacity"
                         aria-label="Dismiss"
                       >
-                        <X className="size-3.5" strokeWidth={2} />
+                        <Icon icon={X} />
                       </button>
                     </AlertAction>
                   </Alert>
