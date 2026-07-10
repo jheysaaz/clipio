@@ -33,15 +33,24 @@ export interface SentryRelayMessage {
 /**
  * Register the relay listener in the background service worker.
  * Call this inside defineBackground() after Sentry has been initialized.
+ *
+ * Validates that messages come from the extension itself (content scripts, popup, options page)
+ * to prevent malicious web pages from abusing the Sentry relay.
  */
 export function registerSentryRelayListener(): void {
   browser.runtime.onMessage.addListener(
-    (message: unknown, _sender, sendResponse) => {
+    (message: unknown, sender, sendResponse) => {
       if (
         typeof message === "object" &&
         message !== null &&
         (message as SentryRelayMessage).type === SENTRY_RELAY_MESSAGE_TYPE
       ) {
+        // Validate sender to prevent external websites from using our relay
+        if (sender.id !== browser.runtime.id) {
+          sendResponse({ ok: false });
+          return false;
+        }
+
         const { envelope } = message as SentryRelayMessage;
         const dsn = import.meta.env.WXT_SENTRY_DSN as string | undefined;
         if (!dsn || !envelope) {
