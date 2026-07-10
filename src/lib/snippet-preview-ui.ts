@@ -129,7 +129,7 @@ export class SnippetPreviewUI {
       position: absolute;
       background: ${this.palette.surface};
       border: 1px solid ${this.palette.border};
-      border-radius: 6px;
+      border-radius: 8px;
       box-shadow: ${this.palette.shadow};
       max-width: 320px;
       min-width: 230px;
@@ -146,12 +146,12 @@ export class SnippetPreviewUI {
     const header = document.createElement("div");
     header.className = "clipio-preview-header";
     header.style.cssText = `
-      padding: 6px 9px;
+      padding: 7px 10px;
       border-bottom: 1px solid ${this.palette.border};
       background: ${this.palette.surfaceMuted};
       font-weight: 600;
-      font-size: 11px;
-      letter-spacing: 0.02em;
+      font-size: 10px;
+      letter-spacing: 0.04em;
       text-transform: uppercase;
       color: ${this.palette.textMuted};
       display: flex;
@@ -174,7 +174,7 @@ export class SnippetPreviewUI {
     };
 
     const title = document.createElement("span");
-    title.textContent = "Clipio Snippets";
+    title.textContent = "Snippets";
 
     header.appendChild(logo);
     header.appendChild(title);
@@ -214,6 +214,7 @@ export class SnippetPreviewUI {
       padding: 8px 12px;
       border-radius: 6px;
       font-size: 11px;
+      line-height: 1.4;
       font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       max-width: 300px;
       white-space: pre-wrap;
@@ -221,7 +222,7 @@ export class SnippetPreviewUI {
       z-index: 2147483648;
       display: none;
       pointer-events: none;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
     `;
 
     // Assemble the UI
@@ -392,12 +393,20 @@ export class SnippetPreviewUI {
     if (this.filteredSnippets.length === 0) {
       const emptyItem = document.createElement("div");
       emptyItem.style.cssText = `
-        padding: 12px 16px;
-        color: #6b7280;
+        padding: 24px 16px;
+        color: ${this.palette.textMuted};
         text-align: center;
-        font-style: italic;
+        font-size: 11px;
+        line-height: 1.5;
       `;
-      emptyItem.textContent = "No snippets found";
+      const emptyLabel = document.createElement("div");
+      emptyLabel.style.cssText = `font-weight: 500; margin-bottom: 2px;`;
+      emptyLabel.textContent = "No snippets found";
+      const emptyHint = document.createElement("div");
+      emptyHint.style.cssText = `color: #9ca3af; font-style: italic;`;
+      emptyHint.textContent = "Type a shortcut to create one";
+      emptyItem.appendChild(emptyLabel);
+      emptyItem.appendChild(emptyHint);
       this.list.appendChild(emptyItem);
       return;
     }
@@ -412,14 +421,14 @@ export class SnippetPreviewUI {
       item.setAttribute("aria-selected", String(isSelected));
 
       item.style.cssText = `
-        padding: 5px 9px;
+        padding: 6px 10px;
         cursor: pointer;
         border-bottom: 1px solid ${this.palette.border};
         background: ${isSelected ? this.palette.rowSelected : "transparent"};
-        transition: background-color 0.15s ease;
+        transition: background-color 0.1s ease;
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 8px;
       `;
       item.addEventListener("mouseenter", () => {
         if (!isSelected) item.style.background = this.palette.rowHover;
@@ -442,7 +451,7 @@ export class SnippetPreviewUI {
       contentWrap.style.cssText = `
         min-width: 0;
         display: grid;
-        gap: 1px;
+        gap: 2px;
       `;
 
       const labelDiv = document.createElement("div");
