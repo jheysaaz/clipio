@@ -295,7 +295,7 @@ export default defineBackground(() => {
         // Parent item — visible on pages, selections, and editable fields
         browser.contextMenus.create({
           id: CONTEXT_MENU.PARENT,
-          title: "Clipio — Snippets Manager",
+          title: "Clipio: Snippets Manager",
           contexts: ["page", "selection", "editable"],
         });
 
