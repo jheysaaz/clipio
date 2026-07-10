@@ -2,7 +2,7 @@ import {
   TIMING,
   SENTRY_TEST_MESSAGE_TYPE,
   CONTENT_SCRIPT_PING_MESSAGE_TYPE,
-} from "~/config/constants";
+} from "@/config/constants";
 import {
   cachedSnippetsItem,
   confettiEnabledItem,
@@ -11,8 +11,8 @@ import {
   snippetPreviewEnabledItem,
   snippetPreviewPrefixItem,
   snippetPreviewShortcutItem,
-} from "~/storage/items";
-import { debugLog as _debugLog } from "~/lib/debug";
+} from "@/storage/items";
+import { debugLog as _debugLog } from "@/lib/debug";
 
 /**
  * Content-script wrapper around debugLog that automatically appends the
@@ -32,10 +32,10 @@ function debugLog(
 import {
   incrementSnippetUsage,
   incrementTotalInsertions,
-} from "~/utils/usageTracking";
+} from "@/utils/usageTracking";
 import confetti from "canvas-confetti";
-import { initSentry, captureError, captureMessage } from "~/lib/sentry";
-import { makeRelayTransport } from "~/lib/sentry-relay";
+import { initSentry, captureError, captureMessage } from "@/lib/sentry";
+import { makeRelayTransport } from "@/lib/sentry-relay";
 import {
   buildShortcutIndex,
   findSnippetMatch as findSnippetMatchHelper,
@@ -43,20 +43,20 @@ import {
   processSnippetContent as processSnippetContentHelper,
   type ContentSnippet,
   type ShortcutIndex,
-} from "~/lib/content-helpers";
+} from "@/lib/content-helpers";
 import {
   MEDIA_GET_DATA_URL,
   type MediaGetDataUrlResponse,
-} from "~/lib/messages";
-import { buildGifUrl } from "~/lib/giphy";
+} from "@/lib/messages";
+import { buildGifUrl } from "@/lib/giphy";
 import {
   fuzzyMatchSnippets,
   calculatePreviewPosition,
   detectPreviewTrigger,
   type FilteredSnippet,
   type PreviewSettings,
-} from "~/lib/preview-helpers";
-import { snippetPreviewUI } from "~/lib/snippet-preview-ui";
+} from "@/lib/preview-helpers";
+import { snippetPreviewUI } from "@/lib/snippet-preview-ui";
 
 /**
  * Returns true if `hostname` is covered by any entry in `blockedPatterns`.
@@ -117,9 +117,6 @@ export default defineContentScript({
           message !== null &&
           (message as { type?: string }).type === SENTRY_TEST_MESSAGE_TYPE
         ) {
-          console.info(
-            "[Clipio] Sentry test triggered (content script, from options): sending exception + message"
-          );
           captureError(
             new Error("Clipio Sentry test exception (content script)")
           );
@@ -133,9 +130,6 @@ export default defineContentScript({
         (e) => {
           if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "E") {
             e.preventDefault();
-            console.info(
-              "[Clipio] Sentry test triggered (content script): sending exception + message"
-            );
             captureError(
               new Error(
                 "Clipio Sentry test exception (content script, shortcut)"
@@ -618,11 +612,6 @@ export default defineContentScript({
       // Handle preview trigger detection
       if (previewSettings.enabled) {
         const cursorPos = target.selectionStart || 0;
-        console.log("[Clipio Preview] Input detected:", {
-          value: target.value,
-          cursorPos,
-          enabled: previewSettings.enabled,
-        });
         handlePreviewTriggerDetection(target, target.value, cursorPos);
       }
 
@@ -891,21 +880,16 @@ export default defineContentScript({
       filteredSnippets: FilteredSnippet[],
       query: string
     ): void {
-      console.log("[Clipio Preview] showPreview called:", {
-        enabled: previewSettings.enabled,
-        hasUI: !!snippetPreviewUI,
+      debugLog("preview:show", {
         snippetCount: filteredSnippets.length,
-      });
+      }).catch(() => {});
 
       if (!previewSettings.enabled || !snippetPreviewUI) {
         return;
       }
 
       const position = calculatePreviewPosition(element);
-      console.log("[Clipio Preview] Position calculated:", position);
-
       snippetPreviewUI.show(position, filteredSnippets);
-      console.log("[Clipio Preview] UI show called");
     }
 
     function hidePreview(): void {
@@ -926,13 +910,6 @@ export default defineContentScript({
       text: string,
       cursorPos: number
     ): void {
-      console.log("[Clipio Preview] Trigger detection:", {
-        enabled: previewSettings.enabled,
-        text,
-        cursorPos,
-        prefix: previewSettings.triggerPrefix,
-      });
-
       if (!previewSettings.enabled) return;
 
       if (!text || cursorPos <= 0) {
@@ -945,8 +922,6 @@ export default defineContentScript({
         cursorPos,
         previewSettings
       );
-
-      console.log("[Clipio Preview] Trigger result:", triggerResult);
 
       if (!triggerResult) {
         hidePreview();
@@ -965,11 +940,10 @@ export default defineContentScript({
             }))
           : fuzzyMatchSnippets(query, snippets);
 
-      console.log("[Clipio Preview] Filtered snippets:", {
-        query,
+      debugLog("preview:filter", {
         count: filteredSnippets.length,
         totalSnippets: snippets.length,
-      });
+      }).catch(() => {});
 
       if (filteredSnippets.length === 0) {
         hidePreview();
