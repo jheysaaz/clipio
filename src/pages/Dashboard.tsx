@@ -29,6 +29,7 @@ import { toast } from "sonner";
 
 import type { Snippet, SnippetFormData } from "@/types";
 import { createSnippet } from "@/types";
+import { fuzzyMatchSnippets } from "@/lib/preview-helpers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -336,18 +337,11 @@ export default function Dashboard() {
   // Filtering & keyboard navigation
   // -------------------------------------------------------------------------
 
-  const filteredSnippets = snippets
-    .filter((snippet) => {
-      if (!searchQuery) return true;
-      const q = searchQuery.toLowerCase();
-      return (
-        snippet.label.toLowerCase().includes(q) ||
-        snippet.content.toLowerCase().includes(q) ||
-        snippet.shortcut.toLowerCase().includes(q) ||
-        snippet.tags?.some((t) => t.toLowerCase().includes(q))
-      );
-    })
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const filteredSnippets: Snippet[] = searchQuery
+    ? fuzzyMatchSnippets(searchQuery, snippets).map(
+        (f) => f.snippet as unknown as Snippet
+      )
+    : [...snippets].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   const handleKeyboardNavigation = useCallback(
     (e: KeyboardEvent) => {
