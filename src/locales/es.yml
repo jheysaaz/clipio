@@ -4,6 +4,7 @@ extDescription: "Una potente extensión de navegador para gestionar e insertar f
 common:
   hideSidebar: Ocultar barra lateral
   showSidebar: Mostrar barra lateral
+  resizeSidebar: Cambiar tamaño de la barra lateral
   cancel: Cancelar
   closeModal: Cerrar
   save: Guardar

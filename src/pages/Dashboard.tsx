@@ -98,9 +98,14 @@ export default function Dashboard() {
   // Sidebar resize
   // -------------------------------------------------------------------------
 
+  const SIDEBAR_MIN_WIDTH = 120;
+  const SIDEBAR_MAX_WIDTH = 240;
+
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing.current) return;
-    setSidebarWidth(Math.max(120, Math.min(240, e.clientX)));
+    setSidebarWidth(
+      Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, e.clientX))
+    );
   }, []);
 
   const handleMouseUp = useCallback(() => {
@@ -117,6 +122,28 @@ export default function Dashboard() {
       document.removeEventListener("mouseup", handleMouseUp);
     };
   }, [handleMouseMove, handleMouseUp]);
+
+  const handleResizeKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const step = 20;
+    switch (e.key) {
+      case "ArrowLeft":
+        e.preventDefault();
+        setSidebarWidth((w) => Math.max(SIDEBAR_MIN_WIDTH, w - step));
+        break;
+      case "ArrowRight":
+        e.preventDefault();
+        setSidebarWidth((w) => Math.min(SIDEBAR_MAX_WIDTH, w + step));
+        break;
+      case "Home":
+        e.preventDefault();
+        setSidebarWidth(SIDEBAR_MIN_WIDTH);
+        break;
+      case "End":
+        e.preventDefault();
+        setSidebarWidth(SIDEBAR_MAX_WIDTH);
+        break;
+    }
+  }, []);
 
   // -------------------------------------------------------------------------
   // Load snippets on mount
@@ -474,12 +501,20 @@ export default function Dashboard() {
         >
           {/* Resize Handle */}
           <div
-            className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-muted-foreground/20 transition-colors z-10"
+            role="separator"
+            aria-orientation="vertical"
+            aria-valuenow={sidebarWidth}
+            aria-valuemin={SIDEBAR_MIN_WIDTH}
+            aria-valuemax={SIDEBAR_MAX_WIDTH}
+            aria-label={i18n.t("common.resizeSidebar")}
+            tabIndex={0}
+            className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-muted-foreground/20 transition-colors z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             onMouseDown={() => {
               isResizing.current = true;
               document.body.style.cursor = "col-resize";
               document.body.style.userSelect = "none";
             }}
+            onKeyDown={handleResizeKeyDown}
           />
 
           {/* Search Bar */}

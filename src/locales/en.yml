@@ -4,6 +4,7 @@ extDescription: "A powerful browser extension for managing and inserting snippet
 common:
   hideSidebar: Hide sidebar
   showSidebar: Show sidebar
+  resizeSidebar: Resize sidebar
   cancel: Cancel
   closeModal: Close
   save: Save
