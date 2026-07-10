@@ -134,7 +134,7 @@ export class SnippetPreviewUI {
       max-width: 320px;
       min-width: 230px;
       max-height: 220px;
-      font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 12px;
       line-height: 1.3;
       overflow: hidden;
@@ -215,7 +215,7 @@ export class SnippetPreviewUI {
       border-radius: 6px;
       font-size: 11px;
       line-height: 1.4;
-      font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       max-width: 300px;
       white-space: pre-wrap;
       word-wrap: break-word;
