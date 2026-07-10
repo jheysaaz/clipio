@@ -17,6 +17,7 @@ export class SnippetPreviewUI {
   private container: HTMLElement | null = null;
   private list: HTMLElement | null = null;
   private tooltip: HTMLElement | null = null;
+  private liveRegion: HTMLElement | null = null;
 
   private filteredSnippets: FilteredSnippet[] = [];
   private selectedIndex = 0;
@@ -109,6 +110,16 @@ export class SnippetPreviewUI {
         font-style: normal;
         font-display: swap;
       }
+      @media (prefers-contrast: high) {
+        .clipio-preview-item.selected {
+          outline: 2px solid Highlight !important;
+          outline-offset: -2px !important;
+          background: transparent !important;
+        }
+        .clipio-preview-item {
+          border-bottom: 1px solid ButtonText !important;
+        }
+      }
     `;
     this.shadowRoot.appendChild(style);
 
@@ -170,10 +181,28 @@ export class SnippetPreviewUI {
 
     // Create snippet list
     this.list = document.createElement("div");
+    this.list.setAttribute("role", "listbox");
+    this.list.setAttribute("aria-label", "Snippet suggestions");
     this.list.style.cssText = `
       max-height: 180px;
       overflow-y: auto;
       padding: 1px 0;
+    `;
+
+    // Create aria-live region for screen reader announcements
+    this.liveRegion = document.createElement("div");
+    this.liveRegion.setAttribute("aria-live", "polite");
+    this.liveRegion.setAttribute("aria-atomic", "true");
+    this.liveRegion.style.cssText = `
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0,0,0,0);
+      white-space: nowrap;
+      border: 0;
     `;
 
     // Create tooltip for hover previews
@@ -196,8 +225,10 @@ export class SnippetPreviewUI {
     `;
 
     // Assemble the UI
+    header.setAttribute("aria-hidden", "true");
     this.container.appendChild(header);
     this.container.appendChild(this.list);
+    this.container.appendChild(this.liveRegion);
     this.shadowRoot.appendChild(this.container);
     document.body.appendChild(this.tooltip);
     document.body.appendChild(this.shadowHost);
@@ -210,6 +241,7 @@ export class SnippetPreviewUI {
       this.shadowRoot = null;
       this.container = null;
       this.list = null;
+      this.liveRegion = null;
     }
     if (this.tooltip) {
       this.tooltip.remove();
@@ -251,6 +283,14 @@ export class SnippetPreviewUI {
 
     // Update list content
     this.updateList();
+
+    // Set initial aria-activedescendant
+    if (this.list && this.filteredSnippets.length > 0) {
+      this.list.setAttribute(
+        "aria-activedescendant",
+        `clipio-preview-option-${this.selectedIndex}`
+      );
+    }
 
     // Force the shadowHost to match container dimensions after content is populated
     setTimeout(() => {
@@ -296,12 +336,16 @@ export class SnippetPreviewUI {
           this.filteredSnippets.length - 1
         );
         this.updateList();
+        this.setActiveDescendant();
+        this.announceSelected();
         return true;
 
       case "ArrowUp":
         event.preventDefault();
         this.selectedIndex = Math.max(this.selectedIndex - 1, 0);
         this.updateList();
+        this.setActiveDescendant();
+        this.announceSelected();
         return true;
 
       case "Enter":
@@ -321,6 +365,22 @@ export class SnippetPreviewUI {
 
       default:
         return false;
+    }
+  }
+
+  private setActiveDescendant(): void {
+    if (!this.list || this.filteredSnippets.length === 0) return;
+    this.list.setAttribute(
+      "aria-activedescendant",
+      `clipio-preview-option-${this.selectedIndex}`
+    );
+  }
+
+  private announceSelected(): void {
+    if (!this.liveRegion || this.filteredSnippets.length === 0) return;
+    const selected = this.filteredSnippets[this.selectedIndex];
+    if (selected) {
+      this.liveRegion.textContent = `${selected.snippet.label}, ${this.selectedIndex + 1} of ${this.filteredSnippets.length}`;
     }
   }
 
@@ -346,6 +406,10 @@ export class SnippetPreviewUI {
       const item = document.createElement("div");
       item.className = "clipio-preview-item";
       const isSelected = index === this.selectedIndex;
+      const itemId = `clipio-preview-option-${index}`;
+      item.id = itemId;
+      item.setAttribute("role", "option");
+      item.setAttribute("aria-selected", String(isSelected));
 
       item.style.cssText = `
         padding: 5px 9px;

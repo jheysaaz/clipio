@@ -251,6 +251,40 @@ createPreviewTooltip("");
 
 ---
 
+---
+
+### Preview UI Accessibility
+
+**Source:** `src/lib/snippet-preview-ui.ts`
+
+**Description:** The shadow DOM preview popup MUST implement the ARIA listbox pattern for screen reader accessibility.
+
+**Behavior:**
+
+- MUST set `role="listbox"` on the snippet list container.
+- MUST set `aria-label="Snippet suggestions"` on the listbox.
+- MUST set `aria-activedescendant` to the ID of the selected option, updated on each keyboard navigation step.
+- MUST use `role="option"` on each preview row element.
+- MUST use `aria-selected="true"` on the selected option and `aria-selected="false"` on others.
+- MUST assign stable, unique ID to each option element (format: `clipio-preview-option-{index}`).
+- MUST include a visually-hidden `aria-live="polite"` region with `aria-atomic="true"` for announcing selection changes.
+- MUST announce selected item as `"{label}, {index+1} of {total}"` on ArrowUp/ArrowDown.
+- MUST support Escape to dismiss without making a selection.
+- MUST support Enter and Tab to confirm the current selection.
+- MUST include `aria-hidden="true"` on the header element since it is decorative.
+- MUST include `@media (prefers-contrast: high)` styles with visible outline for the selected item.
+- MUST add `selected` CSS class on the currently selected option for high-contrast and styling hooks.
+
+**Header:**
+- MUST NOT be included in tab order.
+- MUST be hidden from accessibility tree via `aria-hidden`.
+
+**Edge Cases:**
+- Empty results list: no option elements rendered, empty state shown as plain text.
+- Single option: `aria-activedescendant` points to only child.
+- Preview hidden or cleaned up: `aria-activedescendant` removed with list content.
+
+---
 ## Error Handling
 
 - All functions MUST NOT throw for any valid input.
