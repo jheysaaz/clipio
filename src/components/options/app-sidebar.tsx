@@ -34,7 +34,7 @@ export function AppSidebar({
   onNavigate: (section: string) => void;
 }) {
   return (
-    <Sidebar variant="inset" collapsible="none">
+    <Sidebar variant="inset" collapsible="none" aria-label="Options navigation">
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1">
           <img src="/icon/128.png" alt="Clipio" className="h-6 w-6 shrink-0" />
@@ -52,6 +52,9 @@ export function AppSidebar({
                     <SidebarMenuButton
                       isActive={activeSection === item.id}
                       onClick={() => onNavigate(item.id)}
+                      aria-current={
+                        activeSection === item.id ? "page" : undefined
+                      }
                     >
                       <Icon className="size-4 shrink-0" strokeWidth={1.5} />
                       <span>{item.label}</span>
