@@ -295,7 +295,11 @@ export function SnippetsSection() {
             Reset to default
           </Button>
           {timeoutSaved && (
-            <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+            <span
+              role="status"
+              aria-live="polite"
+              className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"
+            >
               <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
               Saved
             </span>

@@ -514,6 +514,7 @@ export function ImagesSection() {
           <div
             role="dialog"
             aria-modal="true"
+            aria-labelledby="delete-confirm-title"
             className="bg-background rounded-2xl border shadow-xl w-full max-w-sm p-6 space-y-4"
           >
             <div className="flex items-start gap-3">
@@ -524,7 +525,10 @@ export function ImagesSection() {
                 />
               </div>
               <div className="space-y-1">
-                <h3 className="text-sm font-semibold text-foreground">
+                <h3
+                  id="delete-confirm-title"
+                  className="text-sm font-semibold text-foreground"
+                >
                   {i18n.t("options.images.deleteConfirmTitle")}
                 </h3>
                 <p className="text-xs text-muted-foreground">

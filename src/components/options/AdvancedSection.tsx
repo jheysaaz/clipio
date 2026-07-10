@@ -373,13 +373,23 @@ export function AdvancedSection() {
             )}
           </Button>
           {pingStatus === "pong" && (
-            <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+            <span
+              role="status"
+              aria-live="polite"
+              className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"
+            >
               <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
               {i18n.t("options.developers.contentScriptHealth.pong")}
             </span>
           )}
           {pingStatus === "error" && (
-            <span className="text-xs text-destructive">{pingError}</span>
+            <span
+              role="status"
+              aria-live="polite"
+              className="text-xs text-destructive"
+            >
+              {pingError}
+            </span>
           )}
         </div>
       </div>
@@ -407,7 +417,11 @@ export function AdvancedSection() {
         )}
         <div className="flex flex-wrap items-center gap-3 pt-1">
           {switchSwitched ? (
-            <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+            <span
+              role="status"
+              aria-live="polite"
+              className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"
+            >
               <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
               {i18n.t("options.developers.storageMode.switched")}
             </span>
@@ -468,7 +482,13 @@ export function AdvancedSection() {
           )}
         </div>
         {switchError && (
-          <p className="text-xs text-destructive">{switchError}</p>
+          <p
+            role="status"
+            aria-live="polite"
+            className="text-xs text-destructive"
+          >
+            {switchError}
+          </p>
         )}
       </div>
 
@@ -589,7 +609,11 @@ export function AdvancedSection() {
         </div>
         <div className="flex items-center gap-3">
           {clearCleared ? (
-            <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+            <span
+              role="status"
+              aria-live="polite"
+              className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"
+            >
               <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
               {i18n.t("options.developers.clearIdb.cleared")}
             </span>

@@ -88,6 +88,9 @@ export function PreviewSettings() {
             </p>
           </div>
           <Button
+            role="switch"
+            aria-checked={previewEnabled}
+            aria-label="Enable Preview"
             variant={previewEnabled ? "default" : "outline"}
             size="sm"
             onClick={handleTogglePreview}
