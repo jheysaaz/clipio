@@ -7,7 +7,7 @@ import {
   ImageIcon,
   Film,
 } from "lucide-react";
-import { cn } from "~/lib/utils";
+import { cn } from "@/lib/utils";
 import { useVirtualFloating, offset, flip, shift } from "@platejs/floating";
 import type { SlashCommandMenuProps } from "../types";
 import { i18n } from "#i18n";

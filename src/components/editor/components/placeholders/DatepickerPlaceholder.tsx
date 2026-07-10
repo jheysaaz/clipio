@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { CalendarDays } from "lucide-react";
-import { cn } from "~/lib/utils";
+import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
 import type { TElement } from "platejs";
 

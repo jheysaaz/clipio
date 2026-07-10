@@ -18,8 +18,8 @@
  * echoes the entry to the browser console via `console.debug`.
  */
 
-import { debugModeItem, debugLogItem } from "~/storage/items";
-import type { DebugLogEntry } from "~/storage/items";
+import { debugModeItem, debugLogItem } from "@/storage/items";
+import type { DebugLogEntry } from "@/storage/items";
 
 /** Maximum number of entries kept in the circular buffer. */
 export const MAX_DEBUG_ENTRIES = 100;

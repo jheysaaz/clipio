@@ -55,6 +55,8 @@ vi.mock("~/lib/sentry", () => ({
 
 vi.mock("~/lib/sentry-relay", () => ({
   makeRelayTransport: vi.fn(),
+  registerSentryRelayListener: vi.fn(),
+  SENTRY_RELAY_MESSAGE_TYPE: "sentry-relay",
 }));
 
 // ---------------------------------------------------------------------------

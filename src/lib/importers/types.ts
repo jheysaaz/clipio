@@ -2,7 +2,7 @@
  * Types shared across all import/export format parsers.
  */
 
-import type { Snippet } from "~/types";
+import type { Snippet } from "@/types";
 
 /** Supported import formats. */
 export type FormatId = "clipio" | "textblaze" | "powertext";

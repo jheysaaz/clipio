@@ -8,8 +8,8 @@
  * spec: specs/snippet-preview.spec.md
  */
 
-import { markdownToPlainText } from "~/lib/markdown";
-import type { ContentSnippet } from "~/lib/content-helpers";
+import { markdownToPlainText } from "@/lib/markdown";
+import type { ContentSnippet } from "@/lib/content-helpers";
 
 // Re-export ContentSnippet for testing
 export type { ContentSnippet };

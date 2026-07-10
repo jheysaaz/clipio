@@ -14,7 +14,7 @@ import type { ParsedSnippet, FormatParser } from "./types";
 import {
   deserializeContent,
   serializeToMarkdown,
-} from "~/components/editor/serialization";
+} from "@/components/editor/serialization";
 
 // ---------------------------------------------------------------------------
 // Placeholder handling

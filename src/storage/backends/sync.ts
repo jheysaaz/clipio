@@ -23,8 +23,8 @@
 
 import type { StorageBackend } from "../types";
 import { StorageQuotaError } from "../types";
-import type { Snippet } from "~/types";
-import { captureError } from "~/lib/sentry";
+import type { Snippet } from "@/types";
+import { captureError } from "@/lib/sentry";
 
 const SNIPPET_PREFIX = "snip:";
 /** Legacy key used before the per-item layout — kept for migration only. */

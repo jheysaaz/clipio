@@ -2,9 +2,9 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { ErrorBoundary } from "@sentry/react";
 import "~/app.css";
-import OptionsPage from "~/pages/OptionsPage";
-import { ThemeProvider } from "~/hooks/ThemeContext";
-import { initSentry, captureError } from "~/lib/sentry";
+import OptionsPage from "@/pages/OptionsPage";
+import { ThemeProvider } from "@/hooks/ThemeContext";
+import { initSentry, captureError } from "@/lib/sentry";
 
 initSentry("options");
 

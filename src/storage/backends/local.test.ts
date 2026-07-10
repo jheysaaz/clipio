@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { LocalBackend, updateContentScriptCache } from "./local";
 import { resetBrowserMocks } from "../../../tests/mocks/browser";
-import type { Snippet } from "~/types";
+import type { Snippet } from "@/types";
 
 // Mock the storage items used by LocalBackend
 const { mockLocalSnippets, mockCachedSnippets } = vi.hoisted(() => ({

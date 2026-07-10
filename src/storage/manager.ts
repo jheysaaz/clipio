@@ -16,18 +16,18 @@ import { LocalBackend, updateContentScriptCache } from "./backends/local";
 import { IndexedDBBackend } from "./backends/indexeddb";
 import { StorageQuotaError } from "./types";
 import type { StorageMode, StorageStatus } from "./types";
-import type { Snippet } from "~/types";
+import type { Snippet } from "@/types";
 import {
   buildClipioExport,
   buildClipioExportV2,
   buildClipioZip,
   snippetsContainMedia,
   extractMediaIds,
-} from "~/lib/exporters/clipio";
-import { getMedia, listMedia } from "~/storage/backends/media";
-import type { MediaMetadata } from "~/storage/backends/media";
-import { captureError } from "~/lib/sentry";
-import { debugLog } from "~/lib/debug";
+} from "@/lib/exporters/clipio";
+import { getMedia, listMedia } from "@/storage/backends/media";
+import type { MediaMetadata } from "@/storage/backends/media";
+import { captureError } from "@/lib/sentry";
+import { debugLog } from "@/lib/debug";
 import {
   storageModeItem,
   storageModeReasonItem,

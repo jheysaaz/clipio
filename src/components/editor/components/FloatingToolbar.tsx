@@ -10,8 +10,8 @@ import {
   ImageIcon,
   Film,
 } from "lucide-react";
-import { Button } from "~/components/ui/button";
-import { cn } from "~/lib/utils";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useFloatingToolbar, useFloatingToolbarState } from "@platejs/floating";
 import { useEditorRef, useEditorSelector } from "platejs/react";
 import type { TElement } from "platejs";

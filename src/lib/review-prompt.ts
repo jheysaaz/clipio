@@ -16,12 +16,12 @@ import {
   totalSnippetInsertionsItem,
   lastSentryErrorAtItem,
   type ReviewPromptState,
-} from "~/storage/items";
+} from "@/storage/items";
 import {
   REVIEW_MIN_DAYS,
   REVIEW_MIN_INSERTIONS,
   REVIEW_ERROR_SNOOZE_HOURS,
-} from "~/config/constants";
+} from "@/config/constants";
 
 // Re-export the type so consumers can import it from this module
 export type { ReviewPromptState };

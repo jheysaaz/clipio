@@ -9,7 +9,7 @@
  * All backends implement the StorageBackend interface below.
  */
 
-import type { Snippet } from "~/types";
+import type { Snippet } from "@/types";
 
 // ---------------------------------------------------------------------------
 // Backend interface
@@ -38,7 +38,7 @@ export interface StorageBackend {
  * Which backend is currently active.
  * "cloud" is intentionally reserved for a future tier.
  */
-export type StorageMode = "sync" | "local" /* | "cloud" — future */;
+export type StorageMode = "sync" | "local"; /* | "cloud" — future */
 
 // ---------------------------------------------------------------------------
 // Status

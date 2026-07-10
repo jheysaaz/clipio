@@ -3,8 +3,8 @@
  * Tracks how many times each snippet has been copied/used
  */
 
-import { captureError } from "~/lib/sentry";
-import { usageCountsItem, totalSnippetInsertionsItem } from "~/storage/items";
+import { captureError } from "@/lib/sentry";
+import { usageCountsItem, totalSnippetInsertionsItem } from "@/storage/items";
 
 /**
  * Get usage count for all snippets

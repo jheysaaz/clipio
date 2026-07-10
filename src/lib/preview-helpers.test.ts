@@ -11,7 +11,7 @@ import {
   createPreviewTooltip,
   type ContentSnippet,
   type PreviewSettings,
-} from "~/lib/preview-helpers";
+} from "@/lib/preview-helpers";
 
 // Mock the markdown module
 vi.mock("~/lib/markdown", () => ({

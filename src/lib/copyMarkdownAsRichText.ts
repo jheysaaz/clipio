@@ -14,8 +14,8 @@
  */
 
 import { markdownToHtml, markdownToPlainText } from "./markdown";
-import { getMedia } from "~/storage/backends/media";
-import { captureError } from "~/lib/sentry";
+import { getMedia } from "@/storage/backends/media";
+import { captureError } from "@/lib/sentry";
 
 export async function copyMarkdownAsRichText(markdown: string): Promise<void> {
   const plainText = markdownToPlainText(markdown);

@@ -6,15 +6,15 @@ import {
   useDeferredValue,
 } from "react";
 import { Search, X, RefreshCw } from "lucide-react";
-import { cn } from "~/lib/utils";
+import { cn } from "@/lib/utils";
 import {
   useVirtualFloating,
   offset as floatingOffset,
   flip,
   shift,
 } from "@platejs/floating";
-import { search, trending, type GiphyGif, GiphyAuthError } from "~/lib/giphy";
-import { captureError } from "~/lib/sentry";
+import { search, trending, type GiphyGif, GiphyAuthError } from "@/lib/giphy";
+import { captureError } from "@/lib/sentry";
 import { i18n } from "#i18n";
 import type { TRange } from "platejs";
 

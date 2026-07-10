@@ -5,12 +5,12 @@ import React, {
   useEffect,
   ReactNode,
 } from "react";
-import { captureError } from "~/lib/sentry";
+import { captureError } from "@/lib/sentry";
 import {
   themeModeItem,
   legacyThemeItem,
   type ThemeMode,
-} from "~/storage/items";
+} from "@/storage/items";
 
 export type { ThemeMode };
 type ResolvedTheme = "light" | "dark";

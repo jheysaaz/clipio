@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from "vitest";
 import { selectNewest, detectShortcutConflict } from "./snippetUtils";
-import type { Snippet } from "~/types";
+import type { Snippet } from "@/types";
 
 const makeSnippet = (overrides: Partial<Snippet> = {}): Snippet => ({
   id: "test-id",

@@ -6,8 +6,8 @@
  */
 
 import type { ParsedSnippet, FormatParser } from "./types";
-import type { Snippet } from "~/types";
-import type { MediaMetadata } from "~/storage/backends/media";
+import type { Snippet } from "@/types";
+import type { MediaMetadata } from "@/storage/backends/media";
 import { unzipSync } from "fflate";
 
 interface ClipioEnvelope {

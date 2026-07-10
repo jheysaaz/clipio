@@ -21,7 +21,7 @@ vi.mock("~/lib/sentry", () => ({
   captureMessage: vi.fn(),
 }));
 
-import { captureError } from "~/lib/sentry";
+import { captureError } from "@/lib/sentry";
 
 const mockLatestVersionItem = vi.hoisted(() => ({
   getValue: vi.fn(async () => null),

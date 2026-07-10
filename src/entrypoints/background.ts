@@ -5,7 +5,7 @@ import {
   REVIEW_CHECK_ALARM_NAME,
   REVIEW_CHECK_INTERVAL_MINUTES,
   ONBOARDING_SUPPORTED_LOCALES,
-} from "~/config/constants";
+} from "@/config/constants";
 import {
   contextMenuDraftItem,
   syncDataLostItem,
@@ -14,23 +14,23 @@ import {
   onboardingCompletedItem,
   extensionInstalledAtItem,
   reviewPromptStateItem,
-} from "~/storage/items";
-import { initSentry, captureError, captureMessage } from "~/lib/sentry";
-import { registerSentryRelayListener } from "~/lib/sentry-relay";
+} from "@/storage/items";
+import { initSentry, captureError, captureMessage } from "@/lib/sentry";
+import { registerSentryRelayListener } from "@/lib/sentry-relay";
 import { i18n } from "#i18n";
 import {
   MEDIA_GET_DATA_URL,
   type MediaGetDataUrlRequest,
   type MediaGetDataUrlResponse,
-} from "~/lib/messages";
-import { getMedia } from "~/storage/backends/media";
-import { checkForUpdate } from "~/lib/update-checker";
-import { debugLog } from "~/lib/debug";
+} from "@/lib/messages";
+import { getMedia } from "@/storage/backends/media";
+import { checkForUpdate } from "@/lib/update-checker";
+import { debugLog } from "@/lib/debug";
 import {
   shouldShowReviewPrompt,
   setReviewPromptState,
   getStoreReviewUrl,
-} from "~/lib/review-prompt";
+} from "@/lib/review-prompt";
 
 const SNIPPET_PREFIX = "snip:";
 const DEV_QA_OPENED_KEY = "__clipioDevQaOpened__";
@@ -224,8 +224,7 @@ export default defineBackground(() => {
         .then((completed) => {
           if (completed) return;
           const websiteUrl = import.meta.env.WXT_WEBSITE_URL as
-            | string
-            | undefined;
+            string | undefined;
           if (!websiteUrl) return;
 
           const rawLocale =

@@ -12,7 +12,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { X, GripVertical } from "lucide-react";
-import { cn } from "~/lib/utils";
+import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
 import type { TElement } from "platejs";
 import { i18n } from "#i18n";

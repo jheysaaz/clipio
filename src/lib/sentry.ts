@@ -30,7 +30,7 @@ import type { Transport, BaseTransportOptions } from "@sentry/core";
 import type { SeverityLevel } from "@sentry/core";
 import { scrubBreadcrumb, scrubEvent } from "./sentry-scrub";
 import type { ErrorEvent } from "@sentry/browser";
-import { lastSentryErrorAtItem } from "~/storage/items";
+import { lastSentryErrorAtItem } from "@/storage/items";
 
 export type SentryContext = "background" | "popup" | "options" | "content";
 
@@ -82,8 +82,7 @@ export function initSentry(
   if (!enabled) return;
 
   let release: string | undefined = import.meta.env.WXT_SENTRY_RELEASE as
-    | string
-    | undefined;
+    string | undefined;
 
   if (!release) {
     try {
@@ -204,8 +203,7 @@ export async function sendUserFeedback(params: {
   }
 
   let attachments:
-    | { filename: string; data: Uint8Array; contentType: string }[]
-    | undefined;
+    { filename: string; data: Uint8Array; contentType: string }[] | undefined;
 
   if (params.screenshot) {
     const data = await readFileAsUint8Array(params.screenshot);

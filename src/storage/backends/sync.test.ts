@@ -12,7 +12,7 @@ import {
   simulateSyncQuotaError,
   mockStorageSync,
 } from "../../../tests/mocks/browser";
-import type { Snippet } from "~/types";
+import type { Snippet } from "@/types";
 
 const makeSnippet = (overrides: Partial<Snippet> = {}): Snippet => ({
   id: "test-id",

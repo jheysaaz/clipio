@@ -26,7 +26,7 @@ vi.mock("~/storage/backends/media", () => ({
 }));
 
 // Import the mock so we can control return values per test
-import { getMedia } from "~/storage/backends/media";
+import { getMedia } from "@/storage/backends/media";
 const mockGetMedia = getMedia as Mock;
 
 // ---------------------------------------------------------------------------

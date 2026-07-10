@@ -8,8 +8,8 @@
  */
 
 import type { StorageBackend } from "../types";
-import type { Snippet } from "~/types";
-import { captureError } from "~/lib/sentry";
+import type { Snippet } from "@/types";
+import { captureError } from "@/lib/sentry";
 import { localSnippetsItem, cachedSnippetsItem } from "../items";
 
 export class LocalBackend implements StorageBackend {

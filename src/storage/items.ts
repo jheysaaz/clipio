@@ -10,7 +10,7 @@
  */
 
 import { storage } from "wxt/utils/storage";
-import type { Snippet } from "~/types";
+import type { Snippet } from "@/types";
 
 // ---------------------------------------------------------------------------
 // Snippet data

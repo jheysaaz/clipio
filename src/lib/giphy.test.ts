@@ -39,7 +39,7 @@ vi.mock("~/storage/items", () => ({
   blockedSitesItem: { getValue: vi.fn(), setValue: vi.fn() },
 }));
 
-import { captureError } from "~/lib/sentry";
+import { captureError } from "@/lib/sentry";
 
 // ---------------------------------------------------------------------------
 // Giphy mock response builder

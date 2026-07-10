@@ -114,7 +114,9 @@ options:
     feedback: Comentarios
     appearance: Apariencia
     images: Imágenes
-    developers: Desarrolladores
+    dashboard: Panel
+    snippets: Fragmentos
+    advanced: Avanzado
   theme:
     darkMode: Modo oscuro
     lightMode: Modo claro

@@ -114,7 +114,9 @@ options:
     feedback: Feedback
     appearance: Appearance
     images: Images
-    developers: Developers
+    dashboard: Dashboard
+    snippets: Snippets
+    advanced: Advanced
   theme:
     darkMode: Dark mode
     lightMode: Light mode

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { AlertCircle, X } from "lucide-react";
-import { cn } from "~/lib/utils";
+import { cn } from "@/lib/utils";
 
 const AUTO_CLEAR_MS = 8000;
 

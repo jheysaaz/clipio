@@ -10,8 +10,8 @@
  * (unexpected) failures are silently captured to Sentry and never throw.
  */
 
-import { IDB_CONFIG, MEDIA_LIMITS } from "~/config/constants";
-import { captureError, captureMessage } from "~/lib/sentry";
+import { IDB_CONFIG, MEDIA_LIMITS } from "@/config/constants";
+import { captureError, captureMessage } from "@/lib/sentry";
 import { openDB } from "./indexeddb";
 
 // ---------------------------------------------------------------------------

@@ -19,19 +19,19 @@ import {
   AlertTriangle,
   X,
 } from "lucide-react";
-import SnippetListItem from "~/components/SnippetListItem";
-import ConfirmDialog from "~/components/ConfirmDialog";
+import SnippetListItem from "@/components/SnippetListItem";
+import ConfirmDialog from "@/components/ConfirmDialog";
 const SnippetDetailView = lazy(() => import("~/components/SnippetDetailView"));
 const NewSnippetView = lazy(() => import("~/components/NewSnippetView"));
-import { Alert, AlertDescription, AlertAction } from "~/components/ui/alert";
-import { InlineError } from "~/components/ui/inline-error";
+import { Alert, AlertDescription, AlertAction } from "@/components/ui/alert";
+import { InlineError } from "@/components/ui/inline-error";
 
-import type { Snippet, SnippetFormData } from "~/types";
-import { createSnippet } from "~/types";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { ScrollArea } from "~/components/ui/scroll-area";
-import { Separator } from "~/components/ui/separator";
+import type { Snippet, SnippetFormData } from "@/types";
+import { createSnippet } from "@/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import {
   getSnippets,
   saveSnippet,
@@ -42,17 +42,17 @@ import {
   tryRecoverFromBackup,
   clearSyncDataLostFlag,
   StorageQuotaError,
-} from "~/storage";
-import { WarningBanner } from "~/components/ui/warning-banner";
+} from "@/storage";
+import { WarningBanner } from "@/components/ui/warning-banner";
 import {
   dismissedUninstallWarningItem,
   syncDataLostItem,
   contextMenuDraftItem,
   latestVersionItem,
   dismissedUpdateVersionItem,
-} from "~/storage/items";
-import { captureError } from "~/lib/sentry";
-import { selectNewest } from "~/lib/snippetUtils";
+} from "@/storage/items";
+import { captureError } from "@/lib/sentry";
+import { selectNewest } from "@/lib/snippetUtils";
 
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");

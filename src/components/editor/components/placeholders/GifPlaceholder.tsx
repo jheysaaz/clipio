@@ -1,9 +1,9 @@
 import { useCallback, useState } from "react";
 import { Film } from "lucide-react";
-import { cn } from "~/lib/utils";
+import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
 import type { TElement } from "platejs";
-import { buildGifUrl } from "~/lib/giphy";
+import { buildGifUrl } from "@/lib/giphy";
 import { i18n } from "#i18n";
 import { ResizableMediaWrapper } from "./ResizableMediaWrapper";
 

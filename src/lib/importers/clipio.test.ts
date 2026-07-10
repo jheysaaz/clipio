@@ -6,7 +6,7 @@
 import { describe, it, expect } from "vitest";
 import { zipSync, strToU8 } from "fflate";
 import { ClipioParser, importClipioZip } from "./clipio";
-import type { MediaMetadata } from "~/storage/backends/media";
+import type { MediaMetadata } from "@/storage/backends/media";
 
 const makeSnippet = (overrides = {}) => ({
   id: "test-id",

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Button } from "~/components/ui/button";
-import type { Snippet } from "~/types";
-import { cn } from "~/lib/utils";
+import { Button } from "@/components/ui/button";
+import type { Snippet } from "@/types";
+import { cn } from "@/lib/utils";
 
 // Max characters for content preview
 const PREVIEW_MAX_LENGTH = 60;

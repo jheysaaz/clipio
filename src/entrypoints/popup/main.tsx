@@ -2,9 +2,9 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { ErrorBoundary } from "@sentry/react";
 import "~/app.css";
-import Dashboard from "~/pages/Dashboard";
-import { ThemeProvider } from "~/hooks/ThemeContext";
-import { initSentry, captureError } from "~/lib/sentry";
+import Dashboard from "@/pages/Dashboard";
+import { ThemeProvider } from "@/hooks/ThemeContext";
+import { initSentry, captureError } from "@/lib/sentry";
 
 initSentry("popup");
 

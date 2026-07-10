@@ -18,12 +18,12 @@
  *   Returns the latest non-prerelease. Returns 404 if no releases exist.
  */
 
-import { captureError } from "~/lib/sentry";
+import { captureError } from "@/lib/sentry";
 import {
   latestVersionItem,
   latestVersionCheckedAtItem,
   dismissedUpdateVersionItem,
-} from "~/storage/items";
+} from "@/storage/items";
 
 // ---------------------------------------------------------------------------
 // Types

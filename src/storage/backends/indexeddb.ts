@@ -19,10 +19,10 @@
  *   v3 → adds non-unique "hash" index on "media" store (content-hash dedup)
  */
 
-import { IDB_CONFIG } from "~/config/constants";
+import { IDB_CONFIG } from "@/config/constants";
 import type { StorageBackend } from "../types";
-import type { Snippet } from "~/types";
-import { captureError } from "~/lib/sentry";
+import type { Snippet } from "@/types";
+import { captureError } from "@/lib/sentry";
 
 /**
  * Shared IndexedDB opener. Handles all version migrations.

@@ -10,8 +10,8 @@
  *   2. Build-time default key from WXT_GIPHY_API_KEY
  */
 
-import { captureError } from "~/lib/sentry";
-import { giphyApiKeyItem } from "~/storage/items";
+import { captureError } from "@/lib/sentry";
+import { giphyApiKeyItem } from "@/storage/items";
 
 // ---------------------------------------------------------------------------
 // Constants

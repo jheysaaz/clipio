@@ -7,7 +7,7 @@ import {
   useImperativeHandle,
   forwardRef,
 } from "react";
-import { cn } from "~/lib/utils";
+import { cn } from "@/lib/utils";
 import { createPlateEditor, Plate, PlateContent } from "platejs/react";
 import {
   BoldPlugin,
@@ -29,7 +29,7 @@ import {
   type RichTextEditorRef,
 } from "./types";
 import { serializeToMarkdown, deserializeContent } from "./serialization";
-import { copyMarkdownAsRichText } from "~/lib/copyMarkdownAsRichText";
+import { copyMarkdownAsRichText } from "@/lib/copyMarkdownAsRichText";
 import {
   ClipboardPlaceholderPlugin,
   DatePlaceholderPlugin,
@@ -59,9 +59,9 @@ import { FloatingToolbar } from "./components/FloatingToolbar";
 import { SlashCommandMenu } from "./components/SlashCommandMenu";
 import { GifPicker } from "./components/GifPicker";
 import { ImagePicker } from "./components/ImagePicker";
-import { saveMedia, compressMedia } from "~/storage/backends/media";
-import { MEDIA_LIMITS } from "~/config/constants";
-import { captureError, captureMessage } from "~/lib/sentry";
+import { saveMedia, compressMedia } from "@/storage/backends/media";
+import { MEDIA_LIMITS } from "@/config/constants";
+import { captureError, captureMessage } from "@/lib/sentry";
 import { i18n } from "#i18n";
 
 /**

@@ -10,8 +10,8 @@
  *       media/        – one file per referenced image blob
  */
 
-import type { Snippet } from "~/types";
-import type { MediaMetadata } from "~/storage/backends/media";
+import type { Snippet } from "@/types";
+import type { MediaMetadata } from "@/storage/backends/media";
 import { strToU8, zipSync } from "fflate";
 
 // ---------------------------------------------------------------------------

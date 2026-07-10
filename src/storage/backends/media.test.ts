@@ -22,7 +22,7 @@ import {
   findByHash,
 } from "./media";
 import type { MediaEntry } from "./media";
-import { MEDIA_LIMITS } from "~/config/constants";
+import { MEDIA_LIMITS } from "@/config/constants";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -33,7 +33,7 @@ vi.mock("~/lib/sentry", () => ({
   captureMessage: vi.fn(),
 }));
 
-import { captureError, captureMessage } from "~/lib/sentry";
+import { captureError, captureMessage } from "@/lib/sentry";
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -17,27 +17,27 @@ import {
   ChevronLeft,
   X,
 } from "lucide-react";
-import { Button } from "~/components/ui/button";
-import { Progress } from "~/components/ui/progress";
-import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "~/components/ui/select";
-import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
-import { cn } from "~/lib/utils";
-import { getSnippets, getStorageStatus } from "~/storage";
-import { bulkSaveSnippets } from "~/storage";
-import type { Snippet } from "~/types";
-import { createSnippet } from "~/types";
-import { detectFormat } from "~/lib/importers/detect";
-import { TextBlazeParser } from "~/lib/importers/textblaze";
-import { ClipioParser, importClipioZip } from "~/lib/importers/clipio";
-import { PowerTextParser } from "~/lib/importers/powertext";
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+import { getSnippets, getStorageStatus } from "@/storage";
+import { bulkSaveSnippets } from "@/storage";
+import type { Snippet } from "@/types";
+import { createSnippet } from "@/types";
+import { detectFormat } from "@/lib/importers/detect";
+import { TextBlazeParser } from "@/lib/importers/textblaze";
+import { ClipioParser, importClipioZip } from "@/lib/importers/clipio";
+import { PowerTextParser } from "@/lib/importers/powertext";
 import type {
   FormatId,
   ParsedSnippet,
@@ -45,10 +45,10 @@ import type {
   ConflictResolution,
   UnsupportedPlaceholderEntry,
   UnsupportedPlaceholderAction,
-} from "~/lib/importers/types";
-import { SYNC_QUOTA } from "~/config/constants";
-import { restoreMediaEntry } from "~/storage/backends/media";
-import { captureError, captureMessage } from "~/lib/sentry";
+} from "@/lib/importers/types";
+import { SYNC_QUOTA } from "@/config/constants";
+import { restoreMediaEntry } from "@/storage/backends/media";
+import { captureError, captureMessage } from "@/lib/sentry";
 import { i18n } from "#i18n";
 
 // ---------------------------------------------------------------------------

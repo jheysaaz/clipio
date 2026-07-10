@@ -6,7 +6,7 @@ import {
   useDeferredValue,
 } from "react";
 import { Search, X, Upload } from "lucide-react";
-import { cn } from "~/lib/utils";
+import { cn } from "@/lib/utils";
 import {
   useVirtualFloating,
   offset as floatingOffset,
@@ -17,8 +17,8 @@ import {
   listMedia,
   getMediaBlob,
   type MediaMetadata,
-} from "~/storage/backends/media";
-import { captureError } from "~/lib/sentry";
+} from "@/storage/backends/media";
+import { captureError } from "@/lib/sentry";
 import { i18n } from "#i18n";
 import type { TRange } from "platejs";
 

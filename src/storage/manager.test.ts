@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { StorageManager } from "./manager";
 import { StorageQuotaError } from "./types";
-import type { Snippet } from "~/types";
+import type { Snippet } from "@/types";
 
 // ---------------------------------------------------------------------------
 // Mock all backends and dependencies

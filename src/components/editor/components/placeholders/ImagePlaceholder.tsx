@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ImageIcon } from "lucide-react";
-import { cn } from "~/lib/utils";
+import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
 import type { TElement } from "platejs";
-import { getMediaBlob } from "~/storage/backends/media";
-import { captureError } from "~/lib/sentry";
+import { getMediaBlob } from "@/storage/backends/media";
+import { captureError } from "@/lib/sentry";
 import { i18n } from "#i18n";
 import { ResizableMediaWrapper } from "./ResizableMediaWrapper";
 

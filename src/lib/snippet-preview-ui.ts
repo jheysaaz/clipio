@@ -9,7 +9,7 @@
 
 import type { PreviewPosition, FilteredSnippet } from "./preview-helpers";
 import { createPreviewTooltip } from "./preview-helpers";
-import interVariableUrl from "~/assets/fonts/InterVariable.woff2?url";
+import interVariableUrl from "@/assets/fonts/InterVariable.woff2?url";
 
 export class SnippetPreviewUI {
   private shadowHost: HTMLElement | null = null;

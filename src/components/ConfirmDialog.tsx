@@ -7,8 +7,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "~/components/ui/alert-dialog";
-import { Button } from "~/components/ui/button";
+} from "@/components/ui/alert-dialog";
 import { i18n } from "#i18n";
 
 interface ConfirmDialogProps {
@@ -49,14 +48,12 @@ export default function ConfirmDialog({
           <AlertDialogCancel disabled={isLoading}>
             {cancelText}
           </AlertDialogCancel>
-          <AlertDialogAction asChild>
-            <Button
-              onClick={handleConfirm}
-              disabled={isLoading}
-              variant={confirmVariant === "danger" ? "destructive" : "default"}
-            >
-              {isLoading ? i18n.t("confirmDialog.loading") : confirmText}
-            </Button>
+          <AlertDialogAction
+            onClick={handleConfirm}
+            disabled={isLoading}
+            variant={confirmVariant === "danger" ? "destructive" : "default"}
+          >
+            {isLoading ? i18n.t("confirmDialog.loading") : confirmText}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

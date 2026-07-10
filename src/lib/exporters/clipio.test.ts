@@ -11,8 +11,8 @@ import {
   extractMediaIds,
   buildClipioZip,
 } from "./clipio";
-import type { Snippet } from "~/types";
-import type { MediaMetadata } from "~/storage/backends/media";
+import type { Snippet } from "@/types";
+import type { MediaMetadata } from "@/storage/backends/media";
 
 const makeSnippet = (overrides: Partial<Snippet> = {}): Snippet => ({
   id: "test-id",

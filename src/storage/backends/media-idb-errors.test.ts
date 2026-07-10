@@ -16,7 +16,7 @@ vi.mock("~/lib/sentry", () => ({
   captureMessage: vi.fn(),
 }));
 
-import { captureError } from "~/lib/sentry";
+import { captureError } from "@/lib/sentry";
 
 // ---------------------------------------------------------------------------
 // Mock ./indexeddb so openDB can be controlled per-test
