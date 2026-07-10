@@ -557,7 +557,7 @@ export default function Dashboard() {
                   className="border border-red-200 dark:border-red-800 rounded-lg"
                 />
               ) : filteredSnippets.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 gap-2.5 px-3">
+                <div className="flex flex-col items-center justify-center py-6 gap-3 px-3">
                   <p className="text-xs text-muted-foreground text-center">
                     {searchQuery
                       ? i18n.t("dashboard.noSnippetsFound")
@@ -568,14 +568,19 @@ export default function Dashboard() {
                       {i18n.t("dashboard.tryDifferentSearch")}
                     </p>
                   ) : snippets.length === 0 ? (
-                    <>
-                      <p className="text-xs text-muted-foreground text-center">
-                        {i18n.t("dashboard.importSuggestion")}
-                      </p>
+                    <div className="flex flex-col gap-2 w-full max-w-44">
+                      <Button
+                        size="sm"
+                        className="w-full h-7 text-xs gap-1.5"
+                        onClick={handleAddSnippet}
+                      >
+                        <Plus className="h-3 w-3" strokeWidth={1.5} />
+                        {i18n.t("dashboard.createSnippetButton")}
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"
-                        className="w-full h-7 text-xs gap-1.5 mt-1"
+                        className="w-full h-7 text-xs gap-1.5"
                         onClick={() =>
                           browser.tabs.create({
                             url:
@@ -587,7 +592,7 @@ export default function Dashboard() {
                         <ArrowDownUp className="h-3 w-3" strokeWidth={1.5} />
                         {i18n.t("dashboard.importButton")}
                       </Button>
-                    </>
+                    </div>
                   ) : null}
                 </div>
               ) : (
@@ -755,10 +760,38 @@ export default function Dashboard() {
                 <p className="text-xs text-muted-foreground mb-4 max-w-50">
                   {i18n.t("dashboard.emptyState.body")}
                 </p>
-                <Button onClick={handleAddSnippet} className="h-8 text-xs">
-                  <Plus className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
-                  {i18n.t("dashboard.emptyState.action")}
-                </Button>
+                <div className="flex flex-col gap-2 w-full max-w-44">
+                  <Button
+                    onClick={handleAddSnippet}
+                    className="h-8 text-xs w-full"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+                    {i18n.t("dashboard.emptyState.action")}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full h-7 text-xs gap-1.5"
+                    onClick={() =>
+                      browser.tabs.create({
+                        url:
+                          browser.runtime.getURL("/options.html") +
+                          "#import-export",
+                      })
+                    }
+                  >
+                    <ArrowDownUp className="h-3 w-3" strokeWidth={1.5} />
+                    {i18n.t("dashboard.importButton")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full h-7 text-xs text-muted-foreground"
+                    onClick={() => browser.runtime.openOptionsPage()}
+                  >
+                    {i18n.t("dashboard.openSettings")}
+                  </Button>
+                </div>
               </div>
               {showUninstallWarning && (
                 <div className="p-3 border-t shrink-0">

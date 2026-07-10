@@ -23,6 +23,8 @@ dashboard:
   switchToDark: Cambiar a modo oscuro
   switchToLight: Cambiar a modo claro
   settingsAndExport: Ajustes e Importar/Exportar
+  createSnippetButton: Crear fragmento
+  openSettings: Abrir ajustes
   emptyState:
     heading: Aún no hay fragmentos
     body: Crea tu primer fragmento para guardar y reutilizar texto rápidamente.
