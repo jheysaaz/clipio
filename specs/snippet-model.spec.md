@@ -94,13 +94,6 @@ snippet.createdAt === snippet.updatedAt; // → true
 
 ---
 
-## Error Handling
-
-`createSnippet` does not validate its input. Callers are responsible for ensuring
-form fields are non-empty before calling this function.
-
----
-
 ## Shortcut Conflict Detection
 
 > Source: `src/lib/snippetUtils.ts`
@@ -128,6 +121,22 @@ when a conflict is detected.
 - MUST skip the snippet matching `excludeId` (for future edit support)
 - MUST return the first conflict found (array iteration order)
 - Comparison MUST be case-sensitive
+
+---
+
+### `selectNewest(list: Snippet[]): Snippet | null`
+
+**Description:** Returns the snippet that should be auto-selected in the sidebar: the one
+with the most-recent `updatedAt` timestamp (matching the UI sort order).
+Returns `null` when the list is empty.
+
+**Behavior:**
+
+- The input array is never mutated.
+- Returns `null` for empty array.
+- Returns the snippet with the most recent `updatedAt`.
+
+---
 
 ## Dependencies
 

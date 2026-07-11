@@ -164,6 +164,8 @@ most likely represents, or `null` if unrecognised.
   (skip invalid snippets, return `[]`, etc.).
 - `detectFormat` MUST return `null` (not throw) on any input type.
 
+---
+
 ## Dependencies
 
 - `TextBlazeParser` and `PowerTextParser` depend on `deserializeContent` and
@@ -171,6 +173,8 @@ most likely represents, or `null` if unrecognised.
   In tests, these are exercised via real calls (integration-style) unless mocked.
 - `crypto.randomUUID()` is called for `suggestedId` in TextBlaze and PowerText parsers.
   Tests should not assert on the exact UUID value.
+
+---
 
 ## Change History
 

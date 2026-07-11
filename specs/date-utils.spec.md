@@ -70,7 +70,7 @@ getRelativeTime("2020-01-01T00:00:00.000Z"); // → "N years ago"
 
 ### `formatShortDate(date: string | Date): string`
 
-**Description:** Formats a date as a short, locale-formatted string (e.g. `"Nov 11"`).
+**Description:** Formats a date as a short, locale-formatted string (e.g., `"Nov 11"`).
 
 **Behavior:**
 
@@ -96,7 +96,7 @@ formatShortDate(new Date("2025-06-15")); // → "Jun 15"
 
 ### `formatFullDate(date: string | Date): string`
 
-**Description:** Formats a date as a full human-readable string (e.g. `"November 11, 2025"`).
+**Description:** Formats a date as a full human-readable string (e.g., `"November 11, 2025"`).
 
 **Behavior:**
 

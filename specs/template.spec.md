@@ -1,64 +1,44 @@
-# Module: <Name>
+# Module: Template System
 
-> Source: `src/path/to/module.ts`
-> Coverage target: XX%
+> Source: `src/lib/template.ts`
+> Coverage target: 85%
 
 ## Purpose
 
-One paragraph describing what this module does and why it exists in the codebase.
+Handles snippet template processing with variable substitution.
 
 ## Scope
 
-What is in scope and what is explicitly out of scope for this module.
+**In scope:** Template parsing, variable substitution.
+**Out of scope:** Snippet CRUD, UI.
 
 ---
 
-## Public API
-
-### `functionName(param: Type): ReturnType`
-
-**Description:** What this function does in one sentence.
+## `processTemplate(template: string, variables: Record<string, string>): string`
 
 **Behavior:**
 
-- MUST return X when given Y
-- MUST throw `ErrorType` with message "..." when given invalid input
-- MUST NOT modify the input (pure function)
-- MUST handle empty/null/undefined input gracefully
-
-**Edge Cases:**
-
-- Empty string input → returns `""`
-- `null` or `undefined` → throws `TypeError`
-- Very large inputs → truncates/handles gracefully
-
-**Invariants:**
-
-- Output is always a valid `Type`
-- Function is pure: same input always produces same output
-- No side effects
-
-**Examples:**
-
-```ts
-functionName("hello"); // → "expected output"
-functionName(""); // → ""
-functionName(null); // → throws TypeError
-```
+- Replaces `{{variable}}` placeholders with values from `variables`.
+- Leaves unknown placeholders intact.
+- Pure function.
 
 ---
 
 ## Error Handling
 
-Describe error scenarios and what the module guarantees in error cases.
+- Returns original template on error.
+- Does not throw.
+
+---
 
 ## Dependencies
 
-List any external dependencies (other modules, browser APIs) and how they affect
-testability (e.g., "requires mocking `browser.storage`").
+- None.
+
+---
 
 ## Change History
 
 | Date       | Change       | Author |
 | ---------- | ------------ | ------ |
-| YYYY-MM-DD | Initial spec | —      |
+| 2026-03-11 | Initial spec | —      |

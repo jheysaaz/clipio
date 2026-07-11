@@ -1,7 +1,7 @@
 # Module: Storage Layer
 
 > Source: `src/storage/`
-> Coverage target: 80%
+> Coverage target: 85%
 
 ## Purpose
 
@@ -136,7 +136,7 @@ internals.
 - MUST catch `StorageQuotaError` from `SyncBackend`, switch mode to `"local"`,
   save to `LocalBackend`, and re-throw `StorageQuotaError` to callers.
 - MUST always call `updateContentScriptCache` after every successful save.
-- MUST always call `IndexedDBBackend.saveSnippets` as a fire-and-forget shadow write
+- MUST always fire-and-forget call `IndexedDBBackend.saveSnippets` as a shadow write
   (failures MUST NOT propagate to callers).
 
 ### `StorageManager.getStorageStatus(): Promise<StorageStatus>`
@@ -181,6 +181,8 @@ internals.
 - `StorageQuotaError` triggers an automatic mode switch; callers can catch it
   to display a quota warning to the user.
 
+---
+
 ## Dependencies
 
 All backends depend on browser APIs:
@@ -197,6 +199,8 @@ documented in `specs/developers-section.spec.md`:
 `typingTimeoutItem`, `debugModeItem`, `debugLogItem`.
 
 In tests, all browser APIs must be mocked. See `tests/mocks/browser.ts`.
+
+---
 
 ## Change History
 

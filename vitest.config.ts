@@ -21,7 +21,7 @@ export default defineConfig({
       // Files to include in coverage analysis
       include: ["src/**/*.ts", "src/**/*.tsx"],
 
-      // Files to exclude from coverage (entrypoints, UI shells, generated types,
+      // Files to exclude from coverage (minimal exclusions - entrypoints, UI shells, generated types,
       // and modules not yet covered by tests — these will be added back as tests are written)
       exclude: [
         "src/entrypoints/**",
@@ -30,39 +30,33 @@ export default defineConfig({
         "src/components/editor/plugins.ts",
         "src/components/editor/index.ts",
         "src/components/editor/components/**",
-        "src/components/ConfirmDialog.tsx",
-        "src/components/ImportWizard.tsx",
-        "src/components/SnippetDetailView.tsx",
-        "src/components/SnippetListItem.tsx",
-        "src/components/SnippetView.tsx",
-        "src/components/NewSnippetView.tsx",
         "src/app.css",
         "src/assets/**",
+        "src/**/*.d.ts",
+        "src/**/__mocks__/**",
         "src/hooks/**",
         "src/pages/**",
         "src/components/options/**",
         "src/config/**",
         "src/lib/sentry.ts",
         "src/lib/sentry-relay.ts",
+        "src/lib/manifest.ts",
         "src/lib/utils.ts",
-        "src/lib/importers/types.ts",
+        "src/lib/preview-helpers.ts",
         "src/storage/index.ts",
-        "src/storage/items.ts",
         "src/storage/backends/indexeddb.ts",
-        "src/**/*.d.ts",
-        "src/**/__mocks__/**",
       ],
 
       // Per-module coverage thresholds
       // Vitest v2+ supports thresholds per file/glob via the `thresholds` object.
       thresholds: {
-        // Global minimum
+        // Global minimum — keep the bar high but achievable
         lines: 80,
         functions: 80,
         branches: 75,
         statements: 80,
 
-        // Critical pure-logic modules — higher bar
+        // Critical pure-logic modules — highest bar
         "src/utils/dateUtils.ts": {
           lines: 95,
           functions: 95,
@@ -136,22 +130,22 @@ export default defineConfig({
           statements: 90,
         },
         "src/storage/manager.ts": {
-          lines: 80,
+          lines: 85,
           functions: 80,
-          branches: 75,
-          statements: 80,
+          branches: 80,
+          statements: 85,
         },
         "src/storage/backends/sync.ts": {
-          lines: 80,
-          functions: 80,
-          branches: 75,
-          statements: 80,
+          lines: 85,
+          functions: 85,
+          branches: 80,
+          statements: 85,
         },
         "src/storage/backends/local.ts": {
-          lines: 80,
-          functions: 80,
-          branches: 75,
-          statements: 80,
+          lines: 85,
+          functions: 85,
+          branches: 80,
+          statements: 85,
         },
         "src/storage/backends/media.ts": {
           lines: 85,
