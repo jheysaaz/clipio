@@ -34,9 +34,94 @@ import {
 const SNIPPET_PREFIX = "snip:";
 const DEV_QA_OPENED_KEY = "__clipioDevQaOpened__";
 const DEV_QA_URL = "http://localhost:7777/manual-qa.html";
+const CONTEXT_MENU_DRAFT_SESSION_KEY = "__clipioContextMenuDraft__";
+
+async function setupBackgroundAlarms(): Promise<void> {
+  try {
+    await Promise.all([
+      browser.alarms.create(UPDATE_CHECK_ALARM_NAME, {
+        delayInMinutes: UPDATE_CHECK_INTERVAL_MINUTES,
+        periodInMinutes: UPDATE_CHECK_INTERVAL_MINUTES,
+      }),
+      browser.alarms.create(REVIEW_CHECK_ALARM_NAME, {
+        delayInMinutes: REVIEW_CHECK_INTERVAL_MINUTES,
+        periodInMinutes: REVIEW_CHECK_INTERVAL_MINUTES,
+      }),
+    ]);
+  } catch (err) {
+    captureError(err, { action: "alarmsSetup" });
+  }
+}
+
+async function registerContextMenus(): Promise<void> {
+  try {
+    await browser.contextMenus.removeAll();
+
+    await Promise.all([
+      browser.contextMenus.create({
+        id: CONTEXT_MENU.PARENT,
+        title: "Clipio: Snippets Manager",
+        contexts: ["page", "selection", "editable"],
+      }),
+      browser.contextMenus.create({
+        id: CONTEXT_MENU.SAVE_SELECTION,
+        parentId: CONTEXT_MENU.PARENT,
+        title: i18n.t("contextMenu.saveSelection"),
+        contexts: ["selection"],
+      }),
+      browser.contextMenus.create({
+        id: CONTEXT_MENU.CREATE_SNIPPET,
+        parentId: CONTEXT_MENU.PARENT,
+        title: i18n.t("contextMenu.createSnippet"),
+        contexts: ["page", "editable"],
+      }),
+      browser.contextMenus.create({
+        id: CONTEXT_MENU.OPEN_DASHBOARD,
+        parentId: CONTEXT_MENU.PARENT,
+        title: i18n.t("contextMenu.openDashboard"),
+        contexts: ["page", "selection", "editable"],
+      }),
+      browser.contextMenus.create({
+        id: CONTEXT_MENU.GIVE_FEEDBACK,
+        parentId: CONTEXT_MENU.PARENT,
+        title: i18n.t("contextMenu.giveFeedback"),
+        contexts: ["page", "selection", "editable"],
+      }),
+      browser.contextMenus.create({
+        id: CONTEXT_MENU.SEPARATOR_HIDE,
+        parentId: CONTEXT_MENU.PARENT,
+        type: "separator",
+        contexts: ["page", "selection", "editable"],
+      }),
+      browser.contextMenus.create({
+        id: CONTEXT_MENU.HIDE_ON_SITE,
+        parentId: CONTEXT_MENU.PARENT,
+        title: i18n.t("contextMenu.hideOnThisSite"),
+        contexts: ["page", "selection", "editable"],
+      }),
+    ]);
+  } catch (err) {
+    captureError(err, { action: "contextMenusSetup" });
+  }
+}
+
+async function openPopupOrFallback(action: string): Promise<void> {
+  try {
+    await (browser.action ?? browser.browserAction).openPopup();
+  } catch {
+    captureMessage("openPopup failed — falling back to tab", "warning", {
+      action,
+    });
+    const popupUrl = browser.runtime.getURL("/popup.html");
+    browser.tabs.create({ url: popupUrl }).catch((err: unknown) => {
+      captureError(err, { action: `${action}.popupFallback` });
+    });
+  }
+}
 
 export default defineBackground(() => {
   initSentry("background");
+  void setupBackgroundAlarms();
 
   // Dev-only: open the manual QA harness once per dev session.
   if ((import.meta.env.MODE as string) !== "production") {
@@ -70,16 +155,6 @@ export default defineBackground(() => {
     captureError(err, { action: "checkForUpdate.startup" });
   });
 
-  browser.alarms.create(UPDATE_CHECK_ALARM_NAME, {
-    delayInMinutes: UPDATE_CHECK_INTERVAL_MINUTES,
-    periodInMinutes: UPDATE_CHECK_INTERVAL_MINUTES,
-  });
-
-  browser.alarms.create(REVIEW_CHECK_ALARM_NAME, {
-    delayInMinutes: REVIEW_CHECK_INTERVAL_MINUTES,
-    periodInMinutes: REVIEW_CHECK_INTERVAL_MINUTES,
-  });
-
   browser.alarms.onAlarm.addListener((alarm) => {
     debugLog("background", "alarm:fired", { name: alarm.name }).catch(() => {});
     if (alarm.name === UPDATE_CHECK_ALARM_NAME) {
@@ -97,6 +172,8 @@ export default defineBackground(() => {
               iconUrl: browser.runtime.getURL("/icon/128.png"),
               title: i18n.t("background.reviewPrompt.title"),
               message: i18n.t("background.reviewPrompt.message"),
+            }).catch((err: unknown) => {
+              captureError(err, { action: "reviewPrompt.notification" });
             });
           });
         })
@@ -113,18 +190,16 @@ export default defineBackground(() => {
   // transitions from null → a release object.
   latestVersionItem.watch((newValue) => {
     if (!newValue) return;
-    try {
-      browser.notifications.create("clipio-update", {
-        type: "basic",
-        iconUrl: browser.runtime.getURL("/icon/128.png"),
-        title: i18n.t("background.updateAvailable.title"),
-        message: i18n.t("background.updateAvailable.message", [
-          newValue.version,
-        ]),
-      });
-    } catch (err) {
+    browser.notifications.create("clipio-update", {
+      type: "basic",
+      iconUrl: browser.runtime.getURL("/icon/128.png"),
+      title: i18n.t("background.updateAvailable.title"),
+      message: i18n.t("background.updateAvailable.message", [
+        newValue.version,
+      ]),
+    }).catch((err: unknown) => {
       captureError(err, { action: "updateNotification.create" });
-    }
+    });
   });
 
   browser.notifications.onClicked.addListener((notificationId) => {
@@ -133,7 +208,9 @@ export default defineBackground(() => {
         .getValue()
         .then((release) => {
           if (release?.htmlUrl) {
-            browser.tabs.create({ url: release.htmlUrl });
+            browser.tabs.create({ url: release.htmlUrl }).catch((err: unknown) => {
+              captureError(err, { action: "updateNotification.click" });
+            });
           }
         })
         .catch((err: unknown) => {
@@ -141,7 +218,9 @@ export default defineBackground(() => {
         });
     } else if (notificationId === "clipio-review") {
       const storeUrl = getStoreReviewUrl();
-      browser.tabs.create({ url: storeUrl });
+      browser.tabs.create({ url: storeUrl }).catch((err: unknown) => {
+        captureError(err, { action: "reviewNotification.click" });
+      });
       setReviewPromptState("rated").catch((err: unknown) => {
         captureError(err, { action: "reviewNotification.click" });
       });
@@ -257,17 +336,6 @@ export default defineBackground(() => {
         });
     }
 
-    // On extension update: clear the cached latest-version so the checker
-    // re-fetches against the new installed version, and log to Sentry.
-    if (details.reason === "update") {
-      latestVersionItem.setValue(null).catch((err: unknown) => {
-        captureError(err, { action: "onInstalled.clearLatestVersion" });
-      });
-      captureMessage("Extension updated", "info", {
-        previousVersion: details.previousVersion,
-      });
-    }
-
     // Redirect to a farewell / recovery reminder page when uninstalled.
     // Uses WXT_WEBSITE_URL (e.g. https://clipio.xyz) and the browser's UI
     // locale (en | es) to build a localised URL: /{locale}/uninstall
@@ -283,67 +351,33 @@ export default defineBackground(() => {
         ).includes(rawLocale)
           ? rawLocale
           : "en";
-        browser.runtime.setUninstallURL(`${websiteUrl}/${locale}/uninstall`);
+        void (async () => {
+          try {
+            await browser.runtime.setUninstallURL(
+              `${websiteUrl}/${locale}/uninstall`
+            );
+          } catch (err) {
+            captureError(err, { action: "setUninstallUrl" });
+          }
+        })();
       }
     }
 
-    // Register context-menu items under a parent "Clipio" dropdown
-    browser.contextMenus
-      .removeAll()
-      .then(() => {
-        // Parent item — visible on pages, selections, and editable fields
-        browser.contextMenus.create({
-          id: CONTEXT_MENU.PARENT,
-          title: "Clipio: Snippets Manager",
-          contexts: ["page", "selection", "editable"],
-        });
-
-        browser.contextMenus.create({
-          id: CONTEXT_MENU.SAVE_SELECTION,
-          parentId: CONTEXT_MENU.PARENT,
-          title: i18n.t("contextMenu.saveSelection"),
-          contexts: ["selection"],
-        });
-
-        browser.contextMenus.create({
-          id: CONTEXT_MENU.CREATE_SNIPPET,
-          parentId: CONTEXT_MENU.PARENT,
-          title: i18n.t("contextMenu.createSnippet"),
-          contexts: ["page", "editable"],
-        });
-
-        browser.contextMenus.create({
-          id: CONTEXT_MENU.OPEN_DASHBOARD,
-          parentId: CONTEXT_MENU.PARENT,
-          title: i18n.t("contextMenu.openDashboard"),
-          contexts: ["page", "selection", "editable"],
-        });
-
-        browser.contextMenus.create({
-          id: CONTEXT_MENU.GIVE_FEEDBACK,
-          parentId: CONTEXT_MENU.PARENT,
-          title: i18n.t("contextMenu.giveFeedback"),
-          contexts: ["page", "selection", "editable"],
-        });
-
-        // Separator before "Hide on this site"
-        browser.contextMenus.create({
-          id: CONTEXT_MENU.SEPARATOR_HIDE,
-          parentId: CONTEXT_MENU.PARENT,
-          type: "separator",
-          contexts: ["page", "selection", "editable"],
-        });
-
-        browser.contextMenus.create({
-          id: CONTEXT_MENU.HIDE_ON_SITE,
-          parentId: CONTEXT_MENU.PARENT,
-          title: i18n.t("contextMenu.hideOnThisSite"),
-          contexts: ["page", "selection", "editable"],
-        });
-      })
-      .catch((err: unknown) => {
-        captureError(err, { action: "contextMenusSetup" });
+    // On extension update: clear the cached latest-version so the checker
+    // re-fetches against the new installed version, and log to Sentry.
+    if (details.reason === "update") {
+      latestVersionItem.setValue(null).catch((err: unknown) => {
+        captureError(err, { action: "onInstalled.clearLatestVersion" });
       });
+      captureMessage("Extension updated", "info", {
+        previousVersion: details.previousVersion,
+      });
+    }
+
+    // Redirect to a farewell / recovery reminder page when uninstalled.
+    // Uses WXT_WEBSITE_URL (e.g. https://clipio.xyz) and the browser's UI
+    // locale (en | es) to build a localised URL: /{locale}/uninstall
+    void registerContextMenus();
   });
 
   // ---------------------------------------------------------------------------
@@ -354,38 +388,35 @@ export default defineBackground(() => {
       case CONTEXT_MENU.SAVE_SELECTION: {
         const selectedText = info.selectionText?.trim();
         if (!selectedText) return;
-        // Stash the selected text so the popup can pre-fill the draft
-        await contextMenuDraftItem.setValue(selectedText);
-        // Open the popup (falls back to opening the popup URL in a new tab
-        // if the browser doesn't support openPopup)
         try {
-          await (browser.action ?? browser.browserAction).openPopup();
-        } catch {
-          captureMessage("openPopup failed — falling back to tab", "warning", {
-            action: "saveSelection",
-          });
-          const popupUrl = browser.runtime.getURL("/popup.html");
-          browser.tabs.create({ url: popupUrl });
+          // Stash the selected text so the popup can pre-fill the draft
+          await contextMenuDraftItem.setValue(selectedText);
+          await browser.storage.session.remove(CONTEXT_MENU_DRAFT_SESSION_KEY);
+        } catch (err) {
+          captureError(err, { action: "saveSelection.persistDraft" });
+          try {
+            await browser.storage.session.set({
+              [CONTEXT_MENU_DRAFT_SESSION_KEY]: selectedText,
+            });
+          } catch (sessionErr) {
+            captureError(sessionErr, { action: "saveSelection.sessionDraft" });
+          }
         }
+
+        await openPopupOrFallback("saveSelection");
         break;
       }
 
       case CONTEXT_MENU.CREATE_SNIPPET: {
-        try {
-          await (browser.action ?? browser.browserAction).openPopup();
-        } catch {
-          captureMessage("openPopup failed — falling back to tab", "warning", {
-            action: "createSnippet",
-          });
-          const popupUrl = browser.runtime.getURL("/popup.html");
-          browser.tabs.create({ url: popupUrl });
-        }
+        await openPopupOrFallback("createSnippet");
         break;
       }
 
       case CONTEXT_MENU.OPEN_DASHBOARD: {
         const optionsUrl = browser.runtime.getURL("/options.html");
-        browser.tabs.create({ url: optionsUrl });
+        browser.tabs.create({ url: optionsUrl }).catch((err: unknown) => {
+          captureError(err, { action: "openDashboard" });
+        });
         break;
       }
 
@@ -393,6 +424,8 @@ export default defineBackground(() => {
         const optionsUrl = browser.runtime.getURL("/options.html");
         browser.tabs.create({
           url: optionsUrl + "#feedback",
+        }).catch((err: unknown) => {
+          captureError(err, { action: "giveFeedback" });
         });
         break;
       }
@@ -438,7 +471,9 @@ export default defineBackground(() => {
       captureMessage("Sync storage wipe detected", "warning", {
         wipedKeyCount: removedSnipKeys.length,
       });
-      syncDataLostItem.setValue(true);
+      syncDataLostItem.setValue(true).catch((err: unknown) => {
+        captureError(err, { action: "syncDataLostFlag" });
+      });
     }
   });
 });

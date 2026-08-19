@@ -30,6 +30,13 @@ const SNIPPET_PREFIX = "snip:";
 /** Legacy key used before the per-item layout — kept for migration only. */
 const LEGACY_KEY = "snippets";
 
+function normalizeSnippet(snippet: Snippet): Snippet {
+  return {
+    ...snippet,
+    contentFormat: snippet.contentFormat ?? "markdown",
+  };
+}
+
 function snippetKey(id: string): string {
   return `${SNIPPET_PREFIX}${id}`;
 }
@@ -46,10 +53,11 @@ export class SyncBackend implements StorageBackend {
         const raw = all[LEGACY_KEY];
         const snippets: Snippet[] =
           typeof raw === "string" ? JSON.parse(raw) : (raw as Snippet[]);
+        const normalized = snippets.map(normalizeSnippet);
         // Write to per-key layout then remove the legacy key
-        await this.saveSnippets(snippets);
+        await this.saveSnippets(normalized);
         await browser.storage.sync.remove(LEGACY_KEY);
-        return snippets;
+        return normalized;
       } catch {
         console.error("[Clipio] SyncBackend: migration from legacy key failed");
         captureError(
@@ -70,7 +78,7 @@ export class SyncBackend implements StorageBackend {
           typeof value === "string"
             ? (JSON.parse(value) as Snippet)
             : (value as Snippet);
-        snippets.push(snippet);
+        snippets.push(normalizeSnippet(snippet));
       } catch {
         console.error(
           "[Clipio] SyncBackend: failed to parse snippet at key",

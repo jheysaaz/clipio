@@ -13,6 +13,7 @@ const makeSnippet = (overrides = {}) => ({
   label: "Test Snippet",
   shortcut: "ts",
   content: "Test content",
+  contentFormat: "markdown",
   tags: ["tag1"],
   createdAt: "2025-01-01T00:00:00Z",
   updatedAt: "2025-01-01T00:00:00Z",

@@ -12,9 +12,17 @@ import type { Snippet } from "@/types";
 import { captureError } from "@/lib/sentry";
 import { localSnippetsItem, cachedSnippetsItem } from "../items";
 
+function normalizeSnippet(snippet: Snippet): Snippet {
+  return {
+    ...snippet,
+    contentFormat: snippet.contentFormat ?? "markdown",
+  };
+}
+
 export class LocalBackend implements StorageBackend {
   async getSnippets(): Promise<Snippet[]> {
-    return localSnippetsItem.getValue();
+    const snippets = await localSnippetsItem.getValue();
+    return snippets.map(normalizeSnippet);
   }
 
   async saveSnippets(snippets: Snippet[]): Promise<void> {

@@ -138,20 +138,21 @@ When `dateStr` is omitted, uses today's date.
 **Behavior:**
 
 - MUST support format `"iso"` → `"YYYY-MM-DD"`.
-- MUST support format `"us"` → `"MM/DD/YYYY"`.
+- MUST support format `"us"` → `"M/D/YYYY"`.
 - MUST support format `"eu"` → `"DD/MM/YYYY"`.
 - MUST support format `"long"` → full locale date e.g. `"January 1, 2025"`.
 - MUST support format `"short"` → abbreviated locale date e.g. `"Jan 1, 25"`.
 - MUST default to `"iso"` format for unrecognised format strings.
 - MUST use the provided `dateStr` when given (parsed as `new Date(dateStr + "T00:00:00")`).
 - MUST use today's date when `dateStr` is omitted.
-- MUST zero-pad month and day in `"iso"`, `"us"`, and `"eu"` formats.
+- MUST zero-pad month and day in `"iso"`, `"eu"`, and default (iso) formats.
+- MUST NOT zero-pad month and day in `"us"` format.
 
 **Examples:**
 
 ```ts
 formatDate("iso", "2025-06-15"); // → "2025-06-15"
-formatDate("us", "2025-06-15"); // → "06/15/2025"
+formatDate("us", "2025-06-15"); // → "6/15/2025"
 formatDate("eu", "2025-06-15"); // → "15/06/2025"
 formatDate("long", "2025-01-01"); // → "January 1, 2025"
 formatDate("short", "2025-01-01"); // → "Jan 1, 25" (locale-dependent)

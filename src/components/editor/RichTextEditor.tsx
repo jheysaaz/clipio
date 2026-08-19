@@ -73,6 +73,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
     {
       value,
       onChange,
+      contentFormat = "markdown",
       placeholder = "Start typing...",
       className,
       onCopyError,
@@ -114,7 +115,10 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
 
     // Create editor instance
     const editor = useMemo(() => {
-      const initialValue = deserializeContent(initialValueRef.current);
+      const initialValue = deserializeContent(
+        initialValueRef.current,
+        contentFormat
+      );
       return createPlateEditor({
         plugins: [
           BoldPlugin,
@@ -168,11 +172,11 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
 
       const currentMarkdown = serializeToMarkdown(editor.children);
       if (currentMarkdown !== value && value !== initialValueRef.current) {
-        const newValue = deserializeContent(value);
+        const newValue = deserializeContent(value, contentFormat);
         editor.tf.setValue(newValue);
         initialValueRef.current = value;
       }
-    }, [value, editor]);
+    }, [value, editor, contentFormat]);
 
     // Handle editor changes and detect slash command
     const handleChange = useCallback(

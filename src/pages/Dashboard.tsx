@@ -57,6 +57,8 @@ import {
 import { captureError } from "@/lib/sentry";
 import { selectNewest } from "@/lib/snippetUtils";
 
+const CONTEXT_MENU_DRAFT_SESSION_KEY = "__clipioContextMenuDraft__";
+
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -182,13 +184,45 @@ export default function Dashboard() {
     (async () => {
       try {
         const draft = await contextMenuDraftItem.getValue();
-        if (draft) {
-          // Consume the key immediately so it doesn't persist across reopens
-          await contextMenuDraftItem.removeValue();
+        if (typeof draft === "string" && draft) {
+          // Consume both stores immediately so the draft doesn't persist across reopens.
+          await contextMenuDraftItem.removeValue().catch((err) => {
+            captureError(err, { action: "loadContextMenuDraft.clearLocal" });
+          });
+          await browser.storage.session
+            .remove(CONTEXT_MENU_DRAFT_SESSION_KEY)
+            .catch((err) => {
+              captureError(err, {
+                action: "loadContextMenuDraft.clearSession",
+              });
+            });
           setDraftSnippet({
             label: "",
             shortcut: "/",
             content: draft,
+            tags: [],
+          });
+          setSelectedSnippet(null);
+          setIsCreating(true);
+          return;
+        }
+
+        const sessionDraftResult = await browser.storage.session.get(
+          CONTEXT_MENU_DRAFT_SESSION_KEY
+        );
+        const sessionDraft = sessionDraftResult[CONTEXT_MENU_DRAFT_SESSION_KEY];
+        if (typeof sessionDraft === "string" && sessionDraft) {
+          await browser.storage.session
+            .remove(CONTEXT_MENU_DRAFT_SESSION_KEY)
+            .catch((err) => {
+              captureError(err, {
+                action: "loadContextMenuDraft.clearSession",
+              });
+            });
+          setDraftSnippet({
+            label: "",
+            shortcut: "/",
+            content: sessionDraft,
             tags: [],
           });
           setSelectedSnippet(null);
@@ -490,7 +524,7 @@ export default function Dashboard() {
         {/* Left Sidebar */}
         <div
           style={{ width: sidebarOpen ? sidebarWidth : 0 }}
-          className="flex flex-col border-r bg-muted/50 relative shrink-0 transition-[width] duration-200 ease-in-out overflow-hidden min-w-0"
+          className="flex flex-col border-r bg-muted/50 relative shrink-0 transition-[width] duration-200 ease-in-out overflow-hidden min-w-0 min-h-0"
         >
           {/* Resize Handle */}
           <div
@@ -539,7 +573,7 @@ export default function Dashboard() {
           </div>
 
           {/* Snippet List */}
-          <ScrollArea className="flex-1 min-w-0">
+          <ScrollArea className="flex-1 min-w-0 min-h-0">
             <div className="p-2 pb-14 overflow-hidden">
               {loading ? (
                 <div

@@ -649,6 +649,37 @@ test.describe("Snippet Preview Feature", () => {
     expect(text).toContain("Hello, World!");
   });
 
+  test("preserves line breaks when inserting multiline snippet via preview in contenteditable", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [multilineSnippet()]);
+
+    const contenteditable = testPage.locator(
+      '[data-testid="contenteditable-field"]'
+    );
+    await contenteditable.click();
+
+    // Type the trigger prefix to open the preview popup
+    await testPage.keyboard.type("/", { delay: 30 });
+    await testPage.waitForTimeout(200);
+
+    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
+    await expect(previewContainer).toBeVisible();
+
+    // Select the snippet with Enter
+    await testPage.keyboard.press("Enter");
+    await testPage.waitForTimeout(200);
+
+    // All three lines must be preserved (regression: line breaks were lost
+    // because the old preview path assigned plain text via textContent).
+    const innerText = await contenteditable.innerText();
+    expect(innerText.trim()).toBe("Line 1\nLine 2\nLine 3");
+    // Source HTML keeps the <br> separators
+    const brCount = await contenteditable.locator("br").count();
+    expect(brCount).toBeGreaterThanOrEqual(2);
+  });
+
   test("hides preview when focus leaves input", async ({
     testPage,
     storageHelper,

@@ -137,6 +137,7 @@ export const PowerTextParser: FormatParser = {
         label: trimmedShortcut,
         shortcut: trimmedShortcut,
         content,
+        contentFormat: "markdown",
         tags: ["power_text"],
         unsupportedPlaceholders: [...new Set(unsupported)],
       });

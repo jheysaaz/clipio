@@ -1,4 +1,5 @@
 import type { TElement, TRange } from "platejs";
+import type { ContentFormat } from "@/types";
 
 // Placeholder type constants
 export const CLIPBOARD_PLACEHOLDER = "clipboard_placeholder";
@@ -11,7 +12,7 @@ export const GIF_PLACEHOLDER = "gif_placeholder";
 // Date format options
 export const DATE_FORMATS = [
   { id: "iso", label: "ISO", example: "2026-02-21", format: "{{date:iso}}" },
-  { id: "us", label: "US", example: "02/21/2026", format: "{{date:us}}" },
+  { id: "us", label: "US", example: "2/21/2026", format: "{{date:us}}" },
   { id: "eu", label: "EU", example: "21/02/2026", format: "{{date:eu}}" },
   {
     id: "long",
@@ -28,6 +29,7 @@ export type DateFormatId = (typeof DATE_FORMATS)[number]["id"];
 export interface RichTextEditorProps {
   value: string;
   onChange: (value: string) => void;
+  contentFormat?: ContentFormat;
   placeholder?: string;
   className?: string;
   /** Called when a cmd+c copy initiated from within the editor fails. */

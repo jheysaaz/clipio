@@ -21,6 +21,7 @@ describe("createSnippet", () => {
     expect(snippet).toHaveProperty("label");
     expect(snippet).toHaveProperty("shortcut");
     expect(snippet).toHaveProperty("content");
+    expect(snippet).toHaveProperty("contentFormat");
     expect(snippet).toHaveProperty("tags");
     expect(snippet).toHaveProperty("usageCount");
     expect(snippet).toHaveProperty("createdAt");
@@ -66,6 +67,11 @@ describe("createSnippet", () => {
       content: "Hello **world**!",
     });
     expect(snippet.content).toBe("Hello **world**!");
+  });
+
+  it('defaults contentFormat to "markdown"', () => {
+    const snippet = createSnippet({ label: "L", shortcut: "s", content: "c" });
+    expect(snippet.contentFormat).toBe("markdown");
   });
 
   // spec: MUST set tags to form.tags when provided

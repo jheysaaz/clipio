@@ -131,16 +131,18 @@ export function findSnippetMatch(
 export function formatDate(format: string, dateStr?: string): string {
   const date = dateStr ? new Date(dateStr + "T00:00:00") : new Date();
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1);
+  const day = String(date.getDate());
+  const monthPadded = month.padStart(2, "0");
+  const dayPadded = day.padStart(2, "0");
 
   switch (format) {
     case "iso":
-      return `${year}-${month}-${day}`;
+      return `${year}-${monthPadded}-${dayPadded}`;
     case "us":
       return `${month}/${day}/${year}`;
     case "eu":
-      return `${day}/${month}/${year}`;
+      return `${dayPadded}/${monthPadded}/${year}`;
     case "long":
       return date.toLocaleDateString("en-US", {
         year: "numeric",
@@ -154,7 +156,7 @@ export function formatDate(format: string, dateStr?: string): string {
         day: "numeric",
       });
     default:
-      return `${year}-${month}-${day}`;
+      return `${year}-${monthPadded}-${dayPadded}`;
   }
 }
 

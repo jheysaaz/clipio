@@ -166,9 +166,9 @@ describe("formatDate", () => {
     expect(formatDate("iso", FIXED_DATE)).toBe("2025-06-15");
   });
 
-  // spec: "us" format → MM/DD/YYYY
+  // spec: "us" format → M/D/YYYY
   it("formats us date", () => {
-    expect(formatDate("us", FIXED_DATE)).toBe("06/15/2025");
+    expect(formatDate("us", FIXED_DATE)).toBe("6/15/2025");
   });
 
   // spec: "eu" format → DD/MM/YYYY
@@ -203,8 +203,8 @@ describe("formatDate", () => {
     expect(formatDate("iso", "2025-01-05")).toBe("2025-01-05");
   });
 
-  it("zero-pads single-digit day in us format", () => {
-    expect(formatDate("us", "2025-01-05")).toBe("01/05/2025");
+  it("does not zero-pad single-digit month/day in us format", () => {
+    expect(formatDate("us", "2025-01-05")).toBe("1/5/2025");
   });
 
   // spec: uses today's date when dateStr is omitted
@@ -263,7 +263,7 @@ describe("processSnippetContent", () => {
       false,
       noClipboard
     );
-    expect(result.content).toMatch(/\d{4}-\d{2}-\d{2} and \d{2}\/\d{2}\/\d{4}/);
+    expect(result.content).toMatch(/\d{4}-\d{2}-\d{2} and \d{1,2}\/\d{1,2}\/\d{4}/);
   });
 
   // spec: MUST replace {{datepicker:YYYY-MM-DD}} with formatDate("long", date)

@@ -2,10 +2,13 @@
  * Type definitions for the application.
  */
 
+export type ContentFormat = "markdown" | "html";
+
 export interface Snippet {
   id: string;
   label: string;
   content: string;
+  contentFormat: ContentFormat;
   shortcut: string;
   tags?: string[];
   usageCount?: number;
@@ -31,6 +34,7 @@ export function createSnippet(form: SnippetFormData): Snippet {
     label: form.label,
     shortcut: form.shortcut,
     content: form.content,
+    contentFormat: "markdown",
     tags: form.tags ?? [],
     usageCount: 0,
     createdAt: now,

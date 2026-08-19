@@ -1,4 +1,5 @@
 import type { TText, TElement, Descendant } from "platejs";
+import type { ContentFormat } from "@/types";
 import {
   CLIPBOARD_PLACEHOLDER,
   DATE_PLACEHOLDER,
@@ -104,13 +105,16 @@ function serializeNode(node: Descendant): string {
   return children;
 }
 
-// Smart deserializer that handles both old HTML and new Markdown formats
-export function deserializeContent(content: string): TElement[] {
+// Deserializer that uses an explicit content format.
+export function deserializeContent(
+  content: string,
+  contentFormat: ContentFormat = "markdown"
+): TElement[] {
   if (!content || content.trim() === "") {
     return [{ type: "p", children: [{ text: "" }] }];
   }
 
-  if (REGEX_PATTERNS.htmlTags.test(content)) {
+  if (contentFormat === "html") {
     return deserializeFromHtml(content);
   } else {
     return deserializeFromMarkdown(content);

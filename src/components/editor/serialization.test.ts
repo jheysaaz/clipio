@@ -210,7 +210,7 @@ describe("deserializeContent", () => {
 
   // spec: delegates to HTML deserializer when content has HTML tags
   it("delegates to HTML deserializer for HTML content", () => {
-    const result = deserializeContent("<p>Hello</p>");
+    const result = deserializeContent("<p>Hello</p>", "html");
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe("p");
   });
@@ -218,7 +218,8 @@ describe("deserializeContent", () => {
   // spec: HTML <a> tags → LINK_ELEMENT
   it("deserializes HTML <a> tags as link elements", () => {
     const result = deserializeContent(
-      '<p><a href="https://example.com">Click</a></p>'
+      '<p><a href="https://example.com">Click</a></p>',
+      "html"
     );
     expect(result).toHaveLength(1);
     const link = result[0].children[0] as TElement & { url: string };
@@ -229,7 +230,8 @@ describe("deserializeContent", () => {
   // spec: HTML <a> with empty content → uses textContent fallback
   it("deserializes HTML <a> with no children", () => {
     const result = deserializeContent(
-      '<p><a href="https://example.com"></a></p>'
+      '<p><a href="https://example.com"></a></p>',
+      "html"
     );
     expect(result).toHaveLength(1);
     const link = result[0].children[0] as TElement & { url: string };
@@ -238,7 +240,7 @@ describe("deserializeContent", () => {
 
   // spec: HTML <br> → newline text node
   it("deserializes HTML <br> as newline text", () => {
-    const result = deserializeContent("<p>Line one<br>Line two</p>");
+    const result = deserializeContent("<p>Line one<br>Line two</p>", "html");
     expect(result).toHaveLength(1);
     const texts = result[0].children.map((c) =>
       "text" in c ? (c as TText).text : ""
@@ -248,7 +250,7 @@ describe("deserializeContent", () => {
 
   // spec: HTML <span> → recurse into children
   it("deserializes HTML <span> by recursing into children", () => {
-    const result = deserializeContent("<p><span>wrapped text</span></p>");
+    const result = deserializeContent("<p><span>wrapped text</span></p>", "html");
     expect(result).toHaveLength(1);
     const text = result[0].children[0] as TText;
     expect(text.text).toBe("wrapped text");
@@ -256,12 +258,12 @@ describe("deserializeContent", () => {
 
   // spec: HTML inline formatting elements: <strong>, <em>, <code>, etc.
   it("deserializes HTML <strong> as bold mark", () => {
-    const result = deserializeContent("<p><strong>bold</strong></p>");
+    const result = deserializeContent("<p><strong>bold</strong></p>", "html");
     expect(result[0].children[0]).toMatchObject({ text: "bold", bold: true });
   });
 
   it("deserializes HTML <em> as italic mark", () => {
-    const result = deserializeContent("<p><em>italic</em></p>");
+    const result = deserializeContent("<p><em>italic</em></p>", "html");
     expect(result[0].children[0]).toMatchObject({
       text: "italic",
       italic: true,
@@ -269,12 +271,12 @@ describe("deserializeContent", () => {
   });
 
   it("deserializes HTML <code> as code mark", () => {
-    const result = deserializeContent("<p><code>code</code></p>");
+    const result = deserializeContent("<p><code>code</code></p>", "html");
     expect(result[0].children[0]).toMatchObject({ text: "code", code: true });
   });
 
   it("deserializes HTML <s> as strikethrough mark", () => {
-    const result = deserializeContent("<p><s>struck</s></p>");
+    const result = deserializeContent("<p><s>struck</s></p>", "html");
     expect(result[0].children[0]).toMatchObject({
       text: "struck",
       strikethrough: true,
@@ -284,7 +286,8 @@ describe("deserializeContent", () => {
   // spec: HTML nested inline marks: <strong><em>text</em></strong>
   it("deserializes nested HTML inline marks", () => {
     const result = deserializeContent(
-      "<p><strong><em>bold italic</em></strong></p>"
+      "<p><strong><em>bold italic</em></strong></p>",
+      "html"
     );
     expect(result[0].children[0]).toMatchObject({
       text: "bold italic",
@@ -295,7 +298,7 @@ describe("deserializeContent", () => {
 
   // spec: HTML <del> as strikethrough
   it("deserializes HTML <del> as strikethrough mark", () => {
-    const result = deserializeContent("<p><del>deleted</del></p>");
+    const result = deserializeContent("<p><del>deleted</del></p>", "html");
     expect(result[0].children[0]).toMatchObject({
       text: "deleted",
       strikethrough: true,
@@ -304,13 +307,13 @@ describe("deserializeContent", () => {
 
   // spec: HTML <b> as bold (alias for <strong>)
   it("deserializes HTML <b> as bold mark", () => {
-    const result = deserializeContent("<p><b>bold</b></p>");
+    const result = deserializeContent("<p><b>bold</b></p>", "html");
     expect(result[0].children[0]).toMatchObject({ text: "bold", bold: true });
   });
 
   // spec: HTML <i> as italic (alias for <em>)
   it("deserializes HTML <i> as italic mark", () => {
-    const result = deserializeContent("<p><i>italic</i></p>");
+    const result = deserializeContent("<p><i>italic</i></p>", "html");
     expect(result[0].children[0]).toMatchObject({
       text: "italic",
       italic: true,
@@ -319,7 +322,7 @@ describe("deserializeContent", () => {
 
   // spec: HTML <u> as underline
   it("deserializes HTML <u> inside a paragraph as underline mark", () => {
-    const result = deserializeContent("<p><u>underlined</u></p>");
+    const result = deserializeContent("<p><u>underlined</u></p>", "html");
     expect(result[0].children[0]).toMatchObject({
       text: "underlined",
       underline: true,
@@ -328,7 +331,7 @@ describe("deserializeContent", () => {
 
   // spec: HTML unknown elements → recurse into children
   it("deserializes unknown HTML elements by recursing into children", () => {
-    const result = deserializeContent("<p><section>content</section></p>");
+    const result = deserializeContent("<p><section>content</section></p>", "html");
     // The content should still appear
     const allText = result
       .flatMap((el) =>
@@ -340,7 +343,7 @@ describe("deserializeContent", () => {
 
   // spec: HTML <div> → paragraph
   it("deserializes HTML <div> as paragraph", () => {
-    const result = deserializeContent("<div>div content</div>");
+    const result = deserializeContent("<div>div content</div>", "html");
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe("p");
   });
@@ -450,7 +453,7 @@ describe("deserializeContent (markdown path)", () => {
 
   // spec: underline
   it("deserializes <u>text</u> as underline text node", () => {
-    const result = deserializeContent("<u>underlined</u>");
+    const result = deserializeContent("<u>underlined</u>", "html");
     expect(result[0].children[0]).toMatchObject({
       text: "underlined",
       underline: true,

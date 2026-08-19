@@ -55,6 +55,10 @@ import {
   type PreviewSettings,
 } from "@/lib/preview-helpers";
 import { snippetPreviewUI } from "@/lib/snippet-preview-ui";
+import {
+  locateTextRange,
+  getCaretTextOffset,
+} from "@/lib/dom-text-range";
 
 /**
  * Returns true if `hostname` is covered by any entry in `blockedPatterns`.
@@ -282,6 +286,7 @@ export default defineContentScript({
       text: string;
       cursorPos: number;
       element: HTMLElement;
+      manual?: boolean;
     } | null = null;
 
     // ── Shortcut lookup index ──────────────────────────────────────────
@@ -780,8 +785,9 @@ export default defineContentScript({
 
       // Handle preview trigger detection
       if (previewSettings.enabled) {
-        const selection = window.getSelection();
-        const cursorPos = selection ? selection.focusOffset : 0;
+        // focusOffset is node-local; use the global textContent offset so
+        // trigger detection works in fields with multiple text nodes.
+        const cursorPos = getCaretTextOffset(target);
         handlePreviewTriggerDetection(
           target,
           target.textContent || "",
@@ -958,7 +964,28 @@ export default defineContentScript({
     function handlePreviewSnippetSelection(selectedSnippet: FilteredSnippet) {
       if (!lastTriggerState) return;
 
-      const { text, cursorPos, element } = lastTriggerState;
+      const { text, cursorPos, element, manual } = lastTriggerState;
+
+      // Manual shortcut selection: insert at the caret without replacing any
+      // existing text (there is no "/" trigger to replace).
+      if (manual) {
+        if (
+          element instanceof HTMLInputElement ||
+          element instanceof HTMLTextAreaElement
+        ) {
+          insertSnippetInInput(element, selectedSnippet, cursorPos, cursorPos);
+        } else if (element.isContentEditable) {
+          insertSnippetInContentEditable(
+            element,
+            selectedSnippet,
+            cursorPos,
+            cursorPos
+          );
+        }
+        hidePreview();
+        return;
+      }
+
       const triggerResult = detectPreviewTrigger(
         text,
         cursorPos,
@@ -1040,7 +1067,8 @@ export default defineContentScript({
 
       try {
         const { content: processedContent } = await processSnippetContent(
-          snippet.content
+          snippet.content,
+          true
         );
 
         if (!processedContent?.trim()) {
@@ -1062,30 +1090,80 @@ export default defineContentScript({
           return;
         }
 
-        // Get text content for manipulation
-        const textContent = element.textContent || "";
-        const beforeText = textContent.substring(0, startPos);
-        const afterText = textContent.substring(endPos);
+        const tempDiv = document.createElement("div");
+        tempDiv.innerHTML = processedContent;
 
-        // Replace content
-        element.textContent = beforeText + processedContent + afterText;
+        // Locate the cursor marker BEFORE moving nodes into the fragment so the
+        // lookup is scoped to the current insertion only.
+        const cursorMarker = tempDiv.querySelector(
+          '[data-clipio-cursor="true"]'
+        ) as HTMLElement | null;
 
-        // Set cursor position
-        const range = document.createRange();
-        const sel = window.getSelection();
-        if (sel && element.firstChild) {
-          const newCursorPos = beforeText.length + processedContent.length;
-          range.setStart(
-            element.firstChild,
-            Math.min(newCursorPos, element.textContent?.length || 0)
-          );
-          range.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(range);
+        const fragment = document.createDocumentFragment();
+        while (tempDiv.firstChild) fragment.appendChild(tempDiv.firstChild);
+        const lastInsertedNode = fragment.lastChild;
+
+        const located = locateTextRange(element, startPos, endPos);
+        if (!located) {
+          // Fallback: append when no text node covers the trigger range.
+          element.appendChild(fragment);
+        } else {
+          const { startNode, startOffset, endNode, endOffset } = located;
+          if (startNode === endNode) {
+            // Trigger is fully contained in one text node — split around it.
+            const fullText = startNode.textContent || "";
+            const beforeText = fullText.substring(0, startOffset);
+            const afterText = fullText.substring(endOffset);
+            startNode.textContent = beforeText;
+            if (afterText) {
+              const afterNode = document.createTextNode(afterText);
+              startNode.parentNode?.insertBefore(afterNode, startNode.nextSibling);
+              startNode.parentNode?.insertBefore(fragment, afterNode);
+            } else {
+              startNode.parentNode?.insertBefore(fragment, startNode.nextSibling);
+            }
+          } else {
+            const range = document.createRange();
+            range.setStart(startNode, startOffset);
+            range.setEnd(endNode, endOffset);
+            range.deleteContents();
+            // insertNode handles fragments spanning different subtrees,
+            // unlike insertBefore which requires the reference node to share
+            // the caller's parent.
+            range.insertNode(fragment);
+          }
         }
 
-        // Trigger input event
+        // Place the caret after the cursor marker (if present), otherwise at
+        // the end of the inserted fragment.
+        const sel = window.getSelection();
+        if (sel) {
+          if (cursorMarker?.isConnected) {
+            const cursorRange = document.createRange();
+            cursorRange.setStartAfter(cursorMarker);
+            cursorRange.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(cursorRange);
+            cursorMarker.remove();
+          } else if (lastInsertedNode?.parentNode) {
+            const cursorRange = document.createRange();
+            cursorRange.setStartAfter(lastInsertedNode);
+            cursorRange.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(cursorRange);
+          }
+        }
+
+        justExpanded = true;
         element.dispatchEvent(new Event("input", { bubbles: true }));
+
+        const insertionStuck = await verifyInsertionSuccessForContentEditable(
+          element,
+          processedContent
+        );
+        if (!insertionStuck) {
+          reportInsertionReverted("contenteditable");
+        }
 
         // Track usage
         await incrementSnippetUsage(snippet.id);
@@ -1100,9 +1178,6 @@ export default defineContentScript({
           };
           showConfetti(pos.x, pos.y);
         }
-
-        // Mark as just expanded to prevent redundant triggers
-        justExpanded = true;
       } catch (error) {
         captureError(error, { action: "insertSnippetInContentEditable" });
       }
@@ -1162,23 +1237,23 @@ export default defineContentScript({
                   target.tagName === "INPUT" || target.tagName === "TEXTAREA"
                     ? (target as HTMLInputElement | HTMLTextAreaElement)
                         .selectionStart || 0
-                    : 0; // For contentEditable, would need more complex cursor position detection
+                    : getCaretTextOffset(target);
 
-                // Manual shortcut intentionally opens preview even on empty input.
-                if (!text) {
-                  const allSnippets = snippets.map((snippet) => ({
-                    snippet,
-                    relevanceScore: 1,
-                    highlightRanges: [],
-                  }));
-                  if (allSnippets.length > 0) {
-                    lastTriggerState = { text, cursorPos, element: target };
-                    showPreview(target, allSnippets, "");
-                  } else {
-                    hidePreview();
-                  }
+                // Manual shortcut always opens the full snippet list at the
+                // caret, whether or not the field already contains text or a
+                // "/" trigger prefix (regression: cursorPos was hardcoded 0 and
+                // non-empty fields were routed to trigger detection, which
+                // required a "/" prefix before showing anything).
+                const allSnippets = snippets.map((snippet) => ({
+                  snippet,
+                  relevanceScore: 1,
+                  highlightRanges: [],
+                }));
+                if (allSnippets.length > 0) {
+                  lastTriggerState = { text, cursorPos, element: target, manual: true };
+                  showPreview(target, allSnippets, "");
                 } else {
-                  handlePreviewTriggerDetection(target, text, cursorPos);
+                  hidePreview();
                 }
                 return;
               }

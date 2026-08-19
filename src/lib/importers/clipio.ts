@@ -33,7 +33,10 @@ function isValidSnippet(item: unknown): item is Snippet {
     typeof (item as Snippet).id === "string" &&
     typeof (item as Snippet).label === "string" &&
     typeof (item as Snippet).shortcut === "string" &&
-    typeof (item as Snippet).content === "string"
+    typeof (item as Snippet).content === "string" &&
+    ((item as Snippet).contentFormat === undefined ||
+      (item as Snippet).contentFormat === "markdown" ||
+      (item as Snippet).contentFormat === "html")
   );
 }
 
@@ -43,6 +46,7 @@ function snippetToParsed(snippet: Snippet): ParsedSnippet {
     label: snippet.label,
     shortcut: snippet.shortcut,
     content: snippet.content,
+    contentFormat: snippet.contentFormat ?? "markdown",
     tags: snippet.tags ?? [],
     // Clipio snippets are already in our format — no unsupported placeholders
     unsupportedPlaceholders: [],

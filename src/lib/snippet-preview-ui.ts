@@ -231,8 +231,10 @@ export class SnippetPreviewUI {
     this.container.appendChild(this.list);
     this.container.appendChild(this.liveRegion);
     this.shadowRoot.appendChild(this.container);
-    document.body.appendChild(this.tooltip);
     document.body.appendChild(this.shadowHost);
+    // Tooltip must come after the host: 2147483648 clamps to the host's
+    // z-index (2147483647), so DOM order decides the paint order.
+    document.body.appendChild(this.tooltip);
   }
 
   cleanup(): void {

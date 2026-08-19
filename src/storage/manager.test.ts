@@ -123,6 +123,7 @@ const makeSnippet = (overrides: Partial<Snippet> = {}): Snippet => ({
   label: "Test",
   shortcut: "ts",
   content: "content",
+  contentFormat: "markdown",
   tags: [],
   usageCount: 0,
   createdAt: "2025-01-01T00:00:00Z",

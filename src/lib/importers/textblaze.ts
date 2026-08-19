@@ -162,6 +162,7 @@ function parseTBSnippet(
     label,
     shortcut,
     content,
+      contentFormat: "markdown",
     tags,
     unsupportedPlaceholders: [...new Set(unsupportedPlaceholders)],
   };

@@ -24,6 +24,13 @@ import type { StorageBackend } from "../types";
 import type { Snippet } from "@/types";
 import { captureError } from "@/lib/sentry";
 
+function normalizeSnippet(snippet: Snippet): Snippet {
+  return {
+    ...snippet,
+    contentFormat: snippet.contentFormat ?? "markdown",
+  };
+}
+
 /**
  * Shared IndexedDB opener. Handles all version migrations.
  * Exported so MediaStore can reuse the same DB connection logic.
@@ -139,7 +146,8 @@ export class IndexedDBBackend implements StorageBackend {
         const tx = db.transaction(IDB_CONFIG.STORE_NAME, "readonly");
         const store = tx.objectStore(IDB_CONFIG.STORE_NAME);
         const request = store.getAll();
-        request.onsuccess = () => resolve(request.result as Snippet[]);
+        request.onsuccess = () =>
+          resolve((request.result as Snippet[]).map(normalizeSnippet));
         request.onerror = () => reject(request.error);
       });
     } catch (error) {
