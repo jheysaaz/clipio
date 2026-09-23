@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
 import { Film } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
+import { ICON_STROKE } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
 import type { TElement } from "platejs";
@@ -54,7 +56,7 @@ export function GifPlaceholderElement({
           "bg-destructive/10 border border-destructive/30 text-destructive"
         )}
       >
-        <Film className="h-2.5 w-2.5" strokeWidth={2.5} />
+        <Icon icon={Film} size="xs" strokeWidth={ICON_STROKE.micro} />
         <span>{i18n.t("gifPlaceholder.error")}</span>
         <button
           type="button"

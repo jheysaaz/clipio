@@ -1,5 +1,7 @@
 import { useCallback } from "react";
 import { MousePointer2 } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
+import { ICON_STROKE } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
 
@@ -40,7 +42,7 @@ export function CursorPlaceholderElement({
       )}
       title="Cursor position - cursor will be placed here after insertion"
     >
-      <MousePointer2 className="h-2.5 w-2.5" strokeWidth={2.5} />
+      <Icon icon={MousePointer2} size="xs" strokeWidth={ICON_STROKE.micro} />
       <span>cursor</span>
       <span className="hidden">{children}</span>
     </span>

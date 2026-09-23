@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Cloud, HardDrive, Loader2, Bug, Copy, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { InlineError } from "@/components/ui/inline-error";
@@ -336,10 +337,7 @@ export function AdvancedSection() {
           >
             {pingStatus === "pinging" ? (
               <>
-                <Loader2
-                  className="h-3.5 w-3.5 mr-1.5 animate-spin"
-                  strokeWidth={1.5}
-                />
+                <Icon icon={Loader2} className="mr-1.5 animate-spin" />
                 {i18n.t("options.developers.contentScriptHealth.pinging")}
               </>
             ) : (
@@ -409,7 +407,7 @@ export function AdvancedSection() {
                   className="h-9 shrink-0"
                   onClick={() => setSwitchConfirming("sync")}
                 >
-                  <Cloud className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+                  <Icon icon={Cloud} className="mr-1.5" />
                   {i18n.t("options.developers.storageMode.switchToSync")}
                 </Button>
               )}
@@ -420,7 +418,7 @@ export function AdvancedSection() {
                   className="h-9 shrink-0"
                   onClick={() => setSwitchConfirming("local")}
                 >
-                  <HardDrive className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+                  <Icon icon={HardDrive} className="mr-1.5" />
                   {i18n.t("options.developers.storageMode.switchToLocal")}
                 </Button>
               )}
@@ -437,7 +435,7 @@ export function AdvancedSection() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
-              <Bug className="h-4 w-4" strokeWidth={1.5} />
+              <Icon icon={Bug} size="lg" />
               {i18n.t("options.developers.debugMode.title")}
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -472,7 +470,7 @@ export function AdvancedSection() {
                   title={i18n.t("options.developers.debugMode.copyLog")}
                 >
                   <>
-                    <Copy className="h-3 w-3 mr-1" strokeWidth={1.5} />
+                    <Icon icon={Copy} className="mr-1" />
                     {i18n.t("options.developers.debugMode.copyLog")}
                   </>
                 </Button>

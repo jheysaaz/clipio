@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { CalendarDays } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
+import { ICON_STROKE } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
 import type { TElement } from "platejs";
@@ -84,7 +86,7 @@ export function DatepickerPlaceholderElement({
         )}
         title={`Click to change date. Current: ${displayDate}`}
       >
-        <CalendarDays className="h-2.5 w-2.5" strokeWidth={2.5} />
+        <Icon icon={CalendarDays} size="xs" strokeWidth={ICON_STROKE.micro} />
         <span>{displayDate}</span>
       </span>
       {showPicker && (

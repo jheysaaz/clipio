@@ -4,6 +4,7 @@ import * as React from "react";
 import { ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Icon } from "@/components/ui/icon";
 
 interface CollapsibleProps {
   open?: boolean;
@@ -98,12 +99,13 @@ function CollapsibleTrigger({
       {...props}
     >
       {children}
-      <ChevronDown
+      <Icon
+        icon={ChevronDown}
+        size="lg"
         className={cn(
-          "h-4 w-4 text-muted-foreground transition-transform duration-200",
+          "text-muted-foreground transition-transform duration-200",
           isOpen && "rotate-180"
         )}
-        strokeWidth={1.5}
       />
     </button>
   );

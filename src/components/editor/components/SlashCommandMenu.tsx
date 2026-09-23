@@ -8,6 +8,7 @@ import {
   Film,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Icon } from "@/components/ui/icon";
 import { useVirtualFloating, offset, flip, shift } from "@platejs/floating";
 import type { SlashCommandMenuProps } from "../types";
 import { i18n } from "#i18n";
@@ -256,7 +257,7 @@ export function SlashCommandMenu({
       ) : (
         <div className="overflow-y-auto max-h-[280px]">
           {commands.map((command, index) => {
-            const Icon = command.icon;
+            const CommandIcon = command.icon;
             return (
               <button
                 key={command.id}
@@ -285,7 +286,7 @@ export function SlashCommandMenu({
                       : "bg-accent text-accent-foreground"
                   )}
                 >
-                  <Icon className="h-3.5 w-3.5" strokeWidth={2} />
+                  <Icon icon={CommandIcon} stroke="emphasis" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div

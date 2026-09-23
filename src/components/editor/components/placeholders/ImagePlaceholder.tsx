@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ImageIcon } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
+import { ICON_STROKE } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
 import type { TElement } from "platejs";
@@ -91,7 +93,7 @@ export function ImagePlaceholderElement({
           "text-[11px] font-mono text-muted-foreground"
         )}
       >
-        <ImageIcon className="h-2.5 w-2.5" strokeWidth={2.5} />
+        <Icon icon={ImageIcon} size="xs" strokeWidth={ICON_STROKE.micro} />
         <span>{i18n.t("imagePlaceholder.loading")}</span>
         <span className="hidden">{children}</span>
       </span>
@@ -112,7 +114,7 @@ export function ImagePlaceholderElement({
         )}
         title={i18n.t("imagePlaceholder.error")}
       >
-        <ImageIcon className="h-2.5 w-2.5" strokeWidth={2.5} />
+        <Icon icon={ImageIcon} size="xs" strokeWidth={ICON_STROKE.micro} />
         <span>{i18n.t("imagePlaceholder.error")}</span>
         <span className="hidden">{children}</span>
       </span>

@@ -1,5 +1,6 @@
 import { AlertTriangle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Icon } from "@/components/ui/icon";
 
 interface WarningBannerProps {
   children: React.ReactNode;
@@ -23,7 +24,7 @@ export function WarningBanner({
       )}
       // Note: amber colors are intentionally kept as semantic warning colors (no --warning token in shadcn base)
     >
-      <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+      <Icon icon={AlertTriangle} size="lg" />
       <p className="flex-1 leading-snug">
         {children}
         {action && (
@@ -44,7 +45,7 @@ export function WarningBanner({
           className="shrink-0 opacity-50 hover:opacity-100 transition-opacity"
           aria-label="Dismiss"
         >
-          <X className="h-3.5 w-3.5" strokeWidth={2} />
+          <Icon icon={X} stroke="emphasis" />
         </button>
       )}
     </div>

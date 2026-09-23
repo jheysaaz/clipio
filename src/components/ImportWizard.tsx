@@ -17,6 +17,7 @@ import {
   ChevronLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
@@ -242,7 +243,7 @@ function StepIndicator({
                     : "border-border text-muted-foreground"
               )}
             >
-              {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : stepNum}
+              {isDone ? <Icon icon={CheckCircle2} /> : stepNum}
             </div>
             <span
               className={cn(
@@ -255,7 +256,11 @@ function StepIndicator({
               {label}
             </span>
             {i < labels.length - 1 && (
-              <ChevronRight className="h-3 w-3 text-muted-foreground/50 mx-0.5" />
+              <Icon
+                icon={ChevronRight}
+                size="sm"
+                className="text-muted-foreground/50 mx-0.5"
+              />
             )}
           </div>
         );
@@ -630,9 +635,10 @@ export default function ImportWizard({
         />
         {fileName ? (
           <div className="flex flex-col items-center gap-2">
-            <FileJson
-              className="h-8 w-8 text-muted-foreground"
-              strokeWidth={1.5}
+            <Icon
+              icon={FileJson}
+              size="3xl"
+              className="text-muted-foreground"
             />
             <p className="text-sm font-medium text-foreground">{fileName}</p>
             <p className="text-xs text-muted-foreground">
@@ -641,10 +647,7 @@ export default function ImportWizard({
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2">
-            <Upload
-              className="h-8 w-8 text-muted-foreground"
-              strokeWidth={1.5}
-            />
+            <Icon icon={Upload} size="3xl" className="text-muted-foreground" />
             <p className="text-sm font-medium text-foreground">
               {i18n.t("importWizard.upload.dropHere")}
             </p>
@@ -726,19 +729,13 @@ export default function ImportWizard({
       {/* Parse result */}
       {parseError && (
         <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs">
-          <AlertTriangle
-            className="h-3.5 w-3.5 mt-0.5 shrink-0"
-            strokeWidth={1.5}
-          />
+          <Icon icon={AlertTriangle} className="mt-0.5 shrink-0" />
           {parseError}
         </div>
       )}
       {parsedSnippets.length > 0 && !parseError && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-muted border text-xs text-muted-foreground">
-          <CheckCircle2
-            className="h-3.5 w-3.5 text-green-500 shrink-0"
-            strokeWidth={1.5}
-          />
+          <Icon icon={CheckCircle2} className="text-green-500 shrink-0" />
           {i18n.t("importWizard.upload.foundSnippets", parsedSnippets.length)}
         </div>
       )}
@@ -1009,9 +1006,10 @@ export default function ImportWizard({
       return (
         <div className="flex flex-col items-center justify-center py-8 gap-3 text-center">
           <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-            <CheckCircle2
-              className="h-6 w-6 text-green-600 dark:text-green-400"
-              strokeWidth={1.5}
+            <Icon
+              icon={CheckCircle2}
+              size="2xl"
+              className="text-green-600 dark:text-green-400"
             />
           </div>
           <p className="text-base font-medium text-foreground">
@@ -1096,30 +1094,21 @@ export default function ImportWizard({
 
         {willExceedQuota && (
           <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs">
-            <AlertTriangle
-              className="h-3.5 w-3.5 mt-0.5 shrink-0"
-              strokeWidth={1.5}
-            />
+            <Icon icon={AlertTriangle} className="mt-0.5 shrink-0" />
             <span>{i18n.t("importWizard.confirm.quotaWarning")}</span>
           </div>
         )}
 
         {zipMissingMediaWarning && (
           <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs">
-            <AlertTriangle
-              className="h-3.5 w-3.5 mt-0.5 shrink-0"
-              strokeWidth={1.5}
-            />
+            <Icon icon={AlertTriangle} className="mt-0.5 shrink-0" />
             <span>{zipMissingMediaWarning}</span>
           </div>
         )}
 
         {importError && (
           <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs">
-            <AlertTriangle
-              className="h-3.5 w-3.5 mt-0.5 shrink-0"
-              strokeWidth={1.5}
-            />
+            <Icon icon={AlertTriangle} className="mt-0.5 shrink-0" />
             {importError}
           </div>
         )}
@@ -1145,7 +1134,7 @@ export default function ImportWizard({
           }}
           disabled={importing}
         >
-          <ChevronLeft className="h-3.5 w-3.5 mr-1" strokeWidth={1.5} />
+          <Icon icon={ChevronLeft} className="mr-1" />
           {step === 1
             ? i18n.t("importWizard.footer.cancel")
             : i18n.t("importWizard.footer.back")}
@@ -1162,7 +1151,7 @@ export default function ImportWizard({
             disabled={step === 1 && !canGoNext1}
           >
             {i18n.t("importWizard.footer.next")}
-            <ChevronRight className="h-3.5 w-3.5 ml-1" strokeWidth={1.5} />
+            <Icon icon={ChevronRight} className="ml-1" />
           </Button>
         )}
 

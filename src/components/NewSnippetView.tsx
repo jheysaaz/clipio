@@ -113,7 +113,7 @@ export default function NewSnippetView({
           title={i18n.t("newSnippet.cancel")}
           aria-label={i18n.t("newSnippet.cancel")}
         >
-          <Icon icon={X} />
+          <Icon icon={X} stroke="emphasis" />
         </Button>
         <Separator orientation="vertical" className="h-5 mx-1" />
         <Button

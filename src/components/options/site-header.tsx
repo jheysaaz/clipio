@@ -1,6 +1,7 @@
 import { MessageSquareText } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
 const SECTION_TITLES: Record<string, string> = {
@@ -32,7 +33,7 @@ export function SiteHeader({
         onClick={onFeedback}
         aria-label="Feedback"
       >
-        <MessageSquareText className="size-4" strokeWidth={1.5} />
+        <Icon icon={MessageSquareText} size="lg" />
       </Button>
     </header>
   );

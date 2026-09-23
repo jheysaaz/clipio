@@ -265,7 +265,7 @@ export default function SnippetDetailView({
       {uninstallWarning && (
         <div className="px-3 pb-3">
           <Alert className="border-amber-200 bg-amber-50 text-amber-800 [&>svg]:text-amber-500 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:[&>svg]:text-amber-400">
-            <AlertTriangle />
+            <Icon icon={AlertTriangle} size="lg" />
             <AlertDescription className="text-amber-800 dark:text-amber-300">
               {i18n.t("dashboard.warnings.uninstall.body")}
             </AlertDescription>
@@ -275,7 +275,7 @@ export default function SnippetDetailView({
                 className="opacity-50 hover:opacity-100 transition-opacity"
                 aria-label="Dismiss"
               >
-                <Icon icon={X} />
+                <Icon icon={X} stroke="emphasis" />
               </button>
             </AlertAction>
           </Alert>
@@ -308,7 +308,7 @@ export default function SnippetDetailView({
                 title={`Remove "${tag}"`}
                 aria-label={`Remove "${tag}"`}
               >
-                <Icon icon={X} size="sm" />
+                <Icon icon={X} size="sm" stroke="emphasis" />
               </button>
             </Badge>
           ))}

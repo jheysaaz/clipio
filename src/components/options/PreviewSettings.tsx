@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -110,9 +111,9 @@ export function PreviewSettings() {
           </p>
           <div className="flex gap-2 items-center">
             <div className="relative flex-1 max-w-xs">
-              <Search
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none"
-                strokeWidth={1.5}
+              <Icon
+                icon={Search}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
               />
               <Input
                 type="text"

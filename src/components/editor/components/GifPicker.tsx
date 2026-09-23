@@ -6,6 +6,7 @@ import {
   useDeferredValue,
 } from "react";
 import { Search, X, RefreshCw } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import {
   useVirtualFloating,
@@ -234,7 +235,7 @@ export function GifPicker({
     >
       {/* Search header */}
       <div className="flex items-center gap-2 p-2 border-b border-border">
-        <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <Icon icon={Search} className="text-muted-foreground shrink-0" />
         <input
           ref={searchInputRef}
           type="text"
@@ -252,7 +253,7 @@ export function GifPicker({
             onClick={() => setQuery("")}
             className="text-muted-foreground hover:text-foreground"
           >
-            <X className="h-3.5 w-3.5" />
+            <Icon icon={X} stroke="emphasis" />
           </button>
         )}
       </div>
@@ -278,7 +279,7 @@ export function GifPicker({
               onClick={handleRetry}
               className="flex items-center gap-1 text-xs text-primary hover:underline"
             >
-              <RefreshCw className="h-3 w-3" />
+              <Icon icon={RefreshCw} size="sm" />
               {i18n.t("gifPicker.retry")}
             </button>
           </div>

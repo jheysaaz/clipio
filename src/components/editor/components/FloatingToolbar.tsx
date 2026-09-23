@@ -11,6 +11,7 @@ import {
   Film,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { useFloatingToolbar, useFloatingToolbarState } from "@platejs/floating";
 import { useEditorRef, useEditorSelector } from "platejs/react";
@@ -203,9 +204,11 @@ export function FloatingToolbar({
             title={i18n.t("editor.toolbar.confirmLink")}
             type="button"
           >
-            <Link
-              className="h-3 w-3 text-indigo-600 dark:text-indigo-400"
-              strokeWidth={2}
+            <Icon
+              icon={Link}
+              size="sm"
+              stroke="emphasis"
+              className="text-indigo-600 dark:text-indigo-400"
             />
           </Button>
         </div>
@@ -221,7 +224,7 @@ export function FloatingToolbar({
             aria-pressed={isBoldActive}
             type="button"
           >
-            <Bold className="h-3.5 w-3.5" strokeWidth={2} />
+            <Icon icon={Bold} stroke="emphasis" />
           </Button>
           <Button
             variant="ghost"
@@ -233,7 +236,7 @@ export function FloatingToolbar({
             aria-pressed={isItalicActive}
             type="button"
           >
-            <Italic className="h-3.5 w-3.5" strokeWidth={2} />
+            <Icon icon={Italic} stroke="emphasis" />
           </Button>
           <Button
             variant="ghost"
@@ -245,7 +248,7 @@ export function FloatingToolbar({
             aria-pressed={isUnderlineActive}
             type="button"
           >
-            <Underline className="h-3.5 w-3.5" strokeWidth={2} />
+            <Icon icon={Underline} stroke="emphasis" />
           </Button>
           <Button
             variant="ghost"
@@ -257,7 +260,7 @@ export function FloatingToolbar({
             aria-pressed={isStrikethroughActive}
             type="button"
           >
-            <Strikethrough className="h-3.5 w-3.5" strokeWidth={2} />
+            <Icon icon={Strikethrough} stroke="emphasis" />
           </Button>
           <Button
             variant="ghost"
@@ -269,7 +272,7 @@ export function FloatingToolbar({
             aria-pressed={isCodeActive}
             type="button"
           >
-            <Code className="h-3.5 w-3.5" strokeWidth={2} />
+            <Icon icon={Code} stroke="emphasis" />
           </Button>
           <div className="w-px h-4 bg-border mx-0.5" />
           <Button
@@ -291,9 +294,9 @@ export function FloatingToolbar({
             type="button"
           >
             {isLinkActive ? (
-              <Unlink className="h-3.5 w-3.5" strokeWidth={2} />
+              <Icon icon={Unlink} stroke="emphasis" />
             ) : (
-              <Link className="h-3.5 w-3.5" strokeWidth={2} />
+              <Icon icon={Link} stroke="emphasis" />
             )}
           </Button>
           {(onInsertImage || onInsertGif) && (
@@ -309,7 +312,7 @@ export function FloatingToolbar({
               aria-label={i18n.t("editor.toolbar.insertImage")}
               type="button"
             >
-              <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} />
+              <Icon icon={ImageIcon} stroke="emphasis" />
             </Button>
           )}
           {onInsertGif && (
@@ -322,7 +325,7 @@ export function FloatingToolbar({
               aria-label={i18n.t("editor.toolbar.insertGif")}
               type="button"
             >
-              <Film className="h-3.5 w-3.5" strokeWidth={2} />
+              <Icon icon={Film} stroke="emphasis" />
             </Button>
           )}
         </>

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Images, LayoutList, LayoutGrid, Trash2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -204,7 +205,7 @@ export function ImagesSection() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <LayoutList className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <Icon icon={LayoutList} />
             </button>
             <button
               onClick={() => setViewMode("grid")}
@@ -217,7 +218,7 @@ export function ImagesSection() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <LayoutGrid className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <Icon icon={LayoutGrid} />
             </button>
           </div>
         )}
@@ -227,10 +228,7 @@ export function ImagesSection() {
         <div className="rounded-xl border p-4 space-y-2.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5">
-              <Images
-                className="h-3.5 w-3.5 text-muted-foreground"
-                strokeWidth={1.5}
-              />
+              <Icon icon={Images} className="text-muted-foreground" />
               <span className="text-xs text-muted-foreground">
                 {i18n.t("options.images.totalStorage")}
               </span>
@@ -267,10 +265,7 @@ export function ImagesSection() {
 
       {!loading && !loadError && items.length === 0 && (
         <div className="rounded-xl border border-dashed p-10 flex flex-col items-center justify-center gap-3 text-center">
-          <Images
-            className="h-8 w-8 text-muted-foreground/40"
-            strokeWidth={1}
-          />
+          <Icon icon={Images} size="3xl" className="text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground max-w-xs">
             {i18n.t("options.images.empty")}
           </p>
@@ -296,9 +291,10 @@ export function ImagesSection() {
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <Images
-                      className="h-6 w-6 text-muted-foreground/40"
-                      strokeWidth={1}
+                    <Icon
+                      icon={Images}
+                      size="2xl"
+                      className="text-muted-foreground/40"
                     />
                   )}
                 </div>
@@ -355,9 +351,10 @@ export function ImagesSection() {
                       onClick={() => handleSaveAlt(item.meta.id)}
                     >
                       {altSaved[item.meta.id] ? (
-                        <Check
-                          className="h-3 w-3 text-green-500"
-                          strokeWidth={2.5}
+                        <Icon
+                          icon={Check}
+                          stroke="emphasis"
+                          className="text-green-500"
                         />
                       ) : (
                         i18n.t("common.save")
@@ -383,7 +380,7 @@ export function ImagesSection() {
                   onClick={() => setConfirmDeleteId(item.meta.id)}
                   aria-label={`${i18n.t("options.images.deleteButton")} ${item.meta.id}`}
                 >
-                  <Trash2 className="h-3.5 w-3.5 mr-1" strokeWidth={1.5} />
+                  <Icon icon={Trash2} className="mr-1" />
                   {i18n.t("options.images.deleteButton")}
                 </Button>
               </div>
@@ -411,9 +408,10 @@ export function ImagesSection() {
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <Images
-                      className="h-8 w-8 text-muted-foreground/30"
-                      strokeWidth={1}
+                    <Icon
+                      icon={Images}
+                      size="3xl"
+                      className="text-muted-foreground/30"
                     />
                   )}
 
@@ -423,7 +421,7 @@ export function ImagesSection() {
                       aria-label={`${i18n.t("options.images.deleteButton")} ${item.meta.id}`}
                       className="h-8 w-8 rounded-full bg-background/90 flex items-center justify-center text-destructive hover:bg-background transition-colors shadow-sm"
                     >
-                      <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      <Icon icon={Trash2} />
                     </button>
                   </div>
                 </div>
@@ -478,9 +476,10 @@ export function ImagesSection() {
                       onClick={() => handleSaveAlt(item.meta.id)}
                     >
                       {altSaved[item.meta.id] ? (
-                        <Check
-                          className="h-2.5 w-2.5 text-green-500"
-                          strokeWidth={2.5}
+                        <Icon
+                          icon={Check}
+                          stroke="emphasis"
+                          className="text-green-500"
                         />
                       ) : (
                         i18n.t("common.save")
@@ -519,9 +518,10 @@ export function ImagesSection() {
           >
             <div className="flex items-start gap-3">
               <div className="shrink-0 h-8 w-8 rounded-full bg-red-100 dark:bg-red-950/40 flex items-center justify-center">
-                <Trash2
-                  className="h-4 w-4 text-red-600 dark:text-red-400"
-                  strokeWidth={1.5}
+                <Icon
+                  icon={Trash2}
+                  size="lg"
+                  className="text-red-600 dark:text-red-400"
                 />
               </div>
               <div className="space-y-1">

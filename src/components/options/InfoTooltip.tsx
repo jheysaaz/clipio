@@ -1,5 +1,6 @@
 import { Info } from "lucide-react";
 import { useState } from "react";
+import { Icon } from "@/components/ui/icon";
 
 export function InfoTooltip({ text }: { text: string }) {
   const [isVisible, setIsVisible] = useState(false);
@@ -11,19 +12,21 @@ export function InfoTooltip({ text }: { text: string }) {
       onMouseEnter={() => setIsVisible(true)}
       onMouseLeave={() => setIsVisible(false)}
     >
-      <Info
+      {/* Accessible name lives on the button, not the icon (lucide a11y guide). */}
+      <button
+        type="button"
         tabIndex={0}
-        role="button"
         aria-label={text}
         aria-describedby={id}
-        className="h-3.5 w-3.5 text-muted-foreground cursor-help focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-full"
-        strokeWidth={1.5}
+        className="rounded-full text-muted-foreground cursor-help focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         onFocus={() => setIsVisible(true)}
         onBlur={() => setIsVisible(false)}
         onKeyDown={(e) => {
           if (e.key === "Escape") setIsVisible(false);
         }}
-      />
+      >
+        <Icon icon={Info} />
+      </button>
       <div
         id={id}
         role="tooltip"

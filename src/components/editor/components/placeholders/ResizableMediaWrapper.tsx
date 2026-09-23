@@ -12,6 +12,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { X, GripVertical } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
 import type { TElement } from "platejs";
@@ -158,7 +159,7 @@ export function ResizableMediaWrapper({
           isHovered || isResizing ? "opacity-100" : "opacity-0"
         )}
       >
-        <X className="w-3 h-3" strokeWidth={2.5} />
+        <Icon icon={X} size="sm" stroke="emphasis" />
       </button>
 
       {/* Resize handle — right edge, visible on hover */}
@@ -174,12 +175,14 @@ export function ResizableMediaWrapper({
           isHovered || isResizing ? "opacity-100" : "opacity-0"
         )}
       >
-        <GripVertical
+        <Icon
+          icon={GripVertical}
+          size="sm"
+          stroke="emphasis"
           className={cn(
-            "w-3 h-8 text-white drop-shadow",
+            "h-8 w-3 text-white drop-shadow",
             "[filter:drop-shadow(0_0_2px_rgba(0,0,0,0.8))]"
           )}
-          strokeWidth={2}
         />
       </span>
     </span>

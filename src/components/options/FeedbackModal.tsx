@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { Check, Heart, ExternalLink, X, MessageSquareText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { InlineError } from "@/components/ui/inline-error";
@@ -152,9 +153,10 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
-            <MessageSquareText
-              className="h-5 w-5 text-foreground"
-              strokeWidth={1.5}
+            <Icon
+              icon={MessageSquareText}
+              size="xl"
+              className="text-foreground"
             />
             <h2 className="text-lg font-semibold text-foreground">
               {i18n.t("options.feedback.title")}
@@ -167,7 +169,7 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
             onClick={handleClose}
             aria-label={i18n.t("common.closeModal")}
           >
-            <X className="h-4 w-4" strokeWidth={1.5} />
+            <Icon icon={X} size="lg" />
           </Button>
         </div>
 
@@ -311,7 +313,11 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
               role="status"
               aria-live="polite"
             >
-              <Check className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
+              <Icon
+                icon={Check}
+                size="lg"
+                className="text-green-600 dark:text-green-400 mt-0.5"
+              />
               <p className="text-sm text-green-700 dark:text-green-300">
                 {i18n.t("options.feedback.success")}
               </p>
@@ -351,7 +357,7 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
             }
             title={i18n.t("options.feedback.donationTitle")}
           >
-            <Heart className="h-4 w-4" strokeWidth={1.5} />
+            <Icon icon={Heart} size="lg" />
             {i18n.t("options.feedback.donationAction")}
           </Button>
           <div className="rounded-lg border p-4 space-y-2">
@@ -370,7 +376,7 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
               }}
               className="gap-1.5"
             >
-              <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <Icon icon={ExternalLink} />
               {i18n.t("options.feedback.reviewBannerAction")}
             </Button>
           </div>

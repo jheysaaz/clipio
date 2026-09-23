@@ -1,6 +1,7 @@
 import { LayoutDashboard, FileText, Palette, Images, Code } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import { Icon } from "@/components/ui/icon";
 import {
   Sidebar,
   SidebarHeader,
@@ -46,7 +47,6 @@ export function AppSidebar({
           <SidebarGroupContent>
             <SidebarMenu>
               {NAV_ITEMS.map((item) => {
-                const Icon = item.icon;
                 return (
                   <SidebarMenuItem key={item.id}>
                     <SidebarMenuButton
@@ -56,7 +56,7 @@ export function AppSidebar({
                         activeSection === item.id ? "page" : undefined
                       }
                     >
-                      <Icon className="size-4 shrink-0" strokeWidth={1.5} />
+                      <Icon icon={item.icon} size="lg" />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

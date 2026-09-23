@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { AlertCircle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Icon } from "@/components/ui/icon";
 
 const AUTO_CLEAR_MS = 8000;
 
@@ -50,18 +51,14 @@ export function InlineError({
         className
       )}
     >
-      <AlertCircle
-        className="h-3.5 w-3.5 shrink-0 mt-0.5"
-        strokeWidth={1.5}
-        aria-hidden="true"
-      />
+      <Icon icon={AlertCircle} className="mt-0.5" />
       <p className="flex-1 leading-snug">{message}</p>
       <button
         onClick={onDismiss}
         className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
         aria-label="Dismiss error"
       >
-        <X className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
+        <Icon icon={X} size="sm" stroke="emphasis" />
       </button>
     </div>
   );

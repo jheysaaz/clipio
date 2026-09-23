@@ -1,5 +1,7 @@
 import { useCallback } from "react";
 import { Clipboard } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
+import { ICON_STROKE } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
 
@@ -40,7 +42,7 @@ export function ClipboardPlaceholderElement({
       )}
       title="Clipboard placeholder - will be replaced with clipboard content"
     >
-      <Clipboard className="h-2.5 w-2.5" strokeWidth={2.5} />
+      <Icon icon={Clipboard} size="xs" strokeWidth={ICON_STROKE.micro} />
       <span>clipboard</span>
       <span className="hidden">{children}</span>
     </span>

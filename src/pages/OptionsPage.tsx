@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { AlertTriangle, Heart, X } from "lucide-react";
 import { Alert, AlertDescription, AlertAction } from "@/components/ui/alert";
+import { Icon } from "@/components/ui/icon";
 import { i18n } from "#i18n";
 import {
   dismissedUninstallWarningItem,
@@ -63,7 +64,7 @@ export default function OptionsPage() {
           <div className="mx-auto max-w-2xl px-8 py-8">
             {showUninstallWarning && (
               <Alert className="mb-6 border-amber-200 bg-amber-50 text-amber-800 [&>svg]:text-amber-500 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:[&>svg]:text-amber-400">
-                <AlertTriangle />
+                <Icon icon={AlertTriangle} size="lg" />
                 <AlertDescription className="text-amber-800 dark:text-amber-300">
                   {i18n.t("options.warnings.uninstall.body")}
                 </AlertDescription>
@@ -78,14 +79,14 @@ export default function OptionsPage() {
                     className="opacity-50 hover:opacity-100 transition-opacity"
                     aria-label="Dismiss"
                   >
-                    <X className="size-3.5" strokeWidth={2} />
+                    <Icon icon={X} stroke="emphasis" />
                   </button>
                 </AlertAction>
               </Alert>
             )}
             {showReviewBanner && (
               <Alert className="mb-6 border-blue-200 bg-blue-50 text-blue-800 [&>svg]:text-blue-500 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300 dark:[&>svg]:text-blue-400">
-                <Heart className="h-4 w-4" strokeWidth={1.5} />
+                <Icon icon={Heart} size="lg" />
                 <AlertDescription className="text-blue-800 dark:text-blue-300">
                   <span className="font-medium">
                     {i18n.t("options.feedback.reviewBannerTitle")}
@@ -114,7 +115,7 @@ export default function OptionsPage() {
                         "options.feedback.reviewBannerDismiss"
                       )}
                     >
-                      <X className="size-3.5" strokeWidth={2} />
+                      <Icon icon={X} stroke="emphasis" />
                     </button>
                   </div>
                 </AlertAction>

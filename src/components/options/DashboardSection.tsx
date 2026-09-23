@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Cloud, HardDrive, FileText, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { InlineError } from "@/components/ui/inline-error";
@@ -96,10 +97,7 @@ export function DashboardSection() {
         <div className="grid grid-cols-3 gap-3 mb-3">
           <div className="rounded-xl border p-4 space-y-1">
             <div className="flex items-center gap-1.5">
-              <FileText
-                className="h-3.5 w-3.5 text-muted-foreground"
-                strokeWidth={1.5}
-              />
+              <Icon icon={FileText} className="text-muted-foreground" />
               <span className="text-xs text-muted-foreground">
                 {i18n.t("options.overview.snippets")}
               </span>
@@ -119,10 +117,7 @@ export function DashboardSection() {
           <div className="col-span-2 rounded-xl border p-4 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
-                <Cloud
-                  className="h-3.5 w-3.5 text-muted-foreground"
-                  strokeWidth={1.5}
-                />
+                <Icon icon={Cloud} className="text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">
                   {i18n.t("options.overview.syncStorage")}
                 </span>
@@ -156,10 +151,7 @@ export function DashboardSection() {
         <div className="rounded-xl border p-4 space-y-2.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5">
-              <HardDrive
-                className="h-3.5 w-3.5 text-muted-foreground"
-                strokeWidth={1.5}
-              />
+              <Icon icon={HardDrive} className="text-muted-foreground" />
               <span className="text-xs text-muted-foreground">
                 {i18n.t("options.overview.localStorage")}
               </span>
@@ -202,7 +194,7 @@ export function DashboardSection() {
                 browser.tabs.create({ url: latestRelease.htmlUrl })
               }
             >
-              <ExternalLink className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+              <Icon icon={ExternalLink} className="mr-1.5" />
               View release
             </Button>
           </div>

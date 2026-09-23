@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { Download, Check, Globe, Plus, X, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -180,9 +181,9 @@ export function SnippetsSection() {
         <div className="rounded-xl border p-5 space-y-4">
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Globe
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none"
-                strokeWidth={1.5}
+              <Icon
+                icon={Globe}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
               />
               <Input
                 type="text"
@@ -206,7 +207,7 @@ export function SnippetsSection() {
               disabled={!addSiteValue.trim()}
               className="shrink-0 h-9 gap-1.5"
             >
-              <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+              <Icon icon={Plus} />
               {i18n.t("options.generalSection.blockedSites.addButton")}
             </Button>
           </div>
@@ -243,7 +244,7 @@ export function SnippetsSection() {
                     onClick={() => handleRemoveSite(hostname)}
                     aria-label={`${i18n.t("options.generalSection.blockedSites.remove")} ${hostname}`}
                   >
-                    <X className="h-3 w-3 mr-1" strokeWidth={1.5} />
+                    <Icon icon={X} className="mr-1" />
                     {i18n.t("options.generalSection.blockedSites.remove")}
                   </Button>
                 </li>
@@ -300,7 +301,7 @@ export function SnippetsSection() {
             onClick={handleTimeoutReset}
             disabled={typingTimeout === TIMING.TYPING_TIMEOUT}
           >
-            <RotateCcw className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+            <Icon icon={RotateCcw} className="mr-1.5" />
             Reset to default
           </Button>
           {timeoutSaved && (
@@ -309,7 +310,7 @@ export function SnippetsSection() {
               aria-live="polite"
               className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"
             >
-              <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <Icon icon={Check} />
               Saved
             </span>
           )}
@@ -345,7 +346,7 @@ export function SnippetsSection() {
                 onClick={handleExport}
                 className="shrink-0"
               >
-                <Download className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+                <Icon icon={Download} className="mr-1.5" />
                 {i18n.t("options.importExport.exportCard.button")}
               </Button>
             </div>

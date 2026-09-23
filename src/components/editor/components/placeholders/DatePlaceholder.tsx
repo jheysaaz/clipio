@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Calendar } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
+import { ICON_STROKE } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
 import type { TElement } from "platejs";
@@ -76,7 +78,7 @@ export function DatePlaceholderElement({
         )}
         title={`Click to change format. Current: ${formatInfo.example}`}
       >
-        <Calendar className="h-2.5 w-2.5" strokeWidth={2.5} />
+        <Icon icon={Calendar} size="xs" strokeWidth={ICON_STROKE.micro} />
         <span>today</span>
         <span className="text-muted-foreground">· {formatInfo.label}</span>
       </span>

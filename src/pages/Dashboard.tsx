@@ -699,7 +699,7 @@ export default function Dashboard() {
               onClick={handleAddSnippet}
               className="flex-1 h-8 text-xs rounded-lg"
             >
-              <Plus className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+              <Icon icon={Plus} size="lg" className="mr-1.5" />
               {i18n.t("dashboard.addSnippet")}
             </Button>
             <Button
@@ -797,9 +797,10 @@ export default function Dashboard() {
               </div>
               <div className="flex flex-col items-center justify-center flex-1 p-8 text-center">
                 <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
-                  <Clipboard
-                    className="h-8 w-8 text-muted-foreground"
-                    strokeWidth={1.5}
+                  <Icon
+                    icon={Clipboard}
+                    size="3xl"
+                    className="text-muted-foreground"
                   />
                 </div>
                 <h3 className="text-sm font-medium text-foreground mb-1">
@@ -844,7 +845,7 @@ export default function Dashboard() {
               {showUninstallWarning && (
                 <div className="p-3 border-t shrink-0">
                   <Alert className="border-amber-200 bg-amber-50 text-amber-800 [&>svg]:text-amber-500 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:[&>svg]:text-amber-400">
-                    <AlertTriangle />
+                    <Icon icon={AlertTriangle} size="lg" />
                     <AlertDescription className="text-amber-800 dark:text-amber-300">
                       {i18n.t("dashboard.warnings.uninstall.body")}
                     </AlertDescription>
@@ -854,7 +855,7 @@ export default function Dashboard() {
                         className="opacity-50 hover:opacity-100 transition-opacity"
                         aria-label="Dismiss"
                       >
-                        <Icon icon={X} />
+                        <Icon icon={X} stroke="emphasis" />
                       </button>
                     </AlertAction>
                   </Alert>
@@ -895,7 +896,7 @@ export default function Dashboard() {
               {showUninstallWarning && (
                 <div className="p-3 border-t shrink-0">
                   <Alert className="border-amber-200 bg-amber-50 text-amber-800 [&>svg]:text-amber-500 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:[&>svg]:text-amber-400">
-                    <AlertTriangle />
+                    <Icon icon={AlertTriangle} size="lg" />
                     <AlertDescription className="text-amber-800 dark:text-amber-300">
                       {i18n.t("dashboard.warnings.uninstall.body")}
                     </AlertDescription>
@@ -905,7 +906,7 @@ export default function Dashboard() {
                         className="opacity-50 hover:opacity-100 transition-opacity"
                         aria-label="Dismiss"
                       >
-                        <Icon icon={X} />
+                        <Icon icon={X} stroke="emphasis" />
                       </button>
                     </AlertAction>
                   </Alert>

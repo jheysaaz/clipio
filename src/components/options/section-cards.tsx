@@ -1,5 +1,6 @@
 import { FileText, Cloud, HardDrive, ImageIcon } from "lucide-react";
 
+import { Icon } from "@/components/ui/icon";
 import { Progress } from "@/components/ui/progress";
 import { useStorageStats } from "./useStorageStats";
 import { SYNC_QUOTA } from "@/config/constants";
@@ -37,10 +38,7 @@ export function SectionCards() {
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <div className="rounded-xl border bg-card p-4 text-card-foreground shadow-xs">
         <div className="flex items-center gap-2">
-          <FileText
-            className="size-4 text-muted-foreground"
-            strokeWidth={1.5}
-          />
+          <Icon icon={FileText} size="lg" className="text-muted-foreground" />
           <span className="text-xs font-medium text-muted-foreground">
             Snippets
           </span>
@@ -51,7 +49,7 @@ export function SectionCards() {
 
       <div className="rounded-xl border bg-card p-4 text-card-foreground shadow-xs">
         <div className="flex items-center gap-2">
-          <Cloud className="size-4 text-muted-foreground" strokeWidth={1.5} />
+          <Icon icon={Cloud} size="lg" className="text-muted-foreground" />
           <span className="text-xs font-medium text-muted-foreground">
             Sync Storage
           </span>
@@ -67,10 +65,7 @@ export function SectionCards() {
 
       <div className="rounded-xl border bg-card p-4 text-card-foreground shadow-xs">
         <div className="flex items-center gap-2">
-          <HardDrive
-            className="size-4 text-muted-foreground"
-            strokeWidth={1.5}
-          />
+          <Icon icon={HardDrive} size="lg" className="text-muted-foreground" />
           <span className="text-xs font-medium text-muted-foreground">
             Local Storage
           </span>
@@ -84,10 +79,7 @@ export function SectionCards() {
 
       <div className="rounded-xl border bg-card p-4 text-card-foreground shadow-xs">
         <div className="flex items-center gap-2">
-          <ImageIcon
-            className="size-4 text-muted-foreground"
-            strokeWidth={1.5}
-          />
+          <Icon icon={ImageIcon} size="lg" className="text-muted-foreground" />
           <span className="text-xs font-medium text-muted-foreground">
             Storage Mode
           </span>

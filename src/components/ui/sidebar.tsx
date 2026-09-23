@@ -10,6 +10,7 @@ import { PanelLeft } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { Separator } from "@/components/ui/separator";
 
 const SIDEBAR_COOKIE_NAME = "sidebar:state";
@@ -215,7 +216,7 @@ const Sidebar = React.forwardRef<
               {...props}
             >
               <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2">
-                <PanelLeft className="h-4 w-4" />
+                <Icon icon={PanelLeft} size="lg" stroke="emphasis" />
                 <span className="sr-only">Close</span>
               </DialogPrimitive.Close>
               {children}
@@ -260,7 +261,7 @@ const Sidebar = React.forwardRef<
             {...props}
           >
             <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2">
-              <PanelLeft className="h-4 w-4" />
+              <Icon icon={PanelLeft} size="lg" stroke="emphasis" />
               <span className="sr-only">Close</span>
             </DialogPrimitive.Close>
             {children}
@@ -504,7 +505,7 @@ const SidebarTrigger = React.forwardRef<
       ref={ref}
       {...props}
     >
-      <PanelLeft className="size-4" />
+      <Icon icon={PanelLeft} size="lg" />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   );

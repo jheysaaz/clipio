@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { Moon, Sun, Monitor, Sparkles } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { useTheme, type ThemeMode } from "@/hooks/ThemeContext";
 import { confettiEnabledItem } from "@/storage/items";
@@ -50,22 +52,22 @@ export function AppearanceSection() {
   const THEME_OPTIONS: {
     mode: ThemeMode;
     label: string;
-    icon: React.ReactNode;
+    icon: LucideIcon;
   }[] = [
     {
       mode: "light",
       label: i18n.t("options.theme.light"),
-      icon: <Sun className="h-5 w-5" strokeWidth={1.5} />,
+      icon: Sun,
     },
     {
       mode: "dark",
       label: i18n.t("options.theme.dark"),
-      icon: <Moon className="h-5 w-5" strokeWidth={1.5} />,
+      icon: Moon,
     },
     {
       mode: "system",
       label: i18n.t("options.theme.system"),
-      icon: <Monitor className="h-5 w-5" strokeWidth={1.5} />,
+      icon: Monitor,
     },
   ];
 
@@ -110,7 +112,7 @@ export function AppearanceSection() {
                     active ? "text-foreground" : "text-muted-foreground"
                   )}
                 >
-                  {icon}
+                  <Icon icon={icon} size="xl" />
                 </span>
                 <span>{label}</span>
               </button>
@@ -123,10 +125,7 @@ export function AppearanceSection() {
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-0.5">
             <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
-              <Sparkles
-                className="h-3.5 w-3.5 text-muted-foreground"
-                strokeWidth={1.5}
-              />
+              <Icon icon={Sparkles} className="text-muted-foreground" />
               {i18n.t("options.appearance.confettiTitle")}
             </h3>
             <p className="text-xs text-muted-foreground">
@@ -165,7 +164,7 @@ export function AppearanceSection() {
             onClick={handlePreviewConfetti}
             className="shrink-0 gap-1.5"
           >
-            <Sparkles className="h-3.5 w-3.5" strokeWidth={1.5} />
+            <Icon icon={Sparkles} />
             {i18n.t("options.appearance.confettiPreviewButton")}
           </Button>
         </div>

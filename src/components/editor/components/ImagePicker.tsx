@@ -6,6 +6,7 @@ import {
   useDeferredValue,
 } from "react";
 import { Search, X, Upload } from "lucide-react";
+import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import {
   useVirtualFloating,
@@ -300,7 +301,7 @@ export function ImagePicker({
 
       {/* Search header */}
       <div className="flex items-center gap-2 p-2 border-b border-border">
-        <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <Icon icon={Search} className="text-muted-foreground shrink-0" />
         <input
           ref={searchInputRef}
           type="text"
@@ -318,7 +319,7 @@ export function ImagePicker({
             onClick={() => setQuery("")}
             className="text-muted-foreground hover:text-foreground"
           >
-            <X className="h-3.5 w-3.5" />
+            <Icon icon={X} stroke="emphasis" />
           </button>
         )}
       </div>
@@ -348,7 +349,7 @@ export function ImagePicker({
               )}
               title={i18n.t("imagePicker.uploadNew")}
             >
-              <Upload className="h-4 w-4" />
+              <Icon icon={Upload} />
               <span className="text-[10px] text-center leading-tight">
                 {i18n.t("imagePicker.uploadNew")}
               </span>
@@ -371,7 +372,7 @@ export function ImagePicker({
               )}
               title={i18n.t("imagePicker.uploadNew")}
             >
-              <Upload className="h-4 w-4" />
+              <Icon icon={Upload} />
               <span className="text-[10px] text-center leading-tight">
                 {i18n.t("imagePicker.uploadNew")}
               </span>
@@ -394,7 +395,7 @@ export function ImagePicker({
               )}
               title={i18n.t("imagePicker.uploadNew")}
             >
-              <Upload className="h-4 w-4" />
+              <Icon icon={Upload} />
               <span className="text-[10px] text-center leading-tight">
                 {i18n.t("imagePicker.uploadNew")}
               </span>
