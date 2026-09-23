@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Cloud, HardDrive, Loader2, Bug, Copy, RotateCcw } from "lucide-react";
+import { Cloud, HardDrive, Loader2, Bug, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
@@ -17,14 +17,10 @@ import {
 } from "@/config/constants";
 import {
   giphyApiKeyItem,
-  latestVersionItem,
-  dismissedUpdateVersionItem,
   debugModeItem,
   debugLogItem,
-  typingTimeoutItem,
   type DebugLogEntry,
 } from "@/storage/items";
-import { TIMING } from "@/config/constants";
 import { i18n } from "#i18n";
 import { captureError, captureMessage } from "@/lib/sentry";
 import { SENTRY_TEST_MESSAGE_TYPE } from "@/config/constants";
@@ -55,7 +51,6 @@ export function AdvancedSection() {
   const [giphyKeyError, setGiphyKeyError] = useState<string | null>(null);
 
   const [pingStatus, setPingStatus] = useState<"idle" | "pinging">("idle");
-  const [pingError, setPingError] = useState("");
 
   const [storageMode, setStorageMode] = useState<StorageMode>("sync");
   const [syncUsed, setSyncUsed] = useState<number | null>(null);
@@ -202,7 +197,6 @@ export function AdvancedSection() {
 
   const handlePing = async () => {
     setPingStatus("pinging");
-    setPingError("");
     try {
       const allTabs = await browser.tabs.query({});
       const tab = allTabs.find(
@@ -662,7 +656,9 @@ export function AdvancedSection() {
                         type: SENTRY_TEST_MESSAGE_TYPE,
                       });
                       return;
-                    } catch {}
+                    } catch {
+                      /* tab has no content script — try the next one */
+                    }
                   }
                   captureMessage(
                     "No tab with content script found. Open a regular webpage and try again.",

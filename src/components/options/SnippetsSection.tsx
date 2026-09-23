@@ -3,8 +3,6 @@ import { Download, Check, Globe, Plus, X, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 import { InlineError } from "@/components/ui/inline-error";
 import { exportSnippets, getSnippets } from "@/storage";
 import { snippetsContainMedia } from "@/lib/exporters/clipio";
@@ -45,11 +43,11 @@ export function SnippetsSection() {
     if (hostname.startsWith("*.")) {
       const rest = hostname.slice(2);
       return (
-        /^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$/i.test(rest) && rest.includes(".")
+        /^[a-z0-9]([a-z0-9\-.]*[a-z0-9])?$/i.test(rest) && rest.includes(".")
       );
     }
     return (
-      /^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$/i.test(hostname) &&
+      /^[a-z0-9]([a-z0-9\-.]*[a-z0-9])?$/i.test(hostname) &&
       hostname.includes(".")
     );
   }

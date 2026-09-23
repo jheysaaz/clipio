@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
-import { InlineError } from "@/components/ui/inline-error";
 import { getSnippets } from "@/storage";
 import { SYNC_QUOTA } from "@/config/constants";
 import {
@@ -13,7 +12,6 @@ import {
   usageCountsItem,
 } from "@/storage/items";
 import { i18n } from "#i18n";
-import { captureError } from "@/lib/sentry";
 import { InfoTooltip } from "./InfoTooltip";
 import { useStorageStats } from "./useStorageStats";
 

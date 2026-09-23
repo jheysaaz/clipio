@@ -6,7 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { InlineError } from "@/components/ui/inline-error";
-import { SYNC_QUOTA, MEDIA_LIMITS } from "@/config/constants";
+import { MEDIA_LIMITS } from "@/config/constants";
 import {
   listMedia,
   getMedia,
@@ -109,7 +109,9 @@ export function ImagesSection() {
                   referencingSnippets: refMap[meta.id] ?? [],
                 };
               }
-            } catch {}
+            } catch {
+              /* unreadable media entry — fall through with a null object URL */
+            }
             return {
               meta,
               objectUrl: null,
