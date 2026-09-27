@@ -216,3 +216,72 @@ describe("debugLog — never rejects", () => {
     ).resolves.toBeUndefined();
   });
 });
+
+/**
+ * The debug-mode watcher.
+ *
+ * Moved here from `preview-privacy.test.ts`, which was deleted. That file named
+ * a module (`preview-privacy.ts`) that does not exist, five of its six tests
+ * asserted on locally-created spies rather than on any production code, and this
+ * was the only one that touched real behaviour — so it is kept, in the file that
+ * owns `debugLog`.
+ *
+ * `debugLog` is called from hot paths, so the flag read and the watcher
+ * registration happen exactly once per process; a `watch` per call would
+ * accumulate listeners for the lifetime of a service worker.
+ *
+ * The guard that actually enforces this is the `_debugEnabled !== null`
+ * early-return, not the `_watching` flag: once the flag has been read,
+ * `ensureInitialised` returns before reaching the watch block at all. The
+ * `_watching` flag is belt-and-braces and is not independently reachable, so
+ * these tests pin the observable behaviour rather than that flag.
+ */
+describe("debugLog — debug-mode watcher", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    _resetDebugCache();
+    mockDebugModeItem.getValue.mockResolvedValue(true);
+    mockDebugLogItem.getValue.mockResolvedValue([]);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    _resetDebugCache();
+  });
+
+  it("registers a watcher on the first call", async () => {
+    await debugLog("content", "event", {});
+
+    expect(mockDebugModeItem.watch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not register a second watcher on later calls", async () => {
+    // Once-per-process registration.
+    await debugLog("content", "one", {});
+    await debugLog("content", "two", {});
+    await debugLog("storage", "three", {});
+
+    expect(mockDebugModeItem.watch).toHaveBeenCalledTimes(1);
+  });
+
+  it("registers a watcher again after the cache is reset", async () => {
+    // A fresh process (a restarted service worker) must re-establish it, or the
+    // debug toggle would stop taking effect until the next extension update.
+    await debugLog("content", "one", {});
+    _resetDebugCache();
+    await debugLog("content", "two", {});
+
+    expect(mockDebugModeItem.watch).toHaveBeenCalledTimes(2);
+  });
+
+  it("registers the watcher even when debug mode is off", async () => {
+    // Otherwise turning the toggle on would never be observed.
+    mockDebugModeItem.getValue.mockResolvedValue(false);
+    _resetDebugCache();
+
+    await debugLog("content", "event", {});
+
+    expect(mockDebugModeItem.watch).toHaveBeenCalledTimes(1);
+  });
+});

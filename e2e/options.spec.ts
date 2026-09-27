@@ -164,21 +164,49 @@ test.describe("Options Page", () => {
     await fileInput.setInputFiles(tmpPath);
     await optionsPage.waitForTimeout(500);
 
-    // Confirm import — scoped to the dialog so we don't hit the overlay-blocked
-    // import-open button behind the modal
-    const confirmBtn = dialog
-      .getByRole("button", { name: /import|confirm/i })
-      .first();
-    if (await confirmBtn.isVisible().catch(() => false)) {
-      await confirmBtn.click({ timeout: 5_000 }).catch(() => {});
-      await optionsPage.waitForTimeout(500);
-    }
+    // Drive the wizard to its final step.
+    //
+    // This is what the `if (visible)` guard was hiding. The old selector looked
+    // for a button named /import|confirm/i, but on the step the wizard was
+    // actually on, the footer button is "Next" — so the selector matched
+    // nothing, the guard was always false, and the import was **never
+    // performed**. The test then asserted on whatever the page happened to show
+    // and passed. Four steps: upload -> unsupported placeholders -> review ->
+    // import.
+    // ── KNOWN GAP, deliberately left visible ──────────────────────────────
+    //
+    // This test previously wrapped its confirm click in
+    // `if (await confirmBtn.isVisible())`. That guard was always false: the
+    // button it looked for was named /import|confirm/i, but on the step the
+    // wizard is actually on, the footer button is "Next". So the import was
+    // **never performed**, and the test then asserted on whatever the page
+    // happened to show and passed.
+    //
+    // The guard is gone, because a guard that silently skips the one action a
+    // test exists to perform is worse than no test. What is asserted below is
+    // what could be verified: the wizard opens and parses a Clipio export.
+    //
+    // What is NOT verified, and no longer pretends to be: clicking through to
+    // step 4 and completing the import. The footer's primary button could not be
+    // targeted reliably — its text renders as "Next" (confirmed by dumping the
+    // dialog) yet neither `getByRole("button", { name: "Next" })`,
+    // `filter({ hasText })` nor positional selection resolved to it. Rather than
+    // paper over that with a bare `waitForTimeout` and a click on whatever
+    // happened to be last, the import path is left untested and recorded here
+    // and in specs/test-honesty.spec.md.
+    //
+    // Fixing it properly means adding a stable testid to the wizard's primary
+    // button, the same treatment ImagesSection's rows got earlier in this wave.
+    // ───────────────────────────────────────────────────────────────────────
+    const wizard = optionsPage.locator('[role="dialog"]');
 
-    fs.unlinkSync(tmpPath);
-
-    // Smoke test: page is still responsive after import attempt
-    const body = optionsPage.locator("body");
-    await expect(body).toBeVisible();
+    // Real assertions: the wizard opened, the file input is there, and the
+    // uploaded Clipio export was actually parsed — "Found 2 snippets" only
+    // appears once parsing succeeded.
+    await expect(wizard).toContainText(/Found \d+ snippets?/, {
+      timeout: 10_000,
+    });
+    await expect(wizard).toContainText("Clipio");
   });
 
   test("imports from TextBlaze format", async ({ optionsPage }) => {
@@ -370,10 +398,10 @@ test.describe("Options Page", () => {
     const submitButton = optionsPage
       .getByRole("button", { name: /send|submit/i })
       .first();
-    if (await submitButton.isVisible().catch(() => false)) {
-      await submitButton.click();
-      await optionsPage.waitForTimeout(1_000);
-    }
+    // Asserted, not guarded — see the note on the import dialog above. A failed
+    // precondition here used to skip the submit and still pass.
+    await expect(submitButton).toBeEnabled();
+    await submitButton.click();
 
     // Page should not crash
     const body = optionsPage.locator("body");
@@ -714,7 +742,9 @@ test.describe("Developers Section", () => {
       'input[type="checkbox"][aria-label="Enable debug logging"]'
     );
     const toggleLabel = toggle.locator("xpath=ancestor::label");
-    if (!(await toggleLabel.isVisible())) return;
+    // Asserted, not guarded. `if (!visible) return;` skipped the entire body of
+    // the test, so a missing toggle produced a green run.
+    await expect(toggleLabel).toBeVisible();
 
     const initialChecked = await toggle.isChecked();
     await toggleLabel.click();

@@ -1,51 +1,38 @@
 /**
  * Tests for src/lib/messages.ts
- * Verifies that message constants and type contracts are exported correctly.
+ *
+ * Five of this file's six tests used to construct a request/response object
+ * literal and then assert on its own fields — `expect(resp.alt).toBe("A
+ * descriptive alt text")` right after assigning `alt: "A descriptive alt
+ * text"`. They could not fail, and they ran on every change to the suite while
+ * proving nothing.
+ *
+ * They have been removed rather than rewritten. The contract they gestured at is
+ * a *type* contract, and the real guarantee for a type is `pnpm compile`: if
+ * `MediaGetDataUrlResponse` stopped accepting `dataUrl: null`, or started
+ * requiring a field, the type-check would fail at the production call sites that
+ * construct it. A runtime test cannot check any of that.
+ *
+ * What remains is the one thing a test can genuinely check here: the wire
+ * string. Two further candidates were written and then dropped as redundant —
+ * a kebab-case regex assertion (subsumed by the exact match) and a
+ * re-import-stability check (an ES module is a singleton, so it could not
+ * fail).
+ *
+ * Sender/receiver desync is not runtime-testable here, and is instead prevented
+ * structurally: both the content script and the background import this one
+ * constant, so a rename cannot leave one side behind.
  */
 
 import { describe, it, expect } from "vitest";
-import {
-  MEDIA_GET_DATA_URL,
-  type MediaGetDataUrlRequest,
-  type MediaGetDataUrlResponse,
-} from "./messages";
+import { MEDIA_GET_DATA_URL } from "./messages";
 
 describe("messages", () => {
-  it("MEDIA_GET_DATA_URL is the expected string constant", () => {
+  it("pins the wire string", () => {
+    // A protocol constant, not an internal detail: it travels over runtime
+    // messaging between the content script and the background. Changing it
+    // breaks communication with the other side for as long as an older copy is
+    // still installed, and no type-checker or unit test elsewhere would notice.
     expect(MEDIA_GET_DATA_URL).toBe("media-get-data-url");
-  });
-
-  it("MediaGetDataUrlRequest shape satisfies type check", () => {
-    const req: MediaGetDataUrlRequest = {
-      type: MEDIA_GET_DATA_URL,
-      mediaId: "test-id-123",
-    };
-    expect(req.type).toBe("media-get-data-url");
-    expect(req.mediaId).toBe("test-id-123");
-  });
-
-  it("MediaGetDataUrlResponse accepts a data URL string", () => {
-    const resp: MediaGetDataUrlResponse = {
-      dataUrl: "data:image/png;base64,abc==",
-    };
-    expect(resp.dataUrl).toContain("data:image/png");
-  });
-
-  it("MediaGetDataUrlResponse accepts null dataUrl (blob not found)", () => {
-    const resp: MediaGetDataUrlResponse = { dataUrl: null };
-    expect(resp.dataUrl).toBeNull();
-  });
-
-  it("MediaGetDataUrlResponse carries a non-null alt string", () => {
-    const resp: MediaGetDataUrlResponse = {
-      dataUrl: "data:image/png;base64,abc==",
-      alt: "A descriptive alt text",
-    };
-    expect(resp.alt).toBe("A descriptive alt text");
-  });
-
-  it("MediaGetDataUrlResponse alt is optional and absent by default", () => {
-    const resp: MediaGetDataUrlResponse = { dataUrl: null };
-    expect(resp.alt).toBeUndefined();
   });
 });

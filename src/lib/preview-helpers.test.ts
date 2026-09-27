@@ -13,16 +13,17 @@ import {
   type PreviewSettings,
 } from "@/lib/preview-helpers";
 
-// Mock the markdown module
-vi.mock("~/lib/markdown", () => ({
-  markdownToPlainText: vi.fn((content: string) => {
-    // Simple markdown stripping for tests
-    return content
-      .replace(/\*\*(.*?)\*\*/g, "$1") // **bold**
-      .replace(/\*(.*?)\*/g, "$1") // *italic*
-      .replace(/`(.*?)`/g, "$1"); // `code`
-  }),
-}));
+// The markdown module is deliberately NOT mocked.
+//
+// It used to be, with a hand-rolled reimplementation of `markdownToPlainText`
+// that handled `**bold**`, `*italic*` and `` `code` `` and nothing else. So the
+// preview tests asserted against a simplified stand-in rather than the real
+// renderer, and any divergence between the two — a snippet that previews
+// differently from how it will actually insert — was invisible here and would
+// only show up in a browser.
+//
+// The real module is pure, needs no browser, and is already covered by
+// markdown.test.ts, so letting it run costs nothing and tests the truth.
 
 // ---------------------------------------------------------------------------
 // Test utilities
@@ -359,9 +360,20 @@ describe("createPreviewTooltip", () => {
 
   // spec: strips markdown formatting
   it("strips markdown formatting", () => {
-    const content = "Hello **world**! This is *italic* and `code`.";
+    // Expectations are the real renderer's, not a stand-in's. This test used to
+    // run against a hand-rolled `markdownToPlainText` mock that also stripped
+    // `*italic*`, which Clipio does not: its emphasis marker is `_italic_`, so
+    // `*text*` is literal. The mock and this expectation were wrong together,
+    // and the pair hid it.
+    const content = "Hello **world**! This is _italic_ and `code`.";
     const result = createPreviewTooltip(content);
     expect(result).toBe("Hello world! This is italic and code.");
+  });
+
+  it("leaves a single-asterisk span alone, because _ is the emphasis marker", () => {
+    // Pins the divergence that the mock introduced, so it cannot come back.
+    const result = createPreviewTooltip("a *b* c");
+    expect(result).toBe("a *b* c");
   });
 
   // spec: normalizes whitespace
@@ -402,17 +414,18 @@ describe("createPreviewTooltip", () => {
     expect(result.endsWith("...")).toBe(true);
   });
 
-  // spec: handles markdown processing errors gracefully
-  it("handles markdown processing errors gracefully", async () => {
-    // Get the mock function
-    const { markdownToPlainText } = vi.mocked(await import("~/lib/markdown"));
-
-    // Mock markdownToPlainText to throw for this test only
-    markdownToPlainText.mockImplementationOnce(() => {
-      throw new Error("Markdown parsing failed");
-    });
-
-    const result = createPreviewTooltip("Some content");
-    expect(result).toBe("(content preview unavailable)");
-  });
+  // NOTE: this file used to end with a "handles markdown processing errors
+  // gracefully" test that mocked `markdownToPlainText` into throwing. It has
+  // been removed rather than reworked.
+  //
+  // The fallback it covered is real — `createPreviewTooltip` does catch and
+  // return "(content preview unavailable)" — but the only way to reach it was to
+  // make the mocked module throw. `markdownToPlainText` is a pure, total
+  // function over a string, so with the real module that branch is unreachable
+  // from a test. Keeping a mock purely to throw would test the mock, which is
+  // the thing this wave is removing.
+  //
+  // The branch is recorded here rather than silently left uncovered: if
+  // `markdownToPlainText` ever grows a failure mode, this is the test that
+  // should be written to reach it.
 });

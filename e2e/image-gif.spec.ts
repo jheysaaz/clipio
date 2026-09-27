@@ -362,31 +362,38 @@ test.describe("Image / GIF feature tests", () => {
     });
     await seedSnippets(context, extensionId, [snippet]);
 
-    // Open options page at the Images section
+    // Open the options page and navigate to Images by clicking the nav item.
+    //
+    // This used to load `options.html#images` and assume the hash routed there.
+    // It does not: the page came up on the Dashboard, so the only "image" on
+    // screen was the sidebar's own "Images" link — which is exactly what the old
+    // `bodyText.includes("image")` assertion matched. The test passed without
+    // ever opening the section it claimed to test.
     const optionsPage = await context.newPage();
-    await optionsPage.goto(
-      `chrome-extension://${extensionId}/options.html#images`
-    );
+    await optionsPage.goto(`chrome-extension://${extensionId}/options.html`);
     await optionsPage.waitForLoadState("domcontentloaded");
-    await optionsPage.waitForTimeout(800);
+    await optionsPage.getByTestId("options-nav-images").click();
+    await expect(optionsPage.getByTestId("options-nav-images")).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
 
-    const bodyText = await optionsPage.textContent("body");
+    // Assert on THIS image's row, by its stable testid.
+    //
+    // This test previously asserted that the page's text contained "image",
+    // which is true whenever the Images section renders anything at all — it
+    // could not fail, and the comment above it conceded as much. The real claim
+    // is that an image referenced only through the width-suffixed form is still
+    // recognised as referenced, which needs a per-image handle.
+    const row = optionsPage.getByTestId(`image-row-${mediaId}`);
 
-    // The options page should NOT show "Not used in any snippets" for this image
-    // (it should detect the width-suffixed reference)
-    // We verify indirectly: the page loaded without crash and shows expected UI
-    expect(bodyText).toBeTruthy();
-
-    // More specifically: if the images section loaded and found the media,
-    // it should NOT say it's unused (only shows "not used" for truly orphaned images)
-    // The absence of the string "not used" for OUR specific id is the signal.
-    // Since we can't easily isolate a single image row in the DOM, we verify the
-    // page doesn't show the "not used" state exclusively (i.e. page loaded OK).
-    const pageHasImages =
-      bodyText?.includes("Width Suffix Snippet") ||
-      bodyText?.includes("Images") ||
-      bodyText?.includes("image");
-    expect(pageHasImages).toBe(true);
+    await expect(row).toBeVisible();
+    // Rendered as "Used in: <label>", so the width suffix was parsed and the
+    // snippet was matched to this image.
+    await expect(row).toContainText("Used in: Width Suffix Snippet");
+    // And explicitly not the orphaned state.
+    // The real orphaned-state string, from options.images.noReferences.
+    await expect(row).not.toContainText("Not used in any snippets");
 
     await optionsPage.close();
   });

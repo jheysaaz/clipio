@@ -17,6 +17,12 @@ import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
 import type { TElement } from "platejs";
 import { i18n } from "#i18n";
+import {
+  MIN_WIDTH,
+  FALLBACK_MAX_WIDTH,
+  clampWidth,
+  getScrollParentWidth,
+} from "./mediaResize";
 
 interface ResizableMediaWrapperProps {
   /** The Plate element node (used to locate it in the tree for setNodes / removeNodes). */
@@ -27,26 +33,6 @@ interface ResizableMediaWrapperProps {
   onWidthChange: (newWidth: number) => void;
   children: React.ReactNode;
   className?: string;
-}
-
-const MIN_WIDTH = 40;
-
-/**
- * Walk up the DOM from `el` to find the nearest scrollable ancestor
- * (overflow-auto / overflow-scroll).  This is the PlateContent container
- * whose clientWidth is the true maximum we must not exceed.
- */
-function getScrollParentWidth(el: HTMLElement): number {
-  let node: HTMLElement | null = el.parentElement;
-  while (node && node !== document.body) {
-    const { overflow, overflowX } = getComputedStyle(node);
-    if (/auto|scroll/.test(overflow) || /auto|scroll/.test(overflowX)) {
-      return node.clientWidth;
-    }
-    node = node.parentElement;
-  }
-  // Fallback: use the direct parent's offsetWidth
-  return el.parentElement?.offsetWidth ?? 600;
 }
 
 export function ResizableMediaWrapper({
@@ -92,16 +78,13 @@ export function ResizableMediaWrapper({
       // editor's scroll container (i.e. the visible popup area).
       const maxWidth = containerRef.current
         ? getScrollParentWidth(containerRef.current)
-        : 600;
+        : FALLBACK_MAX_WIDTH;
 
       setIsResizing(true);
 
       const onMouseMove = (moveEvent: MouseEvent) => {
         const delta = moveEvent.clientX - startX;
-        const newWidth = Math.min(
-          maxWidth,
-          Math.max(MIN_WIDTH, startWidth + delta)
-        );
+        const newWidth = clampWidth(startWidth, delta, maxWidth);
         // Live-update the container style for smooth feedback (no re-render)
         if (containerRef.current) {
           containerRef.current.style.width = `${newWidth}px`;
@@ -114,10 +97,7 @@ export function ResizableMediaWrapper({
         setIsResizing(false);
 
         const delta = upEvent.clientX - startX;
-        const finalWidth = Math.min(
-          maxWidth,
-          Math.max(MIN_WIDTH, startWidth + delta)
-        );
+        const finalWidth = clampWidth(startWidth, delta, maxWidth);
         onWidthChange(Math.round(finalWidth));
       };
 

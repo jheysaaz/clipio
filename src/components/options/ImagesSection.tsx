@@ -284,6 +284,13 @@ export function ImagesSection() {
             return (
               <div
                 key={item.meta.id}
+                // Stable per-image handle, in both view modes. Without it the
+                // only way to assert on one image is `textContent("body")`,
+                // which cannot tell this image's state from another's — the
+                // reason the e2e test for width-suffixed references could only
+                // check that the page contained the substring "image" (which the
+                // sidebar's own "Images" link satisfied).
+                data-testid={`image-row-${item.meta.id}`}
                 className="rounded-xl border p-4 flex items-start gap-4"
               >
                 <div className="shrink-0 h-16 w-16 rounded-lg border bg-muted/50 overflow-hidden flex items-center justify-center">
@@ -401,6 +408,12 @@ export function ImagesSection() {
             return (
               <div
                 key={item.meta.id}
+                // Stable per-image handle. Without it the only way to assert on
+                // one image row is `textContent("body")`, which cannot tell this
+                // image's state from any other row's — the reason the e2e test
+                // for width-suffixed references could only check that the page
+                // contained the substring "image".
+                data-testid={`image-row-${item.meta.id}`}
                 className="group relative rounded-xl border bg-muted/20 overflow-hidden flex flex-col"
               >
                 <div className="relative aspect-square bg-muted/50 flex items-center justify-center overflow-hidden">
