@@ -56,25 +56,14 @@ import {
 } from "@/lib/preview-helpers";
 import { snippetPreviewUI } from "@/lib/snippet-preview-ui";
 import { locateTextRange, getCaretTextOffset } from "@/lib/dom-text-range";
+import { isHostnameBlocked } from "@/lib/blocked-sites";
 
 /**
- * Returns true if `hostname` is covered by any entry in `blockedPatterns`.
- * Supports exact matches (e.g. "example.com") and wildcard subdomain
- * patterns (e.g. "*.example.com" matches "mail.example.com" and
- * "app.sub.example.com" but NOT bare "example.com").
+ * Blocklist matching lives in src/lib/blocked-sites.ts so it can be unit
+ * tested directly — it was previously a file-local function here with zero
+ * coverage, and a second copy of the normalisation logic lived inside
+ * SnippetsSection.tsx. spec: specs/blocked-sites.spec.md
  */
-function isHostnameBlocked(
-  hostname: string,
-  blockedPatterns: string[]
-): boolean {
-  return blockedPatterns.some((pattern) => {
-    if (pattern.startsWith("*.")) {
-      const base = pattern.slice(2); // e.g. "example.com"
-      return hostname.endsWith("." + base);
-    }
-    return hostname === pattern;
-  });
-}
 
 export default defineContentScript({
   matches: ["<all_urls>"],
@@ -558,6 +547,11 @@ export default defineContentScript({
       element.dispatchEvent(
         new Event("change", { bubbles: true, cancelable: true })
       );
+      // The trust boundary in registerRuntimeListeners rejects these
+      // synthetic events, so nothing downstream will consume the flag any
+      // more. Clear it here instead of leaving it set, otherwise it would
+      // swallow the user's next genuine keystroke.
+      justExpanded = false;
       element.focus();
 
       const insertionStuck = await verifyInsertionSuccessForInput(
@@ -702,6 +696,10 @@ export default defineContentScript({
       element.dispatchEvent(
         new Event("input", { bubbles: true, cancelable: true })
       );
+      // Rejected by the trust boundary, so clear the flag rather than letting
+      // it swallow the user's next genuine keystroke. See the note in
+      // expandSnippet.
+      justExpanded = false;
 
       const insertionStuck = await verifyInsertionSuccessForContentEditable(
         element,
@@ -864,8 +862,12 @@ export default defineContentScript({
 
       await loadSnippets();
 
-      // Initialize preview UI only when preview is enabled
-      if (previewSettings.enabled) {
+      // Initialize preview UI only when preview is enabled AND this host is
+      // not blocked. On a blocked site we inject nothing at all — otherwise
+      // the preview host element and tooltip live in the page DOM for the
+      // whole session, which is the opposite of what "hide on this site"
+      // promises. spec: specs/blocked-sites.spec.md
+      if (previewSettings.enabled && !isBlocked) {
         snippetPreviewUI.init();
         snippetPreviewUI.setEventHandlers(
           handlePreviewSnippetSelection,
@@ -905,6 +907,14 @@ export default defineContentScript({
 
     function handlePreviewKeyboard(event: KeyboardEvent): boolean {
       if (!previewSettings.enabled || !snippetPreviewUI.isVisible()) {
+        return false;
+      }
+      // Defence in depth: init() is already gated on !isBlocked, so a visible
+      // preview on a blocked host should be impossible. If the user blocks
+      // the site mid-session the UI may still be up, and this path performs
+      // the actual insertion — so re-check here.
+      if (isBlocked) {
+        hidePreview();
         return false;
       }
 
@@ -1050,7 +1060,11 @@ export default defineContentScript({
           showConfetti(pos.x, pos.y);
         }
 
-        // Mark as just expanded to prevent redundant triggers
+        // Mark as just expanded to prevent redundant triggers.
+        // Unlike expandSnippet, no synthetic input is dispatched here, so the
+        // flag is deliberately left set: the next genuine input event consumes
+        // it, which stops the freshly inserted snippet content from
+        // immediately re-triggering expansion.
         justExpanded = true;
       } catch (error) {
         captureError(error, { action: "insertSnippetInInput" });
@@ -1162,6 +1176,8 @@ export default defineContentScript({
 
         justExpanded = true;
         element.dispatchEvent(new Event("input", { bubbles: true }));
+        // Rejected by the trust boundary — clear it here. See expandSnippet.
+        justExpanded = false;
 
         const insertionStuck = await verifyInsertionSuccessForContentEditable(
           element,
@@ -1232,7 +1248,11 @@ export default defineContentScript({
           }
 
           // Handle global preview keyboard shortcut
-          if (previewSettings.enabled) {
+          // Blocked hosts must not open the preview either — this branch
+          // renders the entire snippet list (labels, shortcuts, previews)
+          // into the page. handleInput / handleKeyDown already bail on
+          // isBlocked; this one did not. spec: specs/blocked-sites.spec.md
+          if (previewSettings.enabled && !isBlocked) {
             const shortcut = previewSettings.keyboardShortcut.toLowerCase();
             const hasCtrl = shortcut.includes("ctrl")
               ? event.ctrlKey || event.metaKey

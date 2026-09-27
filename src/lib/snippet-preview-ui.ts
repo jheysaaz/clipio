@@ -482,8 +482,17 @@ export class SnippetPreviewUI {
       contentWrap.appendChild(shortcutDiv);
       item.appendChild(contentWrap);
 
-      // Add click handler
-      item.addEventListener("click", () => {
+      // Add click handler.
+      // Guarded on isTrusted: the shadow root is mode:"open" and the host is
+      // in the page DOM, so once the user legitimately opens this preview,
+      // page script can querySelector('.clipio-preview-item').click() and
+      // force onSelect — which reaches insertSnippetIn* and, for a
+      // {{clipboard}} snippet, forces a clipboard read into a field the page
+      // controls. `isTrusted` is UA-set and unforgeable; element.click() and
+      // dispatchEvent() both produce false.
+      // spec: specs/content-script-trust.spec.md
+      item.addEventListener("click", (event: MouseEvent) => {
+        if (!event.isTrusted) return;
         if (this.onSelect) {
           this.onSelect(snippet);
         }

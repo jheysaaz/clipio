@@ -24,6 +24,7 @@ import {
 } from "@/lib/messages";
 import { getMedia } from "@/storage/backends/media";
 import { checkForUpdate } from "@/lib/update-checker";
+import { addBlockedSite } from "@/lib/blocked-sites";
 import { debugLog } from "@/lib/debug";
 import {
   shouldShowReviewPrompt,
@@ -449,9 +450,7 @@ export default defineBackground(() => {
           const hostname = new URL(url).hostname;
           if (!hostname) break;
           const current = await blockedSitesItem.getValue();
-          if (!current.includes(hostname)) {
-            await blockedSitesItem.setValue([...current, hostname]);
-          }
+          await blockedSitesItem.setValue(addBlockedSite(current, hostname));
         } catch (err) {
           captureError(err, { action: "hideOnSite" });
         }

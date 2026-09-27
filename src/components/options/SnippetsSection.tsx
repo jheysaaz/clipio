@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { InlineError } from "@/components/ui/inline-error";
 import { exportSnippets, getSnippets } from "@/storage";
 import { snippetsContainMedia } from "@/lib/exporters/clipio";
+import { normalizeHostname } from "@/lib/blocked-sites";
 import { TIMING } from "@/config/constants";
 import { blockedSitesItem, typingTimeoutItem } from "@/storage/items";
 import { i18n } from "#i18n";
@@ -31,12 +32,13 @@ export function SnippetsSection() {
       .catch(console.warn);
   }, []);
 
+  // Hostname normalisation is owned by src/lib/blocked-sites.ts so the
+  // options form, the context-menu path and the content-script matcher all
+  // agree. This local copy previously did not strip an explicit port, so
+  // pasting "https://mail.example.com:443/inbox" stored an entry that could
+  // never match location.hostname. spec: specs/blocked-sites.spec.md
   function normaliseHostname(raw: string): string {
-    let s = raw.trim().toLowerCase();
-    s = s.replace(/^https?:\/\//i, "");
-    s = s.split("/")[0].split("?")[0].split("#")[0];
-    s = s.replace(/\.+$/, "");
-    return s;
+    return normalizeHostname(raw);
   }
 
   function isValidHostname(hostname: string): boolean {

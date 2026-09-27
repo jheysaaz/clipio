@@ -843,6 +843,7 @@ test.describe("Untrusted event rejection", () => {
     // Ctrl+Shift+Space is the default manual preview shortcut. If the guard
     // is missing, this opens the palette and renders every snippet label and
     // shortcut into the page DOM.
+    await installDefaultPreventedProbe(testPage);
     await testPage.evaluate(() => {
       const input = document.querySelector<HTMLInputElement>(
         '[data-testid="text-input"]'
@@ -867,6 +868,8 @@ test.describe("Untrusted event rejection", () => {
     // means snippet data (label + shortcut) reached the page DOM.
     await expect(testPage.locator(".clipio-preview-item")).toHaveCount(0);
     await expect(testPage.locator("#clipio-snippet-preview-host")).toBeHidden();
+    // The page must not be able to swallow its own default action either.
+    expect(await readPreventedFlag(testPage)).toBe(false);
   });
 
   test("synthetic input event does not expand or arm the debounce", async ({
@@ -887,7 +890,108 @@ test.describe("Untrusted event rejection", () => {
     });
 
     expect(value).toBe("/hello");
-    expect(value).not.toContain("Hello, World!");
+  });
+
+  test("synthetic input event does not open the preview", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    // "/hello" ends with a slash-trigger prefix, so an untrusted input event
+    // that reached the handler would render preview rows into the page.
+    await testPage.locator('[data-testid="text-input"]').click();
+    await testPage.evaluate(() => {
+      const input = document.querySelector<HTMLInputElement>(
+        '[data-testid="text-input"]'
+      );
+      if (!input) throw new Error("test input not found");
+      input.value = "/he";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    await expect(testPage.locator(".clipio-preview-item")).toHaveCount(0);
+  });
+
+  test("synthetic input event does not expand a contenteditable", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    // Covers the input-listener branch that routes to
+    // handleContentEditableInput, which is distinct from the keydown branch.
+    const text = await testPage.evaluate(async () => {
+      const el = document.createElement("div");
+      el.contentEditable = "true";
+      el.textContent = "/hello";
+      document.body.appendChild(el);
+      el.focus();
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      const result = el.textContent ?? "";
+      el.remove();
+      return result;
+    });
+
+    expect(text).toBe("/hello");
+  });
+
+  test("synthetic click on a preview row does not insert a snippet", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    // The user opens the preview legitimately (trusted input), so the row
+    // exists in the page DOM. The shadow root is mode:"open", so page script
+    // can then click it directly. That must not insert anything.
+    const input = testPage.locator('[data-testid="text-input"]');
+    await input.click();
+    await testPage.keyboard.press("Control+Shift+Space");
+    await expect(testPage.locator(".clipio-preview-item").first()).toBeVisible({
+      timeout: 5_000,
+    });
+    const value = await testPage.evaluate(async () => {
+      const target = document.querySelector<HTMLInputElement>(
+        '[data-testid="text-input"]'
+      );
+      if (!target) throw new Error("test input not found");
+      // The rows live inside the host's shadow root, which plain
+      // document.querySelector does NOT pierce (unlike Playwright locators).
+      const host = document.querySelector("#clipio-snippet-preview-host");
+      const shadowRoot = (host as HTMLElement | null)?.shadowRoot;
+      if (!shadowRoot) throw new Error("preview shadow root not found");
+      const row = shadowRoot.querySelector(".clipio-preview-item");
+      if (!row) throw new Error("preview row not found");
+      row.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true })
+      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return target.value;
+    });
+
+    expect(value).toBe("");
+  });
+
+  test("trusted Enter on a preview row still inserts a snippet", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    // Regression guard for the isTrusted guard on the row click handler and
+    // for the preview selection path as a whole. Enter is the documented
+    // primary way to accept a highlighted row.
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    const input = testPage.locator('[data-testid="text-input"]');
+    await input.click();
+    await testPage.keyboard.press("Control+Shift+Space");
+    await expect(testPage.locator(".clipio-preview-item").first()).toBeVisible({
+      timeout: 5_000,
+    });
+
+    await testPage.keyboard.press("Enter");
+    await expect(input).toHaveValue(/Hello, World!/, { timeout: 5_000 });
   });
 
   test("trusted keyboard input still expands a snippet", async ({
