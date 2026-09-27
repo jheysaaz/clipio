@@ -20,6 +20,9 @@ import {
   compressMedia,
   computeHash,
   findByHash,
+  isWithinMediaQuota,
+  isSupportedMediaType,
+  isWithinFileSizeLimit,
 } from "./media";
 import type { MediaEntry } from "./media";
 import { MEDIA_LIMITS } from "@/config/constants";
@@ -839,5 +842,208 @@ describe("restoreMediaEntry (deduplication)", () => {
     await restoreMediaEntry(entry);
     const fetched = await getMedia("restore-hash-test");
     expect(fetched!.hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// restoreMediaEntry — trust boundary for untrusted ZIP imports
+// spec: specs/media-import-hardening.spec.md
+//
+// The docstring used to claim "skips validation since the data was previously
+// validated on export". That is false for an export someone else authored.
+// ---------------------------------------------------------------------------
+
+describe("restoreMediaEntry — validates an untrusted import", () => {
+  const base = (overrides: Partial<MediaEntry> = {}): MediaEntry => {
+    const blob = overrides.blob ?? makeBlob(64, "image/webp");
+    return {
+      id: "untrusted-1",
+      mimeType: "image/webp",
+      width: 10,
+      height: 10,
+      size: blob.size,
+      originalSize: blob.size,
+      createdAt: "2025-01-01T00:00:00.000Z",
+      blob,
+      ...overrides,
+    };
+  };
+
+  // --- MIME allow-list ---
+
+  it("rejects an SVG blob, which is script-capable in some contexts", async () => {
+    const entry = base({ blob: makeBlob(64, "image/svg+xml") });
+    await expect(restoreMediaEntry(entry)).rejects.toThrow();
+  });
+
+  it("rejects a text/html blob", async () => {
+    const entry = base({ blob: makeBlob(64, "text/html") });
+    await expect(restoreMediaEntry(entry)).rejects.toThrow();
+  });
+
+  it("rejects an empty MIME type", async () => {
+    const entry = base({ blob: makeBlob(64, "") });
+    await expect(restoreMediaEntry(entry)).rejects.toThrow();
+  });
+
+  // --- per-file size ---
+
+  it("rejects a blob larger than MAX_FILE_SIZE", async () => {
+    const oversized = new Blob(
+      [new Uint8Array(MEDIA_LIMITS.MAX_FILE_SIZE + 1)],
+      {
+        type: "image/png",
+      }
+    );
+    const entry = base({ blob: oversized, mimeType: "image/png" });
+    await expect(restoreMediaEntry(entry)).rejects.toThrow();
+  });
+
+  it("does not write an oversized blob to the store", async () => {
+    const oversized = new Blob(
+      [new Uint8Array(MEDIA_LIMITS.MAX_FILE_SIZE + 1)],
+      {
+        type: "image/png",
+      }
+    );
+    await expect(
+      restoreMediaEntry(base({ id: "too-big", blob: oversized }))
+    ).rejects.toThrow();
+    expect(await getMedia("too-big")).toBeNull();
+  });
+
+  // --- total quota ---
+
+  // --- the stored size field must not be trusted ---
+
+  it("recomputes size from the blob instead of trusting the stored field", async () => {
+    // An attacker can set size: 1 to make the quota accounting under-report.
+    const blob = makeBlob(2048, "image/webp");
+    const entry = base({
+      id: "lying-size",
+      blob,
+      mimeType: "image/webp",
+      size: 1,
+    });
+    await restoreMediaEntry(entry);
+    const fetched = await getMedia("lying-size");
+    expect(fetched!.size).toBe(2048);
+  });
+
+  it("rejects a lying size field that would otherwise let an oversized blob through", async () => {
+    const oversized = new Blob(
+      [new Uint8Array(MEDIA_LIMITS.MAX_FILE_SIZE + 1)],
+      {
+        type: "image/png",
+      }
+    );
+    const entry = base({
+      id: "lying-and-oversized",
+      blob: oversized,
+      mimeType: "image/png",
+      size: 1, // lies
+    });
+    await expect(restoreMediaEntry(entry)).rejects.toThrow();
+  });
+
+  // --- the happy path must be unaffected ---
+
+  it("still accepts a legitimate entry", async () => {
+    const blob = makeBlob(128, "image/png");
+    await restoreMediaEntry(base({ id: "legit", blob, mimeType: "image/png" }));
+    expect(await getMedia("legit")).not.toBeNull();
+  });
+
+  it("still short-circuits on a duplicate hash without consuming quota", async () => {
+    const blob = makeBlob(128, "image/webp");
+    await restoreMediaEntry(base({ id: "dup-a", blob }));
+    const before = await getTotalSize();
+    await restoreMediaEntry(
+      base({ id: "dup-b", blob, size: 999_999, mimeType: "image/webp" })
+    );
+    // dup-b must not have been written
+    expect(await getMedia("dup-b")).toBeNull();
+    expect(await getTotalSize()).toBe(before);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The limit predicates, tested directly
+//
+// The quota threshold is unreachable without seeding ~50 MB into
+// fake-indexeddb, so the decision is a pure function and is tested as one.
+// spec: specs/media-import-hardening.spec.md
+// ---------------------------------------------------------------------------
+
+describe("isWithinMediaQuota", () => {
+  it("accepts a write into an empty store", () => {
+    expect(isWithinMediaQuota(0, 1024)).toBe(true);
+  });
+
+  it("accepts a write that lands exactly on the cap", () => {
+    expect(isWithinMediaQuota(MEDIA_LIMITS.MAX_TOTAL_SIZE - 100, 100)).toBe(
+      true
+    );
+  });
+
+  it("rejects a write one byte over the cap", () => {
+    expect(isWithinMediaQuota(MEDIA_LIMITS.MAX_TOTAL_SIZE - 100, 101)).toBe(
+      false
+    );
+  });
+
+  it("rejects any write once the store is already full", () => {
+    expect(isWithinMediaQuota(MEDIA_LIMITS.MAX_TOTAL_SIZE, 1)).toBe(false);
+  });
+
+  it("rejects a write into an over-full store", () => {
+    expect(isWithinMediaQuota(MEDIA_LIMITS.MAX_TOTAL_SIZE + 1, 1)).toBe(false);
+  });
+
+  it("accepts a zero-byte write when the store is exactly full", () => {
+    expect(isWithinMediaQuota(MEDIA_LIMITS.MAX_TOTAL_SIZE, 0)).toBe(true);
+  });
+});
+
+describe("isSupportedMediaType", () => {
+  for (const type of ["image/png", "image/jpeg", "image/gif", "image/webp"]) {
+    it(`accepts ${type}`, () => {
+      expect(isSupportedMediaType(type)).toBe(true);
+    });
+  }
+
+  for (const type of [
+    "image/svg+xml",
+    "text/html",
+    "application/pdf",
+    "video/mp4",
+    "",
+    "IMAGE/PNG",
+  ]) {
+    it(`rejects ${JSON.stringify(type)}`, () => {
+      expect(isSupportedMediaType(type)).toBe(false);
+    });
+  }
+
+  it("rejects undefined", () => {
+    expect(isSupportedMediaType(undefined)).toBe(false);
+  });
+
+  it("rejects null", () => {
+    expect(isSupportedMediaType(null)).toBe(false);
+  });
+});
+
+describe("isWithinFileSizeLimit", () => {
+  it("accepts a file at exactly the cap", () => {
+    expect(isWithinFileSizeLimit(MEDIA_LIMITS.MAX_FILE_SIZE)).toBe(true);
+  });
+
+  it("rejects a file one byte over the cap", () => {
+    expect(isWithinFileSizeLimit(MEDIA_LIMITS.MAX_FILE_SIZE + 1)).toBe(false);
+  });
+
+  it("accepts a small file", () => {
+    expect(isWithinFileSizeLimit(1024)).toBe(true);
   });
 });

@@ -5,7 +5,13 @@
 
 import { describe, it, expect } from "vitest";
 import { zipSync, strToU8 } from "fflate";
-import { ClipioParser, importClipioZip } from "./clipio";
+import {
+  ClipioParser,
+  importClipioZip,
+  isValidMediaId,
+  MAX_ZIP_INFLATED_BYTES,
+} from "./clipio";
+import { MEDIA_LIMITS } from "@/config/constants";
 import type { MediaMetadata } from "@/storage/backends/media";
 
 const makeSnippet = (overrides = {}) => ({
@@ -355,5 +361,161 @@ describe("importClipioZip", () => {
     const result = await importClipioZip(file);
     expect(result.snippets).toHaveLength(1);
     expect(result.snippets[0].suggestedId).toBe("valid-zip-id");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Trust boundary for an untrusted .clipio.zip
+// spec: specs/media-import-hardening.spec.md
+// ---------------------------------------------------------------------------
+
+describe("isValidMediaId", () => {
+  it("accepts an opaque alphanumeric id", () => {
+    expect(isValidMediaId("media-id-001")).toBe(true);
+  });
+
+  it("accepts a crypto.randomUUID() value", () => {
+    expect(isValidMediaId("9f8c1e2a-4b3d-4e5f-8a9b-0c1d2e3f4a5b")).toBe(true);
+  });
+
+  it("accepts an underscore", () => {
+    expect(isValidMediaId("a_b")).toBe(true);
+  });
+
+  // --- negative cases: an id must not escape into a path or a placeholder ---
+
+  it("rejects a path separator", () => {
+    expect(isValidMediaId("../../etc/passwd")).toBe(false);
+  });
+
+  it("rejects a dot, which would break the media/<id> path match", () => {
+    expect(isValidMediaId("a.b")).toBe(false);
+  });
+
+  it("rejects a leading dot", () => {
+    expect(isValidMediaId(".hidden")).toBe(false);
+  });
+
+  it("rejects braces, which would escape into a placeholder", () => {
+    expect(isValidMediaId("x}} {{image:y")).toBe(false);
+  });
+
+  it("rejects a colon, which would escape into a placeholder", () => {
+    expect(isValidMediaId("x:123")).toBe(false);
+  });
+
+  it("rejects a null byte", () => {
+    expect(isValidMediaId(`a${String.fromCharCode(0)}b`)).toBe(false);
+  });
+
+  it("rejects a space", () => {
+    expect(isValidMediaId("a b")).toBe(false);
+  });
+
+  it("rejects an empty string", () => {
+    expect(isValidMediaId("")).toBe(false);
+  });
+
+  it("rejects an over-long id", () => {
+    expect(isValidMediaId("a".repeat(65))).toBe(false);
+  });
+
+  it("rejects undefined", () => {
+    expect(isValidMediaId(undefined)).toBe(false);
+  });
+
+  it("rejects null", () => {
+    expect(isValidMediaId(null)).toBe(false);
+  });
+
+  it("rejects a non-string", () => {
+    expect(isValidMediaId(42)).toBe(false);
+  });
+});
+
+describe("importClipioZip — untrusted archive", () => {
+  it("ignores a media entry whose id is not a safe token", async () => {
+    const envelope = makeExportJson({
+      media: [makeMediaMeta({ id: "../../evil" })],
+    });
+    const result = await importClipioZip(
+      buildZipFile({
+        "export.json": envelope,
+        "media/../../evil.png": new Uint8Array([1, 2, 3, 4]),
+      })
+    );
+    expect(result.mediaBlobs.size).toBe(0);
+  });
+
+  it("still imports a legitimate media entry alongside a hostile one", async () => {
+    const good = makeMediaMeta({ id: "good-id-1" });
+    const envelope = makeExportJson({
+      media: [makeMediaMeta({ id: "../evil" }), good],
+    });
+    const result = await importClipioZip(
+      buildZipFile({
+        "export.json": envelope,
+        "media/good-id-1.png": new Uint8Array([1, 2, 3, 4]),
+      })
+    );
+    expect([...result.mediaBlobs.keys()]).toEqual(["good-id-1"]);
+  });
+
+  it("reports a hostile id as missing rather than silently succeeding", async () => {
+    const envelope = makeExportJson({
+      media: [makeMediaMeta({ id: "../evil" })],
+    });
+    const result = await importClipioZip(
+      buildZipFile({ "export.json": envelope })
+    );
+    expect(result.missingMediaIds).toEqual(["../evil"]);
+  });
+});
+
+describe("MAX_ZIP_INFLATED_BYTES", () => {
+  it("is derived from the media store cap, not a separate magic number", () => {
+    expect(MAX_ZIP_INFLATED_BYTES).toBe(MEDIA_LIMITS.MAX_TOTAL_SIZE);
+  });
+
+  it("is large enough for a full legitimate export", () => {
+    // 25 x 2 MB is exactly MAX_FILE_SIZE * 25, which a real user can produce.
+    const maxFiles = Math.floor(
+      MEDIA_LIMITS.MAX_TOTAL_SIZE / MEDIA_LIMITS.MAX_FILE_SIZE
+    );
+    expect(maxFiles * MEDIA_LIMITS.MAX_FILE_SIZE).toBeLessThanOrEqual(
+      MAX_ZIP_INFLATED_BYTES
+    );
+  });
+});
+
+describe("importClipioZip — decompression bomb", () => {
+  it("refuses an archive that declares more inflated bytes than the budget", async () => {
+    // 1 MB of zeroes compresses to roughly 1 KB, so this archive is tiny on
+    // disk and inflates past the cap. fflate reports `originalSize` in the
+    // filter callback BEFORE extraction, which is what makes the guard cheap.
+    const chunkCount = Math.ceil(MAX_ZIP_INFLATED_BYTES / (1024 * 1024)) + 1;
+    const oneMegabyte = new Uint8Array(1024 * 1024);
+    const entries: Record<string, Uint8Array> = {
+      "export.json": strToU8('{"version":2,"format":"clipio","snippets":[]}'),
+    };
+    for (let i = 0; i < chunkCount; i++) {
+      entries[`media/bomb-${i}.png`] = oneMegabyte;
+    }
+    const bomb = zipSync(entries, { level: 9 });
+    const file = new File([bomb.buffer as ArrayBuffer], "bomb.clipio.zip", {
+      type: "application/zip",
+    });
+
+    await expect(importClipioZip(file)).rejects.toThrow(
+      /inflates to more than/
+    );
+  }, 30_000);
+
+  it("accepts a normal small archive", async () => {
+    const envelope = makeExportJson({ snippets: [] });
+    const result = await importClipioZip(
+      buildZipFile({ "export.json": envelope })
+    );
+    expect(result.snippets).toEqual([]);
   });
 });

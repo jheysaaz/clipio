@@ -188,21 +188,105 @@ export async function saveMedia(file: File | Blob): Promise<MediaEntry> {
 }
 
 /**
+ * Pure: would accepting a blob of `incomingSize` bytes exceed the total cap?
+ *
+ * Extracted so the limit is unit-testable without seeding tens of megabytes
+ * into fake-indexeddb to reach the threshold.
+ * spec: specs/media-import-hardening.spec.md
+ */
+export function isWithinMediaQuota(
+  currentTotal: number,
+  incomingSize: number
+): boolean {
+  return currentTotal + incomingSize <= MEDIA_LIMITS.MAX_TOTAL_SIZE;
+}
+
+/**
+ * Pure: is this MIME type one the media store accepts?
+ *
+ * The allow-list is intentionally narrow: no `image/svg+xml` (script-capable
+ * in some embedding contexts) and no `text/html`.
+ * spec: specs/media-import-hardening.spec.md
+ */
+export function isSupportedMediaType(
+  mimeType: string | undefined | null
+): boolean {
+  return (
+    typeof mimeType === "string" &&
+    (MEDIA_LIMITS.SUPPORTED_TYPES as readonly string[]).includes(mimeType)
+  );
+}
+
+/**
+ * Pure: is this blob within the per-file size limit?
+ * spec: specs/media-import-hardening.spec.md
+ */
+export function isWithinFileSizeLimit(size: number): boolean {
+  return size <= MEDIA_LIMITS.MAX_FILE_SIZE;
+}
+
+/**
  * Restore a media entry from a ZIP import, preserving its original ID.
- * Skips validation (size/type) since the data was previously validated on export.
+ *
+ * An export is untrusted input — the user may be importing a file someone
+ * else authored — so this applies the same limits as `saveMedia`. Validation
+ * is deliberately NOT skipped on the grounds that "the data was validated on
+ * export": that premise only holds for a file this extension wrote.
+ *
+ * The stored `size` field is recomputed from the blob rather than trusted,
+ * because `getTotalSize()` sums that field and an attacker could otherwise
+ * under-report it and grow the store past MAX_TOTAL_SIZE.
  *
  * Deduplication: if an entry with the same hash (any ID) already exists,
- * the restore is skipped to avoid storing duplicate bytes.
- * Throws on IDB errors.
+ * the restore is skipped to avoid storing duplicate bytes. The dedup check
+ * runs first so a re-import neither duplicates bytes nor consumes quota.
+ *
+ * Throws on validation failure or IDB errors.
+ * spec: specs/media-import-hardening.spec.md
  */
 export async function restoreMediaEntry(entry: MediaEntry): Promise<void> {
+  // Validate MIME type against the same allow-list as saveMedia.
+  if (!isSupportedMediaType(entry.blob.type)) {
+    captureMessage("Unsupported media type in import", "warning", {
+      action: "media.restore.unsupportedType",
+      mimeType: entry.blob.type,
+    });
+    throw new Error("media.errors.unsupportedType");
+  }
+
+  // Validate per-file size against the same limit as saveMedia.
+  if (!isWithinFileSizeLimit(entry.blob.size)) {
+    captureMessage("Imported media exceeds size limit", "warning", {
+      action: "media.restore.sizeExceeded",
+      size: entry.blob.size,
+    });
+    throw new Error("media.errors.tooLarge");
+  }
+
   // Compute hash for the incoming blob if not already set.
   const hash = entry.hash ?? (await computeHash(entry.blob));
-  const entryWithHash: MediaEntry = { ...entry, hash };
 
-  // Skip if a same-hash entry already exists (idempotent import).
+  // Skip if a same-hash entry already exists (idempotent import). Done before
+  // the quota check so a re-import does not consume budget twice.
   const existing = await findByHash(hash);
   if (existing) return;
+
+  // Validate total quota. The blob's real size is used, never entry.size.
+  const currentTotal = await getTotalSize();
+  if (!isWithinMediaQuota(currentTotal, entry.blob.size)) {
+    captureMessage("Media storage full during import", "warning", {
+      action: "media.restore.storageFull",
+      currentTotal,
+      fileSize: entry.blob.size,
+    });
+    throw new Error("media.errors.storageFull");
+  }
+
+  const entryWithHash: MediaEntry = {
+    ...entry,
+    hash,
+    size: entry.blob.size,
+  };
 
   try {
     const db = await openDB();
