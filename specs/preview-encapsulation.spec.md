@@ -14,18 +14,19 @@ This spec closes that read surface.
 
 ### 1. The shadow root is `mode: "open"`
 
-`init()` created the root with `mode: "open"`, with the comment _"for E2E test
-compatibility"_. An open root is reachable by page script:
+`init()` created the root with `mode: "open"`, with the comment *"for E2E test
+compatibility"*. An open root is reachable by page script:
 
 ```js
-document.querySelector("#clipio-snippet-preview-host").shadowRoot.textContent; // every snippet label and shortcut
+document.querySelector("#clipio-snippet-preview-host").shadowRoot
+  .textContent  // every snippet label and shortcut
 ```
 
 Combined with the untrusted-event work (`specs/content-script-trust.spec.md`), a page could
 read every shortcut, force an expansion, and — for a `{{clipboard}}` snippet — obtain the
 user's clipboard.
 
-### 2. The hover tooltip renders _outside_ the shadow root entirely
+### 2. The hover tooltip renders *outside* the shadow root entirely
 
 This is the part that closing the root alone would **not** fix. `init()` did:
 
@@ -52,7 +53,7 @@ that a genuine disclosure surface.
 it establishes a stacking context. Inside that context the container
 (`z-index: 2147483647`) and the tooltip (`z-index: 2147483648`) compare against each other
 normally, so the tooltip still paints above the list. The old code kept the tooltip in
-`document.body` because `2147483648` clamps to `2147483647` in the _page's_ stacking
+`document.body` because `2147483648` clamps to `2147483647` in the *page's* stacking
 context, making DOM order decisive; that constraint disappears once both live inside the
 host. `position: fixed` on the tooltip still resolves against the viewport, since neither
 the host nor the root has a transform, filter or `contain`.
@@ -67,11 +68,11 @@ three attributes:
 - `data-preview-rows="0" | "1" | "many"`
 - `data-preview-selected="<index>"`
 
-**Exactly what this discloses:** whether the palette is open, a _bucketed_ row count, and
+**Exactly what this discloses:** whether the palette is open, a *bucketed* row count, and
 which row index is highlighted. Never a label, a shortcut, or snippet content.
 
 The count is a bucket rather than a number on purpose. The palette opens either on a `/`
-query (a filter over the library) or on the manual shortcut, which lists _every_ snippet —
+query (a filter over the library) or on the manual shortcut, which lists *every* snippet —
 so an exact count would disclose the size of the user's whole library. Worse, it would be
 an oracle: a page that owns a field can type prefixes and read the count after each genuine
 keystroke to work out which shortcuts exist. `0`/`1`/`many` is sufficient for the e2e
@@ -81,10 +82,10 @@ result set.
 ### Internal accessor for the accessibility unit test
 
 The a11y suite renders the real `SnippetPreviewUI` and asserts real ARIA on real nodes. It
-runs in the _same_ JS world as the extension code, so it can use a documented `@internal`
+runs in the *same* JS world as the extension code, so it can use a documented `@internal`
 accessor. This is safe: an isolated world cannot be reached from the page at all, so an
 internal method on the class is not a page-facing surface. The closed root protects against
-_page_ script; extension code and its tests are unaffected.
+*page* script; extension code and its tests are unaffected.
 
 ## Acceptance Criteria
 

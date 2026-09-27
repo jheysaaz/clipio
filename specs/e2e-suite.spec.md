@@ -107,6 +107,6 @@ instead of decorating the CI pipeline.
 
 ## Change History
 
-| Date       | Change                    | Author |
-| ---------- | ------------------------- | ------ |
-| 2026-09-23 | Initial spec (e2e repair) | —      |
+| Date       | Change                     | Author |
+| ---------- | -------------------------- | ------ |
+| 2026-09-23 | Initial spec (e2e repair)  | —      |

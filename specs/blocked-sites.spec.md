@@ -16,13 +16,13 @@ UI is injected into the page unconditionally.
 
 `isBlocked` was resolved in `initialize()` (during `initialize`) and checked by:
 
-| Path                                           | Checked? |
-| ---------------------------------------------- | -------- |
-| `handleInput`                                  | yes      |
-| `handleContentEditableInput`                   | yes      |
-| `handleKeyDown` (Space/Tab)                    | yes      |
-| `handlePreviewKeyboard` (preview arrows/Enter) | **no**   |
-| manual preview shortcut (`Ctrl+Shift+Space`)   | **no**   |
+| Path | Checked? |
+|---|---|
+| `handleInput` | yes |
+| `handleContentEditableInput` | yes |
+| `handleKeyDown` (Space/Tab) | yes |
+| `handlePreviewKeyboard` (preview arrows/Enter) | **no** |
+| manual preview shortcut (`Ctrl+Shift+Space`) | **no** |
 
 So on a blocked site the user could still press `Ctrl+Shift+Space` and get the **full
 snippet list** — every label, every shortcut, and a content preview for each — rendered
@@ -90,7 +90,7 @@ Pure, exported, and the single source of truth for the three consumers:
 
 ## Non-Goals
 
-- Closing the preview shadow root so page JS cannot read the snippet list on _unblocked_
+- Closing the preview shadow root so page JS cannot read the snippet list on *unblocked*
   sites. Done — see `specs/preview-encapsulation.spec.md`.
 - Per-path blocking (blocking only `{{clipboard}}` snippets). All-or-nothing is the
   existing product behaviour.

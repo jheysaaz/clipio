@@ -15,8 +15,8 @@ Two gaps, both in the import path only.
 
 ### 1. `restoreMediaEntry` skipped all validation
 
-Its docstring states: _"Skips validation (size/type) since the data was previously validated
-on export."_ That premise is false for an untrusted export. `importClipioZip` takes `meta`
+Its docstring states: *"Skips validation (size/type) since the data was previously validated
+on export."* That premise is false for an untrusted export. `importClipioZip` takes `meta`
 verbatim from the attacker's `export.json`; `ImportWizard` calls `restoreMediaEntry` in a
 loop. There is no MIME check, no per-file size check, and no quota check.
 
@@ -51,7 +51,7 @@ inflate to gigabytes, exhausting memory in the options page.
 ### `importClipioZip` bounds decompression
 
 Uses fflate's `UnzipFileInfo.originalSize`, which is available in the `filter` callback
-_before_ extraction, to enforce a total-inflated-bytes budget. The budget is derived from
+*before* extraction, to enforce a total-inflated-bytes budget. The budget is derived from
 `MEDIA_LIMITS.MAX_TOTAL_SIZE` rather than hard-coded, so the two cannot drift.
 
 `media.id` must be a short opaque token matching `[A-Za-z0-9_-]{1,64}`, because the id is
