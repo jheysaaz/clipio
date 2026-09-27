@@ -23,8 +23,33 @@ export interface StorageBackend {
   /** Return all snippets from this backend. */
   getSnippets(): Promise<Snippet[]>;
 
-  /** Persist the full snippets array to this backend. */
+  /**
+   * Replace the entire snippet set.
+   *
+   * This is the "delete everything I did not see" operation, and it is only
+   * correct when the caller genuinely means to replace the whole set — import,
+   * mode switch, clear. For a single snippet, use `upsertSnippets` /
+   * `removeSnippetsById`, which cannot clobber a concurrent write from another
+   * extension context.
+   */
   saveSnippets(snippets: Snippet[]): Promise<void>;
+
+  /**
+   * Write exactly these snippets, deleting nothing.
+   *
+   * A snippet another context created or updated between the caller's read and
+   * this write is untouched, which is what makes a single-snippet save safe
+   * against concurrent editors.
+   */
+  upsertSnippets?(snippets: Snippet[]): Promise<void>;
+
+  /**
+   * Remove exactly these snippets by id, writing nothing.
+   *
+   * Removing by name rather than by set difference is what stops a delete in
+   * one context from sweeping away a snippet another context just created.
+   */
+  removeSnippetsById?(ids: string[]): Promise<void>;
 
   /** Erase all data owned by this backend. */
   clear(): Promise<void>;

@@ -24,11 +24,18 @@ const {
   mockSyncBackend: {
     getSnippets: vi.fn(),
     saveSnippets: vi.fn(),
+    // Intent-based mutations. The manager uses these for single-snippet CRUD
+    // so a concurrent write in another context is not clobbered — see
+    // specs/storage-durability.spec.md.
+    upsertSnippets: vi.fn(),
+    removeSnippetsById: vi.fn(),
     clear: vi.fn(),
   },
   mockLocalBackend: {
     getSnippets: vi.fn(),
     saveSnippets: vi.fn(),
+    upsertSnippets: vi.fn(),
+    removeSnippetsById: vi.fn(),
     clear: vi.fn(),
   },
   mockIdbBackend: {
@@ -139,10 +146,18 @@ describe("StorageManager", () => {
     mockStorageMode.getValue.mockResolvedValue("sync");
     mockStorageModeReason.getValue.mockResolvedValue("quota");
     mockStorageModeReason.setValue.mockResolvedValue(undefined);
+    // NOTE: vi.clearAllMocks() clears call history but NOT implementations, so
+    // a mockRejectedValue set by one test leaks into the next. Every mock the
+    // manager touches must therefore be re-primed here, not only the ones
+    // that existed when this suite was written.
     mockSyncBackend.getSnippets.mockResolvedValue([]);
     mockSyncBackend.saveSnippets.mockResolvedValue(undefined);
+    mockSyncBackend.upsertSnippets.mockResolvedValue(undefined);
+    mockSyncBackend.removeSnippetsById.mockResolvedValue(undefined);
     mockLocalBackend.getSnippets.mockResolvedValue([]);
     mockLocalBackend.saveSnippets.mockResolvedValue(undefined);
+    mockLocalBackend.upsertSnippets.mockResolvedValue(undefined);
+    mockLocalBackend.removeSnippetsById.mockResolvedValue(undefined);
     mockIdbBackend.saveSnippets.mockResolvedValue(undefined);
     mockIdbBackend.getSnippets.mockResolvedValue([]);
     mockUpdateContentScriptCache.mockResolvedValue(undefined);
@@ -206,14 +221,31 @@ describe("StorageManager", () => {
   // ── saveSnippet ───────────────────────────────────────────────────────────
 
   describe("saveSnippet", () => {
-    it("appends a new snippet to the existing list", async () => {
-      const existing = makeSnippet({ id: "existing" });
+    it("upserts only the new snippet, not the whole list", async () => {
+      // Writing the whole list is what clobbered a concurrent write in
+      // another context. spec: specs/storage-durability.spec.md
       const newSnippet = makeSnippet({ id: "new" });
-      mockSyncBackend.getSnippets.mockResolvedValue([existing]);
+      mockSyncBackend.getSnippets.mockResolvedValue([
+        makeSnippet({ id: "existing" }),
+      ]);
       await manager.saveSnippet(newSnippet);
-      expect(mockSyncBackend.saveSnippets).toHaveBeenCalledWith(
-        expect.arrayContaining([existing, newSnippet])
-      );
+      expect(mockSyncBackend.upsertSnippets).toHaveBeenCalledWith([newSnippet]);
+      expect(mockSyncBackend.saveSnippets).not.toHaveBeenCalled();
+    });
+
+    it("leaves a snippet created by another context after our read intact", async () => {
+      // The lost-update case. Previously the read list was written back whole,
+      // so anything added in between was silently deleted.
+      const newSnippet = makeSnippet({ id: "new" });
+      // Our read saw only `stale`; another context then added `theirs`.
+      mockSyncBackend.getSnippets.mockResolvedValue([
+        makeSnippet({ id: "stale" }),
+        makeSnippet({ id: "theirs" }),
+      ]);
+      await manager.saveSnippet(newSnippet);
+      // We upserted one key and issued no remove at all.
+      expect(mockSyncBackend.upsertSnippets).toHaveBeenCalledWith([newSnippet]);
+      expect(mockSyncBackend.removeSnippetsById).not.toHaveBeenCalled();
     });
 
     // spec: always calls updateContentScriptCache
@@ -234,37 +266,58 @@ describe("StorageManager", () => {
   // ── updateSnippet ─────────────────────────────────────────────────────────
 
   describe("updateSnippet", () => {
-    it("replaces the snippet with the matching id", async () => {
-      const original = makeSnippet({ id: "s1", label: "Original" });
+    it("upserts only the updated snippet", async () => {
       const updated = makeSnippet({ id: "s1", label: "Updated" });
-      mockSyncBackend.getSnippets.mockResolvedValue([original]);
+      mockSyncBackend.getSnippets.mockResolvedValue([
+        makeSnippet({ id: "s1", label: "Original" }),
+      ]);
       await manager.updateSnippet(updated);
-      expect(mockSyncBackend.saveSnippets).toHaveBeenCalledWith([updated]);
+      expect(mockSyncBackend.upsertSnippets).toHaveBeenCalledWith([updated]);
+      expect(mockSyncBackend.saveSnippets).not.toHaveBeenCalled();
     });
 
-    it("does not affect other snippets when updating one", async () => {
-      const s1 = makeSnippet({ id: "s1", label: "One" });
-      const s2 = makeSnippet({ id: "s2", label: "Two" });
+    it("does not re-write other snippets", async () => {
+      // The old implementation re-serialised every snippet on every update,
+      // which is also what made a concurrent change to another snippet get
+      // reverted by a stale list.
       const updatedS1 = makeSnippet({ id: "s1", label: "One Updated" });
-      mockSyncBackend.getSnippets.mockResolvedValue([s1, s2]);
+      mockSyncBackend.getSnippets.mockResolvedValue([
+        makeSnippet({ id: "s1" }),
+        makeSnippet({ id: "s2" }),
+      ]);
       await manager.updateSnippet(updatedS1);
-      const saved = mockSyncBackend.saveSnippets.mock.calls[0][0] as Snippet[];
-      expect(saved).toHaveLength(2);
-      expect(saved.find((s) => s.id === "s2")).toEqual(s2);
+      const upserted = mockSyncBackend.upsertSnippets.mock
+        .calls[0][0] as Snippet[];
+      expect(upserted).toHaveLength(1);
+      expect(upserted[0].id).toBe("s1");
+      expect(mockSyncBackend.removeSnippetsById).not.toHaveBeenCalled();
     });
   });
 
   // ── deleteSnippet ─────────────────────────────────────────────────────────
 
   describe("deleteSnippet", () => {
-    it("removes the snippet with the given id", async () => {
-      const s1 = makeSnippet({ id: "s1" });
-      const s2 = makeSnippet({ id: "s2" });
-      mockSyncBackend.getSnippets.mockResolvedValue([s1, s2]);
+    it("removes exactly the named id", async () => {
+      mockSyncBackend.getSnippets.mockResolvedValue([
+        makeSnippet({ id: "s1" }),
+        makeSnippet({ id: "s2" }),
+      ]);
       await manager.deleteSnippet("s1");
-      const saved = mockSyncBackend.saveSnippets.mock.calls[0][0] as Snippet[];
-      expect(saved).toHaveLength(1);
-      expect(saved[0].id).toBe("s2");
+      expect(mockSyncBackend.removeSnippetsById).toHaveBeenCalledWith(["s1"]);
+      expect(mockSyncBackend.saveSnippets).not.toHaveBeenCalled();
+    });
+
+    it("cannot delete a snippet it never saw", async () => {
+      // The exact bug: the old filter-based delete removed everything absent
+      // from a stale read, so a snippet added in another context between the
+      // read and the write was destroyed. Removing by id cannot do that.
+      mockSyncBackend.getSnippets.mockResolvedValue([
+        makeSnippet({ id: "s1" }),
+      ]);
+      await manager.deleteSnippet("s1");
+      const removed = mockSyncBackend.removeSnippetsById.mock
+        .calls[0][0] as string[];
+      expect(removed).toEqual(["s1"]);
     });
   });
 
@@ -282,12 +335,22 @@ describe("StorageManager", () => {
 
   describe("persistSnippets quota handling", () => {
     it("switches to local mode on StorageQuotaError and re-throws", async () => {
-      mockSyncBackend.saveSnippets.mockRejectedValue(new StorageQuotaError());
+      mockSyncBackend.upsertSnippets.mockRejectedValue(new StorageQuotaError());
       await expect(manager.saveSnippet(makeSnippet())).rejects.toThrow(
         StorageQuotaError
       );
       expect(mockStorageMode.setValue).toHaveBeenCalledWith("local");
-      expect(mockLocalBackend.saveSnippets).toHaveBeenCalled();
+      expect(mockLocalBackend.upsertSnippets).toHaveBeenCalled();
+    });
+
+    it("falls back to a by-id removal when a delete hits the quota", async () => {
+      mockSyncBackend.removeSnippetsById.mockRejectedValue(
+        new StorageQuotaError()
+      );
+      await expect(manager.deleteSnippet("s1")).rejects.toThrow(
+        StorageQuotaError
+      );
+      expect(mockLocalBackend.removeSnippetsById).toHaveBeenCalledWith(["s1"]);
     });
   });
 
@@ -358,21 +421,34 @@ describe("StorageManager", () => {
   // ── IDB shadow-write error handling ──────────────────────────────────────
 
   describe("IDB shadow-write error handling", () => {
-    it("does not throw when IDB backup write fails", async () => {
+    it("completes the primary write even when the IDB backup fails", async () => {
+      // Previously this test had no assertion at all, so it could not fail.
+      // Assert that the save still landed: the backup is best-effort and must
+      // never take the primary write down with it.
       mockIdbBackend.saveSnippets.mockRejectedValue(new Error("IDB error"));
       const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-      await manager.saveSnippet(makeSnippet());
-      // Allow fire-and-forget to flush
-      await new Promise((r) => setTimeout(r, 10));
-      consoleSpy.mockRestore();
+      try {
+        const snippet = makeSnippet({ id: "s1" });
+        await expect(manager.saveSnippet(snippet)).resolves.toBeUndefined();
+        expect(mockSyncBackend.upsertSnippets).toHaveBeenCalledWith([snippet]);
+        expect(mockUpdateContentScriptCache).toHaveBeenCalled();
+        // Let the fire-and-forget rejection land so it is observed, not raced.
+        await new Promise((r) => setTimeout(r, 10));
+        expect(consoleSpy).toHaveBeenCalled();
+      } finally {
+        consoleSpy.mockRestore();
+      }
     });
 
-    it("does not throw when debugLog rejects (fire-and-forget catch)", async () => {
+    it("completes the write when debugLog rejects (fire-and-forget catch)", async () => {
       // Exercises the .catch(() => {}) no-op callbacks on debugLog calls
       const { debugLog } = await import("~/lib/debug");
       vi.mocked(debugLog).mockRejectedValue(new Error("debug error"));
       const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-      await manager.saveSnippet(makeSnippet());
+      const snippet = makeSnippet({ id: "s1" });
+      await manager.saveSnippet(snippet);
+      // Assert the write landed, not merely that nothing threw.
+      expect(mockSyncBackend.upsertSnippets).toHaveBeenCalledWith([snippet]);
       // Allow fire-and-forget microtasks to flush
       await new Promise((r) => setTimeout(r, 10));
       consoleSpy.mockRestore();
@@ -389,7 +465,9 @@ describe("StorageManager", () => {
       const snippet = makeSnippet();
       mockLocalBackend.getSnippets.mockResolvedValue([]);
       await manager.saveSnippet(snippet);
-      expect(mockLocalBackend.saveSnippets).toHaveBeenCalledWith([snippet]);
+      expect(mockLocalBackend.upsertSnippets).toHaveBeenCalledWith([snippet]);
+      // The sync backend must not be touched at all in local mode.
+      expect(mockSyncBackend.upsertSnippets).not.toHaveBeenCalled();
     });
   });
 
@@ -397,12 +475,14 @@ describe("StorageManager", () => {
 
   describe("persistSnippets non-quota error", () => {
     it("re-throws non-quota errors from SyncBackend on save", async () => {
-      mockSyncBackend.saveSnippets.mockRejectedValue(
+      mockSyncBackend.upsertSnippets.mockRejectedValue(
         new Error("Network error")
       );
       await expect(manager.saveSnippet(makeSnippet())).rejects.toThrow(
         "Network error"
       );
+      // A non-quota failure must not silently switch storage mode.
+      expect(mockStorageMode.setValue).not.toHaveBeenCalledWith("local");
     });
   });
 

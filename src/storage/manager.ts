@@ -195,17 +195,116 @@ export class StorageManager {
     });
   }
 
+  /**
+   * The backend for the current mode.
+   *
+   * Note the content script cannot use the manager at all — `storage.sync` is
+   * unreachable from a content script's isolated world — so the manager is a
+   * per-JS-context singleton rather than a true process-wide one. The popup and
+   * the options page are separate contexts with separate instances, which is
+   * exactly why mutations below are intent-based rather than read-modify-write.
+   */
+  private async activeBackend() {
+    const mode = await this.getMode();
+    return mode === "local" ? this.local : this.sync;
+  }
+
+  /**
+   * Apply an upsert to the active backend, then refresh derived stores.
+   *
+   * With the quota fallback the data has already been written to local, so
+   * there is nothing more to do for the primary.
+   */
+  private async applyUpsert(snippets: Snippet[]): Promise<void> {
+    debugLog("storage", "snippet:upsert", {
+      count: snippets.length,
+    }).catch(() => {});
+
+    const mode = await this.getMode();
+    if (mode === "local") {
+      await this.local.upsertSnippets(snippets);
+    } else {
+      try {
+        await this.sync.upsertSnippets(snippets);
+      } catch (error) {
+        if (error instanceof StorageQuotaError) {
+          // Fall back for this write. The previous list was read by the caller
+          // in most paths; for a single-snippet upsert there is nothing to
+          // re-read, so merge onto whatever local already holds.
+          await this.setMode("local");
+          await storageModeReasonItem.setValue("quota");
+          await this.local.upsertSnippets(snippets);
+          throw error;
+        }
+        throw error;
+      }
+    }
+
+    await this.refreshDerivedStores(mode);
+  }
+
+  /** Apply a by-id removal to the active backend, then refresh derived stores. */
+  private async applyRemoval(ids: string[]): Promise<void> {
+    debugLog("storage", "snippet:remove", { count: ids.length }).catch(
+      () => {}
+    );
+
+    const mode = await this.getMode();
+    if (mode === "local") {
+      await this.local.removeSnippetsById(ids);
+    } else {
+      try {
+        await this.sync.removeSnippetsById(ids);
+      } catch (error) {
+        if (error instanceof StorageQuotaError) {
+          await this.setMode("local");
+          await storageModeReasonItem.setValue("quota");
+          await this.local.removeSnippetsById(ids);
+          throw error;
+        }
+        throw error;
+      }
+    }
+
+    await this.refreshDerivedStores(mode);
+  }
+
+  /**
+   * Refresh the content-script cache and the IndexedDB shadow backup.
+   *
+   * Both are derived from the authoritative store, so they re-read rather than
+   * trusting the caller's list. A stale derived store is how a user ends up
+   * typing a shortcut and getting yesterday's snippet.
+   */
+  private async refreshDerivedStores(mode: StorageMode): Promise<void> {
+    const fresh = await this.getSnippets();
+
+    await updateContentScriptCache(fresh);
+
+    // Fire-and-forget: the backup must never block or fail a save.
+    this.idb.saveSnippets(fresh).catch((err) => {
+      console.warn("[Clipio] IndexedDB backup write failed:", err);
+      captureError(err, { action: "idbBackupWrite" });
+    });
+    void mode;
+  }
+
   // -------------------------------------------------------------------------
   // CRUD operations
   // -------------------------------------------------------------------------
 
+  /**
+   * Create a snippet.
+   *
+   * Writes only this snippet rather than read-all-then-write-all, so a snippet
+   * another extension context created in the meantime is not clobbered.
+   */
   async saveSnippet(snippet: Snippet): Promise<void> {
     debugLog("storage", "snippet:save", {
       id: snippet.id,
       shortcut: snippet.shortcut,
     }).catch(() => {});
-    const snippets = await this.getSnippets();
-    await this.persistSnippets([...snippets, snippet]);
+    await this.applyUpsert([snippet]);
   }
 
   async updateSnippet(updated: Snippet): Promise<void> {
@@ -213,18 +312,28 @@ export class StorageManager {
       id: updated.id,
       shortcut: updated.shortcut,
     }).catch(() => {});
-    const snippets = await this.getSnippets();
-    const next = snippets.map((s) => (s.id === updated.id ? updated : s));
-    await this.persistSnippets(next);
+    await this.applyUpsert([updated]);
   }
 
+  /**
+   * Delete a snippet by id.
+   *
+   * Previously this read the whole store, filtered it, and wrote the list back.
+   * A snippet created in another context between that read and the write was
+   * absent from the stale list, so the write deleted it — a silent cross-context
+   * data loss that `manager.test.ts` could not see because it only ever tested
+   * one context at a time.
+   */
   async deleteSnippet(id: string): Promise<void> {
     debugLog("storage", "snippet:delete", { id }).catch(() => {});
-    const snippets = await this.getSnippets();
-    const next = snippets.filter((s) => s.id !== id);
-    await this.persistSnippets(next);
+    await this.applyRemoval([id]);
   }
 
+  /**
+   * Replace the whole set. Used by import, which genuinely means "these are all
+   * my snippets" — the ImportWizard has already resolved conflicts and
+   * duplicates with the user.
+   */
   async bulkSaveSnippets(snippets: Snippet[]): Promise<void> {
     debugLog("storage", "snippet:bulkSave", { count: snippets.length }).catch(
       () => {}

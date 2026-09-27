@@ -29,6 +29,32 @@ export class LocalBackend implements StorageBackend {
     await localSnippetsItem.setValue(snippets);
   }
 
+  /**
+   * Write exactly these snippets, deleting nothing.
+   *
+   * Read-modify-write against a fresh read, so a snippet another context wrote
+   * between our read and this write survives. Local storage has no
+   * per-key-addressed API, so unlike the sync backend this cannot be a single
+   * key write — the fresh read narrows the window rather than closing it.
+   */
+  async upsertSnippets(snippets: Snippet[]): Promise<void> {
+    if (snippets.length === 0) return;
+    const existing = await localSnippetsItem.getValue();
+    const byId = new Map(existing.map((s) => [s.id, s]));
+    for (const snippet of snippets) {
+      byId.set(snippet.id, snippet);
+    }
+    await localSnippetsItem.setValue([...byId.values()]);
+  }
+
+  /** Remove exactly these snippets by id, writing nothing else. */
+  async removeSnippetsById(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const drop = new Set(ids);
+    const existing = await localSnippetsItem.getValue();
+    await localSnippetsItem.setValue(existing.filter((s) => !drop.has(s.id)));
+  }
+
   async clear(): Promise<void> {
     await localSnippetsItem.removeValue();
   }

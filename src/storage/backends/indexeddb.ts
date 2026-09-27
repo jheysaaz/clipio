@@ -196,6 +196,57 @@ export class IndexedDBBackend implements StorageBackend {
     }
   }
 
+  /**
+   * Write exactly these snippets, deleting nothing.
+   *
+   * Done as per-record `put` inside one transaction rather than the
+   * clear-and-rewrite that `saveSnippets` uses, so a record this call did not
+   * mention cannot be lost.
+   */
+  async upsertSnippets(snippets: Snippet[]): Promise<void> {
+    if (snippets.length === 0) return;
+    try {
+      const db = await openDB();
+      const tx = db.transaction(IDB_CONFIG.STORE_NAME, "readwrite");
+      const store = tx.objectStore(IDB_CONFIG.STORE_NAME);
+      for (const snippet of snippets) {
+        store.put(snippet);
+      }
+      await new Promise<void>((resolve, reject) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch (error) {
+      console.warn("[Clipio] IndexedDBBackend.upsertSnippets failed:", error);
+      captureError(error, { action: "idb.upsertSnippets" });
+      throw error;
+    }
+  }
+
+  /** Remove exactly these snippets by id, writing nothing else. */
+  async removeSnippetsById(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    try {
+      const db = await openDB();
+      const tx = db.transaction(IDB_CONFIG.STORE_NAME, "readwrite");
+      const store = tx.objectStore(IDB_CONFIG.STORE_NAME);
+      for (const id of ids) {
+        store.delete(id);
+      }
+      await new Promise<void>((resolve, reject) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch (error) {
+      console.warn(
+        "[Clipio] IndexedDBBackend.removeSnippetsById failed:",
+        error
+      );
+      captureError(error, { action: "idb.removeSnippetsById" });
+      throw error;
+    }
+  }
+
   async clear(): Promise<void> {
     try {
       const db = await openDB();
