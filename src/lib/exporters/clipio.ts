@@ -77,14 +77,21 @@ export function snippetsContainMedia(snippets: Snippet[]): boolean {
 }
 
 /**
- * Extract all unique media IDs referenced in the given snippets.
+ * The set of distinct media IDs referenced across a list of snippets.
  *
- * Deduplication stays here rather than moving into the shared parser: whether a
- * caller wants unique ids or every occurrence is a per-callsite decision, and
- * the clipboard path genuinely wants the opposite of this one.
+ * Named `collectReferencedMediaIds` rather than `extractMediaIds` because the
+ * shared parser exports a function of that name taking a single content string.
+ * Two exports with one name and different signatures is a trap: an import that
+ * picks the wrong one type-checks, and returns the wrong shape.
+ *
+ * Deduplication is deliberate and stays here. Whether a caller wants unique ids
+ * or every occurrence is a real per-callsite decision: the clipboard path must
+ * keep two references to the same image apart, because they can carry different
+ * widths, while an export manifest wants one entry per blob.
+ *
  * spec: specs/media-placeholders.spec.md
  */
-export function extractMediaIds(snippets: Snippet[]): string[] {
+export function collectReferencedMediaIds(snippets: Snippet[]): string[] {
   const ids = new Set<string>();
   for (const s of snippets) {
     for (const id of extractImageIds(s.content)) {

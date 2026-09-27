@@ -22,7 +22,7 @@ import {
   buildClipioExportV2,
   buildClipioZip,
   snippetsContainMedia,
-  extractMediaIds,
+  collectReferencedMediaIds,
 } from "@/lib/exporters/clipio";
 import { getMedia, listMedia } from "@/storage/backends/media";
 import { captureError, captureMessage } from "@/lib/sentry";
@@ -375,7 +375,7 @@ export class StorageManager {
     if (snippetsContainMedia(snippets)) {
       // v2: ZIP export with embedded images
       try {
-        const mediaIds = extractMediaIds(snippets);
+        const mediaIds = collectReferencedMediaIds(snippets);
         const allMeta = await listMedia();
         const referencedMeta = allMeta.filter((m) => mediaIds.includes(m.id));
 

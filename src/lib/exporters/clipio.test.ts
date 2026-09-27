@@ -8,7 +8,7 @@ import {
   buildClipioExport,
   buildClipioExportV2,
   snippetsContainMedia,
-  extractMediaIds,
+  collectReferencedMediaIds,
   buildClipioZip,
 } from "./clipio";
 import type { Snippet } from "@/types";
@@ -172,17 +172,17 @@ describe("snippetsContainMedia", () => {
   });
 });
 
-describe("extractMediaIds", () => {
+describe("collectReferencedMediaIds", () => {
   it("returns empty array when no images are referenced", () => {
-    expect(extractMediaIds([makeSnippet({ content: "no images" })])).toEqual(
-      []
-    );
+    expect(
+      collectReferencedMediaIds([makeSnippet({ content: "no images" })])
+    ).toEqual([]);
   });
 
   it("extracts a single image ID", () => {
     const id = "550e8400-e29b-41d4-a716-446655440000";
     const snippets = [makeSnippet({ content: `Hello {{image:${id}}}` })];
-    expect(extractMediaIds(snippets)).toEqual([id]);
+    expect(collectReferencedMediaIds(snippets)).toEqual([id]);
   });
 
   it("deduplicates repeated image IDs", () => {
@@ -190,7 +190,7 @@ describe("extractMediaIds", () => {
     const snippets = [
       makeSnippet({ content: `{{image:${id}}} and {{image:${id}}}`, id: "s1" }),
     ];
-    expect(extractMediaIds(snippets)).toEqual([id]);
+    expect(collectReferencedMediaIds(snippets)).toEqual([id]);
   });
 
   it("collects IDs from multiple snippets", () => {
@@ -200,7 +200,7 @@ describe("extractMediaIds", () => {
       makeSnippet({ content: `{{image:${id1}}}`, id: "s1" }),
       makeSnippet({ content: `{{image:${id2}}}`, id: "s2" }),
     ];
-    const result = extractMediaIds(snippets);
+    const result = collectReferencedMediaIds(snippets);
     expect(result).toContain(id1);
     expect(result).toContain(id2);
     expect(result).toHaveLength(2);
@@ -208,13 +208,13 @@ describe("extractMediaIds", () => {
 
   it("does not extract gif IDs", () => {
     const snippets = [makeSnippet({ content: "{{gif:abc123XYZ}}" })];
-    expect(extractMediaIds(snippets)).toEqual([]);
+    expect(collectReferencedMediaIds(snippets)).toEqual([]);
   });
 
   it("extracts UUID from width-suffixed placeholder {{image:uuid:200}}", () => {
     const id = "550e8400-e29b-41d4-a716-446655440000";
     const snippets = [makeSnippet({ content: `{{image:${id}:200}}` })];
-    expect(extractMediaIds(snippets)).toEqual([id]);
+    expect(collectReferencedMediaIds(snippets)).toEqual([id]);
   });
 });
 

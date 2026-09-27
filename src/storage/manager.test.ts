@@ -118,7 +118,7 @@ vi.mock("~/lib/exporters/clipio", () => ({
     async () => new Blob(["zip"], { type: "application/zip" })
   ),
   snippetsContainMedia: vi.fn(() => false),
-  extractMediaIds: vi.fn(() => []),
+  collectReferencedMediaIds: vi.fn(() => []),
 }));
 
 // ---------------------------------------------------------------------------
@@ -669,13 +669,13 @@ describe("StorageManager", () => {
     });
 
     it("produces a ZIP download when snippets contain media", async () => {
-      const { snippetsContainMedia, extractMediaIds } =
+      const { snippetsContainMedia, collectReferencedMediaIds } =
         await import("~/lib/exporters/clipio");
       const { listMedia, getMedia } = await import("~/storage/backends/media");
 
       // Make snippetsContainMedia return true for this test
       vi.mocked(snippetsContainMedia).mockReturnValue(true);
-      vi.mocked(extractMediaIds).mockReturnValue(["media-id-1"]);
+      vi.mocked(collectReferencedMediaIds).mockReturnValue(["media-id-1"]);
       vi.mocked(listMedia).mockResolvedValue([
         {
           id: "media-id-1",

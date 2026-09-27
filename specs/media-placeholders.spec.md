@@ -100,13 +100,31 @@ Two regexes survive, and they are **not** matchers:
 - **Callers that only need a boolean** must use `hasMediaPlaceholder` rather than `.test()` on a
   raw regex, so the charset lives in one place.
 
+## Deduplication, resolved
+
+Deduplication is **not** unified, and the reasoning is written down rather than left implicit,
+because "why is this inconsistent?" is the question a reader actually has.
+
+| Call site                   | Deduplicates                 | Why                                                                                                                       |
+| --------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `exporters/clipio.ts`       | yes, via a `Set`             | an export manifest wants one entry per blob                                                                               |
+| `content.ts`                | yes, via a `Set`             | it resolves each blob to a data URL once                                                                                  |
+| `copyMarkdownAsRichText.ts` | **no**                       | two references to one image can carry different widths; collapsing them loses a size                                      |
+| `ImagesSection.tsx`         | per id, keeping a label list | it builds a reverse id → labels map, and a label appears once per snippet even if that snippet references the image twice |
+
+So the _matching_ is unified and the _cardinality_ stays a per-callsite decision.
+
+What did get fixed is a footgun this work surfaced: `exporters/clipio.ts` exported a function also
+called `extractMediaIds` taking `Snippet[]`, while the shared parser exports one of the same name
+taking a content string. An import that picked the wrong one type-checks and returns the wrong
+shape. The exporter's is now `collectReferencedMediaIds`.
+
 ## Non-Goals
 
-- Media-ref _deduplication_ semantics, which differ per call site (the exporter dedupes, the
-  clipboard path does not, the Images section builds a reverse map). Unifying the four
-  extractions is a separate step; this wave unifies the _matching_.
-- The three `markdownToPlainText`-style stripping variants, and the `normalizeSnippet` copies.
-  Also separate steps in this wave.
+- The two `nextSpecial` scanners described above, which disagree about which placeholders are
+  worth stopping for. That belongs with the markdown block-grammar work.
+- The `{{image:}}` charset itself. It is deliberately left exactly as strict as it was; see Edge
+  Cases.
 
 ## Change History
 
