@@ -14,6 +14,7 @@ import {
 import { i18n } from "#i18n";
 import { InfoTooltip } from "./InfoTooltip";
 import { useStorageStats } from "./useStorageStats";
+import { openReleasePage } from "@/lib/update-checker";
 
 export function DashboardSection() {
   const stats = useStorageStats();
@@ -196,9 +197,9 @@ export function DashboardSection() {
               size="sm"
               variant="outline"
               className="h-9 shrink-0"
-              onClick={() =>
-                browser.tabs.create({ url: latestRelease.htmlUrl })
-              }
+              onClick={() => {
+                void openReleasePage(latestRelease.htmlUrl);
+              }}
             >
               <Icon icon={ExternalLink} className="mr-1.5" />
               View release

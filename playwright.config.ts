@@ -18,7 +18,11 @@ const extensionPath = path.resolve(".output/chrome-mv3");
 export default defineConfig({
   testDir: "e2e",
   timeout: 30_000,
-  globalTimeout: 5 * 60 * 1_000, // 5 minutes
+  // 128 tests run serially (workers: 1 — extensions share one browser
+  // context), which works out to roughly 6-7 minutes. The previous 5-minute
+  // budget was hit around test 102, so the tail of the suite never ran.
+  // This is a wall-clock budget for the whole run, not a per-test allowance.
+  globalTimeout: 15 * 60 * 1_000,
   // Retries are disabled in CI as well as locally. A retry hides the flake
   // instead of fixing it, and this suite runs serially against a real browser
   // where a flake is always a real bug (AGENTS.md Testing Standards, rule 12).

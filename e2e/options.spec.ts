@@ -41,7 +41,10 @@ async function seedSnippets(
       syncEntries[`snip:${s.id}`] = s;
     }
     await ext.storage.sync.set(syncEntries);
-    await ext.storage.local.set({ cachedSnippets: snips, storageMode: "sync" });
+    await ext.storage.local.set({
+      cachedSnippets: snips,
+      storageMode: "sync",
+    });
   }, snippets);
 }
 
@@ -501,28 +504,35 @@ test.describe("Developers Section", () => {
     await popupPage.waitForLoadState("domcontentloaded");
     await popupPage.waitForTimeout(500);
 
-    // Find and click the dismiss (X) button on the warning banner
-    const dismissBtn = popupPage
-      .locator('button[aria-label*="dismiss" i], button[aria-label*="close" i]')
-      .first();
-    if (await dismissBtn.isVisible()) {
-      await dismissBtn.click();
-      await popupPage.waitForTimeout(300);
+    // Find and click the dismiss (X) button on the warning banner.
+    // The banner must be asserted present. The previous version wrapped every
+    // assertion in `if (await dismissBtn.isVisible())`, so the test passed
+    // vacuously whenever the banner failed to render.
+    //
+    // Note: items are defined as "local:x" in src/storage/items.ts but WXT
+    // strips the area prefix, so the real storage.local key is the bare "x".
+    // Verified by dumping storage.local.get(null) from a loaded options page.
+    const dismissBtn = popupPage.getByTestId("warning-update");
+    await expect(dismissBtn).toBeVisible({ timeout: 5_000 });
+    await dismissBtn.click();
 
-      // Banner should no longer show "888.0.0"
-      const pageText = await popupPage.textContent("body");
-      expect(pageText).not.toContain(
-        "A new version of Clipio is available: 888.0.0"
-      );
+    // Banner should no longer show "888.0.0"
+    await expect(popupPage.locator("body")).not.toContainText("888.0.0");
 
-      // dismissedUpdateVersion should be stored in local storage
-      const dismissed = await popupPage.evaluate(async () => {
-        const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-        const r = await ext.storage.local.get("dismissedUpdateVersion");
-        return r.dismissedUpdateVersion;
-      });
-      expect(dismissed).toBe("888.0.0");
-    }
+    // dismissedUpdateVersion should be stored in local storage.
+    // Polled because the write happens in the click handler.
+    await expect
+      .poll(
+        () =>
+          popupPage.evaluate(async () => {
+            const ext =
+              (globalThis as any).chrome ?? (globalThis as any).browser;
+            const r = await ext.storage.local.get("dismissedUpdateVersion");
+            return r.dismissedUpdateVersion;
+          }),
+        { timeout: 5_000 }
+      )
+      .toBe("888.0.0");
 
     await popupPage.close();
   });

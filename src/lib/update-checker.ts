@@ -20,6 +20,7 @@
 
 import { captureError } from "@/lib/sentry";
 import { latestVersionItem, latestVersionCheckedAtItem } from "@/storage/items";
+import { browser } from "wxt/browser";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -92,6 +93,63 @@ export function getCurrentVersion(): string {
  * - Never throws — all errors are captured to Sentry and swallowed so
  *   the caller (background service worker) is never disrupted.
  */
+/**
+ * Pure helper: allow only a GitHub release page URL.
+ *
+ * `checkForUpdate` reads `html_url` out of the GitHub API response and stores
+ * it; three call sites later hand it to `browser.tabs.create`. A GitHub API
+ * response always carries an `html_url` of the form
+ * `https://github.com/{owner}/{repo}/releases/tag/{tag}`, so anything else
+ * means the response was tampered with or mis-parsed.
+ *
+ * The realistic threat is a TLS-intercepting proxy with an installed root CA
+ * (corporate proxy, malware, or a developer machine with a debugging CA).
+ * `host_permissions` pins the fetch to `https://api.github.com/*`, so a plain
+ * network attacker cannot reach this — but a proxy that MITMs that host can
+ * return any URL it likes, and the extension would relay it behind a genuine
+ * system notification reading "Update available: 1.6.0". Chrome blocks
+ * `javascript:` in `tabs.create`, so this is phishing, not code execution.
+ *
+ * Returns the URL unchanged when acceptable, or `""` when it must be rejected.
+ */
+export function sanitizeReleaseUrl(raw: string | undefined | null): string {
+  if (typeof raw !== "string" || raw.trim() === "") return "";
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return "";
+  }
+  if (parsed.protocol !== "https:") return "";
+  const host = parsed.hostname.toLowerCase();
+  if (host !== "github.com" && host !== "www.github.com") return "";
+  return parsed.toString();
+}
+
+/**
+ * Open a validated release page in a new tab.
+ *
+ * This is the single chokepoint for "user clicked a link to a release". It
+ * re-validates rather than trusting the stored value: `latestVersionItem` is a
+ * storage item, so a future writer (or a hand-edited profile) could put
+ * anything there, and the notification-click path in particular fires behind a
+ * system notification the user trusts.
+ *
+ * Returns false when the URL was rejected, so callers can surface nothing
+ * rather than opening a blank or hostile tab.
+ */
+export async function openReleasePage(htmlUrl: string): Promise<boolean> {
+  const safe = sanitizeReleaseUrl(htmlUrl);
+  if (!safe) return false;
+  try {
+    await browser.tabs.create({ url: safe });
+    return true;
+  } catch (err) {
+    captureError(err, { action: "openReleasePage" });
+    return false;
+  }
+}
+
 export async function checkForUpdate(): Promise<void> {
   const repo = (import.meta.env.WXT_GITHUB_REPO as string | undefined)?.trim();
   if (!repo) return;
@@ -127,10 +185,23 @@ export async function checkForUpdate(): Promise<void> {
     }
 
     const remoteVersion = json.tag_name?.replace(/^v/, "") ?? "";
-    const htmlUrl = json.html_url ?? "";
     const publishedAt = json.published_at ?? new Date().toISOString();
 
     if (!remoteVersion) {
+      await latestVersionCheckedAtItem.setValue(new Date().toISOString());
+      return;
+    }
+
+    // Reject a release page we cannot vouch for. A banner whose link we do not
+    // trust is worse than no banner, so drop the whole update rather than
+    // storing a URL some call site might open. The check timestamp is still
+    // recorded so a bad response does not cause a fetch storm.
+    const htmlUrl = sanitizeReleaseUrl(json.html_url);
+    if (!htmlUrl) {
+      captureError(new Error("Rejected release URL with an unexpected host"), {
+        action: "checkForUpdate",
+        repo,
+      });
       await latestVersionCheckedAtItem.setValue(new Date().toISOString());
       return;
     }

@@ -9,6 +9,8 @@ import {
   getCurrentVersion,
   checkForUpdate,
   shouldShowUpdateAlert,
+  sanitizeReleaseUrl,
+  openReleasePage,
   type ReleaseInfo,
 } from "./update-checker";
 
@@ -22,6 +24,7 @@ vi.mock("~/lib/sentry", () => ({
 }));
 
 import { captureError } from "@/lib/sentry";
+import type { mockBrowser } from "../../tests/mocks/browser";
 
 const mockLatestVersionItem = vi.hoisted(() => ({
   getValue: vi.fn(async () => null),
@@ -334,5 +337,192 @@ describe("checkForUpdate — HTTP errors", () => {
     mockFetchNetworkError();
     await expect(checkForUpdate()).resolves.toBeUndefined();
     expect(captureError).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// sanitizeReleaseUrl — allowlist for the release page link
+// spec: specs/update-checker.spec.md
+// ---------------------------------------------------------------------------
+
+describe("sanitizeReleaseUrl", () => {
+  it("accepts a canonical GitHub release URL", () => {
+    expect(
+      sanitizeReleaseUrl("https://github.com/owner/repo/releases/tag/v1.2.0")
+    ).toBe("https://github.com/owner/repo/releases/tag/v1.2.0");
+  });
+
+  it("accepts www.github.com", () => {
+    expect(
+      sanitizeReleaseUrl(
+        "https://www.github.com/owner/repo/releases/tag/v1.2.0"
+      )
+    ).toContain("github.com");
+  });
+
+  it("preserves the release path", () => {
+    const url = "https://github.com/owner/repo/releases/tag/v1.2.0";
+    expect(sanitizeReleaseUrl(url)).toContain("/releases/tag/v1.2.0");
+  });
+
+  // --- negative cases: everything a tampered or mis-parsed response could hold ---
+
+  it("rejects a lookalike host (github.com.evil.test)", () => {
+    expect(sanitizeReleaseUrl("https://github.com.evil.test/x")).toBe("");
+  });
+
+  it("rejects a subdomain of github.com", () => {
+    expect(sanitizeReleaseUrl("https://gist.github.com/a/b")).toBe("");
+  });
+
+  it("rejects an unrelated host", () => {
+    expect(sanitizeReleaseUrl("https://evil.test/phish")).toBe("");
+  });
+
+  it("rejects http (not https)", () => {
+    expect(sanitizeReleaseUrl("http://github.com/a/b")).toBe("");
+  });
+
+  it("rejects a javascript: URL", () => {
+    expect(sanitizeReleaseUrl("javascript:alert(1)")).toBe("");
+  });
+
+  it("rejects a data: URL", () => {
+    expect(sanitizeReleaseUrl("data:text/html,<script>alert(1)</script>")).toBe(
+      ""
+    );
+  });
+
+  it("rejects a file: URL", () => {
+    expect(sanitizeReleaseUrl("file:///etc/passwd")).toBe("");
+  });
+
+  it("rejects a non-URL string", () => {
+    expect(sanitizeReleaseUrl("not a url")).toBe("");
+  });
+
+  it("rejects an empty string", () => {
+    expect(sanitizeReleaseUrl("")).toBe("");
+  });
+
+  it("rejects a whitespace-only string", () => {
+    expect(sanitizeReleaseUrl("   ")).toBe("");
+  });
+
+  it("rejects undefined", () => {
+    expect(sanitizeReleaseUrl(undefined)).toBe("");
+  });
+
+  it("rejects null", () => {
+    expect(sanitizeReleaseUrl(null)).toBe("");
+  });
+
+  it("rejects a non-string value at runtime", () => {
+    expect(sanitizeReleaseUrl(42 as unknown as string)).toBe("");
+  });
+
+  it("rejects a host with a trailing dot that is not github.com", () => {
+    expect(sanitizeReleaseUrl("https://evil.test./x")).toBe("");
+  });
+
+  it("is case-insensitive about the host", () => {
+    expect(sanitizeReleaseUrl("https://GitHub.com/a/b")).toContain(
+      "github.com"
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkForUpdate — refuses to store an untrusted release URL
+// ---------------------------------------------------------------------------
+
+describe("checkForUpdate — untrusted release URL", () => {
+  it("does not store an update when html_url points at another host", async () => {
+    mockFetchSuccess(makeRelease({ html_url: "https://evil.test/phishing" }));
+    await checkForUpdate();
+    expect(mockLatestVersionItem.setValue).not.toHaveBeenCalledWith(
+      expect.objectContaining({ htmlUrl: expect.stringContaining("evil.test") })
+    );
+  });
+
+  it("records the check timestamp so a bad response cannot cause a fetch storm", async () => {
+    mockFetchSuccess(makeRelease({ html_url: "https://evil.test/phishing" }));
+    await checkForUpdate();
+    expect(mockLatestVersionCheckedAtItem.setValue).toHaveBeenCalled();
+  });
+
+  it("captures the rejection so the tampering is visible", async () => {
+    mockFetchSuccess(makeRelease({ html_url: "https://evil.test/phishing" }));
+    await checkForUpdate();
+    expect(captureError).toHaveBeenCalled();
+  });
+
+  it("still stores the update for a legitimate GitHub URL", async () => {
+    mockFetchSuccess(makeRelease());
+    await checkForUpdate();
+    expect(mockLatestVersionItem.setValue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        htmlUrl: "https://github.com/owner/repo/releases/tag/v1.2.0",
+      })
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// openReleasePage — the single chokepoint that opens a release link
+// ---------------------------------------------------------------------------
+
+describe("openReleasePage", () => {
+  it("opens a legitimate GitHub release URL and reports success", async () => {
+    // tests/setup.ts installs mockBrowser as globalThis.browser.
+    const tabs = (globalThis as unknown as { browser: typeof mockBrowser })
+      .browser.tabs;
+    tabs.create.mockClear();
+    await expect(
+      openReleasePage("https://github.com/owner/repo/releases/tag/v1.2.0")
+    ).resolves.toBe(true);
+    expect(tabs.create).toHaveBeenCalledWith({
+      url: "https://github.com/owner/repo/releases/tag/v1.2.0",
+    });
+  });
+
+  it("refuses to open a lookalike host and does not create a tab", async () => {
+    // tests/setup.ts installs mockBrowser as globalThis.browser.
+    const tabs = (globalThis as unknown as { browser: typeof mockBrowser })
+      .browser.tabs;
+    tabs.create.mockClear();
+    await expect(
+      openReleasePage("https://github.com.evil.test/x")
+    ).resolves.toBe(false);
+    expect(tabs.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses to open a javascript: URL", async () => {
+    // tests/setup.ts installs mockBrowser as globalThis.browser.
+    const tabs = (globalThis as unknown as { browser: typeof mockBrowser })
+      .browser.tabs;
+    tabs.create.mockClear();
+    await expect(openReleasePage("javascript:alert(1)")).resolves.toBe(false);
+    expect(tabs.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses an empty URL", async () => {
+    // tests/setup.ts installs mockBrowser as globalThis.browser.
+    const tabs = (globalThis as unknown as { browser: typeof mockBrowser })
+      .browser.tabs;
+    tabs.create.mockClear();
+    await expect(openReleasePage("")).resolves.toBe(false);
+    expect(tabs.create).not.toHaveBeenCalled();
+  });
+
+  it("reports failure when tabs.create itself throws", async () => {
+    // tests/setup.ts installs mockBrowser as globalThis.browser.
+    const tabs = (globalThis as unknown as { browser: typeof mockBrowser })
+      .browser.tabs;
+    tabs.create.mockClear();
+    tabs.create.mockRejectedValueOnce(new Error("no tab for you"));
+    await expect(
+      openReleasePage("https://github.com/owner/repo/releases/tag/v1.2.0")
+    ).resolves.toBe(false);
   });
 });

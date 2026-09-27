@@ -56,6 +56,7 @@ import {
 } from "@/storage/items";
 import { captureError } from "@/lib/sentry";
 import { selectNewest } from "@/lib/snippetUtils";
+import { openReleasePage } from "@/lib/update-checker";
 
 const CONTEXT_MENU_DRAFT_SESSION_KEY = "__clipioContextMenuDraft__";
 
@@ -444,6 +445,7 @@ export default function Dashboard() {
       {/* Sign-out recovery banner */}
       {showRecoveryBanner && (
         <WarningBanner
+          testId="warning-uninstall"
           action={{
             label: i18n.t(
               "dashboard.warnings.recovery.action",
@@ -476,6 +478,7 @@ export default function Dashboard() {
       {/* Quota warning banner — only shown when sync quota was actually exceeded */}
       {quotaWarning && (
         <WarningBanner
+          testId="warning-quota"
           action={{
             label: i18n.t("dashboard.warnings.quotaFull.action"),
             onClick: () => browser.runtime.openOptionsPage(),
@@ -489,6 +492,7 @@ export default function Dashboard() {
       {/* Sync paused banner — shown when user manually switched to local */}
       {syncPausedWarning && (
         <WarningBanner
+          testId="warning-sync-paused"
           action={{
             label: i18n.t("dashboard.warnings.syncPaused.action"),
             onClick: () => browser.runtime.openOptionsPage(),
@@ -502,9 +506,12 @@ export default function Dashboard() {
       {/* Update available banner */}
       {showUpdateBanner && updateRelease && (
         <WarningBanner
+          testId="warning-update"
           action={{
             label: i18n.t("dashboard.warnings.updateAvailable.action"),
-            onClick: () => browser.tabs.create({ url: updateRelease.htmlUrl }),
+            onClick: () => {
+              void openReleasePage(updateRelease.htmlUrl);
+            },
           }}
           onDismiss={() => {
             dismissedUpdateVersionItem

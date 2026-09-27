@@ -59,18 +59,27 @@ async function setupTestPage(
 }
 
 /**
- * Type text into a field and wait for the debounce period to expire.
+ * Type text into a field and return its locator.
+ *
+ * Expansion is debounced inside the content script by TYPING_TIMEOUT, so
+ * callers must assert with an auto-retrying expectation (`toHaveValue`,
+ * `toContainText`) instead of sleeping. A fixed sleep is a flake: it passed
+ * 3/3 in isolation but failed under full-suite load once `retries` was set
+ * to 0, which is exactly the failure mode the retry was hiding.
  */
-async function typeAndWaitDebounce(
+async function typeIntoField(
   page: import("@playwright/test").Page,
   selector: string,
-  text: string,
-  extra = 100
+  text: string
 ) {
-  await page.locator(selector).click();
+  const field = page.locator(selector);
+  await field.click();
   await page.keyboard.type(text, { delay: 30 });
-  await page.waitForTimeout(TYPING_TIMEOUT + extra);
+  return field;
 }
+
+/** Auto-retrying window for a debounced expansion to land. */
+const EXPANSION_TIMEOUT = 5_000;
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -83,26 +92,29 @@ test.describe("Content Script Expansion", () => {
   }) => {
     await setupTestPage(testPage, storageHelper, [helloSnippet()]);
 
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-    await testPage.keyboard.type("/hello", { delay: 30 });
-    await testPage.waitForTimeout(TYPING_TIMEOUT + 150);
-
-    const value = await input.inputValue();
-    expect(value).toContain("Hello, World!");
-    expect(value).not.toContain("/hello");
+    const input = await typeIntoField(
+      testPage,
+      '[data-testid="text-input"]',
+      "/hello"
+    );
+    await expect(input).toHaveValue(/Hello, World!/, {
+      timeout: EXPANSION_TIMEOUT,
+    });
+    expect(await input.inputValue()).not.toContain("/hello");
   });
 
   test("expands shortcut in textarea", async ({ testPage, storageHelper }) => {
     await setupTestPage(testPage, storageHelper, [multilineSnippet()]);
 
-    const textarea = testPage.locator('[data-testid="textarea-field"]');
-    await textarea.click();
-    await testPage.keyboard.type("/multi", { delay: 30 });
-    await testPage.waitForTimeout(TYPING_TIMEOUT + 150);
-
+    const textarea = await typeIntoField(
+      testPage,
+      '[data-testid="textarea-field"]',
+      "/multi"
+    );
+    await expect(textarea).toHaveValue(/Line 1/, {
+      timeout: EXPANSION_TIMEOUT,
+    });
     const value = await textarea.inputValue();
-    expect(value).toContain("Line 1");
     expect(value).toContain("Line 2");
     expect(value).toContain("Line 3");
     expect(value).not.toContain("/multi");
@@ -117,11 +129,10 @@ test.describe("Content Script Expansion", () => {
     const ce = testPage.locator('[data-testid="contenteditable-field"]');
     await ce.click();
     await testPage.keyboard.type("/hello", { delay: 30 });
-    await testPage.waitForTimeout(TYPING_TIMEOUT + 150);
-
-    const innerText = await ce.innerText();
-    expect(innerText).toContain("Hello, World!");
-    expect(innerText).not.toContain("/hello");
+    await expect(ce).toContainText("Hello, World!", {
+      timeout: EXPANSION_TIMEOUT,
+    });
+    expect(await ce.innerText()).not.toContain("/hello");
   });
 
   test("does not expand partial match (no word boundary)", async ({
@@ -134,7 +145,11 @@ test.describe("Content Script Expansion", () => {
     await input.click();
     // "x/hello" — the "/hello" is not at a word boundary
     await testPage.keyboard.type("x/hello", { delay: 30 });
-    await testPage.waitForTimeout(TYPING_TIMEOUT + 150);
+
+    // Negative case: nothing may ever appear here, so wait out the debounce
+    // before asserting. A fixed sleep is required — an auto-retrying
+    // assertion cannot prove a negative.
+    await testPage.waitForTimeout(TYPING_TIMEOUT + 400);
 
     const value = await input.inputValue();
     // Should still contain the literal typed text, not the snippet
@@ -191,11 +206,11 @@ test.describe("Content Script Expansion", () => {
     const valueBefore = await input.inputValue();
     expect(valueBefore).toBe("/hello");
 
-    // Wait for debounce to fire
-    await testPage.waitForTimeout(TYPING_TIMEOUT + 150);
-
-    const valueAfter = await input.inputValue();
-    expect(valueAfter).toContain("Hello, World!");
+    // Auto-retrying assertion instead of a sleep: it polls until the
+    // debounce fires, so it is both faster and immune to load variance.
+    await expect(input).toHaveValue(/Hello, World!/, {
+      timeout: EXPANSION_TIMEOUT,
+    });
   });
 
   test("positions cursor with {{cursor}} placeholder in input", async ({
@@ -207,12 +222,10 @@ test.describe("Content Script Expansion", () => {
     const input = testPage.locator('[data-testid="text-input"]');
     await input.click();
     await testPage.keyboard.type("/cursor", { delay: 30 });
-    await testPage.waitForTimeout(TYPING_TIMEOUT + 150);
-
+    await expect(input).toHaveValue(/Dear /, { timeout: EXPANSION_TIMEOUT });
     const value = await input.inputValue();
     // Content is "Dear {{cursor}}, Thank you!" → cursor replaces {{cursor}}
     // The final text should have the placeholder removed
-    expect(value).toContain("Dear ");
     expect(value).toContain(", Thank you!");
     expect(value).not.toContain("{{cursor}}");
 
@@ -233,10 +246,8 @@ test.describe("Content Script Expansion", () => {
     const ce = testPage.locator('[data-testid="contenteditable-field"]');
     await ce.click();
     await testPage.keyboard.type("/cursor", { delay: 30 });
-    await testPage.waitForTimeout(TYPING_TIMEOUT + 150);
-
+    await expect(ce).toContainText("Dear ", { timeout: EXPANSION_TIMEOUT });
     const innerText = await ce.innerText();
-    expect(innerText).toContain("Dear ");
     expect(innerText).toContain(", Thank you!");
     // The cursor marker element should have been removed
     const markerCount = await ce.locator('[data-clipio-cursor="true"]').count();
@@ -257,10 +268,8 @@ test.describe("Content Script Expansion", () => {
     const input = testPage.locator('[data-testid="text-input"]');
     await input.click();
     await testPage.keyboard.type("/clip", { delay: 30 });
-    await testPage.waitForTimeout(TYPING_TIMEOUT + 150);
-
+    await expect(input).toHaveValue(/Copied:/, { timeout: EXPANSION_TIMEOUT });
     const value = await input.inputValue();
-    expect(value).toContain("Copied:");
     // The clipboard content should appear (or fallback if unavailable)
     expect(
       value.includes("clipboard-test-content") ||
@@ -274,14 +283,15 @@ test.describe("Content Script Expansion", () => {
   }) => {
     await setupTestPage(testPage, storageHelper, [dateSnippet()]);
 
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-    await typeAndWaitDebounce(testPage, '[data-testid="text-input"]', "/date");
-
+    const input = await typeIntoField(
+      testPage,
+      '[data-testid="text-input"]',
+      "/date"
+    );
+    await expect(input).toHaveValue(/Today is \d{4}-\d{2}-\d{2}/, {
+      timeout: EXPANSION_TIMEOUT,
+    });
     const value = await input.inputValue();
-    expect(value).toContain("Today is ");
-    // Should contain a date in YYYY-MM-DD format (iso)
-    expect(value).toMatch(/Today is \d{4}-\d{2}-\d{2}/);
     expect(value).not.toContain("{{date");
   });
 
@@ -294,14 +304,14 @@ test.describe("Content Script Expansion", () => {
     const ce = testPage.locator('[data-testid="contenteditable-field"]');
     await ce.click();
     await testPage.keyboard.type("/md", { delay: 30 });
-    await testPage.waitForTimeout(TYPING_TIMEOUT + 150);
-
-    // Markdown should be rendered as HTML in contenteditable
-    const innerHTML = await ce.innerHTML();
-    // **Bold text** → <strong>Bold text</strong>
-    expect(innerHTML).toMatch(/<strong>Bold text<\/strong>/i);
+    // Markdown should be rendered as HTML in contenteditable.
+    // Poll the rendered HTML rather than sleeping, since the debounce plus the
+    // contenteditable insertion path is the slowest in the suite.
+    await expect
+      .poll(() => ce.innerHTML(), { timeout: EXPANSION_TIMEOUT })
+      .toMatch(/<strong>Bold text<\/strong>/i);
     // _italic text_ → <em>italic text</em>
-    expect(innerHTML).toMatch(/<em>italic text<\/em>/i);
+    expect(await ce.innerHTML()).toMatch(/<em>italic text<\/em>/i);
   });
 
   test("matches longest shortcut first (/h vs /hello)", async ({
@@ -316,12 +326,11 @@ test.describe("Content Script Expansion", () => {
     const input = testPage.locator('[data-testid="text-input"]');
     await input.click();
     await testPage.keyboard.type("/hello", { delay: 30 });
-    await testPage.waitForTimeout(TYPING_TIMEOUT + 150);
-
-    const value = await input.inputValue();
+    await expect(input).toHaveValue(/Long shortcut content/, {
+      timeout: EXPANSION_TIMEOUT,
+    });
     // Should expand /hello (long), not /h (short)
-    expect(value).toContain("Long shortcut content");
-    expect(value).not.toContain("Short content");
+    expect(await input.inputValue()).not.toContain("Short content");
   });
 
   test("updates index on storage change (dynamic snippet)", async ({
@@ -364,10 +373,10 @@ test.describe("Content Script Expansion", () => {
     const input = testPage.locator('[data-testid="text-input"]');
     await input.click();
     await testPage.keyboard.type("/dynamic", { delay: 30 });
-    await testPage.waitForTimeout(TYPING_TIMEOUT + 150);
 
-    const value = await input.inputValue();
-    expect(value).toContain("Dynamically added!");
+    await expect(input).toHaveValue(/Dynamically added!/, {
+      timeout: EXPANSION_TIMEOUT,
+    });
   });
 
   test("handles extension context gracefully (no crash on invalid context)", async ({
@@ -382,11 +391,11 @@ test.describe("Content Script Expansion", () => {
     const input = testPage.locator('[data-testid="text-input"]');
     await input.click();
     await testPage.keyboard.type("/hello", { delay: 30 });
-    await testPage.waitForTimeout(TYPING_TIMEOUT + 150);
 
     // Should still work without throwing
-    const value = await input.inputValue();
-    expect(value).toContain("Hello, World!");
+    await expect(input).toHaveValue(/Hello, World!/, {
+      timeout: EXPANSION_TIMEOUT,
+    });
   });
 });
 

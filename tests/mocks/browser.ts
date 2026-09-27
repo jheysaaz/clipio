@@ -142,12 +142,23 @@ export const mockRuntime = {
 // browser global mock
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// browser.tabs mock
+// ---------------------------------------------------------------------------
+
+export const mockTabs = {
+  create: vi.fn(async (_props: { url: string }) => ({ id: 1 })),
+  query: vi.fn(async (_query?: unknown) => [] as unknown[]),
+  sendMessage: vi.fn(async () => undefined),
+};
+
 export const mockBrowser = {
   storage: {
     sync: mockStorageSync,
     local: mockStorageLocal,
   },
   runtime: mockRuntime,
+  tabs: mockTabs,
 };
 
 // ---------------------------------------------------------------------------
@@ -213,6 +224,10 @@ export function resetBrowserMocks() {
   mockRuntime.getManifest.mockClear();
   mockRuntime.onMessage.addListener.mockClear();
   mockRuntime.onMessage.removeListener.mockClear();
+
+  mockTabs.create.mockClear();
+  mockTabs.query.mockClear();
+  mockTabs.sendMessage.mockClear();
 }
 
 /** Simulate a storage.sync quota error on the next `set` call. */

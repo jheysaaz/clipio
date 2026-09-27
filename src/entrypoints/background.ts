@@ -23,7 +23,7 @@ import {
   type MediaGetDataUrlResponse,
 } from "@/lib/messages";
 import { getMedia } from "@/storage/backends/media";
-import { checkForUpdate } from "@/lib/update-checker";
+import { checkForUpdate, openReleasePage } from "@/lib/update-checker";
 import { addBlockedSite } from "@/lib/blocked-sites";
 import { debugLog } from "@/lib/debug";
 import {
@@ -213,11 +213,12 @@ export default defineBackground(() => {
         .getValue()
         .then((release) => {
           if (release?.htmlUrl) {
-            browser.tabs
-              .create({ url: release.htmlUrl })
-              .catch((err: unknown) => {
-                captureError(err, { action: "updateNotification.click" });
-              });
+            // Re-validates before opening — this fires behind a system
+            // notification the user trusts, so it is the highest-value place
+            // for a tampered URL to land.
+            openReleasePage(release.htmlUrl).catch((err: unknown) => {
+              captureError(err, { action: "updateNotification.click" });
+            });
           }
         })
         .catch((err: unknown) => {

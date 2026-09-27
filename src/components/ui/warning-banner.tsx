@@ -7,6 +7,13 @@ interface WarningBannerProps {
   action?: { label: string; onClick: () => void };
   onDismiss?: () => void;
   className?: string;
+  /**
+   * Distinguishes this banner from the other WarningBanner instances on the
+   * page for e2e selectors. Four banners render in Dashboard.tsx and they all
+   * share `aria-label="Dismiss"`, so a generic testid would match whichever
+   * one happened to come first in the DOM.
+   */
+  testId?: string;
 }
 
 export function WarningBanner({
@@ -14,6 +21,7 @@ export function WarningBanner({
   action,
   onDismiss,
   className,
+  testId,
 }: WarningBannerProps) {
   return (
     <div
@@ -44,6 +52,7 @@ export function WarningBanner({
           onClick={onDismiss}
           className="shrink-0 opacity-50 hover:opacity-100 transition-opacity"
           aria-label="Dismiss"
+          data-testid={testId}
         >
           <Icon icon={X} stroke="emphasis" />
         </button>
