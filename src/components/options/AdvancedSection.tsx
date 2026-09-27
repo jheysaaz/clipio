@@ -608,7 +608,7 @@ export function AdvancedSection() {
                 });
               }}
             >
-              Simulate notification
+              {i18n.t("options.copy.simulateNotification")}
             </Button>
             <Button
               type="button"
@@ -618,7 +618,7 @@ export function AdvancedSection() {
                 await setReviewPromptState("pending");
               }}
             >
-              Reset to pending
+              {i18n.t("options.copy.resetToPending")}
             </Button>
           </div>
         </div>
@@ -686,7 +686,7 @@ export function AdvancedSection() {
                 }
               }}
             >
-              Trigger test in content script
+              {i18n.t("options.copy.triggerContentScriptTest")}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">

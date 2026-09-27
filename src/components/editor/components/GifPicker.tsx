@@ -231,7 +231,7 @@ export function GifPicker({
       style={floating.style}
       className="z-50 w-72 rounded-lg border border-border bg-popover shadow-lg flex flex-col max-h-[min(360px,80vh)]"
       role="dialog"
-      aria-label="GIF picker"
+      aria-label={i18n.t("common.editor.gifPickerLabel")}
     >
       {/* Search header */}
       <div className="flex items-center gap-2 p-2 border-b border-border">

@@ -1,5 +1,6 @@
 "use client";
 
+import { i18n } from "#i18n";
 import * as React from "react";
 
 import { Slot } from "@radix-ui/react-slot";
@@ -506,7 +507,7 @@ const SidebarTrigger = React.forwardRef<
       {...props}
     >
       <Icon icon={PanelLeft} size="lg" />
-      <span className="sr-only">Toggle Sidebar</span>
+      <span className="sr-only">{i18n.t("common.toggleSidebar")}</span>
     </Button>
   );
 });

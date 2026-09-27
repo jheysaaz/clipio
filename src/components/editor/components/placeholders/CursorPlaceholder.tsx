@@ -1,3 +1,4 @@
+import { i18n } from "#i18n";
 import { useCallback } from "react";
 import { MousePointer2 } from "lucide-react";
 import { Icon } from "@/components/ui/icon";
@@ -40,7 +41,7 @@ export function CursorPlaceholderElement({
         "hover:bg-accent",
         "transition-colors duration-150"
       )}
-      title="Cursor position - cursor will be placed here after insertion"
+      title={i18n.t("common.editor.cursorTitle")}
     >
       <Icon icon={MousePointer2} size="xs" strokeWidth={ICON_STROKE.micro} />
       <span>cursor</span>

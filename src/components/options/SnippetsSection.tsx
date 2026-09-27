@@ -257,14 +257,14 @@ export function SnippetsSection() {
 
       <div className="border-t" />
 
-      {/* Typing Timeout */}
+      {/* {i18n.t("options.copy.typingTimeout")} */}
       <div
         data-testid="card-typing-timeout"
         className="rounded-xl border p-5 space-y-4"
       >
         <div>
           <h3 className="text-sm font-medium text-foreground">
-            Typing Timeout
+            {i18n.t("options.copy.typingTimeout")}
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             How long Clipio waits after you stop typing before attempting to
@@ -296,7 +296,7 @@ export function SnippetsSection() {
             disabled={typingTimeout === TIMING.TYPING_TIMEOUT}
           >
             <Icon icon={RotateCcw} className="mr-1.5" />
-            Reset to default
+            {i18n.t("options.copy.typingTimeoutReset")}
           </Button>
           {timeoutSaved && (
             <span

@@ -1,3 +1,4 @@
+import { i18n } from "#i18n";
 import { AlertTriangle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
@@ -10,7 +11,7 @@ interface WarningBannerProps {
   /**
    * Distinguishes this banner from the other WarningBanner instances on the
    * page for e2e selectors. Four banners render in Dashboard.tsx and they all
-   * share `aria-label="Dismiss"`, so a generic testid would match whichever
+   * share `aria-label={i18n.t("common.dismiss")}`, so a generic testid would match whichever
    * one happened to come first in the DOM.
    */
   testId?: string;
@@ -51,7 +52,7 @@ export function WarningBanner({
         <button
           onClick={onDismiss}
           className="shrink-0 opacity-50 hover:opacity-100 transition-opacity"
-          aria-label="Dismiss"
+          aria-label={i18n.t("common.dismiss")}
           data-testid={testId}
         >
           <Icon icon={X} stroke="emphasis" />

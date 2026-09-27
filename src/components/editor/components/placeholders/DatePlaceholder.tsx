@@ -1,3 +1,4 @@
+import { i18n } from "#i18n";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Calendar } from "lucide-react";
 import { Icon } from "@/components/ui/icon";
@@ -92,7 +93,7 @@ export function DatePlaceholderElement({
           )}
         >
           <div className="text-[10px] font-medium text-muted-foreground px-2 py-1 uppercase tracking-wide">
-            Date Format
+            {i18n.t("common.editor.dateFormat")}
           </div>
           {DATE_FORMATS.map((fmt) => (
             <button

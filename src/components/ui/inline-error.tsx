@@ -1,3 +1,4 @@
+import { i18n } from "#i18n";
 import { useEffect, useRef } from "react";
 import { AlertCircle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -56,7 +57,7 @@ export function InlineError({
       <button
         onClick={onDismiss}
         className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
-        aria-label="Dismiss error"
+        aria-label={i18n.t("common.dismissError")}
       >
         <Icon icon={X} size="sm" stroke="emphasis" />
       </button>

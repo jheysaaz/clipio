@@ -75,19 +75,21 @@ export function PreviewSettings() {
   return (
     <div>
       <h2 className="text-lg font-semibold text-foreground mb-1 flex items-center gap-2">
-        Snippet Preview
+        {i18n.t("options.copy.previewHeading")}
         <InfoTooltip text="Configure the snippet preview feature that shows available snippets as you type" />
       </h2>
       <p className="text-sm text-muted-foreground mb-4">
-        Show a preview menu when typing to quickly find and select snippets
+        {i18n.t("options.copy.previewDescription")}
       </p>
 
       <div className="rounded-xl border p-5 space-y-6">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label className="text-sm font-medium">Enable Preview</Label>
+            <Label className="text-sm font-medium">
+              {i18n.t("options.copy.previewEnable")}
+            </Label>
             <p className="text-xs text-muted-foreground">
-              Show snippet preview menu while typing
+              {i18n.t("options.copy.previewEnableHint")}
             </p>
           </div>
           <Button
@@ -99,12 +101,16 @@ export function PreviewSettings() {
             onClick={handleTogglePreview}
             className="shrink-0"
           >
-            {previewEnabled ? "Enabled" : "Disabled"}
+            {previewEnabled
+              ? i18n.t("options.copy.previewOn")
+              : i18n.t("options.copy.previewOff")}
           </Button>
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Trigger Prefix</Label>
+          <Label className="text-sm font-medium">
+            {i18n.t("options.copy.previewTriggerPrefix")}
+          </Label>
           <p className="text-xs text-muted-foreground">
             Character that triggers the preview menu. Leave empty to always show
             preview.
@@ -137,9 +143,11 @@ export function PreviewSettings() {
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Manual Trigger Shortcut</Label>
+          <Label className="text-sm font-medium">
+            {i18n.t("options.copy.previewShortcut")}
+          </Label>
           <p className="text-xs text-muted-foreground">
-            Keyboard shortcut to manually show all snippets
+            {i18n.t("options.copy.previewShortcutHint")}
           </p>
           <div className="flex gap-2 items-center">
             <div className="relative flex-1 max-w-xs">

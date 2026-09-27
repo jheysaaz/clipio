@@ -45,14 +45,16 @@ export function SectionCards() {
           </span>
         </div>
         <p className="mt-2 text-2xl font-bold">{stats.snippetCount}</p>
-        <p className="mt-1 text-xs text-muted-foreground">Total snippets</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {i18n.t("options.copy.totalSnippets")}
+        </p>
       </div>
 
       <div className="rounded-xl border bg-card p-4 text-card-foreground shadow-xs">
         <div className="flex items-center gap-2">
           <Icon icon={Cloud} size="lg" className="text-muted-foreground" />
           <span className="text-xs font-medium text-muted-foreground">
-            Sync Storage
+            {i18n.t("options.copy.syncStorage")}
           </span>
         </div>
         <p className="mt-2 text-2xl font-bold">{syncKB} KB</p>
@@ -71,7 +73,7 @@ export function SectionCards() {
         <div className="flex items-center gap-2">
           <Icon icon={HardDrive} size="lg" className="text-muted-foreground" />
           <span className="text-xs font-medium text-muted-foreground">
-            Local Storage
+            {i18n.t("options.copy.localStorage")}
           </span>
         </div>
         <p className="mt-2 text-2xl font-bold">{localKB} KB</p>
@@ -88,7 +90,7 @@ export function SectionCards() {
         <div className="flex items-center gap-2">
           <Icon icon={ImageIcon} size="lg" className="text-muted-foreground" />
           <span className="text-xs font-medium text-muted-foreground">
-            Storage Mode
+            {i18n.t("options.copy.storageMode")}
           </span>
         </div>
         <p className="mt-2 text-2xl font-bold capitalize">{stats.mode}</p>

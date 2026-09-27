@@ -8,6 +8,18 @@ common:
   cancel: Cancel
   closeModal: Close
   save: Save
+  # Generic UI affordances, shared by the dialog, banner and sidebar primitives.
+  # spec: specs/i18n.spec.md
+  dismiss: Dismiss
+  dismissError: Dismiss error
+  toggleSidebar: Toggle sidebar
+  close: Close
+
+  # Editor placeholder chrome
+  editor:
+    dateFormat: Date Format
+    cursorTitle: Cursor position - cursor will be placed here after insertion
+    gifPickerLabel: GIF picker
 
 dashboard:
   searchPlaceholder: Search snippets...
@@ -109,6 +121,30 @@ confirmDialog:
   defaultCancel: Cancel
 
 options:
+  # Options page — component copy that was previously hardcoded English.
+  # spec: specs/i18n.spec.md
+  copy:
+    previewHeading: Snippet Preview
+    previewDescription: Show a preview menu when typing to quickly find and select snippets
+    previewEnable: Enable Preview
+    previewEnableHint: Show snippet preview menu while typing
+    previewOn: Enabled
+    previewOff: Disabled
+    previewTriggerPrefix: Trigger Prefix
+    previewShortcut: Manual Trigger Shortcut
+    previewShortcutHint: Keyboard shortcut to manually show all snippets
+    typingTimeout: Typing Timeout
+    typingTimeoutReset: Reset to default
+    totalSnippets: Total snippets
+    syncStorage: Sync Storage
+    localStorage: Local Storage
+    storageMode: Storage Mode
+    extensionVersion: Extension Version
+    viewRelease: View release
+    upToDate: Up to date
+    simulateNotification: Simulate notification
+    resetToPending: Reset to pending
+    triggerContentScriptTest: Trigger test in content script
   # Accessible names for controls that carry no visible text. Read by screen
   # readers, so a Spanish user should hear Spanish. spec: specs/i18n.spec.md
   a11y:

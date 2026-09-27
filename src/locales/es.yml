@@ -8,6 +8,18 @@ common:
   cancel: Cancelar
   closeModal: Cerrar
   save: Guardar
+  # Generic UI affordances, shared by the dialog, banner and sidebar primitives.
+  # spec: specs/i18n.spec.md
+  dismiss: Descartar
+  dismissError: Descartar error
+  toggleSidebar: Alternar barra lateral
+  close: Cerrar
+
+  # Chrome del editor
+  editor:
+    dateFormat: Formato de fecha
+    cursorTitle: Posición del cursor - el cursor se colocará aquí tras insertar
+    gifPickerLabel: Selector de GIF
 
 dashboard:
   searchPlaceholder: Buscar fragmentos...
@@ -109,6 +121,29 @@ confirmDialog:
   defaultCancel: Cancelar
 
 options:
+  # Página de opciones — texto que antes estaba en inglés fijo.
+  copy:
+    previewHeading: Vista previa de fragmentos
+    previewDescription: Muestra un menú de vista previa al escribir para encontrar y seleccionar fragmentos rápidamente
+    previewEnable: Activar vista previa
+    previewEnableHint: Muestra el menú de vista previa mientras escribes
+    previewOn: Activado
+    previewOff: Desactivado
+    previewTriggerPrefix: Prefijo activador
+    previewShortcut: Atajo manual
+    previewShortcutHint: Atajo de teclado para mostrar todos los fragmentos manualmente
+    typingTimeout: Tiempo de espera
+    typingTimeoutReset: Restablecer al valor predeterminado
+    totalSnippets: Total de fragmentos
+    syncStorage: Almacenamiento en la nube
+    localStorage: Almacenamiento local
+    storageMode: Modo de almacenamiento
+    extensionVersion: Versión de la extensión
+    viewRelease: Ver la publicación
+    upToDate: Actualizado
+    simulateNotification: Simular notificación
+    resetToPending: Restablecer a pendiente
+    triggerContentScriptTest: Probar en el script de contenido
   # Nombres accesibles de controles sin texto visible. Los lee un lector de
   # pantalla, así que un usuario en español debe oír español.
   a11y:

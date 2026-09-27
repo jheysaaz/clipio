@@ -274,7 +274,7 @@ export default function SnippetDetailView({
               <button
                 onClick={onDismissUninstallWarning}
                 className="opacity-50 hover:opacity-100 transition-opacity"
-                aria-label="Dismiss"
+                aria-label={i18n.t("common.dismiss")}
               >
                 <Icon icon={X} stroke="emphasis" />
               </button>

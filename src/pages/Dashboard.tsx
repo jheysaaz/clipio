@@ -865,7 +865,7 @@ export default function Dashboard() {
                       <button
                         onClick={handleDismissUninstallWarning}
                         className="opacity-50 hover:opacity-100 transition-opacity"
-                        aria-label="Dismiss"
+                        aria-label={i18n.t("common.dismiss")}
                       >
                         <Icon icon={X} stroke="emphasis" />
                       </button>
@@ -916,7 +916,7 @@ export default function Dashboard() {
                       <button
                         onClick={handleDismissUninstallWarning}
                         className="opacity-50 hover:opacity-100 transition-opacity"
-                        aria-label="Dismiss"
+                        aria-label={i18n.t("common.dismiss")}
                       >
                         <Icon icon={X} stroke="emphasis" />
                       </button>

@@ -178,7 +178,7 @@ export function DashboardSection() {
       >
         <div>
           <h3 className="text-sm font-medium text-foreground">
-            Extension Version
+            {i18n.t("options.copy.extensionVersion")}
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             Current installed version and available updates.
@@ -202,7 +202,7 @@ export function DashboardSection() {
               }}
             >
               <Icon icon={ExternalLink} className="mr-1.5" />
-              View release
+              {i18n.t("options.copy.viewRelease")}
             </Button>
           </div>
         )}
@@ -211,7 +211,7 @@ export function DashboardSection() {
             data-testid="version-up-to-date"
             className="text-xs text-muted-foreground"
           >
-            Up to date
+            {i18n.t("options.copy.upToDate")}
           </p>
         )}
       </div>

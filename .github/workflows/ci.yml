@@ -35,6 +35,14 @@ jobs:
       - name: Check locale parity
         run: pnpm check:locales
 
+      # The other half of the same concern: `check:locales` proves every
+      # translated key is read, this proves the text a user actually sees went
+      # through i18n at all. The options sidebar shipped hardcoded English
+      # beside a fully translated `options.nav.*` that nothing read, and only
+      # the pair of checks together would have caught it.
+      - name: Check for hardcoded user-visible text
+        run: pnpm check:hardcoded-text
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
