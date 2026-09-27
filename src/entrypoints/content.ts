@@ -1,3 +1,4 @@
+import { hasImagePlaceholder, extractImageIds } from "@/lib/media-placeholders";
 import {
   TIMING,
   SENTRY_TEST_MESSAGE_TYPE,
@@ -385,11 +386,9 @@ export default defineContentScript({
       let resolveMedia:
         | ((id: string) => { src: string; alt?: string | null } | null)
         | undefined;
-      if (asHtml && /\{\{image:[a-f0-9-]+(?::\d+)?\}\}/.test(content)) {
-        const idMatches = [
-          ...content.matchAll(/\{\{image:([a-f0-9-]+)(?::\d+)?\}\}/g),
-        ];
-        const uniqueIds = [...new Set(idMatches.map((m) => m[1]))];
+      // spec: specs/media-placeholders.spec.md
+      if (asHtml && hasImagePlaceholder(content)) {
+        const uniqueIds = [...new Set(extractImageIds(content))];
         const blobMap = new Map<string, { src: string; alt?: string | null }>();
         await Promise.all(
           uniqueIds.map(async (id) => {

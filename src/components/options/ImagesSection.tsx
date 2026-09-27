@@ -1,3 +1,4 @@
+import { extractImageIds } from "@/lib/media-placeholders";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Images, LayoutList, LayoutGrid, Trash2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -84,11 +85,8 @@ export function ImagesSection() {
 
         const refMap: Record<string, string[]> = {};
         for (const snippet of snippets) {
-          const matches = snippet.content.matchAll(
-            /\{\{image:([a-f0-9-]+)(?::\d+)?\}\}/g
-          );
-          for (const match of matches) {
-            const id = match[1];
+          // spec: specs/media-placeholders.spec.md
+          for (const id of extractImageIds(snippet.content)) {
             if (!refMap[id]) refMap[id] = [];
             if (!refMap[id].includes(snippet.label)) {
               refMap[id].push(snippet.label);

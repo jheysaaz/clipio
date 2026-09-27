@@ -18,9 +18,10 @@ const REGEX_PATTERNS = {
   date: /^\{\{date:(iso|us|eu|long|short)\}\}/,
   cursor: /^\{\{cursor\}\}/,
   datepicker: /^\{\{datepicker:(\d{4}-\d{2}-\d{2})\}\}/,
-  // Width suffix (:NNN) is optional — matches both {{image:uuid}} and {{image:uuid:200}}
-  image: /^\{\{image:([a-f0-9-]+)(?::(\d+))?\}\}/,
-  gif: /^\{\{gif:([a-zA-Z0-9]+)(?::(\d+))?\}\}/,
+  // Width suffix (:NNN) is optional — matches both {{image:uuid}} and
+  // {{image:uuid:200}}. Owned by specs/media-placeholders.spec.md.
+  image: IMAGE_PLACEHOLDER_ANCHORED,
+  gif: GIF_PLACEHOLDER_ANCHORED,
   link: /^\[([^\]]+)\]\(([^)]+)\)/,
   bold: /^\*\*([^*]+)\*\*/,
   italic: /^_([^_]+)_/,
@@ -127,6 +128,10 @@ export function deserializeContent(content: string): TElement[] {
  *
  * spec: specs/content-format-migration.spec.md
  */
+import {
+  IMAGE_PLACEHOLDER_ANCHORED,
+  GIF_PLACEHOLDER_ANCHORED,
+} from "@/lib/media-placeholders";
 export function htmlToMarkdown(html: string): string {
   if (!html || html.trim() === "") return "";
   return serializeToMarkdown(deserializeFromHtml(html));

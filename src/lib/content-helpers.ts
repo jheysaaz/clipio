@@ -10,6 +10,10 @@
  * @see specs/content-expansion.spec.md for the behavioral specification.
  */
 
+import {
+  imagePlaceholderGlobal,
+  gifPlaceholderGlobal,
+} from "@/lib/media-placeholders";
 import { markdownToHtml, markdownToPlainText } from "./markdown";
 import { buildGifUrl } from "./giphy";
 
@@ -178,6 +182,29 @@ export function formatDate(format: string, dateStr?: string): string {
  * @param resolveGif - Optional: given a Giphy ID, returns the GIF URL (defaults to buildGifUrl).
  * @returns Processed content string and cursor offset (null if no {{cursor}}).
  */
+/**
+ * Replace image placeholders with "[image]" and GIF placeholders with their
+ * resolved URL.
+ *
+ * The two regexes this replaces were `{{image:[^}]+}}` and `{{gif:([^}]+)}}`,
+ * whose captures included any `:width` suffix — so for a resized reference the
+ * "id" handed to `getMedia`/the Giphy URL builder was `<id>:200`, which could
+ * never resolve. The width is now parsed out of the id rather than swallowed
+ * into it.
+ *
+ * spec: specs/media-placeholders.spec.md
+ */
+function resolveMediaPlaceholders(
+  content: string,
+  resolveGif?: (id: string) => string
+): string {
+  return content
+    .replace(imagePlaceholderGlobal(), "[image]")
+    .replace(gifPlaceholderGlobal(), (_match, id: string) =>
+      resolveGif ? resolveGif(id) : buildGifUrl(id)
+    );
+}
+
 export function processSnippetContent(
   content: string,
   asHtml: boolean,
@@ -255,18 +282,9 @@ export function processSnippetContent(
     // Plain text mode
 
     // 4. Image placeholders → "[image]"
-    processedContent = processedContent.replace(
-      /\{\{image:[^}]+\}\}/g,
-      "[image]"
-    );
-
     // 5. GIF placeholders → Giphy URL
-    processedContent = processedContent.replace(
-      /\{\{gif:([^}]+)\}\}/g,
-      (_match, id: string) => {
-        return resolveGif ? resolveGif(id) : buildGifUrl(id);
-      }
-    );
+    // spec: specs/media-placeholders.spec.md
+    processedContent = resolveMediaPlaceholders(processedContent, resolveGif);
 
     // Strip markdown and handle cursor offset
     const cursorMatch = processedContent.match(/\{\{cursor\}\}/);
@@ -275,14 +293,9 @@ export function processSnippetContent(
       // so the index correctly reflects the post-substitution string length.
       const beforeCursor = processedContent.substring(0, cursorMatch.index);
       // Apply the remaining placeholder substitutions to the before-cursor fragment
-      let processedBefore = beforeCursor;
-      processedBefore = processedBefore.replace(
-        /\{\{image:[^}]+\}\}/g,
-        "[image]"
-      );
-      processedBefore = processedBefore.replace(
-        /\{\{gif:([^}]+)\}\}/g,
-        (_m, id: string) => (resolveGif ? resolveGif(id) : buildGifUrl(id))
+      const processedBefore = resolveMediaPlaceholders(
+        beforeCursor,
+        resolveGif
       );
       cursorOffset = markdownToPlainText(processedBefore).length;
 

@@ -10,6 +10,7 @@
  *       media/        – one file per referenced image blob
  */
 
+import { hasImagePlaceholder, extractImageIds } from "@/lib/media-placeholders";
 import type { Snippet } from "@/types";
 import type { MediaMetadata } from "@/storage/backends/media";
 import { strToU8, zipSync } from "fflate";
@@ -67,23 +68,27 @@ export function buildClipioExportV2(
 // Detection helpers
 // ---------------------------------------------------------------------------
 
-/** Returns true if any snippet content contains an {{image:...}} placeholder. */
+/**
+ * Returns true if any snippet content contains an {{image:...}} placeholder.
+ * spec: specs/media-placeholders.spec.md
+ */
 export function snippetsContainMedia(snippets: Snippet[]): boolean {
-  return snippets.some((s) =>
-    /\{\{image:[a-f0-9-]+(?::\d+)?\}\}/.test(s.content)
-  );
+  return snippets.some((s) => hasImagePlaceholder(s.content));
 }
 
 /**
  * Extract all unique media IDs referenced in the given snippets.
+ *
+ * Deduplication stays here rather than moving into the shared parser: whether a
+ * caller wants unique ids or every occurrence is a per-callsite decision, and
+ * the clipboard path genuinely wants the opposite of this one.
+ * spec: specs/media-placeholders.spec.md
  */
 export function extractMediaIds(snippets: Snippet[]): string[] {
   const ids = new Set<string>();
   for (const s of snippets) {
-    for (const match of s.content.matchAll(
-      /\{\{image:([a-f0-9-]+)(?::\d+)?\}\}/g
-    )) {
-      ids.add(match[1]);
+    for (const id of extractImageIds(s.content)) {
+      ids.add(id);
     }
   }
   return [...ids];

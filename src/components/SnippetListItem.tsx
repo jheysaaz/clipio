@@ -1,3 +1,4 @@
+import { stripMediaPlaceholders } from "@/lib/media-placeholders";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import type { Snippet } from "@/types";
@@ -20,8 +21,11 @@ function stripMarkdown(content: string): string {
   text = text.replace(/\{\{date:([a-z]+)\}\}/g, "{{today}}");
   text = text.replace(/\{\{cursor\}\}/g, "{{cursor}}");
   text = text.replace(/\{\{datepicker:(\d{4}-\d{2}-\d{2})\}\}/g, "{{date}}");
-  text = text.replace(/\{\{image:[a-f0-9-]+\}\}/g, "[image]");
-  text = text.replace(/\{\{gif:[a-zA-Z0-9]+\}\}/g, "[GIF]");
+  // Via the shared parser, which understands the optional width suffix. The
+  // hand-typed regexes here did not, so a resized image — written as
+  // `{{image:<id>:200}}` the moment the user drags it — was left in place and
+  // the raw placeholder was displayed next to the snippet label.
+  text = stripMediaPlaceholders(text);
   // Also handle any legacy HTML tags
   text = text.replace(/<[^>]*>/g, "");
   // Decode common HTML entities
@@ -34,7 +38,7 @@ function stripMarkdown(content: string): string {
   return text;
 }
 
-function getContentPreview(content: string): string {
+export function getContentPreview(content: string): string {
   // Strip markdown formatting, then clean up whitespace
   const stripped = stripMarkdown(content)
     .replace(/[\n\r]+/g, " ")

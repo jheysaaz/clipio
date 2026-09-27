@@ -11,6 +11,12 @@
  * @see specs/markdown.spec.md for the behavioral specification.
  */
 
+import {
+  IMAGE_PLACEHOLDER_ANCHORED,
+  GIF_PLACEHOLDER_ANCHORED,
+  stripMediaPlaceholders,
+} from "./media-placeholders";
+
 // ---------------------------------------------------------------------------
 // Escaping & sanitization
 // ---------------------------------------------------------------------------
@@ -62,9 +68,8 @@ export function markdownInlineToHtml(text: string): string {
 
   while (remaining.length > 0) {
     // Image placeholder {{image:<uuid>}} or {{image:<uuid>:<width>}}
-    const imageMatch = remaining.match(
-      /^\{\{image:([a-f0-9-]+)(?::(\d+))?\}\}/
-    );
+    // spec: specs/media-placeholders.spec.md
+    const imageMatch = remaining.match(IMAGE_PLACEHOLDER_ANCHORED);
     if (imageMatch) {
       const mediaId = escapeHtml(imageMatch[1]);
       const width = imageMatch[2];
@@ -77,7 +82,8 @@ export function markdownInlineToHtml(text: string): string {
     }
 
     // GIF placeholder {{gif:<giphyId>}} or {{gif:<giphyId>:<width>}}
-    const gifMatch = remaining.match(/^\{\{gif:([a-zA-Z0-9]+)(?::(\d+))?\}\}/);
+    // spec: specs/media-placeholders.spec.md
+    const gifMatch = remaining.match(GIF_PLACEHOLDER_ANCHORED);
     if (gifMatch) {
       const giphyId = escapeHtml(gifMatch[1]);
       const width = gifMatch[2];
@@ -203,8 +209,8 @@ export function markdownToPlainText(content: string): string {
   if (!content) return "";
   let text = content;
   // Image/GIF placeholders → descriptive text (optional :width suffix)
-  text = text.replace(/\{\{image:[a-f0-9-]+(?::\d+)?\}\}/g, "[image]");
-  text = text.replace(/\{\{gif:[a-zA-Z0-9]+(?::\d+)?\}\}/g, "[GIF]");
+  // spec: specs/media-placeholders.spec.md
+  text = stripMediaPlaceholders(text);
   // Links → URL only (must run before stripping marks to avoid URL underscores matching italic)
   text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$2");
   // Strip formatting marks

@@ -13,6 +13,7 @@
  * @throws Error if the Clipboard API write fails (caller should surface to user).
  */
 
+import { extractMediaRefs } from "@/lib/media-placeholders";
 import { markdownToHtml, markdownToPlainText } from "./markdown";
 import { getMedia } from "@/storage/backends/media";
 import { captureError } from "@/lib/sentry";
@@ -21,15 +22,18 @@ export async function copyMarkdownAsRichText(markdown: string): Promise<void> {
   const plainText = markdownToPlainText(markdown);
   let html = markdownToHtml(markdown);
 
-  // Collect all unique image UUIDs (with optional :width suffix)
-  const imageRefs = [
-    ...markdown.matchAll(/\{\{image:([a-f0-9-]+)(?::\d+)?\}\}/g),
-  ];
+  // Every image reference, with the optional :width suffix. Deliberately not
+  // deduplicated: two references to the same image can carry different widths,
+  // and the replacement below rewrites by media id, so collapsing them here
+  // would lose a size.
+  // spec: specs/media-placeholders.spec.md
+  const imageRefs = extractMediaRefs(markdown).filter(
+    (ref) => ref.kind === "image"
+  );
 
   if (imageRefs.length > 0) {
     const replacements = await Promise.all(
-      imageRefs.map(async (match) => {
-        const id = match[1];
+      imageRefs.map(async ({ id }) => {
         try {
           const entry = await getMedia(id);
           if (!entry) return { id, dataUrl: null, alt: null };
