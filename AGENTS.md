@@ -190,6 +190,7 @@ Before writing any code, create a **specification** (markdown or inline comments
 - **Component**: `src/components/**/*.test.tsx` — React Testing Library
 - **E2E**: `e2e/*.spec.ts` — Playwright with extension loaded
 - Colocate tests next to source when possible
+- See **Testing Standards** below for the mandatory test-quality rules
 
 ### Spec Reference
 
@@ -199,6 +200,112 @@ See `specs/` for behavioral specifications covering all modules.
 - Conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `chore:`
 - One logical change per commit
 - No direct pushes to `main` — use PRs
+
+---
+
+## Testing Standards
+
+> Derived from the test-suite audit (`TEST_AUDIT.md`). Every rule below was a
+> real defect class found in the audit. Follow these when adding or modifying
+> tests.
+
+### Rules
+
+1. **Assert on behavior, not on local string math.** Never re-implement a
+   function's logic inside the test and assert the result of your own
+   re-import. Import the production function and assert its output.
+
+   ```ts
+   // BAD — decorative
+   const isSafe = !url.startsWith("javascript:");
+   expect(isSafe).toBe(false);
+
+   // GOOD — exercises real code
+   import { sanitizeUrl } from "./markdown";
+   expect(sanitizeUrl("javascript:alert(1)")).toBe("");
+   ```
+
+2. **Prefer stable selectors over copy / structure.** E2E must prefer, in
+   order: `data-testid` → ARIA role + accessible name → stable attribute
+   (`name`, `type`, `aria-label`). Avoid:
+   - `:has-text("…")` container matching
+   - `textContent("body").includes(…)` as the primary signal
+   - nth-child / nth-of-type positional nav selectors
+   - Copy-keyed navigation when a testid exists (`options-nav-*`)
+
+   A `data-testid` under e2e coverage may not be removed or repurposed
+   without updating its test in the same PR (`specs/e2e-suite.spec.md`).
+
+3. **No vacuous or `expect(true).toBe(true)` fallbacks.** If a precondition
+   fails (e.g. fewer list items than expected), fail loudly with a real
+   assertion. Silent `else { expect(true).toBe(true) }` branches hide
+   regressions.
+
+   ```ts
+   // BAD
+   if (count >= 2) { … } else { expect(true).toBe(true); }
+
+   // GOOD
+   await expect(listItems).toHaveCount(2, { timeout: 5_000 });
+   ```
+
+4. **Every feature needs a negative test.** For each happy path, cover at
+   least one: rejected input, thrown error, blocked security path, or absent
+   resource. Known gaps that were filled:
+   - `sanitizeUrl`: mixed-case `JaVaScRiPt:`, protocol-relative `//evil`,
+     unknown schemes
+   - TextBlaze: HTML conversion throw → falls back to `text` field
+   - Sentry relay: foreign `sender.id`, empty envelope, missing/malformed DSN
+
+5. **Assert something specific.** `expect(pageText).toBeTruthy()` and
+   `expect(body).toBeVisible()` alone are weak. Pair a smoke assertion with
+   a behavioral one (storage change, role attribute flip, filtered list
+   contents, download filename).
+
+6. **No non-determinism.**
+   - Restore globals you stub (`fetch`, timers) in `afterEach` / `finally`.
+   - Prefer auto-retrying Playwright assertions over `waitForTimeout`.
+   - Never leave `vi.fn()` replacements of `global.fetch` un-restored across
+     tests.
+   - No fake clocks unless the unit under test accepts an injected clock.
+
+7. **No redundant tests.** One behavioral claim → one test. Do not assert the
+   same property twice with different wording (e.g. three `exportedAt` tests
+   for one function). Fold overlapping suites instead of maintaining
+   parallel copies.
+
+8. **No comments that overclaim.** Do not write "verified against the built
+   stylesheet" when the test only checks class strings. Comments must
+   describe what the test actually proves.
+
+9. **Tests must import the code under test.** A test file that imports only
+   `vitest` and asserts literals is decorative. Every test file must import
+   (or e2e must drive) the production module it claims to cover. Page-level
+   a11y is covered by e2e axe scans (`AxeBuilder` in `popup.spec.ts` /
+   `options.spec.ts`), not by placeholder unit files.
+
+10. **Spec alignment.**
+    - Prefer spec-derived tests (`specs/*.spec.md` → `// spec:` comments).
+    - When impl and spec disagree, fix the impl or flag the discrepancy in
+      the spec — never silently encode the buggy behavior as "expected".
+
+11. **Coverage exclusions need a written reason.** Modules with tests should
+    not be blanket-excluded in `vitest.config.ts` without a justification
+    comment (see the `coverage.exclude` list).
+
+12. **CI: prefer `retries: 0` locally.** Investigate any CI retry as a flake
+    bug, not as noise to suppress.
+
+### Required checks
+
+```bash
+pnpm test            # unit
+pnpm compile         # types
+pnpm lint            # eslint
+pnpm test:e2e        # playwright (needs build; kill port 7777 first if stale)
+```
+
+Coverage thresholds are enforced in CI (`vitest.config.ts`).
 
 ---
 

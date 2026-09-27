@@ -80,6 +80,8 @@ internals.
 ### `LocalBackend.getSnippets(): Promise<Snippet[]>`
 
 - MUST return the value of `localSnippetsItem` (defaults to `[]`).
+- MUST normalize each returned snippet: legacy entries missing a
+  `contentFormat` field default to `"markdown"`; existing values are preserved.
 
 ### `LocalBackend.saveSnippets(snippets: Snippet[]): Promise<void>`
 
