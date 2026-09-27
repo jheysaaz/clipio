@@ -263,7 +263,9 @@ describe("processSnippetContent", () => {
       false,
       noClipboard
     );
-    expect(result.content).toMatch(/\d{4}-\d{2}-\d{2} and \d{1,2}\/\d{1,2}\/\d{4}/);
+    expect(result.content).toMatch(
+      /\d{4}-\d{2}-\d{2} and \d{1,2}\/\d{1,2}\/\d{4}/
+    );
   });
 
   // spec: MUST replace {{datepicker:YYYY-MM-DD}} with formatDate("long", date)

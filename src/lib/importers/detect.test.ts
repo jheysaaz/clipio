@@ -118,6 +118,37 @@ describe("detectFormat", () => {
     expect(detectFormat({ snippets: "data", hi: "Hello" })).toBeNull();
   });
 
+  // ── Cross-parser collisions (detection order, specs/importers.spec.md) ─────
+
+  // spec: detection order 1 > 3 — a Clipio envelope marker outranks the
+  // TextBlaze shape; a TextBlaze-shaped object with format:"clipio" is
+  // claimed by Clipio, not TextBlaze.
+  it('claims a TextBlaze-shaped object with format:"clipio" as clipio', () => {
+    expect(detectFormat({ format: "clipio", version: 1, folders: [] })).toBe(
+      "clipio"
+    );
+  });
+
+  it('claims a TextBlaze-shaped object with format:"clipio", folders and snippets as clipio', () => {
+    expect(
+      detectFormat({
+        format: "clipio",
+        version: 2,
+        folders: [{ name: "x", snippets: [] }],
+        snippets: [],
+      })
+    ).toBe("clipio");
+  });
+
+  // spec: detection order 3 > 1-without-marker — Clipio's envelope requires
+  // format:"clipio"; a bare version+folders object stays TextBlaze even when
+  // it also carries a "snippets" key.
+  it('claims version+folders as textblaze even when a "snippets" key is present', () => {
+    expect(detectFormat({ version: 1, folders: [], snippets: [] })).toBe(
+      "textblaze"
+    );
+  });
+
   // ── Invalid inputs ────────────────────────────────────────────────────────
 
   // spec: MUST return null for null

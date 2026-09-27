@@ -1,6 +1,7 @@
 import { test, expect } from "./fixtures.js";
 import type { StorageHelper } from "./fixtures.js";
 import { multilineSnippet, helloSnippet } from "./helpers/snippets.js";
+import { waitForContentScriptReady } from "./helpers/content-script.js";
 
 /**
  * Regressions for the contenteditable snippet-insertion flow.
@@ -117,9 +118,10 @@ test.describe("Contenteditable insertion flow", () => {
     const worldIndex = await field.evaluate(
       (el) => el.textContent?.indexOf("World") ?? -1
     );
-    expect(worldIndex, "World should follow the inserted snippet").toBeGreaterThan(
-      0
-    );
+    expect(
+      worldIndex,
+      "World should follow the inserted snippet"
+    ).toBeGreaterThan(0);
     expect(
       caretOffset,
       "caret should land at the end of the inserted snippet"
@@ -243,5 +245,5 @@ async function setupTestPage(
   await storageHelper.seedSnippets(snippets);
   await testPage.reload();
   await testPage.waitForLoadState("domcontentloaded");
-  await testPage.waitForTimeout(600);
+  await waitForContentScriptReady(testPage);
 }

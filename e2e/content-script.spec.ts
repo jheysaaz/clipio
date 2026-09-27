@@ -24,6 +24,7 @@ import {
   shortShortcutSnippet,
   longShortcutSnippet,
 } from "./helpers/snippets.js";
+import { waitForContentScriptReady } from "./helpers/content-script.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -37,6 +38,10 @@ const TYPING_TIMEOUT = 300; // Must match TIMING.TYPING_TIMEOUT in constants.ts
  *
  * Storage must be seeded via an extension page (via the storageHelper fixture)
  * because chrome.storage is not available in regular HTTP page contexts.
+ *
+ * Waits for the content script's real readiness signal (data-clipio-ready)
+ * rather than a fixed sleep — typing before listeners attach silently drops
+ * keystrokes, which caused intermittent expansion failures.
  */
 async function setupTestPage(
   testPage: import("@playwright/test").Page,
@@ -50,8 +55,7 @@ async function setupTestPage(
   // Reload so the content script initializes with the new cache
   await testPage.reload();
   await testPage.waitForLoadState("domcontentloaded");
-  // Give content script time to initialize and pick up the storage data
-  await testPage.waitForTimeout(600);
+  await waitForContentScriptReady(testPage);
 }
 
 /**
@@ -329,7 +333,7 @@ test.describe("Content Script Expansion", () => {
     // Start with no snippets (seed empty list to clear any prior state)
     await storageHelper.seedSnippets([]);
     await testPage.reload();
-    await testPage.waitForTimeout(600);
+    await waitForContentScriptReady(testPage);
 
     // Dynamically add a snippet via another extension page (simulating popup)
     const extPage = await context.newPage();
@@ -406,10 +410,7 @@ test.describe("Snippet Preview Feature", () => {
     // Type the trigger prefix
     await testPage.keyboard.type("/", { delay: 30 });
 
-    // Wait for preview to appear
-    await testPage.waitForTimeout(200);
-
-    // Check if preview container exists and is positioned
+    // Wait for preview host to attach (auto-retrying; avoids fixed sleeps)
     const previewContainer = testPage.locator("#clipio-snippet-preview-host");
     await expect(previewContainer).toBeAttached();
 
@@ -421,14 +422,19 @@ test.describe("Snippet Preview Feature", () => {
     expect(boundingBox!.width).toBeGreaterThan(0);
     expect(boundingBox!.height).toBeGreaterThan(0);
 
-    // Check if Clipio branding header is present
-    const header = previewContainer.locator(".clipio-preview-header");
+    // Branding header must render with the Clipio logo. The visible title was
+    // shortened to "Snippets" in 81cd5e5 — the logo carries the branding, so
+    // assert the logo rather than literal header copy.
+    const header = previewContainer.locator(
+      '[data-testid="clipio-preview-header"]'
+    );
     await expect(header).toBeVisible();
-    await expect(header).toContainText("Clipio Snippets");
+    await expect(header.locator('img[alt="Clipio"]')).toBeVisible();
 
-    // Check if snippets are listed
-    const snippetItems = previewContainer.locator(".clipio-preview-item");
-    expect(await snippetItems.count()).toBeGreaterThan(0);
+    // Check if snippets are listed (auto-retrying count avoids timing flakes)
+    await expect(
+      previewContainer.locator(".clipio-preview-item").first()
+    ).toBeVisible();
   });
 
   test("filters snippets by query when typing after prefix", async ({

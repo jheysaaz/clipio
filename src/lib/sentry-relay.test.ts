@@ -1,169 +1,252 @@
 /**
  * Sentry Relay Security Tests
  *
- * Verifies that the Sentry relay properly validates message senders
- * to prevent malicious websites from abusing the relay.
+ * spec: none (security hardening — see src/lib/sentry-relay.ts)
+ *
+ * Invokes the REAL registerSentryRelayListener() (bypassing the global
+ * ~/lib/sentry-relay mock from tests/setup.ts via vi.importActual) and
+ * drives the captured onMessage listener with hostile and valid messages.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { SentryRelayMessage } from "./sentry-relay";
-import { SENTRY_RELAY_MESSAGE_TYPE } from "./sentry-relay";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mockRuntime } from "../../tests/mocks/browser";
+
+type Listener = (
+  message: unknown,
+  sender: { id?: string },
+  sendResponse: (response: unknown) => void
+) => unknown;
+
+async function loadActualRelay() {
+  return await vi.importActual<typeof import("./sentry-relay")>(
+    "./sentry-relay"
+  );
+}
+
+async function registerAndGetListener(): Promise<{
+  listener: Listener;
+  relay: typeof import("./sentry-relay");
+}> {
+  const relay = await loadActualRelay();
+  mockRuntime.onMessage.addListener.mockClear();
+  relay.registerSentryRelayListener();
+  const listener = mockRuntime.onMessage.addListener.mock
+    .calls[0][0] as Listener;
+  expect(listener).toBeTypeOf("function");
+  return { listener, relay };
+}
+
+const EXT_ID = mockRuntime.id; // "test-extension-id"
+const VALID_ENVELOPE = '{"event_id":"abc","sent_at":"2026-01-01T00:00:00Z"}';
+const VALID_DSN = "https://abc123@sentry.io/42";
 
 describe("Sentry Relay Security", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("WXT_SENTRY_DSN", VALID_DSN);
   });
 
-  describe("Sender Validation", () => {
-    it("should reject messages from external websites (sender.id mismatch)", () => {
-      // This test documents the security requirement.
-      // The actual validation is done in sentry-relay.ts in the message listener.
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
 
-      const mockBrowserRuntimeId: string = "valid-extension-id-123";
-      const externalWebsiteId: string = "malicious-website-id";
+  describe("Message type validation", () => {
+    it("ignores messages that are not sentry-relay type (returns false, no response)", async () => {
+      const { listener } = await registerAndGetListener();
+      const sendResponse = vi.fn();
 
-      // Message from external website should be rejected
-      // (Comparing two different IDs should show they don't match)
-      const isValidSender = externalWebsiteId === mockBrowserRuntimeId;
-      expect(isValidSender).toBe(false); // Will be false for different IDs
+      const result = listener(
+        { type: "some-other-message-type", envelope: "data" },
+        { id: EXT_ID },
+        sendResponse
+      );
+
+      expect(result).toBe(false);
+      expect(sendResponse).not.toHaveBeenCalled();
     });
 
-    it("should accept messages from the extension itself", () => {
-      // Messages with matching sender.id should be accepted
-      const mockBrowserRuntimeId: string = "valid-extension-id-123";
-      const contentScriptId: string = "valid-extension-id-123"; // Same as extension
+    it("ignores non-object messages (returns false, no response)", async () => {
+      const { listener } = await registerAndGetListener();
+      const sendResponse = vi.fn();
 
-      const isValidSender = contentScriptId === mockBrowserRuntimeId;
-      expect(isValidSender).toBe(true);
+      expect(listener("not an object", { id: EXT_ID }, sendResponse)).toBe(
+        false
+      );
+      expect(listener(null, { id: EXT_ID }, sendResponse)).toBe(false);
+      expect(listener(undefined, { id: EXT_ID }, sendResponse)).toBe(false);
+      expect(sendResponse).not.toHaveBeenCalled();
     });
 
-    it("should only accept valid SENTRY_RELAY_MESSAGE_TYPE messages", () => {
-      const validMessage: SentryRelayMessage = {
-        type: SENTRY_RELAY_MESSAGE_TYPE,
-        envelope: "serialized-envelope-data",
-      };
+    it("ignores messages missing the type field", async () => {
+      const { listener } = await registerAndGetListener();
+      const sendResponse = vi.fn();
 
-      const invalidMessage: Record<string, unknown> = {
-        type: "some-other-message-type",
-        envelope: "data",
-      };
+      const result = listener(
+        { envelope: VALID_ENVELOPE },
+        { id: EXT_ID },
+        sendResponse
+      );
 
-      expect(validMessage.type).toBe(SENTRY_RELAY_MESSAGE_TYPE);
-      expect(invalidMessage.type).not.toBe(SENTRY_RELAY_MESSAGE_TYPE);
-    });
-
-    it("should reject messages with missing envelope data", () => {
-      const messageWithoutEnvelope = {
-        type: SENTRY_RELAY_MESSAGE_TYPE,
-        envelope: "",
-      };
-
-      const messageWithoutEnvelopeProperty: Record<string, unknown> = {
-        type: SENTRY_RELAY_MESSAGE_TYPE,
-      };
-
-      expect(messageWithoutEnvelope.envelope).toBe("");
-      expect(messageWithoutEnvelopeProperty.envelope).toBeUndefined();
-    });
-
-    it("should validate that envelope is a non-empty string", () => {
-      const validEnvelope = "valid-envelope-content";
-      const emptyEnvelope = "";
-
-      expect(validEnvelope).toBeTruthy();
-      expect(emptyEnvelope).toBeFalsy();
+      expect(result).toBe(false);
+      expect(sendResponse).not.toHaveBeenCalled();
     });
   });
 
-  describe("Message Type Validation", () => {
-    it("should verify message structure before processing", () => {
-      // Valid message structure
-      const validStructure = {
-        type: SENTRY_RELAY_MESSAGE_TYPE,
-        envelope: "some-data",
-      };
+  describe("Sender validation (external websites must be rejected)", () => {
+    it("rejects a matching type from a foreign sender.id with {ok:false}", async () => {
+      const { listener, relay } = await registerAndGetListener();
+      const sendResponse = vi.fn();
 
-      // Invalid structures
-      const notAnObject = "not an object";
-      const nullObject = null;
-      const noTypeField: Record<string, unknown> = { envelope: "data" };
+      const result = listener(
+        { type: relay.SENTRY_RELAY_MESSAGE_TYPE, envelope: VALID_ENVELOPE },
+        { id: "malicious-website-id" },
+        sendResponse
+      );
 
-      expect(typeof validStructure).toBe("object");
-      expect(validStructure).not.toBeNull();
-      expect(validStructure.type).toBeDefined();
+      expect(result).toBe(false);
+      expect(sendResponse).toHaveBeenCalledWith({ ok: false });
+    });
 
-      expect(typeof notAnObject).not.toBe("object");
-      expect(nullObject).toBeNull();
-      expect(noTypeField.type).toBeUndefined();
+    it("rejects a sender with no id (content script vs page ambiguity)", async () => {
+      const { listener, relay } = await registerAndGetListener();
+      const sendResponse = vi.fn();
+
+      const result = listener(
+        { type: relay.SENTRY_RELAY_MESSAGE_TYPE, envelope: VALID_ENVELOPE },
+        {},
+        sendResponse
+      );
+
+      expect(result).toBe(false);
+      expect(sendResponse).toHaveBeenCalledWith({ ok: false });
+    });
+
+    it("accepts the extension's own sender.id (proceeds past sender check)", async () => {
+      const { listener, relay } = await registerAndGetListener();
+      const sendResponse = vi.fn();
+
+      const result = listener(
+        { type: relay.SENTRY_RELAY_MESSAGE_TYPE, envelope: VALID_ENVELOPE },
+        { id: EXT_ID },
+        sendResponse
+      );
+
+      // Async path: returns true (will respond later), never sync {ok:false}
+      expect(result).toBe(true);
+      expect(sendResponse).not.toHaveBeenCalledWith({ ok: false });
     });
   });
 
-  describe("DSN and Endpoint Validation", () => {
-    it("should validate DSN format before building the ingest URL", () => {
-      const validDsn = "https://key@sentry.io/project-id";
-      const invalidDsn = "not-a-valid-dsn";
+  describe("Envelope and DSN validation", () => {
+    it("rejects an empty envelope with {ok:false}", async () => {
+      const { listener, relay } = await registerAndGetListener();
+      const sendResponse = vi.fn();
 
-      try {
-        const urlValid = new URL(validDsn);
-        expect(urlValid.protocol).toBe("https:");
-        expect(urlValid.hostname).toBe("sentry.io");
-      } catch {
-        expect.fail("Valid DSN should parse without error");
-      }
+      const result = listener(
+        { type: relay.SENTRY_RELAY_MESSAGE_TYPE, envelope: "" },
+        { id: EXT_ID },
+        sendResponse
+      );
 
-      try {
-        new URL(invalidDsn);
-        expect.fail("Invalid DSN should throw");
-      } catch (e) {
-        expect(e).toBeDefined();
-      }
+      expect(result).toBe(false);
+      expect(sendResponse).toHaveBeenCalledWith({ ok: false });
     });
 
-    it("should handle DSN parsing errors safely", () => {
-      const malformedDsn = ":::not-valid-dsn";
+    it("rejects a missing envelope field with {ok:false}", async () => {
+      const { listener, relay } = await registerAndGetListener();
+      const sendResponse = vi.fn();
 
-      let parseError: Error | undefined;
-      try {
-        new URL(malformedDsn);
-      } catch (e) {
-        parseError = e as Error;
-      }
+      const result = listener(
+        { type: relay.SENTRY_RELAY_MESSAGE_TYPE },
+        { id: EXT_ID },
+        sendResponse
+      );
 
-      expect(parseError).toBeDefined();
-      expect(parseError?.message).toContain("Invalid URL");
+      expect(result).toBe(false);
+      expect(sendResponse).toHaveBeenCalledWith({ ok: false });
+    });
+
+    it("rejects when WXT_SENTRY_DSN is unset with {ok:false}", async () => {
+      vi.stubEnv("WXT_SENTRY_DSN", "");
+      const { listener, relay } = await registerAndGetListener();
+      const sendResponse = vi.fn();
+
+      const result = listener(
+        { type: relay.SENTRY_RELAY_MESSAGE_TYPE, envelope: VALID_ENVELOPE },
+        { id: EXT_ID },
+        sendResponse
+      );
+
+      expect(result).toBe(false);
+      expect(sendResponse).toHaveBeenCalledWith({ ok: false });
+    });
+
+    it("rejects a malformed DSN with {ok:false} (URL parse throws)", async () => {
+      vi.stubEnv("WXT_SENTRY_DSN", ":::not-a-url");
+      const { listener, relay } = await registerAndGetListener();
+      const sendResponse = vi.fn();
+
+      const result = listener(
+        { type: relay.SENTRY_RELAY_MESSAGE_TYPE, envelope: VALID_ENVELOPE },
+        { id: EXT_ID },
+        sendResponse
+      );
+
+      expect(result).toBe(true); // async path entered…
+      expect(sendResponse).toHaveBeenCalledWith({ ok: false }); // …but URL failed
     });
   });
 
-  describe("Response Handling", () => {
-    it("should respond with {ok: false} on validation failure", () => {
-      // When sender.id doesn't match or data is invalid, respond {ok: false}
-      const failureResponse = { ok: false };
+  describe("Relay fetch behavior", () => {
+    it("POSTs the envelope to the DSN's /api/{projectId}/envelope/ endpoint and responds {ok:true}", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(new Response("OK"));
+      vi.stubGlobal("fetch", fetchMock);
 
-      expect(failureResponse.ok).toBe(false);
+      const { listener, relay } = await registerAndGetListener();
+      const sendResponse = vi.fn();
+
+      const result = listener(
+        { type: relay.SENTRY_RELAY_MESSAGE_TYPE, envelope: VALID_ENVELOPE },
+        { id: EXT_ID },
+        sendResponse
+      );
+      expect(result).toBe(true);
+
+      await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(1));
+      expect(sendResponse).toHaveBeenCalledWith({ ok: true });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://sentry.io/api/42/envelope/",
+        {
+          method: "POST",
+          body: VALID_ENVELOPE,
+          headers: { "Content-Type": "application/x-sentry-envelope" },
+        }
+      );
     });
 
-    it("should respond with {ok: true} on successful relay", () => {
-      // When relay succeeds, respond {ok: true}
-      const successResponse = { ok: true };
+    it("responds {ok:false} when the ingest fetch rejects", async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error("network down"));
+      vi.stubGlobal("fetch", fetchMock);
 
-      expect(successResponse.ok).toBe(true);
+      const { listener, relay } = await registerAndGetListener();
+      const sendResponse = vi.fn();
+
+      listener(
+        { type: relay.SENTRY_RELAY_MESSAGE_TYPE, envelope: VALID_ENVELOPE },
+        { id: EXT_ID },
+        sendResponse
+      );
+
+      await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(1));
+      expect(sendResponse).toHaveBeenCalledWith({ ok: false });
     });
+  });
 
-    it("should handle async response from fetch", () => {
-      // Fetch is async; the relay should handle the response asynchronously
-      const envelopeData = "serialized-envelope";
-
-      const mockFetch = vi.fn().mockResolvedValue(new Response("OK"));
-      expect(mockFetch).toBeDefined();
-
-      // Response should be awaited or handled via .then()
-      const fetchPromise = mockFetch("https://sentry.io/api/123/envelope/", {
-        method: "POST",
-        body: envelopeData,
-        headers: { "Content-Type": "application/x-sentry-envelope" },
-      });
-
-      expect(fetchPromise).toBeInstanceOf(Promise);
+  describe("Constants", () => {
+    it("exports SENTRY_RELAY_MESSAGE_TYPE as 'sentry-relay'", async () => {
+      const relay = await loadActualRelay();
+      expect(relay.SENTRY_RELAY_MESSAGE_TYPE).toBe("sentry-relay");
     });
   });
 });

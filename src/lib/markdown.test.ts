@@ -161,6 +161,7 @@ describe("markdownInlineToHtml", () => {
   it("renders blocked URL as plain escaped text", () => {
     const result = markdownInlineToHtml("[Click](javascript:alert(1))");
     expect(result).not.toContain("<a");
+    expect(result).not.toContain("javascript:");
     expect(result).toContain("Click");
   });
 

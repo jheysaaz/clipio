@@ -60,6 +60,17 @@ export default defineConfig({
       "notifications",
       "tabs",
     ],
+    // The snippet-preview UI is injected into regular web pages and loads
+    // the logo + Inter font via chrome-extension:// URLs. Chrome blocks such
+    // subresource requests from web pages unless they are declared here —
+    // without this entry the preview branding logo and font never load.
+    // (Found by the e2e preview-header test — see specs/e2e-suite.spec.md.)
+    web_accessible_resources: [
+      {
+        resources: ["icon/16.png", "assets/InterVariable*.woff2"],
+        matches: ["http://*/*", "https://*/*"],
+      },
+    ],
     // Allow all extension contexts (including content scripts) to reach Sentry.
     // The DSN uses the US ingest cluster (*.ingest.us.sentry.io); keeping the
     // broader *.ingest.sentry.io as well covers EU tenants and future regions.

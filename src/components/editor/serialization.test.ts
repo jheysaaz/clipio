@@ -250,7 +250,10 @@ describe("deserializeContent", () => {
 
   // spec: HTML <span> → recurse into children
   it("deserializes HTML <span> by recursing into children", () => {
-    const result = deserializeContent("<p><span>wrapped text</span></p>", "html");
+    const result = deserializeContent(
+      "<p><span>wrapped text</span></p>",
+      "html"
+    );
     expect(result).toHaveLength(1);
     const text = result[0].children[0] as TText;
     expect(text.text).toBe("wrapped text");
@@ -331,7 +334,10 @@ describe("deserializeContent", () => {
 
   // spec: HTML unknown elements → recurse into children
   it("deserializes unknown HTML elements by recursing into children", () => {
-    const result = deserializeContent("<p><section>content</section></p>", "html");
+    const result = deserializeContent(
+      "<p><section>content</section></p>",
+      "html"
+    );
     // The content should still appear
     const allText = result
       .flatMap((el) =>

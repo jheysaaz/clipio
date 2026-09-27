@@ -12,6 +12,7 @@
  * - Seed state via storage helpers before test
  */
 
+import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "./fixtures.js";
 import { helloSnippet, makeSnippet, makeSnippets } from "./helpers/snippets.js";
 
@@ -23,13 +24,12 @@ import { helloSnippet, makeSnippet, makeSnippets } from "./helpers/snippets.js";
  * Wait for the popup's main content to be visible (React has hydrated).
  */
 async function waitForPopupReady(page: import("@playwright/test").Page) {
-  // Wait for either the snippet list or the empty state to appear
+  // Wait for the stable hydration landmarks added under e2e coverage
+  // (specs/e2e-suite.spec.md): either the snippet list or the empty state.
   await page.waitForSelector(
-    '[data-testid="snippet-list"], [data-testid="empty-state"], button, input',
+    '[data-testid="snippet-list"], [data-testid="empty-state"]',
     { timeout: 10_000 }
   );
-  // Give React a brief moment to finish rendering
-  await page.waitForTimeout(300);
 }
 
 /**
@@ -70,13 +70,13 @@ test.describe("Popup (Dashboard)", () => {
     await popupPage.reload();
     await waitForPopupReady(popupPage);
 
-    // Popup should load without errors
+    // Popup should load without the empty-state landmark when snippets exist,
+    // or show it when none do — either way the hydration landmark must appear.
     const title = await popupPage.title();
     expect(title.length).toBeGreaterThan(0);
 
-    // Page should be visible and interactive
-    const body = popupPage.locator("body");
-    await expect(body).toBeVisible();
+    // Empty state is the behavioral signal for "no snippets"
+    await expect(popupPage.getByTestId("empty-state")).toBeVisible();
   });
 
   test("creates new snippet via form", async ({ popupPage }) => {
@@ -88,42 +88,32 @@ test.describe("Popup (Dashboard)", () => {
     await popupPage.reload();
     await waitForPopupReady(popupPage);
 
-    // Click the "New snippet" / "+" button
-    const newButton = popupPage
-      .locator(
-        'button[aria-label*="new" i], button[aria-label*="create" i], button[title*="new" i], button:has(svg)'
-      )
-      .first();
+    // Click the "Add Snippet" button (stable testid)
+    const newButton = popupPage.getByTestId("add-snippet");
+    await expect(newButton).toBeVisible({ timeout: 5_000 });
     await newButton.click();
     await popupPage.waitForTimeout(300);
 
-    // Fill in snippet form fields
-    const labelInput = popupPage
-      .locator(
-        'input[placeholder*="label" i], input[name="label"], input[placeholder*="name" i]'
-      )
-      .first();
-    const shortcutInput = popupPage
-      .locator('input[placeholder*="shortcut" i], input[name="shortcut"]')
-      .first();
+    // Fill in snippet form fields (stable name-based testids)
+    const labelInput = popupPage.getByTestId("snippet-label-input");
+    const shortcutInput = popupPage.getByTestId("snippet-shortcut-input");
 
-    if (await labelInput.isVisible()) {
-      await labelInput.fill("E2E Test Snippet");
-    }
-    if (await shortcutInput.isVisible()) {
-      await shortcutInput.fill("/e2e");
-    }
+    await expect(labelInput).toBeVisible();
+    await labelInput.fill("E2E Test Snippet");
+    await expect(shortcutInput).toBeVisible();
+    await shortcutInput.fill("/e2e");
+
+    // canSave requires non-empty content — fill the PlateJS contenteditable
+    const editor = popupPage.locator('[contenteditable="true"]').first();
+    await expect(editor).toBeVisible({ timeout: 5_000 });
+    await editor.click();
+    await popupPage.keyboard.type("Created by e2e");
 
     // Save the snippet
-    const saveButton = popupPage
-      .locator(
-        'button:has-text("Save"), button:has-text("Create"), button[type="submit"]'
-      )
-      .first();
-    if (await saveButton.isVisible()) {
-      await saveButton.click();
-      await popupPage.waitForTimeout(500);
-    }
+    const saveButton = popupPage.getByTestId("snippet-create-save");
+    await expect(saveButton).toBeEnabled();
+    await saveButton.click();
+    await popupPage.waitForTimeout(500);
 
     // Verify snippet was stored in sync storage
     const syncSnippets = await popupPage.evaluate(async () => {
@@ -132,8 +122,9 @@ test.describe("Popup (Dashboard)", () => {
       return Object.keys(all).filter((k) => k.startsWith("snip:"));
     });
 
-    // Should have at least one snippet now
-    expect(syncSnippets.length).toBeGreaterThanOrEqual(0); // smoke test — form UI may differ
+    // The created snippet must now exist
+    expect(syncSnippets.length).toBeGreaterThanOrEqual(1);
+    await expect(popupPage.getByTestId("snippet-list")).toBeVisible();
   });
 
   test("displays existing snippets in list", async ({ popupPage }) => {
@@ -162,17 +153,17 @@ test.describe("Popup (Dashboard)", () => {
     ];
     await seedAndReload(popupPage, snippets);
 
-    // Find and use the search input
-    const searchInput = popupPage
-      .locator('input[placeholder*="search" i], input[type="search"]')
-      .first();
-    if (await searchInput.isVisible()) {
-      await searchInput.fill("Beta");
-      await popupPage.waitForTimeout(300);
-
-      const pageText = await popupPage.textContent("body");
-      expect(pageText).toContain("Beta");
-    }
+    // Find and use the search input (aria-label from dashboard.searchPlaceholder)
+    const searchInput = popupPage.getByRole("textbox", { name: /search/i });
+    await expect(searchInput).toBeVisible({ timeout: 5_000 });
+    await searchInput.fill("Beta");
+    await expect(
+      popupPage.getByTestId("snippet-list-item").filter({ hasText: "Beta" })
+    ).toBeVisible();
+    // Other labels must be filtered out
+    await expect(
+      popupPage.getByTestId("snippet-list-item").filter({ hasText: "Alpha" })
+    ).toHaveCount(0);
   });
 
   test("shows sync-wipe recovery banner when syncDataLost is true", async ({
@@ -276,20 +267,15 @@ test.describe("Popup (Dashboard)", () => {
       })
       .catch(() => {});
 
-    // Find and click a copy button
-    const copyButton = popupPage
-      .locator(
-        'button[aria-label*="copy" i], button[title*="copy" i], button:has-text("Copy")'
-      )
-      .first();
-    if (await copyButton.isVisible()) {
-      await copyButton.click();
-      await popupPage.waitForTimeout(300);
-    }
+    // Find and click the copy button via stable testid
+    const copyButton = popupPage.getByTestId("snippet-copy");
+    await expect(copyButton).toBeVisible({ timeout: 5_000 });
+    await copyButton.click();
 
-    // Page should not crash
-    const body = popupPage.locator("body");
-    await expect(body).toBeVisible();
+    // Behavior: aria-pressed flips to true after a successful copy
+    await expect(copyButton).toHaveAttribute("aria-pressed", "true", {
+      timeout: 3_000,
+    });
   });
 
   test("shows quota warning banner near storage limit", async ({
@@ -331,26 +317,23 @@ test.describe("Popup (Dashboard)", () => {
   }) => {
     await waitForPopupReady(popupPage);
 
-    // Track new pages
-    const pageOpenedPromise = context
-      .waitForEvent("page", { timeout: 3_000 })
-      .catch(() => null);
+    // Click the settings button (exact accessible name — avoids matching
+    // empty-state "Import snippets" or "Open settings")
+    const settingsBtn = popupPage.getByRole("button", {
+      name: "Settings & Import/Export",
+      exact: true,
+    });
+    await expect(settingsBtn).toBeVisible({ timeout: 5_000 });
+    const newPage = await Promise.all([
+      context.waitForEvent("page", { timeout: 5_000 }).catch(() => null),
+      settingsBtn.click(),
+    ]).then(([p]) => p);
 
-    // Click any import/settings button
-    const settingsBtn = popupPage
-      .locator(
-        'button[aria-label*="setting" i], button[aria-label*="import" i], a[href*="options"]'
-      )
-      .first();
-
-    if (await settingsBtn.isVisible()) {
-      await settingsBtn.click();
-      const newPage = await pageOpenedPromise;
-      if (newPage) {
-        await newPage.waitForLoadState("domcontentloaded");
-        expect(newPage.url()).toContain(extensionId);
-        await newPage.close();
-      }
+    expect(newPage).not.toBeNull();
+    if (newPage) {
+      await newPage.waitForLoadState("domcontentloaded");
+      expect(newPage.url()).toContain(extensionId);
+      await newPage.close();
     }
 
     // Smoke test: popup is still responsive
@@ -364,38 +347,26 @@ test.describe("Popup (Dashboard)", () => {
     const snippet = makeSnippet({ label: "Delete Me", shortcut: "/delete-me" });
     await seedAndReload(popupPage, [snippet]);
 
-    // Find and click delete button if available
-    const deleteButton = popupPage
-      .locator(
-        'button[aria-label*="delete" i], button[aria-label*="remove" i], button:has-text("Delete")'
-      )
+    // Click delete via stable testid, then confirm in the dialog
+    const deleteButton = popupPage.getByTestId("snippet-delete");
+    await expect(deleteButton).toBeVisible({ timeout: 5_000 });
+    await deleteButton.click();
+
+    const confirmButton = popupPage
+      .getByRole("button", { name: /delete|confirm|yes/i })
       .first();
+    await expect(confirmButton).toBeVisible({ timeout: 5_000 });
+    await confirmButton.click();
 
-    if (await deleteButton.isVisible()) {
-      await deleteButton.click();
-      await popupPage.waitForTimeout(300);
-
-      // Confirm dialog if it appears
-      const confirmButton = popupPage
-        .locator(
-          'button:has-text("Delete"), button:has-text("Confirm"), button:has-text("Yes")'
-        )
-        .first();
-      if (await confirmButton.isVisible()) {
-        await confirmButton.click();
-        await popupPage.waitForTimeout(500);
-      }
-    }
-
-    // Storage verification
+    // Storage verification — the seeded snippet must be gone
+    await popupPage.waitForTimeout(500);
     const syncKeys = await popupPage.evaluate(async () => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const all = await ext.storage.sync.get(null);
       return Object.keys(all).filter((k) => k.startsWith("snip:"));
     });
-
-    // Either 0 snippets (deleted) or still 1 (button not found) — just ensure no crash
-    expect(syncKeys.length).toBeLessThanOrEqual(1);
+    expect(syncKeys).toHaveLength(0);
+    await expect(popupPage.getByTestId("empty-state")).toBeVisible();
   });
 
   // -------------------------------------------------------------------------
@@ -405,14 +376,22 @@ test.describe("Popup (Dashboard)", () => {
   test("popup has no critical accessibility violations", async ({
     popupPage,
   }) => {
-    // spec: ROADMAP_v1.5.md#testing
-    // Use axe-core to scan for WCAG violations
-    const { injectAxe, checkA11y } = await import("@axe-core/playwright");
-    await injectAxe(popupPage);
-    const results = await checkA11y(popupPage, undefined, {
-      // Report everything but only fail on critical/serious
-      includedImpacts: ["critical", "serious"],
+    // spec: specs/e2e-suite.spec.md
+    // @axe-core/playwright v4 exposes the AxeBuilder class — the old
+    // injectAxe/checkA11y free functions do not exist. Scan the hydrated
+    // popup; fail on critical/serious violations without suppression, and
+    // attach the full axe output to the report either way.
+    await waitForPopupReady(popupPage);
+    const results = await new AxeBuilder({ page: popupPage })
+      .include("body")
+      .analyze();
+    await test.info().attach("axe-results", {
+      body: JSON.stringify(results, null, 2),
+      contentType: "application/json",
     });
-    expect(results.violations.length).toBe(0);
+    const critical = results.violations.filter((v) =>
+      ["critical", "serious"].includes(v.impact ?? "")
+    );
+    expect(critical).toEqual([]);
   });
 });

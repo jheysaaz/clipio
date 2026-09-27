@@ -127,6 +127,7 @@ export function DashboardSection() {
             </div>
             <Progress
               value={stats.loading ? 0 : syncPercent}
+              aria-label={i18n.t("options.overview.syncStorage")}
               className={cn(
                 syncPercent >= syncWarnPercent
                   ? "[&>div]:bg-amber-500"
@@ -161,7 +162,8 @@ export function DashboardSection() {
           </div>
           <Progress
             value={stats.loading ? 0 : localPercent}
-            className="[&>div]:bg-muted-foreground"
+            aria-label={i18n.t("options.overview.localStorage")}
+            className=" [&>div]:bg-muted-foreground"
           />
         </div>
       </div>
@@ -169,7 +171,10 @@ export function DashboardSection() {
       <div className="border-t" />
 
       {/* Version info */}
-      <div className="rounded-xl border p-5 space-y-4">
+      <div
+        data-testid="card-extension-version"
+        className="rounded-xl border p-5 space-y-4"
+      >
         <div>
           <h3 className="text-sm font-medium text-foreground">
             Extension Version
@@ -180,7 +185,10 @@ export function DashboardSection() {
         </div>
         <p className="text-sm text-foreground">Version: {currentVersion}</p>
         {latestRelease && latestRelease.version !== dismissedVersion && (
-          <div className="flex items-center gap-3">
+          <div
+            data-testid="version-update-available"
+            className="flex items-center gap-3"
+          >
             <span className="text-xs text-amber-600 dark:text-amber-400">
               New version available: {latestRelease.version}
             </span>
@@ -198,12 +206,20 @@ export function DashboardSection() {
           </div>
         )}
         {(!latestRelease || latestRelease.version === dismissedVersion) && (
-          <p className="text-xs text-muted-foreground">Up to date</p>
+          <p
+            data-testid="version-up-to-date"
+            className="text-xs text-muted-foreground"
+          >
+            Up to date
+          </p>
         )}
       </div>
 
       {/* Top 5 Usage */}
-      <div className="rounded-xl border p-5 space-y-4">
+      <div
+        data-testid="card-top-usage"
+        className="rounded-xl border p-5 space-y-4"
+      >
         <div>
           <h3 className="text-sm font-medium text-foreground">Top 5 Usage</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -211,7 +227,12 @@ export function DashboardSection() {
           </p>
         </div>
         {usageLoaded && topUsage.length === 0 && (
-          <p className="text-xs text-muted-foreground">No usage data yet.</p>
+          <p
+            data-testid="top-usage-empty"
+            className="text-xs text-muted-foreground"
+          >
+            No usage data yet.
+          </p>
         )}
         {topUsage.length > 0 && (
           <ul className="space-y-2">

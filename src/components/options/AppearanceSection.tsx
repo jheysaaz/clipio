@@ -98,6 +98,7 @@ export function AppearanceSection() {
             return (
               <button
                 key={mode}
+                data-testid={`theme-${mode}`}
                 onClick={() => setThemeMode(mode)}
                 className={cn(
                   "flex flex-col items-center justify-center gap-2.5 rounded-xl border p-4 text-sm transition-all duration-150",
@@ -135,6 +136,7 @@ export function AppearanceSection() {
 
           <button
             role="switch"
+            data-testid="confetti-toggle"
             aria-checked={confettiEnabled}
             onClick={() => handleConfettiToggle(!confettiEnabled)}
             className={cn(

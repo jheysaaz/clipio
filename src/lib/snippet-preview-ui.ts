@@ -145,6 +145,7 @@ export class SnippetPreviewUI {
     // Create header with Clipio branding
     const header = document.createElement("div");
     header.className = "clipio-preview-header";
+    header.setAttribute("data-testid", "clipio-preview-header");
     header.style.cssText = `
       padding: 7px 10px;
       border-bottom: 1px solid ${this.palette.border};

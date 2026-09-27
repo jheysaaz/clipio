@@ -4,6 +4,7 @@ import { Icon } from "@/components/ui/icon";
 import { Progress } from "@/components/ui/progress";
 import { useStorageStats } from "./useStorageStats";
 import { SYNC_QUOTA } from "@/config/constants";
+import { i18n } from "#i18n";
 
 export function SectionCards() {
   const stats = useStorageStats();
@@ -59,7 +60,10 @@ export function SectionCards() {
           of {syncTotalKB} KB
         </p>
         <div className="mt-2">
-          <Progress value={syncPercent} />
+          <Progress
+            value={syncPercent}
+            aria-label={i18n.t("options.overview.syncStorage")}
+          />
         </div>
       </div>
 
@@ -73,7 +77,10 @@ export function SectionCards() {
         <p className="mt-2 text-2xl font-bold">{localKB} KB</p>
         <p className="mt-1 text-xs text-muted-foreground">estimated</p>
         <div className="mt-2">
-          <Progress value={localPercent} />
+          <Progress
+            value={localPercent}
+            aria-label={i18n.t("options.overview.localStorage")}
+          />
         </div>
       </div>
 

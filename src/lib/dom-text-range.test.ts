@@ -167,85 +167,85 @@ describe("locateTextRange", () => {
   });
 
   describe("getCaretTextOffset", () => {
-  function placeCaret(element: HTMLElement, atEnd = true) {
-    const selection = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    range.collapse(!atEnd);
-    selection!.removeAllRanges();
-    selection!.addRange(range);
-  }
-
-  function placeCaretAt(element: HTMLElement, node: Node, offset: number) {
-    const selection = window.getSelection();
-    const range = document.createRange();
-    range.setStart(node, offset);
-    range.collapse(true);
-    selection!.removeAllRanges();
-    selection!.addRange(range);
-  }
-
-  it("returns the full text length when the caret is at the end (flat)", () => {
-    const el = document.createElement("div");
-    el.textContent = "Hello World";
-    placeCaret(el, true);
-    expect(getCaretTextOffset(el)).toBe(11);
-  });
-
-  it("returns 0 when the caret is at the start", () => {
-    const el = document.createElement("div");
-    el.textContent = "Hello World";
-    placeCaret(el, false);
-    expect(getCaretTextOffset(el)).toBe(0);
-  });
-
-  it("returns the global offset inside a nested element structure", () => {
-    const el = document.createElement("div");
-    el.innerHTML = "<div>Hello </div><div>World<br></div>";
-    // textContent = "Hello World"
-    placeCaret(el, true);
-    expect(getCaretTextOffset(el)).toBe(11);
-  });
-
-  it("returns the offset into a middle text node", () => {
-    const el = document.createElement("div");
-    el.innerHTML = "<div>Hello </div><div>World<br></div>";
-    // textContent = "Hello World"; caret after "World" is at global offset 11
-    const lastText = el.querySelector("div:nth-child(2)")!.firstChild as Text;
-    placeCaretAt(el, lastText, 5);
-    expect(getCaretTextOffset(el)).toBe(11);
-  });
-
-  it("respects the offset within the focused node, not just node boundaries", () => {
-    const el = document.createElement("div");
-    el.innerHTML = "<div>Hello </div><div>World<br></div>";
-    // caret after "Wo" in "World" → global offset 6 ("Hello "=6) + 2 = 8
-    const lastText = el.querySelector("div:nth-child(2)")!.firstChild as Text;
-    placeCaretAt(el, lastText, 2);
-    expect(getCaretTextOffset(el)).toBe(8);
-  });
-
-  it("returns 0 when there is no selection", () => {
-    const el = document.createElement("div");
-    el.textContent = "Hello World";
-    const original = window.getSelection;
-    (window as any).getSelection = () => null;
-    try {
-      expect(getCaretTextOffset(el)).toBe(0);
-    } finally {
-      (window as any).getSelection = original;
+    function placeCaret(element: HTMLElement, atEnd = true) {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      range.collapse(!atEnd);
+      selection!.removeAllRanges();
+      selection!.addRange(range);
     }
-  });
 
-  it("returns 0 when the caret is outside the element", () => {
-    const el = document.createElement("div");
-    el.textContent = "Hello World";
-    const other = document.createElement("div");
-    other.textContent = "outside";
-    document.body.appendChild(other);
-    placeCaretAt(el, other.firstChild as Text, 3);
-    expect(getCaretTextOffset(el)).toBe(0);
-    other.remove();
+    function placeCaretAt(element: HTMLElement, node: Node, offset: number) {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.setStart(node, offset);
+      range.collapse(true);
+      selection!.removeAllRanges();
+      selection!.addRange(range);
+    }
+
+    it("returns the full text length when the caret is at the end (flat)", () => {
+      const el = document.createElement("div");
+      el.textContent = "Hello World";
+      placeCaret(el, true);
+      expect(getCaretTextOffset(el)).toBe(11);
+    });
+
+    it("returns 0 when the caret is at the start", () => {
+      const el = document.createElement("div");
+      el.textContent = "Hello World";
+      placeCaret(el, false);
+      expect(getCaretTextOffset(el)).toBe(0);
+    });
+
+    it("returns the global offset inside a nested element structure", () => {
+      const el = document.createElement("div");
+      el.innerHTML = "<div>Hello </div><div>World<br></div>";
+      // textContent = "Hello World"
+      placeCaret(el, true);
+      expect(getCaretTextOffset(el)).toBe(11);
+    });
+
+    it("returns the offset into a middle text node", () => {
+      const el = document.createElement("div");
+      el.innerHTML = "<div>Hello </div><div>World<br></div>";
+      // textContent = "Hello World"; caret after "World" is at global offset 11
+      const lastText = el.querySelector("div:nth-child(2)")!.firstChild as Text;
+      placeCaretAt(el, lastText, 5);
+      expect(getCaretTextOffset(el)).toBe(11);
+    });
+
+    it("respects the offset within the focused node, not just node boundaries", () => {
+      const el = document.createElement("div");
+      el.innerHTML = "<div>Hello </div><div>World<br></div>";
+      // caret after "Wo" in "World" → global offset 6 ("Hello "=6) + 2 = 8
+      const lastText = el.querySelector("div:nth-child(2)")!.firstChild as Text;
+      placeCaretAt(el, lastText, 2);
+      expect(getCaretTextOffset(el)).toBe(8);
+    });
+
+    it("returns 0 when there is no selection", () => {
+      const el = document.createElement("div");
+      el.textContent = "Hello World";
+      const original = window.getSelection;
+      (window as any).getSelection = () => null;
+      try {
+        expect(getCaretTextOffset(el)).toBe(0);
+      } finally {
+        (window as any).getSelection = original;
+      }
+    });
+
+    it("returns 0 when the caret is outside the element", () => {
+      const el = document.createElement("div");
+      el.textContent = "Hello World";
+      const other = document.createElement("div");
+      other.textContent = "outside";
+      document.body.appendChild(other);
+      placeCaretAt(el, other.firstChild as Text, 3);
+      expect(getCaretTextOffset(el)).toBe(0);
+      other.remove();
+    });
   });
-});
 });

@@ -167,14 +167,16 @@ export default defineBackground(() => {
         .then((shouldShow) => {
           if (!shouldShow) return;
           return setReviewPromptState("shown").then(() => {
-            browser.notifications.create("clipio-review", {
-              type: "basic",
-              iconUrl: browser.runtime.getURL("/icon/128.png"),
-              title: i18n.t("background.reviewPrompt.title"),
-              message: i18n.t("background.reviewPrompt.message"),
-            }).catch((err: unknown) => {
-              captureError(err, { action: "reviewPrompt.notification" });
-            });
+            browser.notifications
+              .create("clipio-review", {
+                type: "basic",
+                iconUrl: browser.runtime.getURL("/icon/128.png"),
+                title: i18n.t("background.reviewPrompt.title"),
+                message: i18n.t("background.reviewPrompt.message"),
+              })
+              .catch((err: unknown) => {
+                captureError(err, { action: "reviewPrompt.notification" });
+              });
           });
         })
         .catch((err: unknown) => {
@@ -190,16 +192,18 @@ export default defineBackground(() => {
   // transitions from null → a release object.
   latestVersionItem.watch((newValue) => {
     if (!newValue) return;
-    browser.notifications.create("clipio-update", {
-      type: "basic",
-      iconUrl: browser.runtime.getURL("/icon/128.png"),
-      title: i18n.t("background.updateAvailable.title"),
-      message: i18n.t("background.updateAvailable.message", [
-        newValue.version,
-      ]),
-    }).catch((err: unknown) => {
-      captureError(err, { action: "updateNotification.create" });
-    });
+    browser.notifications
+      .create("clipio-update", {
+        type: "basic",
+        iconUrl: browser.runtime.getURL("/icon/128.png"),
+        title: i18n.t("background.updateAvailable.title"),
+        message: i18n.t("background.updateAvailable.message", [
+          newValue.version,
+        ]),
+      })
+      .catch((err: unknown) => {
+        captureError(err, { action: "updateNotification.create" });
+      });
   });
 
   browser.notifications.onClicked.addListener((notificationId) => {
@@ -208,9 +212,11 @@ export default defineBackground(() => {
         .getValue()
         .then((release) => {
           if (release?.htmlUrl) {
-            browser.tabs.create({ url: release.htmlUrl }).catch((err: unknown) => {
-              captureError(err, { action: "updateNotification.click" });
-            });
+            browser.tabs
+              .create({ url: release.htmlUrl })
+              .catch((err: unknown) => {
+                captureError(err, { action: "updateNotification.click" });
+              });
           }
         })
         .catch((err: unknown) => {
@@ -422,11 +428,13 @@ export default defineBackground(() => {
 
       case CONTEXT_MENU.GIVE_FEEDBACK: {
         const optionsUrl = browser.runtime.getURL("/options.html");
-        browser.tabs.create({
-          url: optionsUrl + "#feedback",
-        }).catch((err: unknown) => {
-          captureError(err, { action: "giveFeedback" });
-        });
+        browser.tabs
+          .create({
+            url: optionsUrl + "#feedback",
+          })
+          .catch((err: unknown) => {
+            captureError(err, { action: "giveFeedback" });
+          });
         break;
       }
 

@@ -66,6 +66,25 @@ describe("LocalBackend", () => {
       const result = await backend.getSnippets();
       expect(result).toEqual([]);
     });
+
+    // spec: specs/storage.spec.md#LocalBackend — legacy snippets without
+    // contentFormat are normalized to "markdown" on read
+    it("normalizes a snippet missing contentFormat to markdown", async () => {
+      const legacy = { ...makeSnippet() } as Partial<Snippet>;
+      delete legacy.contentFormat;
+      mockLocalSnippets.getValue.mockResolvedValue([legacy as Snippet]);
+      const result = await backend.getSnippets();
+      expect(result).toHaveLength(1);
+      expect(result[0].contentFormat).toBe("markdown");
+    });
+
+    it("preserves an explicit contentFormat value", async () => {
+      mockLocalSnippets.getValue.mockResolvedValue([
+        makeSnippet({ contentFormat: "html" }),
+      ]);
+      const result = await backend.getSnippets();
+      expect(result[0].contentFormat).toBe("html");
+    });
   });
 
   // ── saveSnippets ──────────────────────────────────────────────────────────

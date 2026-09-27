@@ -21,34 +21,48 @@ export default defineConfig({
       // Files to include in coverage analysis
       include: ["src/**/*.ts", "src/**/*.tsx"],
 
-      // Files to exclude from coverage (minimal exclusions - entrypoints, UI shells, generated types,
-      // and modules not yet covered by tests — these will be added back as tests are written)
+      // Coverage exclusions — every entry carries a written reason
+      // (AGENTS.md Testing Standards rule 11: no blanket excludes without
+      // justification).
       exclude: [
+        // Thin entrypoint wiring — exercised end-to-end by Playwright specs
         "src/entrypoints/**",
+        // Generic UI primitives — covered by e2e axe scans, not unit logic
         "src/components/ui/**",
+        // Editor presentation shells (serialization.ts is NOT excluded and is
+        // unit-tested at its own threshold)
         "src/components/editor/RichTextEditor.tsx",
         "src/components/editor/plugins.ts",
         "src/components/editor/index.ts",
         "src/components/editor/components/**",
+        // Styles / assets / generated types — no executable branches
         "src/app.css",
         "src/assets/**",
         "src/**/*.d.ts",
+        // Test scaffolding
         "src/**/__mocks__/**",
+        // React glue — covered indirectly through components and e2e
         "src/hooks/**",
+        // Page composition — covered by e2e specs
         "src/pages/**",
+        // Options UI — covered by e2e options/image-gif specs
         "src/components/options/**",
+        // Static constants
         "src/config/**",
+        // Side-effectful Sentry SDK bootstrap (init runs on import)
         "src/lib/sentry.ts",
-        "src/lib/sentry-relay.ts",
+        // Static manifest fields
         "src/lib/manifest.ts",
+        // Trivial class-merge helper (shadcn cn-style)
         "src/lib/utils.ts",
-        "src/lib/preview-helpers.ts",
+        // Re-export barrel / browser-API wrapper — coverage debt: unit tests
+        // not yet written, exercised only via e2e integration paths
         "src/storage/index.ts",
         "src/storage/backends/indexeddb.ts",
       ],
 
       // Per-module coverage thresholds
-      // Vitest v2+ supports thresholds per file/glob via the `thresholds` object.
+      // Vitest v4 supports thresholds per file/glob via the `thresholds` object.
       thresholds: {
         // Global minimum — keep the bar high but achievable
         lines: 80,

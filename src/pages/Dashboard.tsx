@@ -564,7 +564,7 @@ export default function Dashboard() {
               {!searchQuery && (
                 <kbd
                   id="search-help"
-                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 hidden h-5 select-none items-center rounded border bg-muted px-1 font-mono text-[10px] font-medium text-muted-foreground sm:flex"
+                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 hidden h-5 select-none items-center rounded border bg-muted px-1 font-mono text-[10px] font-medium text-foreground/70 sm:flex"
                 >
                   {/mac/i.test(navigator.platform) ? "⌘K" : "Ctrl+K"}
                 </kbd>
@@ -597,7 +597,10 @@ export default function Dashboard() {
                   className="border border-red-200 dark:border-red-800 rounded-lg"
                 />
               ) : filteredSnippets.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-6 gap-3 px-3">
+                <div
+                  data-testid="empty-state"
+                  className="flex flex-col items-center justify-center py-6 gap-3 px-3"
+                >
                   <p className="text-xs text-muted-foreground text-center">
                     {searchQuery
                       ? i18n.t("dashboard.noSnippetsFound")
@@ -637,6 +640,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div
+                  data-testid="snippet-list"
                   className="space-y-1 overflow-hidden"
                   role="listbox"
                   aria-label={i18n.t("dashboard.snippetListLabel")}
@@ -696,6 +700,7 @@ export default function Dashboard() {
           {/* Add Snippet + Settings */}
           <div className="px-2 py-2 border-t flex items-center gap-1.5">
             <Button
+              data-testid="add-snippet"
               onClick={handleAddSnippet}
               className="flex-1 h-8 text-xs rounded-lg"
             >

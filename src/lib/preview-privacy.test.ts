@@ -5,110 +5,18 @@
  *
  * These tests verify that:
  * 1. Preview detection never logs raw user input to console
- * 2. Debug logging is safe and off by default
- * 3. Clipboard operations are documented and intentional
- * 4. Content expansion never exposes sensitive data
+ * 2. Clipboard operations are documented and intentional
+ * 3. Content expansion never exposes sensitive data
+ *
+ * debugLog behavior (off by default, JSON detail, no ambient input) lives in
+ * debug.test.ts — its safety cases were folded there from this file.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { debugLog, _resetDebugCache } from "./debug";
-import { debugModeItem, debugLogItem } from "@/storage/items";
-import type { DebugLogEntry } from "@/storage/items";
+import { debugModeItem } from "@/storage/items";
 
 describe("Preview Privacy & Security", () => {
-  // ──────────────────────────────────────────────────────────────────
-  // Test 1: debugLog should not leak raw values
-  // ──────────────────────────────────────────────────────────────────
-
-  describe("debugLog safety", () => {
-    beforeEach(() => {
-      vi.clearAllMocks();
-      _resetDebugCache();
-    });
-
-    afterEach(() => {
-      _resetDebugCache();
-    });
-
-    it("should be disabled by default and return synchronously", async () => {
-      const consoleSpy = vi.spyOn(console, "debug");
-      _resetDebugCache();
-
-      // First call (will initialize from storage, which should return false by default)
-      await debugLog("content", "event", { data: "value" });
-
-      // Wait a moment for any async operations
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      // Since debug mode is off by default in tests, debugLog should not console.debug
-      expect(consoleSpy).not.toHaveBeenCalled();
-      consoleSpy.mockRestore();
-    });
-
-    it("should never store raw user input when debug is on", async () => {
-      // Enable debug mode
-      const mockGetValue = vi.fn().mockResolvedValue(true);
-      const mockSetValue = vi.fn().mockResolvedValue(undefined);
-      const mockWatch = vi.fn();
-
-      vi.spyOn(debugModeItem, "getValue").mockImplementation(mockGetValue);
-      vi.spyOn(debugModeItem, "watch").mockImplementation(mockWatch);
-      vi.spyOn(debugLogItem, "getValue").mockResolvedValue([]);
-      vi.spyOn(debugLogItem, "setValue").mockImplementation(mockSetValue);
-
-      _resetDebugCache();
-
-      // Simulate a preview trigger with raw user input (should never be logged)
-      const userInput = "very sensitive input here";
-      const cursorPos = 20;
-
-      // Log metadata only, not raw input
-      await debugLog("content", "preview:filter", {
-        count: 3,
-        totalSnippets: 10,
-        // DO NOT include: userInput, cursorPos, or any raw field values
-      });
-
-      expect(mockSetValue).toHaveBeenCalled();
-      const callArgs = mockSetValue.mock.calls[0];
-      if (Array.isArray(callArgs[0])) {
-        const entries = callArgs[0] as DebugLogEntry[];
-        const lastEntry = entries[entries.length - 1];
-        expect(lastEntry.detail).not.toContain(userInput);
-        expect(lastEntry.detail).not.toContain(String(cursorPos));
-        expect(lastEntry.detail).toContain("count");
-      }
-    });
-
-    it("should JSON.stringify the detail object safely", async () => {
-      const mockGetValue = vi.fn().mockResolvedValue(true);
-      const mockWatch = vi.fn();
-
-      vi.spyOn(debugModeItem, "getValue").mockImplementation(mockGetValue);
-      vi.spyOn(debugModeItem, "watch").mockImplementation(mockWatch);
-      vi.spyOn(debugLogItem, "getValue").mockResolvedValue([]);
-      const setValueSpy = vi
-        .spyOn(debugLogItem, "setValue")
-        .mockResolvedValue(undefined);
-
-      _resetDebugCache();
-
-      const safeDetail = { eventType: "preview", count: 5 };
-      await debugLog("content", "preview:show", safeDetail);
-
-      expect(setValueSpy).toHaveBeenCalled();
-      const callArgs = setValueSpy.mock.calls[0];
-      if (Array.isArray(callArgs[0])) {
-        const entries = callArgs[0] as DebugLogEntry[];
-        const lastEntry = entries[entries.length - 1];
-        // Verify the detail is a JSON string
-        expect(typeof lastEntry.detail).toBe("string");
-        const parsed = JSON.parse(lastEntry.detail);
-        expect(parsed).toEqual(safeDetail);
-      }
-    });
-  });
-
   // ──────────────────────────────────────────────────────────────────
   // Test 2: Console should never log raw input from preview
   // ──────────────────────────────────────────────────────────────────
@@ -165,29 +73,6 @@ describe("Preview Privacy & Security", () => {
       expect(expectedBehavior).toContain("reads");
       expect(expectedBehavior).toContain("clipboard");
     });
-
-    it("should verify clipboard operations don't capture in debug logs by default", async () => {
-      // When debug mode is off, debugLog should be a fast no-op
-      _resetDebugCache();
-
-      const consoleSpy = vi.spyOn(console, "debug");
-      const mockGetValue = vi.fn().mockResolvedValue(false);
-      const mockWatch = vi.fn();
-
-      vi.spyOn(debugModeItem, "getValue").mockImplementation(mockGetValue);
-      vi.spyOn(debugModeItem, "watch").mockImplementation(mockWatch);
-
-      // Simulating clipboard operation with debug off
-      await debugLog("content", "clipboard:read", {
-        success: true,
-        // DO NOT include clipboard content
-      });
-
-      // Should be a no-op when debug is off
-      expect(consoleSpy).not.toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
-    });
   });
 
   // ──────────────────────────────────────────────────────────────────
@@ -228,15 +113,6 @@ describe("Preview Privacy & Security", () => {
 
     afterEach(() => {
       _resetDebugCache();
-    });
-
-    it("should require explicit opt-in to enable debugging", () => {
-      // Debug logging is off by default
-      // Users must explicitly enable it through options page
-      // This prevents accidental logging of sensitive data
-
-      const requiresExplicitOptIn = true; // By design
-      expect(requiresExplicitOptIn).toBe(true);
     });
 
     it("should maintain debug flag per context and update via watch", async () => {

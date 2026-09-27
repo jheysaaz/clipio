@@ -86,7 +86,7 @@ function htmlSnippetToMarkdown(html: string): string | null {
     cleaned = replaceSupportedPlaceholders(cleaned);
 
     // 4. Parse HTML → Plate nodes → Markdown
-    const nodes = deserializeContent(cleaned);
+    const nodes = deserializeContent(cleaned, "html");
     return serializeToMarkdown(nodes);
   } catch {
     return null;
@@ -162,7 +162,7 @@ function parseTBSnippet(
     label,
     shortcut,
     content,
-      contentFormat: "markdown",
+    contentFormat: "markdown",
     tags,
     unsupportedPlaceholders: [...new Set(unsupportedPlaceholders)],
   };

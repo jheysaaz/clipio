@@ -25,6 +25,7 @@
 
 import { test, expect } from "./fixtures.js";
 import { makeSnippet, makeSnippets } from "./helpers/snippets.js";
+import { waitForContentScriptReady } from "./helpers/content-script.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -209,42 +210,35 @@ test.describe("Image / GIF feature tests", () => {
     await popupPage.waitForTimeout(600);
 
     // Make an edit in the rich-text editor to dirty the form.
-    // The PlateJS editor renders a contenteditable.
+    // The PlateJS editor renders a contenteditable — it must be present
+    // (hard precondition, not a conditional branch).
     const editor = popupPage.locator('[contenteditable="true"]').first();
-    if (await editor.isVisible()) {
-      await editor.click();
-      // Select all and type to replace current content
-      await popupPage.keyboard.press("Control+a");
-      await popupPage.keyboard.type("UNSAVED EDIT");
-      await popupPage.waitForTimeout(200);
-    }
+    await expect(editor).toBeVisible({ timeout: 5_000 });
+    await editor.click();
+    // Select all and type to replace current content
+    await popupPage.keyboard.press("Control+a");
+    await popupPage.keyboard.type("UNSAVED EDIT");
 
     // Try to click the OTHER snippet in the list
     const listItems = popupPage.locator('[data-testid="snippet-list-item"]');
-    const count = await listItems.count();
-    if (count >= 2) {
-      // Click whichever item is NOT currently selected
-      await listItems.nth(1).click();
-      await popupPage.waitForTimeout(300);
+    await expect(listItems).toHaveCount(2, { timeout: 5_000 });
 
-      // A confirm/alert dialog should appear
-      const dialog = popupPage.locator('[role="dialog"], [role="alertdialog"]');
-      const hasDialog = await dialog.isVisible().catch(() => false);
+    // Click the item that is NOT currently selected — aria-selected sits on
+    // the item element itself, so this must be one combined selector
+    // (chained locators match descendants only, never the element itself).
+    await popupPage
+      .locator('[data-testid="snippet-list-item"][aria-selected="false"]')
+      .first()
+      .click();
 
-      // Also check for known i18n text that would appear in the dialog
-      const bodyText = await popupPage.textContent("body");
-      const hasUnsavedText =
-        hasDialog ||
-        (bodyText?.toLowerCase().includes("unsaved") ?? false) ||
-        (bodyText?.toLowerCase().includes("discard") ?? false);
-
-      // Either the dialog appeared, or the snippet switch was blocked
-      // (i.e. "Snippet Two" detail panel is NOT showing while "UNSAVED EDIT" is present)
-      expect(hasUnsavedText || hasDialog).toBe(true);
-    } else {
-      // Only 1 item visible in list — test is inconclusive but shouldn't fail
-      expect(true).toBe(true);
-    }
+    // The confirm dialog must appear with its discard action —
+    // auto-retrying expect (spec: no textContent("body") copy scans).
+    const dialog = popupPage.locator('[role="dialog"], [role="alertdialog"]');
+    await expect(dialog).toBeVisible({ timeout: 3_000 });
+    await expect(dialog).toContainText(/Unsaved changes/);
+    await expect(
+      dialog.getByRole("button", { name: /Discard changes/ })
+    ).toBeVisible();
 
     await popupPage.close();
   });
@@ -427,25 +421,24 @@ test.describe("Image / GIF feature tests", () => {
     // Reload test page so content script picks up new snippet cache
     await testPage.reload();
     await testPage.waitForLoadState("domcontentloaded");
-    await testPage.waitForTimeout(700);
+    await waitForContentScriptReady(testPage);
 
     // Type the shortcut into the contenteditable field
     const ce = testPage.locator('[data-testid="contenteditable-field"]');
     await ce.click();
     await testPage.keyboard.type("/imgw", { delay: 30 });
-    await testPage.waitForTimeout(400); // wait for debounce + async image resolution
 
-    // The shortcut itself should be replaced (not left as "/imgw")
-    const innerText = await ce.innerText();
-    expect(innerText).not.toContain("/imgw");
+    // Auto-retry until expansion replaces the shortcut (300ms input debounce
+    // + async image resolution — never a fixed sleep, AGENTS.md Testing Standards §6)
+    await expect(ce).not.toContainText("/imgw", { timeout: 5_000 });
 
     // The raw placeholder should be fully resolved — no leftover token
-    expect(innerText).not.toContain("{{image:");
+    await expect(ce).not.toContainText("{{image:", { timeout: 5_000 });
 
-    // The HTML should contain an <img> tag (image was resolved)
+    // Expansion has completed — read the HTML once (deterministic post-state)
     const innerHTML = await ce.innerHTML();
     // Either an img tag (successful resolution) or empty/blank (media resolved to blob)
-    // We verify no "uuid:200" leak as the src attribute
+    // We verify no "uuid:150" leak as the src attribute
     expect(innerHTML).not.toContain(`${mediaId}:150`);
   });
 
@@ -477,19 +470,22 @@ test.describe("Image / GIF feature tests", () => {
 
     await testPage.reload();
     await testPage.waitForLoadState("domcontentloaded");
-    await testPage.waitForTimeout(700);
+    await waitForContentScriptReady(testPage);
 
     const ce = testPage.locator('[data-testid="contenteditable-field"]');
     await ce.click();
     await testPage.keyboard.type("/altesc", { delay: 30 });
-    await testPage.waitForTimeout(400);
 
+    // Auto-retry until expansion replaces the shortcut — no fixed sleep
+    // (reading innerHTML before expansion would be a vacuous pass)
+    await expect(ce).not.toContainText("/altesc", { timeout: 5_000 });
+
+    // Expansion completed — read the HTML once (deterministic post-state)
     const innerHTML = await ce.innerHTML();
 
     // The raw <script> tag must NOT appear literally in the DOM
     // (it should be escaped or the alt attribute should contain &lt;script&gt;)
-    const hasRawScript = innerHTML.includes("<script>");
-    expect(hasRawScript).toBe(false);
+    expect(innerHTML).not.toContain("<script>");
   });
 
   // -------------------------------------------------------------------------
@@ -520,35 +516,26 @@ test.describe("Image / GIF feature tests", () => {
     await popupPage.waitForLoadState("domcontentloaded");
     await popupPage.waitForTimeout(600);
 
-    // Click the "New snippet" / "+" button
-    const newButton = popupPage
-      .locator('button[aria-label*="new" i], button[title*="new" i]')
+    // Click the "Add Snippet" button (stable testid)
+    const newButton = popupPage.getByTestId("add-snippet");
+    await expect(newButton).toBeVisible({ timeout: 5_000 });
+    await newButton.click();
+
+    // Cancel the creation — NewSnippetView's X has aria-label from i18n
+    // newSnippet.cancel (English default: "Cancel")
+    const cancelButton = popupPage
+      .locator('button[aria-label*="cancel" i]')
       .first();
-    const addButton = popupPage
-      .locator("button")
-      .filter({ has: popupPage.locator("svg") })
-      .first();
+    await expect(cancelButton).toBeVisible({ timeout: 5_000 });
+    await cancelButton.click();
+    await popupPage.waitForTimeout(300);
 
-    const btn = (await newButton.isVisible()) ? newButton : addButton;
-    if (await btn.isVisible()) {
-      await btn.click();
-      await popupPage.waitForTimeout(300);
-
-      // Cancel the creation
-      const cancelButton = popupPage
-        .locator(
-          'button:has-text("Cancel"), button[aria-label*="cancel" i], button:has-text("Discard")'
-        )
-        .first();
-      if (await cancelButton.isVisible()) {
-        await cancelButton.click();
-        await popupPage.waitForTimeout(300);
-      }
-    }
-
-    // After cancel, the detail panel should show the NEWER snippet (not older)
-    const bodyText = await popupPage.textContent("body");
-    expect(bodyText).toContain("Newer Snippet");
+    // After cancel, the detail/list returns to the NEWER snippet
+    await expect(
+      popupPage
+        .getByTestId("snippet-list-item")
+        .filter({ hasText: "Newer Snippet" })
+    ).toBeVisible();
 
     await popupPage.close();
   });

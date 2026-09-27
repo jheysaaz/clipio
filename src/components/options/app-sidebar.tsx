@@ -35,7 +35,7 @@ export function AppSidebar({
   onNavigate: (section: string) => void;
 }) {
   return (
-    <Sidebar variant="inset" collapsible="none" aria-label="Options navigation">
+    <Sidebar variant="inset" collapsible="none">
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1">
           <img src="/icon/128.png" alt="Clipio" className="h-6 w-6 shrink-0" />
@@ -43,28 +43,31 @@ export function AppSidebar({
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {NAV_ITEMS.map((item) => {
-                return (
-                  <SidebarMenuItem key={item.id}>
-                    <SidebarMenuButton
-                      isActive={activeSection === item.id}
-                      onClick={() => onNavigate(item.id)}
-                      aria-current={
-                        activeSection === item.id ? "page" : undefined
-                      }
-                    >
-                      <Icon icon={item.icon} size="lg" />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <nav aria-label="Options navigation">
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {NAV_ITEMS.map((item) => {
+                  return (
+                    <SidebarMenuItem key={item.id}>
+                      <SidebarMenuButton
+                        data-testid={`options-nav-${item.id}`}
+                        isActive={activeSection === item.id}
+                        onClick={() => onNavigate(item.id)}
+                        aria-current={
+                          activeSection === item.id ? "page" : undefined
+                        }
+                      >
+                        <Icon icon={item.icon} size="lg" />
+                        <span>{item.label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </nav>
       </SidebarContent>
     </Sidebar>
   );

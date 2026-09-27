@@ -176,6 +176,7 @@ export default function SnippetDetailView({
         <Button
           variant="ghost"
           size="icon"
+          data-testid="snippet-delete"
           onClick={() => setShowDeleteDialog(true)}
           disabled={isDeleting}
           className="h-8 w-8 hover:text-destructive hover:bg-destructive/10"
@@ -187,6 +188,7 @@ export default function SnippetDetailView({
         <Button
           variant="ghost"
           size="icon"
+          data-testid="snippet-copy"
           onClick={handleCopy}
           className="h-8 w-8"
           title={i18n.t("snippetDetail.copyToClipboard")}

@@ -146,4 +146,31 @@ describe("debugLog", () => {
     // Should not throw
     await expect(callDebugLog()).resolves.toBeUndefined();
   });
+
+  // spec: privacy — no console output while debug mode is off
+  // (folded from preview-privacy.test.ts)
+  it("does not console.debug when debug mode is off", async () => {
+    const consoleSpy = vi.spyOn(console, "debug");
+    mockDebugModeItem.getValue.mockResolvedValue(false);
+
+    await callDebugLog("content", "preview:filter", { count: 1 });
+
+    expect(consoleSpy).not.toHaveBeenCalled();
+    expect(mockDebugLogItem.setValue).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  // spec: privacy — detail is exactly what the caller passed (JSON-stringified),
+  // never silently enriched with ambient user input
+  // (folded from preview-privacy.test.ts)
+  it("stores exactly the caller-provided detail with no extra fields", async () => {
+    mockDebugModeItem.getValue.mockResolvedValue(true);
+    mockDebugLogItem.getValue.mockResolvedValue([]);
+
+    await callDebugLog("content", "preview:filter", { count: 3 });
+
+    expect(mockDebugLogItem.setValue).toHaveBeenCalledOnce();
+    const written = mockDebugLogItem.setValue.mock.calls[0][0];
+    expect(JSON.parse(written[0].detail)).toEqual({ count: 3 });
+  });
 });

@@ -186,6 +186,21 @@ describe("StorageManager", () => {
       mockSyncBackend.getSnippets.mockRejectedValue(new Error("Network error"));
       await expect(manager.getSnippets()).rejects.toThrow("Network error");
     });
+
+    // spec: specs/storage.spec.md#StorageManager — fallback is keyed on the
+    // StorageQuotaError TYPE, never on message text: a plain Error that merely
+    // mentions quota must NOT switch the manager to local mode.
+    it("does not fall back for a plain Error with a quota-like message", async () => {
+      mockSyncBackend.getSnippets.mockRejectedValue(
+        new Error("QUOTA_BYTES quota exceeded")
+      );
+      await expect(manager.getSnippets()).rejects.toThrow(
+        "QUOTA_BYTES quota exceeded"
+      );
+      expect(mockLocalBackend.getSnippets).not.toHaveBeenCalled();
+      expect(mockStorageMode.setValue).not.toHaveBeenCalled();
+      expect(mockStorageModeReason.setValue).not.toHaveBeenCalled();
+    });
   });
 
   // ── saveSnippet ───────────────────────────────────────────────────────────

@@ -68,8 +68,9 @@ describe("Icon", () => {
   });
 
   it("supports the non-square override (GripVertical: size token + h-8 w-3)", () => {
-    // tailwind-merge keeps size-3 alongside h-8/w-3; CSS order (size-* < h-* < w-*)
-    // makes h-8/w-3 win, yielding 12x32 — verified against the built stylesheet.
+    // Asserts the class merge keeps size-3 alongside h-8/w-3.
+    // Visual precedence (h-8/w-3 winning over size-3) is a CSS-order
+    // concern covered by e2e / manual review, not this unit test.
     const html = render(<Icon icon={Settings} size="sm" className="h-8 w-3" />);
     expect(html).toContain("size-3");
     expect(html).toContain("h-8");

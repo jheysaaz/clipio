@@ -1088,6 +1088,7 @@ export default function ImportWizard({
           </div>
           <Progress
             value={quotaPercent}
+            aria-label={i18n.t("importWizard.confirm.estimatedStorage")}
             className={cn(willExceedQuota ? "[&>div]:bg-amber-500" : "")}
           />
         </div>

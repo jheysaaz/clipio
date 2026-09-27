@@ -265,7 +265,10 @@ export function SnippetsSection() {
       <div className="border-t" />
 
       {/* Typing Timeout */}
-      <div className="rounded-xl border p-5 space-y-4">
+      <div
+        data-testid="card-typing-timeout"
+        className="rounded-xl border p-5 space-y-4"
+      >
         <div>
           <h3 className="text-sm font-medium text-foreground">
             Typing Timeout
@@ -341,6 +344,7 @@ export function SnippetsSection() {
               <Button
                 variant="outline"
                 size="sm"
+                data-testid="export-json"
                 onClick={handleExport}
                 className="shrink-0"
               >
@@ -370,6 +374,7 @@ export function SnippetsSection() {
               <Button
                 ref={importButtonRef}
                 size="sm"
+                data-testid="import-open"
                 onClick={() => {
                   setShowImportWizard(true);
                 }}

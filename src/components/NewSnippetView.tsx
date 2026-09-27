@@ -119,6 +119,7 @@ export default function NewSnippetView({
         <Button
           variant="default"
           size="sm"
+          data-testid="snippet-create-save"
           onClick={onSave}
           disabled={!canSave || isSaving}
           className="h-8 text-xs"
@@ -146,6 +147,7 @@ export default function NewSnippetView({
           <Input
             id="label"
             name="label"
+            data-testid="snippet-label-input"
             type="text"
             placeholder={i18n.t("newSnippet.namePlaceholder")}
             value={draftSnippet.label}
@@ -162,6 +164,7 @@ export default function NewSnippetView({
           <Input
             id="shortcut"
             name="shortcut"
+            data-testid="snippet-shortcut-input"
             type="text"
             placeholder={i18n.t("newSnippet.shortcutPlaceholder")}
             value={draftSnippet.shortcut}

@@ -14,7 +14,9 @@
 
 import path from "path";
 import fs from "fs";
-import { test, expect } from "./fixtures.js";
+import AxeBuilder from "@axe-core/playwright";
+import type { BrowserContext, Page } from "@playwright/test";
+import { test, expect, type StorageHelper } from "./fixtures.js";
 import { makeSnippets } from "./helpers/snippets.js";
 
 // ---------------------------------------------------------------------------
@@ -51,18 +53,21 @@ test.describe("Options Page", () => {
   test("loads with sidebar navigation sections", async ({ optionsPage }) => {
     await waitForOptionsReady(optionsPage);
 
-    const pageText = await optionsPage.textContent("body");
-    // The options page should contain nav section labels
-    // (translated via i18n — check for partial English text)
-    expect(pageText).toBeTruthy();
-    expect(pageText!.length).toBeGreaterThan(100);
+    // The sidebar renders a navigation landmark with section buttons.
+    const nav = optionsPage.getByRole("navigation", {
+      name: "Options navigation",
+    });
+    await expect(nav).toBeVisible();
+    expect(await nav.getByRole("button").count()).toBeGreaterThanOrEqual(1);
 
-    // Sidebar should have clickable nav items
-    const navItems = optionsPage.locator(
-      "nav a, nav button, aside button, aside a"
-    );
-    const count = await navItems.count();
-    expect(count).toBeGreaterThanOrEqual(1);
+    // Behavior: selecting a section marks it current (aria-current="page")
+    // and clears the previously active section.
+    const dashboardNav = optionsPage.getByTestId("options-nav-dashboard");
+    const snippetsNav = optionsPage.getByTestId("options-nav-snippets");
+    await expect(dashboardNav).toHaveAttribute("aria-current", "page");
+    await snippetsNav.click();
+    await expect(snippetsNav).toHaveAttribute("aria-current", "page");
+    await expect(dashboardNav).not.toHaveAttribute("aria-current", "page");
   });
 
   test("displays storage statistics", async ({ optionsPage }) => {
@@ -93,44 +98,27 @@ test.describe("Options Page", () => {
     await optionsPage.reload();
     await waitForOptionsReady(optionsPage);
 
-    // Navigate to import/export section
-    const importExportNav = optionsPage
-      .locator(
-        'button:has-text("Import"), button:has-text("Export"), a:has-text("Import"), a:has-text("Export"), nav button'
-      )
-      .first();
-    if (await importExportNav.isVisible()) {
-      await importExportNav.click();
-      await optionsPage.waitForTimeout(300);
-    }
+    // Import/export lives in the Snippets section — navigate via stable testid
+    await optionsPage.getByTestId("options-nav-snippets").click();
+    const exportButton = optionsPage.getByTestId("export-json");
+    await expect(exportButton).toBeVisible({ timeout: 5_000 });
 
-    // Find and click the export button, intercepting the download
-    const exportButton = optionsPage
-      .locator(
-        'button:has-text("Export"), button[aria-label*="export" i], button[title*="export" i]'
-      )
-      .first();
-
-    if (await exportButton.isVisible()) {
-      const downloadPromise = optionsPage
-        .waitForEvent("download", { timeout: 5_000 })
-        .catch(() => null);
-      await exportButton.click();
-      const download = await downloadPromise;
-
-      if (download) {
-        expect(download.suggestedFilename()).toMatch(/\.json$/i);
-        // Read the downloaded file
-        const tmpPath = path.resolve(`test-results/export-${Date.now()}.json`);
-        await download.saveAs(tmpPath).catch(() => {});
-        if (fs.existsSync(tmpPath)) {
-          const content = fs.readFileSync(tmpPath, "utf-8");
-          const parsed = JSON.parse(content);
-          expect(Array.isArray(parsed) || typeof parsed === "object").toBe(
-            true
-          );
-          fs.unlinkSync(tmpPath);
-        }
+    const downloadPromise = optionsPage
+      .waitForEvent("download", { timeout: 5_000 })
+      .catch(() => null);
+    await exportButton.click();
+    const download = await downloadPromise;
+    expect(download).not.toBeNull();
+    if (download) {
+      expect(download.suggestedFilename()).toMatch(/\.json$/i);
+      // Read the downloaded file
+      const tmpPath = path.resolve(`test-results/export-${Date.now()}.json`);
+      await download.saveAs(tmpPath).catch(() => {});
+      if (fs.existsSync(tmpPath)) {
+        const content = fs.readFileSync(tmpPath, "utf-8");
+        const parsed = JSON.parse(content);
+        expect(Array.isArray(parsed) || typeof parsed === "object").toBe(true);
+        fs.unlinkSync(tmpPath);
       }
     }
 
@@ -151,39 +139,39 @@ test.describe("Options Page", () => {
     }));
     const jsonContent = JSON.stringify(importData);
 
-    // Navigate to import/export section
-    const importNav = optionsPage
-      .locator('button:has-text("Import"), nav button')
-      .first();
-    if (await importNav.isVisible()) {
-      await importNav.click();
-      await optionsPage.waitForTimeout(300);
-    }
+    // Open the import wizard from the Snippets section via stable testid
+    await optionsPage.getByTestId("options-nav-snippets").click();
+    const importOpen = optionsPage.getByTestId("import-open");
+    await expect(importOpen).toBeVisible({ timeout: 5_000 });
+    await importOpen.click();
+
+    // Wizard dialog must open (behavior, not copy)
+    const dialog = optionsPage.getByRole("dialog", { name: /.*/ });
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
 
     // Find file input and upload the JSON
     const fileInput = optionsPage.locator('input[type="file"]').first();
-    if (await fileInput.isVisible().catch(() => false)) {
-      // Write temp file
-      const tmpPath = path.resolve(
-        `test-results/import-test-${Date.now()}.json`
-      );
-      fs.mkdirSync(path.dirname(tmpPath), { recursive: true });
-      fs.writeFileSync(tmpPath, jsonContent);
+    await expect(fileInput).toBeAttached({ timeout: 5_000 });
 
-      await fileInput.setInputFiles(tmpPath);
+    // Write temp file
+    const tmpPath = path.resolve(`test-results/import-test-${Date.now()}.json`);
+    fs.mkdirSync(path.dirname(tmpPath), { recursive: true });
+    fs.writeFileSync(tmpPath, jsonContent);
+
+    await fileInput.setInputFiles(tmpPath);
+    await optionsPage.waitForTimeout(500);
+
+    // Confirm import — scoped to the dialog so we don't hit the overlay-blocked
+    // import-open button behind the modal
+    const confirmBtn = dialog
+      .getByRole("button", { name: /import|confirm/i })
+      .first();
+    if (await confirmBtn.isVisible().catch(() => false)) {
+      await confirmBtn.click({ timeout: 5_000 }).catch(() => {});
       await optionsPage.waitForTimeout(500);
-
-      // Confirm import if wizard shows a confirm step
-      const confirmBtn = optionsPage
-        .locator('button:has-text("Import"), button:has-text("Confirm")')
-        .first();
-      if (await confirmBtn.isVisible()) {
-        await confirmBtn.click();
-        await optionsPage.waitForTimeout(500);
-      }
-
-      fs.unlinkSync(tmpPath);
     }
+
+    fs.unlinkSync(tmpPath);
 
     // Smoke test: page is still responsive after import attempt
     const body = optionsPage.locator("body");
@@ -196,25 +184,26 @@ test.describe("Options Page", () => {
     // TextBlaze CSV-like format
     const textBlazeContent = `shortcut,content\n/tb1,"TextBlaze snippet one"\n/tb2,"TextBlaze snippet two"`;
 
-    const importNav = optionsPage
-      .locator('button:has-text("Import"), nav button')
-      .first();
-    if (await importNav.isVisible()) {
-      await importNav.click();
-      await optionsPage.waitForTimeout(300);
-    }
+    // Open the import wizard from the Snippets section via stable testid
+    await optionsPage.getByTestId("options-nav-snippets").click();
+    const importOpen = optionsPage.getByTestId("import-open");
+    await expect(importOpen).toBeVisible({ timeout: 5_000 });
+    await importOpen.click();
+    await expect(optionsPage.getByRole("dialog", { name: /.*/ })).toBeVisible({
+      timeout: 5_000,
+    });
 
     const fileInput = optionsPage.locator('input[type="file"]').first();
-    if (await fileInput.isVisible().catch(() => false)) {
-      const tmpPath = path.resolve(`test-results/textblaze-${Date.now()}.csv`);
-      fs.mkdirSync(path.dirname(tmpPath), { recursive: true });
-      fs.writeFileSync(tmpPath, textBlazeContent);
+    await expect(fileInput).toBeAttached({ timeout: 5_000 });
 
-      await fileInput.setInputFiles(tmpPath);
-      await optionsPage.waitForTimeout(500);
+    const tmpPath = path.resolve(`test-results/textblaze-${Date.now()}.csv`);
+    fs.mkdirSync(path.dirname(tmpPath), { recursive: true });
+    fs.writeFileSync(tmpPath, textBlazeContent);
 
-      fs.unlinkSync(tmpPath);
-    }
+    await fileInput.setInputFiles(tmpPath);
+    await optionsPage.waitForTimeout(500);
+
+    fs.unlinkSync(tmpPath);
 
     const body = optionsPage.locator("body");
     await expect(body).toBeVisible();
@@ -229,25 +218,26 @@ test.describe("Options Page", () => {
       { keyword: "/pt2", expansion: "PowerText snippet two" },
     ]);
 
-    const importNav = optionsPage
-      .locator('button:has-text("Import"), nav button')
-      .first();
-    if (await importNav.isVisible()) {
-      await importNav.click();
-      await optionsPage.waitForTimeout(300);
-    }
+    // Open the import wizard from the Snippets section via stable testid
+    await optionsPage.getByTestId("options-nav-snippets").click();
+    const importOpen = optionsPage.getByTestId("import-open");
+    await expect(importOpen).toBeVisible({ timeout: 5_000 });
+    await importOpen.click();
+    await expect(optionsPage.getByRole("dialog", { name: /.*/ })).toBeVisible({
+      timeout: 5_000,
+    });
 
     const fileInput = optionsPage.locator('input[type="file"]').first();
-    if (await fileInput.isVisible().catch(() => false)) {
-      const tmpPath = path.resolve(`test-results/powertext-${Date.now()}.json`);
-      fs.mkdirSync(path.dirname(tmpPath), { recursive: true });
-      fs.writeFileSync(tmpPath, powerTextContent);
+    await expect(fileInput).toBeAttached({ timeout: 5_000 });
 
-      await fileInput.setInputFiles(tmpPath);
-      await optionsPage.waitForTimeout(500);
+    const tmpPath = path.resolve(`test-results/powertext-${Date.now()}.json`);
+    fs.mkdirSync(path.dirname(tmpPath), { recursive: true });
+    fs.writeFileSync(tmpPath, powerTextContent);
 
-      fs.unlinkSync(tmpPath);
-    }
+    await fileInput.setInputFiles(tmpPath);
+    await optionsPage.waitForTimeout(500);
+
+    fs.unlinkSync(tmpPath);
 
     const body = optionsPage.locator("body");
     await expect(body).toBeVisible();
@@ -256,45 +246,34 @@ test.describe("Options Page", () => {
   test("toggles theme (light/dark/system)", async ({ optionsPage }) => {
     await waitForOptionsReady(optionsPage);
 
-    // Navigate to appearance section
-    const appearanceNav = optionsPage
-      .locator(
-        'button:has-text("Appearance"), button:has-text("Theme"), nav button, aside button'
-      )
-      .nth(2); // try third nav item (Appearance is typically 3rd)
-    if (await appearanceNav.isVisible()) {
-      await appearanceNav.click();
-      await optionsPage.waitForTimeout(300);
-    }
+    // Navigate to appearance via stable testid
+    await optionsPage.getByTestId("options-nav-appearance").click();
 
-    // Find theme toggle buttons
-    const darkButton = optionsPage
-      .locator(
-        'button:has-text("Dark"), [aria-label*="dark" i], input[value="dark"]'
-      )
-      .first();
-    if (await darkButton.isVisible()) {
-      await darkButton.click();
-      await optionsPage.waitForTimeout(300);
+    // Find theme toggle buttons by stable testid
+    const darkButton = optionsPage.getByTestId("theme-dark");
+    await expect(darkButton).toBeVisible({ timeout: 5_000 });
+    await darkButton.click();
+    await optionsPage.waitForTimeout(300);
 
-      // Verify the theme was changed in storage
-      const storedTheme = await optionsPage.evaluate(async () => {
-        const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-        const result = await ext.storage.local.get("themeMode");
-        return result.themeMode;
-      });
-      expect(["dark", "light", "system", undefined]).toContain(storedTheme);
-    }
+    // Verify the theme was changed in storage
+    const storedTheme = await optionsPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      const result = await ext.storage.local.get("themeMode");
+      return result.themeMode;
+    });
+    expect(storedTheme).toBe("dark");
 
-    const lightButton = optionsPage
-      .locator(
-        'button:has-text("Light"), [aria-label*="light" i], input[value="light"]'
-      )
-      .first();
-    if (await lightButton.isVisible()) {
-      await lightButton.click();
-      await optionsPage.waitForTimeout(300);
-    }
+    const lightButton = optionsPage.getByTestId("theme-light");
+    await expect(lightButton).toBeVisible();
+    await lightButton.click();
+    await optionsPage.waitForTimeout(300);
+
+    const storedLight = await optionsPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      const result = await ext.storage.local.get("themeMode");
+      return result.themeMode;
+    });
+    expect(storedLight).toBe("light");
 
     const body = optionsPage.locator("body");
     await expect(body).toBeVisible();
@@ -303,35 +282,28 @@ test.describe("Options Page", () => {
   test("toggles confetti setting", async ({ optionsPage }) => {
     await waitForOptionsReady(optionsPage);
 
-    // Navigate to appearance section
-    const appearanceNav = optionsPage
-      .locator(
-        'button:has-text("Appearance"), button:has-text("Confetti"), nav button'
-      )
-      .nth(2);
-    if (await appearanceNav.isVisible()) {
-      await appearanceNav.click();
-      await optionsPage.waitForTimeout(300);
-    }
+    // Navigate to appearance via stable testid
+    await optionsPage.getByTestId("options-nav-appearance").click();
 
-    const confettiToggle = optionsPage
-      .locator(
-        'input[type="checkbox"][name*="confetti" i], button[aria-label*="confetti" i], [data-testid*="confetti"]'
-      )
-      .first();
+    const confettiToggle = optionsPage.getByTestId("confetti-toggle");
+    await expect(confettiToggle).toBeVisible({ timeout: 5_000 });
 
-    if (await confettiToggle.isVisible()) {
-      await confettiToggle.click();
-      await optionsPage.waitForTimeout(300);
+    const initialAria = await confettiToggle.getAttribute("aria-checked");
+    await confettiToggle.click();
+    await optionsPage.waitForTimeout(300);
 
-      const stored = await optionsPage.evaluate(async () => {
-        const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-        const result = await ext.storage.local.get("confettiEnabled");
-        return result.confettiEnabled;
-      });
-      // Value should be a boolean (either true or false, depending on initial state)
-      expect(typeof stored === "boolean" || stored === undefined).toBe(true);
-    }
+    // Behavior: switch role flips aria-checked
+    const newAria = await confettiToggle.getAttribute("aria-checked");
+    expect(newAria).not.toBe(initialAria);
+
+    const stored = await optionsPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      const result = await ext.storage.local.get("confettiEnabled");
+      return result.confettiEnabled;
+    });
+    // Value should track the flipped boolean
+    expect(typeof stored).toBe("boolean");
+    expect(String(stored)).toBe(newAria);
 
     const body = optionsPage.locator("body");
     await expect(body).toBeVisible();
@@ -367,16 +339,11 @@ test.describe("Options Page", () => {
       route.fulfill({ status: 200, body: "{}" });
     });
 
-    // Navigate to feedback section
-    const feedbackNav = optionsPage
-      .locator(
-        'button:has-text("Feedback"), a:has-text("Feedback"), nav button'
-      )
-      .last();
-    if (await feedbackNav.isVisible()) {
-      await feedbackNav.click();
-      await optionsPage.waitForTimeout(300);
-    }
+    // Feedback opens from the header button (aria-label="Feedback")
+    const feedbackNav = optionsPage.getByRole("button", { name: "Feedback" });
+    await expect(feedbackNav).toBeVisible({ timeout: 5_000 });
+    await feedbackNav.click();
+    await optionsPage.waitForTimeout(300);
 
     // Fill feedback form fields
     const nameField = optionsPage
@@ -398,11 +365,9 @@ test.describe("Options Page", () => {
 
     // Submit the form
     const submitButton = optionsPage
-      .locator(
-        'button[type="submit"], button:has-text("Send"), button:has-text("Submit")'
-      )
+      .getByRole("button", { name: /send|submit/i })
       .first();
-    if (await submitButton.isVisible()) {
+    if (await submitButton.isVisible().catch(() => false)) {
       await submitButton.click();
       await optionsPage.waitForTimeout(1_000);
     }
@@ -420,43 +385,61 @@ test.describe("Options Page", () => {
 test.describe("Developers Section", () => {
   async function navigateToDevelopers(page: import("@playwright/test").Page) {
     await waitForOptionsReady(page);
-    const devNav = page
-      .locator('button:has-text("Developers"), a:has-text("Developers")')
-      .first();
-    if (await devNav.isVisible()) {
-      await devNav.click();
-      await page.waitForTimeout(300);
-    }
+    // Sidebar item id is "advanced"; the section it opens is titled
+    // "Developers". Selector is keyed to behavior (testid), not copy.
+    await page.getByTestId("options-nav-advanced").click();
+    // Fail loudly if the section never renders — never silently no-op.
+    await expect(page.getByTestId("card-content-script-health")).toBeVisible({
+      timeout: 5_000,
+    });
   }
 
-  test("renders the Developers section with all five new cards", async ({
+  test("renders all five developer cards (Dashboard + Developers section)", async ({
     optionsPage,
   }) => {
-    await navigateToDevelopers(optionsPage);
+    await waitForOptionsReady(optionsPage);
 
-    const pageText = await optionsPage.textContent("body");
-    expect(pageText).toContain("Extension Version & Update");
-    expect(pageText).toContain("Content Script Health");
-    expect(pageText).toContain("Storage Mode & Quota");
-    expect(pageText).toContain("Top 5 Usage");
-    expect(pageText).toContain("Clear IDB Backup");
+    // Extension Version and Top 5 Usage render on the Dashboard overview
+    // (relocated out of the Developers section — see specs/e2e-suite.spec.md).
+    await expect(
+      optionsPage.getByTestId("card-extension-version")
+    ).toBeVisible();
+    await expect(optionsPage.getByTestId("card-top-usage")).toBeVisible();
+
+    // Content Script Health, Storage Mode & Quota and Clear IDB Backup
+    // render in the Developers section.
+    await navigateToDevelopers(optionsPage);
+    await expect(
+      optionsPage.getByTestId("card-content-script-health")
+    ).toBeVisible();
+    await expect(optionsPage.getByTestId("card-storage-mode")).toBeVisible();
+    await expect(optionsPage.getByTestId("card-clear-idb")).toBeVisible();
   });
 
   test("shows current version in version card", async ({ optionsPage }) => {
-    await navigateToDevelopers(optionsPage);
+    await waitForOptionsReady(optionsPage);
 
-    // Version card should show "Version: X.Y.Z"
-    const pageText = await optionsPage.textContent("body");
-    expect(pageText).toMatch(/Version:\s*\d+\.\d+/);
+    // The version card lives on the Dashboard (default section) and must
+    // display the real manifest version.
+    const card = optionsPage.getByTestId("card-extension-version");
+    await expect(card).toBeVisible();
+    const manifestVersion = await optionsPage.evaluate(() => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      return ext.runtime.getManifest().version as string;
+    });
+    await expect(card).toContainText(manifestVersion);
   });
 
-  test("shows 'Up to date' when no update is available", async ({
+  test("shows up-to-date state when no update is available", async ({
     optionsPage,
   }) => {
-    await navigateToDevelopers(optionsPage);
-    // With no latestVersionItem seeded, the card shows "Up to date"
-    const pageText = await optionsPage.textContent("body");
-    expect(pageText).toContain("Up to date");
+    await waitForOptionsReady(optionsPage);
+    // Fresh context — no latestVersion seeded. The card must show its
+    // up-to-date state and must not offer the update action.
+    const card = optionsPage.getByTestId("card-extension-version");
+    await expect(card).toBeVisible();
+    await expect(card.getByTestId("version-up-to-date")).toBeVisible();
+    await expect(card.getByTestId("version-update-available")).toHaveCount(0);
   });
 
   test("shows update banner on Dashboard when latestVersionItem is set to newer version", async ({
@@ -550,50 +533,64 @@ test.describe("Developers Section", () => {
     await navigateToDevelopers(optionsPage);
 
     const pingButton = optionsPage
-      .locator('button:has-text("Ping content script")')
-      .first();
+      .getByTestId("card-content-script-health")
+      .getByRole("button", { name: /ping/i });
+    await expect(pingButton).toBeVisible();
 
-    if (await pingButton.isVisible()) {
-      await pingButton.click();
-      await optionsPage.waitForTimeout(1_000);
+    await pingButton.click();
 
-      // After ping, should show either pong or an error message
-      const pageText = await optionsPage.textContent("body");
-      const hasPong = pageText!.includes("Pong") || pageText!.includes("pong");
-      const hasError =
-        pageText!.includes("No active tab") ||
-        pageText!.includes("No content script") ||
-        pageText!.includes("Ping failed");
-      expect(hasPong || hasError).toBe(true);
-    }
-
-    const body = optionsPage.locator("body");
-    await expect(body).toBeVisible();
+    // The ping outcome is reported as a Sonner toast — assert on that toast
+    // (spec: specs/e2e-suite.spec.md — no literal copy via textContent("body")).
+    const toast = optionsPage.locator("[data-sonner-toast]").first();
+    await expect(toast).toBeVisible({ timeout: 5_000 });
+    await expect(toast).toContainText(
+      /Pong|No active tab|No content script|Ping failed/
+    );
   });
 
-  test("storage mode card displays active backend", async ({ optionsPage }) => {
-    await navigateToDevelopers(optionsPage);
-
-    const pageText = await optionsPage.textContent("body");
-    // Should show "Active backend: sync" or "Active backend: local"
-    expect(pageText).toMatch(/Active backend:\s*(sync|local|—)/);
-  });
-
-  test("top-5 usage card shows 'No usage data yet' when empty", async ({
+  test("storage mode card reflects the active backend after a mode switch", async ({
     optionsPage,
   }) => {
     await navigateToDevelopers(optionsPage);
-    // No usage data seeded → empty state message
-    const pageText = await optionsPage.textContent("body");
-    // Either "No usage data yet." or actual usage items
-    const hasEmpty = pageText!.includes("No usage data yet");
-    const hasUsageItems = pageText!.match(/\d+ uses/) !== null;
-    expect(hasEmpty || hasUsageItems).toBe(true);
+
+    const backendEl = optionsPage.getByTestId("storage-active-backend");
+    const readStoredMode = () =>
+      optionsPage.evaluate(async () => {
+        const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+        const result = await ext.storage.local.get("storageMode");
+        return (result.storageMode as "sync" | "local") ?? "sync";
+      });
+
+    // The card must display the backend that storage reports as active.
+    const initial = await readStoredMode();
+    await expect(backendEl).toContainText(initial);
+
+    // Drive a real switch and assert the card follows the new backend.
+    const target = initial === "sync" ? "local" : "sync";
+    await optionsPage.getByTestId(`storage-switch-${target}`).click();
+    await optionsPage.getByTestId("storage-switch-confirm").click();
+    await expect(backendEl).toContainText(target);
+    expect(await readStoredMode()).toBe(target);
+
+    // Restore the original mode — verifies the card tracks both directions.
+    await optionsPage.getByTestId(`storage-switch-${initial}`).click();
+    await optionsPage.getByTestId("storage-switch-confirm").click();
+    await expect(backendEl).toContainText(initial);
+    expect(await readStoredMode()).toBe(initial);
+  });
+
+  test("top-5 usage card shows empty state when no usage data exists", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+    // Top 5 Usage lives on the Dashboard (default section); fresh context
+    // has no usage counts, so the empty state must be shown.
+    const card = optionsPage.getByTestId("card-top-usage");
+    await expect(card).toBeVisible();
+    await expect(card.getByTestId("top-usage-empty")).toBeVisible();
   });
 
   test("top-5 usage card shows snippet labels when usage data exists", async ({
-    context,
-    extensionId,
     optionsPage,
   }) => {
     // Seed usage counts and snippets
@@ -616,12 +613,13 @@ test.describe("Developers Section", () => {
 
     await optionsPage.reload();
     await waitForOptionsReady(optionsPage);
-    await navigateToDevelopers(optionsPage);
 
-    const pageText = await optionsPage.textContent("body");
-    // Should show the label and usage count
-    expect(pageText).toContain("My Email Signature");
-    expect(pageText).toContain("42");
+    const card = optionsPage.getByTestId("card-top-usage");
+    await expect(card).toBeVisible();
+    // Seeded (test-defined) label and usage count render; empty state is gone.
+    await expect(card).toContainText("My Email Signature");
+    await expect(card).toContainText("42");
+    await expect(card.getByTestId("top-usage-empty")).toHaveCount(0);
   });
 
   test("clear IDB backup requires two-step confirmation", async ({
@@ -629,33 +627,20 @@ test.describe("Developers Section", () => {
   }) => {
     await navigateToDevelopers(optionsPage);
 
-    // First click: shows confirm button
-    const clearButton = optionsPage
-      .locator('button:has-text("Clear backup")')
-      .first();
-    if (await clearButton.isVisible()) {
-      await clearButton.click();
-      await optionsPage.waitForTimeout(200);
+    const card = optionsPage.getByTestId("card-clear-idb");
+    const clearButton = optionsPage.getByTestId("clear-idb-clear");
+    await expect(clearButton).toBeVisible();
 
-      // Confirm button should now be visible
-      const confirmButton = optionsPage
-        .locator('button:has-text("Confirm clear")')
-        .first();
-      await expect(confirmButton).toBeVisible();
+    // First click: reveals the confirm step.
+    await clearButton.click();
+    const confirmButton = optionsPage.getByTestId("clear-idb-confirm");
+    await expect(confirmButton).toBeVisible();
 
-      // Second click: performs action, shows "Cleared"
-      await confirmButton.click();
-      await optionsPage.waitForTimeout(2_500);
-
-      const pageText = await optionsPage.textContent("body");
-      // Either "Cleared" flash was shown (and expired) or page is still functional
-      const body = optionsPage.locator("body");
-      await expect(body).toBeVisible();
-    } else {
-      // Developers section not navigated to — just smoke test
-      const body = optionsPage.locator("body");
-      await expect(body).toBeVisible();
-    }
+    // Second click: performs the wipe and resets the card to its idle state.
+    await confirmButton.click();
+    await expect(clearButton).toBeVisible({ timeout: 5_000 });
+    await expect(confirmButton).toHaveCount(0);
+    await expect(card).toBeVisible();
   });
 
   // ── Typing Timeout slider ──────────────────────────────────────────────
@@ -664,30 +649,34 @@ test.describe("Developers Section", () => {
     optionsPage,
   }) => {
     await waitForOptionsReady(optionsPage);
-    await navigateToDevelopers(optionsPage);
+    // The Typing Timeout card lives in the Snippets section.
+    await optionsPage.getByTestId("options-nav-snippets").click();
+    const card = optionsPage.getByTestId("card-typing-timeout");
+    await expect(card).toBeVisible({ timeout: 5_000 });
 
-    // The typing timeout card title should be visible
-    const cardTitle = optionsPage.locator(':has-text("Typing Timeout")');
-    await expect(cardTitle.first()).toBeVisible({ timeout: 5000 });
-
-    // The range input should be present with value 300 (default)
-    const slider = optionsPage.locator('input[type="range"]').first();
+    // Slider is identified by its accessible role/name, scoped to the card.
+    // Fresh profile → default TIMING.TYPING_TIMEOUT (300 ms).
+    const slider = card.getByRole("slider", { name: "Typing Timeout" });
     await expect(slider).toBeVisible();
-    const value = await slider.inputValue();
-    expect(value).toBe("300");
+    await expect(slider).toHaveValue("300");
   });
 
   test("typing timeout slider saves new value to storage", async ({
     optionsPage,
   }) => {
     await waitForOptionsReady(optionsPage);
-    await navigateToDevelopers(optionsPage);
+    await optionsPage.getByTestId("options-nav-snippets").click();
+    const card = optionsPage.getByTestId("card-typing-timeout");
+    await expect(card).toBeVisible({ timeout: 5_000 });
 
-    const slider = optionsPage.locator('input[type="range"]').first();
-    if (!(await slider.isVisible())) return;
+    const slider = card.getByRole("slider", { name: "Typing Timeout" });
+    await expect(slider).toHaveValue("300");
 
-    // Use Playwright fill() to set a range value — triggers React onChange
-    await slider.fill("600");
+    // Drive the slider with real arrow-key input (step=50): 300 → 600.
+    for (let i = 0; i < 6; i++) {
+      await slider.press("ArrowRight");
+    }
+    await expect(slider).toHaveValue("600");
 
     // Wait for the debounced save (400ms) + extra buffer
     await optionsPage.waitForTimeout(1000);
@@ -739,24 +728,18 @@ test.describe("Developers Section", () => {
   test("storage mode switch buttons appear in Developers section", async ({
     optionsPage,
   }) => {
-    await waitForOptionsReady(optionsPage);
     await navigateToDevelopers(optionsPage);
 
-    // In sync mode (default), "Switch to local" button should appear
-    const switchLocalBtn = optionsPage.locator(
-      'button:has-text("Switch to local")'
-    );
-    // The button may or may not be there depending on current mode; just assert page loaded
-    const body = optionsPage.locator("body");
-    await expect(body).toBeVisible();
-    // At minimum, the Storage Mode card title should be present
-    const storageModeTitle = optionsPage.locator(':has-text("Storage Mode")');
-    await expect(storageModeTitle.first()).toBeVisible({ timeout: 5000 });
-
-    // If the switch button is present, it should be clickable
-    if ((await switchLocalBtn.count()) > 0) {
-      await expect(switchLocalBtn.first()).toBeVisible();
-    }
+    // The Storage Mode card must offer exactly one switch target — the
+    // backend that is NOT currently active.
+    await expect(optionsPage.getByTestId("card-storage-mode")).toBeVisible();
+    const switchLocalBtn = optionsPage.getByTestId("storage-switch-local");
+    const switchSyncBtn = optionsPage.getByTestId("storage-switch-sync");
+    const visibleSwitches = [
+      await switchLocalBtn.isVisible(),
+      await switchSyncBtn.isVisible(),
+    ];
+    expect(visibleSwitches.filter(Boolean)).toHaveLength(1);
   });
 
   test("cancel on clear IDB backup hides confirm step", async ({
@@ -764,34 +747,21 @@ test.describe("Developers Section", () => {
   }) => {
     await navigateToDevelopers(optionsPage);
 
-    const clearButton = optionsPage
-      .locator('button:has-text("Clear backup")')
-      .first();
-    if (await clearButton.isVisible()) {
-      await clearButton.click();
-      await optionsPage.waitForTimeout(200);
+    const card = optionsPage.getByTestId("card-clear-idb");
+    const clearButton = optionsPage.getByTestId("clear-idb-clear");
+    await expect(clearButton).toBeVisible();
+    await clearButton.click();
 
-      // Cancel button should be present alongside Confirm
-      const cancelButton = optionsPage
-        .locator('button:has-text("Cancel")')
-        .first();
-      if (await cancelButton.isVisible()) {
-        await cancelButton.click();
-        await optionsPage.waitForTimeout(200);
+    const confirmButton = optionsPage.getByTestId("clear-idb-confirm");
+    await expect(confirmButton).toBeVisible();
 
-        // "Clear backup" button should be back; "Confirm clear" gone
-        await expect(
-          optionsPage.locator('button:has-text("Clear backup")').first()
-        ).toBeVisible();
-        const confirmButton = optionsPage.locator(
-          'button:has-text("Confirm clear")'
-        );
-        await expect(confirmButton).not.toBeVisible();
-      }
-    }
+    const cancelButton = card.getByRole("button", { name: "Cancel" });
+    await expect(cancelButton).toBeVisible();
+    await cancelButton.click();
 
-    const body = optionsPage.locator("body");
-    await expect(body).toBeVisible();
+    // Card returns to its idle state: clear button back, confirm step gone.
+    await expect(clearButton).toBeVisible();
+    await expect(confirmButton).toHaveCount(0);
   });
 });
 
@@ -801,6 +771,73 @@ test.describe("Developers Section", () => {
 
 test.describe("Review Prompt Banner", () => {
   // spec: review-prompt.spec.md#options-page-banner
+
+  /**
+   * Seed review-banner storage keys and re-assert until stable.
+   *
+   * On a fresh context the background SW runs checkForUpdate() immediately;
+   * if that fetch fails it calls captureError(), which fire-and-forget writes
+   * lastSentryErrorAt = now — racing our seed and hiding the banner.
+   * Wait for the startup check marker, then re-assert the seed until it sticks.
+   */
+  async function seedReviewBanner(
+    storageHelper: StorageHelper,
+    opts: { state: string; lastSentryErrorAt?: string | null }
+  ): Promise<void> {
+    // Give checkForUpdate a moment to write its completion marker (or fail).
+    const deadline = Date.now() + 1_500;
+    while (Date.now() < deadline) {
+      const checked = await storageHelper.getLocal("latestVersionCheckedAt");
+      if (checked) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+
+    await storageHelper.setLocal("reviewPromptState", opts.state);
+
+    if (!("lastSentryErrorAt" in opts)) return;
+
+    const target = opts.lastSentryErrorAt ?? null;
+    for (let i = 0; i < 10; i++) {
+      await storageHelper.setLocal("lastSentryErrorAt", target);
+      const current = await storageHelper.getLocal("lastSentryErrorAt");
+      if (current === target) return;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    throw new Error(
+      `Failed to stabilize lastSentryErrorAt=${String(target)} — background captureError kept overwriting it`
+    );
+  }
+
+  /**
+   * Open options.html after a stable seed. If a late captureError still
+   * overwrote lastSentryErrorAt between seed and mount, re-seed and reload once.
+   */
+  async function openOptionsAfterSeed(
+    context: BrowserContext,
+    extensionId: string,
+    storageHelper: StorageHelper,
+    opts: { state: string; lastSentryErrorAt?: string | null }
+  ): Promise<Page> {
+    await seedReviewBanner(storageHelper, opts);
+
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+    await page.waitForLoadState("domcontentloaded");
+    await waitForOptionsReady(page);
+
+    if ("lastSentryErrorAt" in opts) {
+      const target = opts.lastSentryErrorAt ?? null;
+      const actual = await storageHelper.getLocal("lastSentryErrorAt");
+      if (actual !== target) {
+        await seedReviewBanner(storageHelper, opts);
+        await page.reload();
+        await page.waitForLoadState("domcontentloaded");
+        await waitForOptionsReady(page);
+      }
+    }
+
+    return page;
+  }
 
   test("banner is hidden when reviewPromptState is pending (default)", async ({
     context,
@@ -813,8 +850,13 @@ test.describe("Review Prompt Banner", () => {
     await page.waitForLoadState("domcontentloaded");
     await waitForOptionsReady(page);
 
-    const pageText = await page.textContent("body");
-    expect(pageText).not.toContain("Enjoying Clipio?");
+    // Give the OptionsPage storage useEffect time to resolve before asserting
+    // absence (otherwise a slow read could false-pass before the banner mounts).
+    await page
+      .getByText("Enjoying Clipio?")
+      .waitFor({ state: "visible", timeout: 1_000 })
+      .catch(() => {});
+    await expect(page.getByText("Enjoying Clipio?")).toHaveCount(0);
 
     await page.close();
   });
@@ -825,17 +867,22 @@ test.describe("Review Prompt Banner", () => {
     storageHelper,
   }) => {
     // spec: review-prompt.spec.md#options-page-banner
-    // Seed state before opening options page
-    await storageHelper.setLocal("reviewPromptState", "shown");
+    // Seed state before opening options page (re-assert: background captureError races)
+    const page = await openOptionsAfterSeed(
+      context,
+      extensionId,
+      storageHelper,
+      {
+        state: "shown",
+        lastSentryErrorAt: null,
+      }
+    );
 
-    const page = await context.newPage();
-    await page.goto(`chrome-extension://${extensionId}/options.html`);
-    await page.waitForLoadState("domcontentloaded");
-    await waitForOptionsReady(page);
-
-    const pageText = await page.textContent("body");
-    expect(pageText).toContain("Enjoying Clipio?");
-    expect(pageText).toContain("Rate on the Store");
+    // Auto-retrying — storage read + React render can lag under suite load
+    await expect(page.getByText("Enjoying Clipio?")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByText("Rate on the Store")).toBeVisible();
 
     await page.close();
   });
@@ -847,16 +894,21 @@ test.describe("Review Prompt Banner", () => {
   }) => {
     // spec: review-prompt.spec.md#options-page-banner
     const recentError = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1 hour ago
-    await storageHelper.setLocal("reviewPromptState", "shown");
-    await storageHelper.setLocal("lastSentryErrorAt", recentError);
+    const page = await openOptionsAfterSeed(
+      context,
+      extensionId,
+      storageHelper,
+      {
+        state: "shown",
+        lastSentryErrorAt: recentError,
+      }
+    );
 
-    const page = await context.newPage();
-    await page.goto(`chrome-extension://${extensionId}/options.html`);
-    await page.waitForLoadState("domcontentloaded");
-    await waitForOptionsReady(page);
-
-    const pageText = await page.textContent("body");
-    expect(pageText).not.toContain("Enjoying Clipio?");
+    await page
+      .getByText("Enjoying Clipio?")
+      .waitFor({ state: "visible", timeout: 1_000 })
+      .catch(() => {});
+    await expect(page.getByText("Enjoying Clipio?")).toHaveCount(0);
 
     await page.close();
   });
@@ -868,16 +920,19 @@ test.describe("Review Prompt Banner", () => {
   }) => {
     // spec: review-prompt.spec.md#options-page-banner
     const oldError = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(); // 25 hours ago
-    await storageHelper.setLocal("reviewPromptState", "shown");
-    await storageHelper.setLocal("lastSentryErrorAt", oldError);
+    const page = await openOptionsAfterSeed(
+      context,
+      extensionId,
+      storageHelper,
+      {
+        state: "shown",
+        lastSentryErrorAt: oldError,
+      }
+    );
 
-    const page = await context.newPage();
-    await page.goto(`chrome-extension://${extensionId}/options.html`);
-    await page.waitForLoadState("domcontentloaded");
-    await waitForOptionsReady(page);
-
-    const pageText = await page.textContent("body");
-    expect(pageText).toContain("Enjoying Clipio?");
+    await expect(page.getByText("Enjoying Clipio?")).toBeVisible({
+      timeout: 10_000,
+    });
 
     await page.close();
   });
@@ -888,34 +943,35 @@ test.describe("Review Prompt Banner", () => {
     storageHelper,
   }) => {
     // spec: review-prompt.spec.md#options-page-banner
-    await storageHelper.setLocal("reviewPromptState", "shown");
+    const page = await openOptionsAfterSeed(
+      context,
+      extensionId,
+      storageHelper,
+      {
+        state: "shown",
+        lastSentryErrorAt: null,
+      }
+    );
 
-    const page = await context.newPage();
-    await page.goto(`chrome-extension://${extensionId}/options.html`);
-    await page.waitForLoadState("domcontentloaded");
-    await waitForOptionsReady(page);
-
-    // Banner should be visible before dismiss
-    await expect(page.locator('text="Enjoying Clipio?"').first()).toBeVisible({
-      timeout: 5_000,
+    // Banner should be visible before dismiss (auto-retrying)
+    await expect(page.getByText("Enjoying Clipio?").first()).toBeVisible({
+      timeout: 10_000,
     });
 
     // The review banner is the blue Alert containing "Enjoying Clipio?"
     // Scope the dismiss button search to that banner to avoid hitting the
     // uninstall warning dismiss (amber banner) which also has aria-label="Dismiss"
     const reviewBanner = page
-      .locator('text="Enjoying Clipio?"')
+      .getByText("Enjoying Clipio?")
       .locator("..")
       .locator("..");
     const dismissBtn = reviewBanner
       .locator('button[aria-label="Dismiss"]')
       .first();
     await dismissBtn.click();
-    await page.waitForTimeout(500);
-
-    // Banner should disappear
-    const pageText = await page.textContent("body");
-    expect(pageText).not.toContain("Enjoying Clipio?");
+    await expect(page.getByText("Enjoying Clipio?")).toHaveCount(0, {
+      timeout: 5_000,
+    });
 
     // Storage should reflect "dismissed"
     const storedState = await storageHelper.getLocal("reviewPromptState");
@@ -930,16 +986,19 @@ test.describe("Review Prompt Banner", () => {
     storageHelper,
   }) => {
     // spec: review-prompt.spec.md#options-page-banner
-    await storageHelper.setLocal("reviewPromptState", "shown");
+    const page = await openOptionsAfterSeed(
+      context,
+      extensionId,
+      storageHelper,
+      {
+        state: "shown",
+        lastSentryErrorAt: null,
+      }
+    );
 
-    const page = await context.newPage();
-    await page.goto(`chrome-extension://${extensionId}/options.html`);
-    await page.waitForLoadState("domcontentloaded");
-    await waitForOptionsReady(page);
-
-    // Banner should be visible
-    await expect(page.locator('text="Enjoying Clipio?"').first()).toBeVisible({
-      timeout: 5_000,
+    // Banner should be visible (auto-retrying)
+    await expect(page.getByText("Enjoying Clipio?").first()).toBeVisible({
+      timeout: 10_000,
     });
 
     // Intercept the new tab so the test does not navigate away
@@ -947,20 +1006,18 @@ test.describe("Review Prompt Banner", () => {
       .waitForEvent("page", { timeout: 3_000 })
       .catch(() => null);
 
-    // Click the "Rate on the Store" button
-    const rateBtn = page
-      .locator('button:has-text("Rate on the Store")')
-      .first();
+    // Click the "Rate on the Store" button (scoped role lookup)
+    const rateBtn = page.getByRole("button", { name: /rate on the store/i });
     await rateBtn.click();
-    await page.waitForTimeout(500);
 
     // Close any newly opened tab so the context stays clean
     const newTab = await newPagePromise;
     if (newTab) await newTab.close().catch(() => {});
 
     // Banner should disappear
-    const pageText = await page.textContent("body");
-    expect(pageText).not.toContain("Enjoying Clipio?");
+    await expect(page.getByText("Enjoying Clipio?")).toHaveCount(0, {
+      timeout: 5_000,
+    });
 
     // Storage should reflect "rated"
     const storedState = await storageHelper.getLocal("reviewPromptState");
@@ -983,8 +1040,11 @@ test.describe("Review Prompt Banner", () => {
     await page.waitForLoadState("domcontentloaded");
     await waitForOptionsReady(page);
 
-    const pageText = await page.textContent("body");
-    expect(pageText).not.toContain("Enjoying Clipio?");
+    await page
+      .getByText("Enjoying Clipio?")
+      .waitFor({ state: "visible", timeout: 1_000 })
+      .catch(() => {});
+    await expect(page.getByText("Enjoying Clipio?")).toHaveCount(0);
 
     await page.close();
   });
@@ -1003,8 +1063,11 @@ test.describe("Review Prompt Banner", () => {
     await page.waitForLoadState("domcontentloaded");
     await waitForOptionsReady(page);
 
-    const pageText = await page.textContent("body");
-    expect(pageText).not.toContain("Enjoying Clipio?");
+    await page
+      .getByText("Enjoying Clipio?")
+      .waitFor({ state: "visible", timeout: 1_000 })
+      .catch(() => {});
+    await expect(page.getByText("Enjoying Clipio?")).toHaveCount(0);
 
     await page.close();
   });
@@ -1016,13 +1079,22 @@ test.describe("Review Prompt Banner", () => {
   test("options page has no critical accessibility violations", async ({
     optionsPage,
   }) => {
-    // spec: ROADMAP_v1.5.md#testing
-    // Use axe-core to scan for WCAG violations
-    const { injectAxe, checkA11y } = await import("@axe-core/playwright");
-    await injectAxe(optionsPage);
-    const results = await checkA11y(optionsPage, undefined, {
-      includedImpacts: ["critical", "serious"],
+    // spec: specs/e2e-suite.spec.md
+    // @axe-core/playwright v4 exposes the AxeBuilder class — the old
+    // injectAxe/checkA11y free functions do not exist. Scan the hydrated
+    // page; fail on critical/serious violations without suppression, and
+    // attach the full axe output to the report either way.
+    await waitForOptionsReady(optionsPage);
+    const results = await new AxeBuilder({ page: optionsPage })
+      .include("body")
+      .analyze();
+    await test.info().attach("axe-results", {
+      body: JSON.stringify(results, null, 2),
+      contentType: "application/json",
     });
-    expect(results.violations.length).toBe(0);
+    const critical = results.violations.filter((v) =>
+      ["critical", "serious"].includes(v.impact ?? "")
+    );
+    expect(critical).toEqual([]);
   });
 });

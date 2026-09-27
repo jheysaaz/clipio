@@ -3,7 +3,7 @@
  * spec: specs/importers.spec.md#TextBlazeParser
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { TextBlazeParser } from "./textblaze";
 
 const makeTBExport = (folders: unknown[] = []) => ({
@@ -284,6 +284,68 @@ describe("TextBlazeParser.parse", () => {
       ])
     );
     expect(result[0].unsupportedPlaceholders).toContain("{formtext:name}");
+  });
+
+  // Negative path: HTML conversion failure falls back to the text field
+  // (htmlSnippetToMarkdown returns null → parseTBSnippet uses text).
+  it("falls back to text field when HTML conversion throws", async () => {
+    const serialization = await import("@/components/editor/serialization");
+    const spy = vi
+      .spyOn(serialization, "deserializeContent")
+      .mockImplementation(() => {
+        throw new Error("parser exploded");
+      });
+
+    try {
+      const result = TextBlazeParser.parse(
+        makeTBExport([
+          {
+            snippets: [
+              makeTBSnippet({
+                type: "html",
+                html: "<p>Rich content that fails</p>",
+                text: "Fallback plain text",
+              }),
+            ],
+          },
+        ])
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0].content).toBe("Fallback plain text");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  // Negative path: HTML with no text fallback still yields a snippet
+  // (content becomes empty string via replaceSupportedPlaceholders("")).
+  it("still returns a snippet when HTML fails and text is missing", async () => {
+    const serialization = await import("@/components/editor/serialization");
+    const spy = vi
+      .spyOn(serialization, "deserializeContent")
+      .mockImplementation(() => {
+        throw new Error("parser exploded");
+      });
+
+    try {
+      const result = TextBlazeParser.parse(
+        makeTBExport([
+          {
+            snippets: [
+              makeTBSnippet({
+                type: "html",
+                html: "<p>Rich</p>",
+                text: undefined,
+              }),
+            ],
+          },
+        ])
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0].content).toBe("");
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   // spec: skips snippets with missing name

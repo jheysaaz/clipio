@@ -55,10 +55,7 @@ import {
   type PreviewSettings,
 } from "@/lib/preview-helpers";
 import { snippetPreviewUI } from "@/lib/snippet-preview-ui";
-import {
-  locateTextRange,
-  getCaretTextOffset,
-} from "@/lib/dom-text-range";
+import { locateTextRange, getCaretTextOffset } from "@/lib/dom-text-range";
 
 /**
  * Returns true if `hostname` is covered by any entry in `blockedPatterns`.
@@ -877,6 +874,9 @@ export default defineContentScript({
       }
 
       registerRuntimeListeners();
+
+      // Readiness marker: input listeners are bound only after init (e2e waits on this).
+      document.documentElement.setAttribute("data-clipio-ready", "true");
     }
 
     // ── Preview Helper Functions ──────────────────────────────────────
@@ -1117,10 +1117,16 @@ export default defineContentScript({
             startNode.textContent = beforeText;
             if (afterText) {
               const afterNode = document.createTextNode(afterText);
-              startNode.parentNode?.insertBefore(afterNode, startNode.nextSibling);
+              startNode.parentNode?.insertBefore(
+                afterNode,
+                startNode.nextSibling
+              );
               startNode.parentNode?.insertBefore(fragment, afterNode);
             } else {
-              startNode.parentNode?.insertBefore(fragment, startNode.nextSibling);
+              startNode.parentNode?.insertBefore(
+                fragment,
+                startNode.nextSibling
+              );
             }
           } else {
             const range = document.createRange();
@@ -1250,7 +1256,12 @@ export default defineContentScript({
                   highlightRanges: [],
                 }));
                 if (allSnippets.length > 0) {
-                  lastTriggerState = { text, cursorPos, element: target, manual: true };
+                  lastTriggerState = {
+                    text,
+                    cursorPos,
+                    element: target,
+                    manual: true,
+                  };
                   showPreview(target, allSnippets, "");
                 } else {
                   hidePreview();

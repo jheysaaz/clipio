@@ -89,7 +89,7 @@ const HTML_TAG_RE = /<[a-z][\s\S]*>/i;
 function maybeConvertHtml(raw: string): string | null {
   if (!HTML_TAG_RE.test(raw)) return null;
   try {
-    const nodes = deserializeContent(raw);
+    const nodes = deserializeContent(raw, "html");
     return serializeToMarkdown(nodes);
   } catch {
     return null;

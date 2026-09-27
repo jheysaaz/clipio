@@ -114,6 +114,7 @@ export default function SnippetListItem({
   return (
     <Button
       id={snippetId}
+      data-testid="snippet-list-item"
       variant="ghost"
       role="option"
       aria-selected={isSelected}

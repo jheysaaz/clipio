@@ -241,6 +241,7 @@ export function ImagesSection() {
           </div>
           <Progress
             value={totalPercent}
+            aria-label={i18n.t("options.images.totalStorage")}
             className={cn(
               totalPercent >= 80
                 ? "[&>div]:bg-amber-500"

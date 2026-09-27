@@ -312,7 +312,10 @@ export function AdvancedSection() {
       </div>
 
       {/* Content Script Health */}
-      <div className="rounded-xl border p-5 space-y-4">
+      <div
+        data-testid="card-content-script-health"
+        className="rounded-xl border p-5 space-y-4"
+      >
         <div>
           <h3 className="text-sm font-medium text-foreground">
             {i18n.t("options.developers.contentScriptHealth.title")}
@@ -342,7 +345,10 @@ export function AdvancedSection() {
       </div>
 
       {/* Storage Mode & Quota */}
-      <div className="rounded-xl border p-5 space-y-4">
+      <div
+        data-testid="card-storage-mode"
+        className="rounded-xl border p-5 space-y-4"
+      >
         <div>
           <h3 className="text-sm font-medium text-foreground">
             {i18n.t("options.developers.storageMode.title")}
@@ -351,7 +357,10 @@ export function AdvancedSection() {
             {i18n.t("options.developers.storageMode.description")}
           </p>
         </div>
-        <p className="text-sm text-foreground">
+        <p
+          data-testid="storage-active-backend"
+          className="text-sm text-foreground"
+        >
           {i18n.t("options.developers.storageMode.mode", [storageMode])}
         </p>
         {syncUsed !== null && (
@@ -370,6 +379,7 @@ export function AdvancedSection() {
                 variant="destructive"
                 className="h-9 shrink-0"
                 disabled={switching}
+                data-testid="storage-switch-confirm"
                 onClick={() => handleForceSwitch(switchConfirming)}
               >
                 {switching
@@ -399,6 +409,7 @@ export function AdvancedSection() {
                   size="sm"
                   variant="outline"
                   className="h-9 shrink-0"
+                  data-testid="storage-switch-sync"
                   onClick={() => setSwitchConfirming("sync")}
                 >
                   <Icon icon={Cloud} className="mr-1.5" />
@@ -410,6 +421,7 @@ export function AdvancedSection() {
                   size="sm"
                   variant="outline"
                   className="h-9 shrink-0"
+                  data-testid="storage-switch-local"
                   onClick={() => setSwitchConfirming("local")}
                 >
                   <Icon icon={HardDrive} className="mr-1.5" />
@@ -523,7 +535,10 @@ export function AdvancedSection() {
       </div>
 
       {/* Clear IDB Backup */}
-      <div className="rounded-xl border p-5 space-y-4">
+      <div
+        data-testid="card-clear-idb"
+        className="rounded-xl border p-5 space-y-4"
+      >
         <div>
           <h3 className="text-sm font-medium text-foreground">
             {i18n.t("options.developers.clearIdb.title")}
@@ -539,6 +554,7 @@ export function AdvancedSection() {
                 size="sm"
                 variant="destructive"
                 className="h-9 shrink-0"
+                data-testid="clear-idb-confirm"
                 onClick={handleClearIdb}
               >
                 {i18n.t("options.developers.clearIdb.confirm")}
@@ -557,6 +573,7 @@ export function AdvancedSection() {
               size="sm"
               variant="outline"
               className="h-9 shrink-0"
+              data-testid="clear-idb-clear"
               onClick={() => setClearConfirming(true)}
             >
               {i18n.t("options.developers.clearIdb.button")}

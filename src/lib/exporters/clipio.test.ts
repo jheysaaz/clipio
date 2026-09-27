@@ -51,16 +51,19 @@ describe("buildClipioExport", () => {
     expect(result.format).toBe("clipio");
   });
 
-  // spec: MUST set exportedAt to a valid ISO 8601 timestamp
-  it("sets exportedAt to a valid ISO date string", () => {
+  // spec: MUST set exportedAt to a valid ISO 8601 timestamp close to now
+  it("sets exportedAt to a valid ISO timestamp close to the current time", () => {
+    const before = Date.now();
     const result = buildClipioExport([]);
+    const after = Date.now();
+
+    // Shape: parseable ISO timestamp
+    expect(result.exportedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     const parsed = new Date(result.exportedAt);
     expect(parsed.getTime()).not.toBeNaN();
-  });
-
-  it("sets exportedAt to a string that looks like an ISO timestamp", () => {
-    const result = buildClipioExport([]);
-    expect(result.exportedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    // Value: reflects the time of the call
+    expect(parsed.getTime()).toBeGreaterThanOrEqual(before);
+    expect(parsed.getTime()).toBeLessThanOrEqual(after);
   });
 
   // spec: MUST pass the snippets array through unchanged
@@ -94,16 +97,6 @@ describe("buildClipioExport", () => {
       snippets,
     });
     expect(typeof result.exportedAt).toBe("string");
-  });
-
-  // spec: exportedAt reflects the time of the call (within a reasonable window)
-  it("sets exportedAt close to the current time", () => {
-    const before = Date.now();
-    const result = buildClipioExport([]);
-    const after = Date.now();
-    const exportedTime = new Date(result.exportedAt).getTime();
-    expect(exportedTime).toBeGreaterThanOrEqual(before);
-    expect(exportedTime).toBeLessThanOrEqual(after);
   });
 });
 

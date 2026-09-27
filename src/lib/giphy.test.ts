@@ -88,6 +88,10 @@ function mockFetchNetworkError() {
     .mockRejectedValueOnce(new TypeError("Network failure"));
 }
 
+// Capture the real fetch before any test overwrites it, and restore it in
+// afterEach so mockFetch* helpers cannot leak into other test files.
+const realFetch = global.fetch;
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("WXT_GIPHY_API_KEY", "env-default-giphy-key");
@@ -95,6 +99,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  global.fetch = realFetch;
   vi.unstubAllEnvs();
 });
 
