@@ -17,7 +17,14 @@ export const IDB_CONFIG = {
   DB_NAME: "clipio-backup",
   STORE_NAME: "snippets",
   MEDIA_STORE_NAME: "media",
-  /** v1: snippets store | v2: media store | v3: hash index on media */
+  /**
+   * IndexedDB schema version — an internal DB revision, NOT an extension
+   * release version. Migration history with the extension release that
+   * shipped each feature:
+   *   1 — snippets store             (shipped in 1.2.0)
+   *   2 — media store                (shipped in 1.4.0)
+   *   3 — hash index on media store  (shipped in 1.4.1)
+   */
   VERSION: 3,
 } as const;
 

@@ -306,6 +306,10 @@ export default defineBackground(() => {
       onboardingCompletedItem
         .getValue()
         .then((completed) => {
+          // spec: development builds (pnpm dev) must never open the onboarding
+          // page — it is a production funnel only: no HEAD reachability probe,
+          // no tab opened, no completed-flag write in dev.
+          if ((import.meta.env.MODE as string) !== "production") return;
           if (completed) return;
           const websiteUrl = import.meta.env.WXT_WEBSITE_URL as
             string | undefined;

@@ -196,7 +196,8 @@ export const dismissedUpdateVersionItem = storage.defineItem<string>(
 
 /**
  * Set to true once the onboarding redirect has been triggered on first install.
- * Prevents re-opening the onboarding page on subsequent installs in development.
+ * Prevents re-opening the onboarding page on subsequent installs. Development
+ * builds never open it at all (see the onInstalled handler in background.ts).
  */
 export const onboardingCompletedItem = storage.defineItem<boolean>(
   "local:onboardingCompleted",
