@@ -3,6 +3,12 @@
  * Accessibility tests for snippet preview popup UI.
  * Verifies WCAG 2.1 compliance for listbox/option pattern,
  * screen reader announcements, and keyboard navigation.
+ *
+ * The shadow root is mode:"closed", so these tests reach it through the
+ * `@internal` getInternalShadowRoot() accessor rather than host.shadowRoot.
+ * That is sound because extension code and its tests share a JS world: an
+ * isolated world is unreachable from the page, so an internal method is not a
+ * page-facing surface. spec: specs/preview-encapsulation.spec.md
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -34,7 +40,7 @@ describe("SnippetPreviewUI Accessibility", () => {
       // Access shadow root to verify ARIA roles
       const host = document.getElementById("clipio-snippet-preview-host");
       expect(host).not.toBeNull();
-      const shadow = host!.shadowRoot;
+      const shadow = ui.getInternalShadowRoot()!;
       expect(shadow).not.toBeNull();
 
       const list = shadow!.querySelector('[role="listbox"]');
@@ -43,7 +49,7 @@ describe("SnippetPreviewUI Accessibility", () => {
 
     it("should have aria-label on the listbox", () => {
       const host = document.getElementById("clipio-snippet-preview-host");
-      const shadow = host!.shadowRoot;
+      const shadow = ui.getInternalShadowRoot()!;
       const list = shadow!.querySelector('[role="listbox"]');
       expect(list!.getAttribute("aria-label")).toBe("Snippet suggestions");
     });
@@ -57,7 +63,7 @@ describe("SnippetPreviewUI Accessibility", () => {
       ui.show({ x: 0, y: 0, maxHeight: 200 }, snippets);
 
       const host = document.getElementById("clipio-snippet-preview-host");
-      const shadow = host!.shadowRoot;
+      const shadow = ui.getInternalShadowRoot()!;
       const list = shadow!.querySelector('[role="listbox"]');
       expect(list!.getAttribute("aria-activedescendant")).toBe(
         "clipio-preview-option-0"
@@ -77,7 +83,7 @@ describe("SnippetPreviewUI Accessibility", () => {
       ui.handleKeyDown(event);
 
       const host = document.getElementById("clipio-snippet-preview-host");
-      const shadow = host!.shadowRoot;
+      const shadow = ui.getInternalShadowRoot()!;
       const list = shadow!.querySelector('[role="listbox"]');
       expect(list!.getAttribute("aria-activedescendant")).toBe(
         "clipio-preview-option-1"
@@ -95,7 +101,7 @@ describe("SnippetPreviewUI Accessibility", () => {
       ui.show({ x: 0, y: 0, maxHeight: 200 }, snippets);
 
       const host = document.getElementById("clipio-snippet-preview-host");
-      const shadow = host!.shadowRoot;
+      const shadow = ui.getInternalShadowRoot()!;
       const options = shadow!.querySelectorAll('[role="option"]');
       expect(options.length).toBe(2);
 
@@ -113,7 +119,7 @@ describe("SnippetPreviewUI Accessibility", () => {
       ui.show({ x: 0, y: 0, maxHeight: 200 }, snippets);
 
       const host = document.getElementById("clipio-snippet-preview-host");
-      const shadow = host!.shadowRoot;
+      const shadow = ui.getInternalShadowRoot()!;
       const firstOption = shadow!.querySelector('[role="option"]');
       expect(firstOption!.getAttribute("aria-selected")).toBe("true");
     });
@@ -127,7 +133,7 @@ describe("SnippetPreviewUI Accessibility", () => {
       ui.show({ x: 0, y: 0, maxHeight: 200 }, snippets);
 
       const host = document.getElementById("clipio-snippet-preview-host");
-      const shadow = host!.shadowRoot;
+      const shadow = ui.getInternalShadowRoot()!;
       const options = shadow!.querySelectorAll('[role="option"]');
       expect(options[0].id).toBe("clipio-preview-option-0");
       expect(options[1].id).toBe("clipio-preview-option-1");
@@ -142,7 +148,7 @@ describe("SnippetPreviewUI Accessibility", () => {
       ui.show({ x: 0, y: 0, maxHeight: 200 }, snippets);
 
       const host = document.getElementById("clipio-snippet-preview-host");
-      const shadow = host!.shadowRoot;
+      const shadow = ui.getInternalShadowRoot()!;
       const firstOption = shadow!.querySelector('[role="option"]');
       expect(firstOption!.classList.contains("selected")).toBe(true);
     });
@@ -160,7 +166,7 @@ describe("SnippetPreviewUI Accessibility", () => {
       ui.handleKeyDown(downEvent);
 
       const host = document.getElementById("clipio-snippet-preview-host");
-      const shadow = host!.shadowRoot;
+      const shadow = ui.getInternalShadowRoot()!;
       const options = shadow!.querySelectorAll('[role="option"]');
       expect(options[0].getAttribute("aria-selected")).toBe("false");
       expect(options[1].getAttribute("aria-selected")).toBe("true");
@@ -177,7 +183,7 @@ describe("SnippetPreviewUI Accessibility", () => {
       ui.show({ x: 0, y: 0, maxHeight: 200 }, snippets);
 
       const host = document.getElementById("clipio-snippet-preview-host");
-      const shadow = host!.shadowRoot;
+      const shadow = ui.getInternalShadowRoot()!;
       const liveRegion = shadow!.querySelector('[aria-live="polite"]');
       expect(liveRegion).not.toBeNull();
       expect(liveRegion!.getAttribute("aria-atomic")).toBe("true");
@@ -196,7 +202,7 @@ describe("SnippetPreviewUI Accessibility", () => {
       ui.handleKeyDown(downEvent);
 
       const host = document.getElementById("clipio-snippet-preview-host");
-      const shadow = host!.shadowRoot;
+      const shadow = ui.getInternalShadowRoot()!;
       const liveRegion = shadow!.querySelector('[aria-live="polite"]');
       expect(liveRegion!.textContent).toContain("World");
       expect(liveRegion!.textContent).toContain("2 of 2");
@@ -264,7 +270,7 @@ describe("SnippetPreviewUI Accessibility", () => {
       ui.init();
 
       const host = document.getElementById("clipio-snippet-preview-host");
-      const shadow = host!.shadowRoot;
+      const shadow = ui.getInternalShadowRoot()!;
       const style = shadow!.querySelector("style");
       expect(style!.textContent).toContain("prefers-contrast: high");
       expect(style!.textContent).toContain(".clipio-preview-item.selected");
@@ -274,7 +280,7 @@ describe("SnippetPreviewUI Accessibility", () => {
   describe("Header accessibility", () => {
     it("should hide header from accessibility tree", () => {
       const host = document.getElementById("clipio-snippet-preview-host");
-      const shadow = host!.shadowRoot;
+      const shadow = ui.getInternalShadowRoot()!;
       const header = shadow!.querySelector(".clipio-preview-header");
       expect(header!.getAttribute("aria-hidden")).toBe("true");
     });

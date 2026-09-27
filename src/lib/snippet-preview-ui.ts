@@ -67,8 +67,13 @@ export class SnippetPreviewUI {
       height: 0px !important;
     `;
 
-    // Create shadow root with "open" mode for E2E test compatibility
-    this.shadowRoot = this.shadowHost.attachShadow({ mode: "open" });
+    // Closed root: page-world `host.shadowRoot` is null, so a hostile page
+    // cannot read snippet labels, shortcuts or content previews out of the
+    // palette. It was "open" purely for E2E selector convenience; those
+    // assertions now use the data-preview-visible attribute on the host
+    // instead, which exposes state and not content.
+    // spec: specs/preview-encapsulation.spec.md
+    this.shadowRoot = this.shadowHost.attachShadow({ mode: "closed" });
 
     const prefersDark =
       typeof window !== "undefined" &&
@@ -232,10 +237,21 @@ export class SnippetPreviewUI {
     this.container.appendChild(this.list);
     this.container.appendChild(this.liveRegion);
     this.shadowRoot.appendChild(this.container);
+    // The tooltip holds snippet content, so it must live inside the closed
+    // root. In document.body it was a plain readable <div> that page script
+    // could read with one textContent lookup, shadow root or not.
+    //
+    // Stacking still works: the host is position:fixed with
+    // z-index 2147483647 and establishes a stacking context, so the container
+    // (2147483647) and the tooltip (2147483648) compare normally *within* it
+    // and the tooltip still paints above the list. The old DOM-order hack
+    // existed only because 2147483648 clamps in the page's stacking context.
+    this.shadowRoot.appendChild(this.tooltip);
     document.body.appendChild(this.shadowHost);
-    // Tooltip must come after the host: 2147483648 clamps to the host's
-    // z-index (2147483647), so DOM order decides the paint order.
-    document.body.appendChild(this.tooltip);
+    // The palette is created closed, so publish that state now. Without this
+    // the attribute is absent until the first show()/hide(), which makes
+    // "the palette never opened" indistinguishable from "nothing ran yet".
+    this.syncObservableState();
   }
 
   cleanup(): void {
@@ -284,6 +300,16 @@ export class SnippetPreviewUI {
     this.container.style.top = "0px";
     this.container.style.maxHeight = `${position.maxHeight}px`;
     this.container.style.display = "block";
+    // Bounded, content-free observability for e2e. Playwright's CSS engine
+    // pierces only *open* shadow roots, so with the root closed these
+    // attributes are the only page-world signal available.
+    //
+    // Disclosed: whether the palette is open, how many rows it rendered, and
+    // which row index is highlighted. Not disclosed: any label, shortcut or
+    // content. "How many snippets match this query" is a strictly weaker leak
+    // than the library itself, and a page can already infer that snippets
+    // exist by watching text expand.
+    this.syncObservableState();
 
     // Update list content
     this.updateList();
@@ -323,6 +349,43 @@ export class SnippetPreviewUI {
     this.visible = false;
     this.filteredSnippets = [];
     this.selectedIndex = 0;
+    this.syncObservableState();
+  }
+
+  /**
+   * Mirror non-content palette state onto the host element so e2e can assert
+   * on it from the page world. See the comment at the call site for exactly
+   * what this discloses.
+   */
+  private syncObservableState(): void {
+    if (!this.shadowHost) return;
+    this.shadowHost.setAttribute(
+      "data-preview-visible",
+      this.visible ? "true" : "false"
+    );
+    this.shadowHost.setAttribute(
+      "data-preview-count",
+      String(this.filteredSnippets.length)
+    );
+    this.shadowHost.setAttribute(
+      "data-preview-selected",
+      String(this.selectedIndex)
+    );
+  }
+
+  /**
+   * @internal
+   * Test-only accessor for the closed shadow root.
+   *
+   * Extension code and its tests share a JS world, so this is not a
+   * page-facing surface: an isolated world cannot be reached from the page at
+   * all, and `host.shadowRoot` is null there regardless. It exists so the
+   * accessibility suite can assert real ARIA on real nodes.
+   *
+   * Do not use from production code paths that run in the page context.
+   */
+  getInternalShadowRoot(): ShadowRoot | null {
+    return this.shadowRoot;
   }
 
   isVisible(): boolean {
@@ -342,6 +405,7 @@ export class SnippetPreviewUI {
         this.updateList();
         this.setActiveDescendant();
         this.announceSelected();
+        this.syncObservableState();
         return true;
 
       case "ArrowUp":
@@ -350,6 +414,7 @@ export class SnippetPreviewUI {
         this.updateList();
         this.setActiveDescendant();
         this.announceSelected();
+        this.syncObservableState();
         return true;
 
       case "Enter":

@@ -106,7 +106,14 @@ test.describe("Blocked sites", () => {
     await testPage.keyboard.press("Control+Shift+Space");
     await testPage.waitForTimeout(200);
 
-    await expect(testPage.locator(".clipio-preview-item")).toHaveCount(0);
+    // On a blocked host previewUI.init() is never called, so the host element
+    // does not exist at all. Asserting its absence is the stronger claim — and
+    // unlike a ".clipio-preview-item" count it is not vacuous, because the
+    // shadow root is closed and rows are never in the light DOM anywhere.
+    await expect(testPage.locator("#clipio-snippet-preview-host")).toHaveCount(
+      0,
+      { timeout: 5_000 }
+    );
   });
 
   test("does not render snippet rows for a slash trigger on a blocked host", async ({
@@ -120,7 +127,14 @@ test.describe("Blocked sites", () => {
     await testPage.keyboard.type("/he");
     await testPage.waitForTimeout(200);
 
-    await expect(testPage.locator(".clipio-preview-item")).toHaveCount(0);
+    // On a blocked host previewUI.init() is never called, so the host element
+    // does not exist at all. Asserting its absence is the stronger claim — and
+    // unlike a ".clipio-preview-item" count it is not vacuous, because the
+    // shadow root is closed and rows are never in the light DOM anywhere.
+    await expect(testPage.locator("#clipio-snippet-preview-host")).toHaveCount(
+      0,
+      { timeout: 5_000 }
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -151,9 +165,9 @@ test.describe("Blocked sites", () => {
     await testPage.keyboard.press("Control+Shift+Space");
 
     // The manual shortcut lists every snippet, so at least one row must render.
-    await expect(testPage.locator(".clipio-preview-item").first()).toBeVisible({
-      timeout: 5_000,
-    });
+    await expect(
+      testPage.locator("#clipio-snippet-preview-host")
+    ).toHaveAttribute("data-preview-count", "1", { timeout: 5_000 });
   });
 
   test("still renders the preview for a slash trigger on an unblocked host", async ({
@@ -166,9 +180,9 @@ test.describe("Blocked sites", () => {
     await input.click();
     await testPage.keyboard.type("/he");
 
-    await expect(testPage.locator(".clipio-preview-item").first()).toBeVisible({
-      timeout: 5_000,
-    });
+    await expect(
+      testPage.locator("#clipio-snippet-preview-host")
+    ).toHaveAttribute("data-preview-count", "1", { timeout: 5_000 });
   });
 
   // -------------------------------------------------------------------------

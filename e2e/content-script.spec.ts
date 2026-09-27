@@ -419,31 +419,27 @@ test.describe("Snippet Preview Feature", () => {
     // Type the trigger prefix
     await testPage.keyboard.type("/", { delay: 30 });
 
-    // Wait for preview host to attach (auto-retrying; avoids fixed sleeps)
-    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
-    await expect(previewContainer).toBeAttached();
+    // The palette lives in a CLOSED shadow root, so Playwright cannot select
+    // rows. The host mirrors non-content state instead — see
+    // specs/preview-encapsulation.spec.md. Asserting the row count also proves
+    // both seeded snippets were offered.
+    const host = testPage.locator("#clipio-snippet-preview-host");
+    await expect(host).toHaveAttribute("data-preview-visible", "true", {
+      timeout: 5_000,
+    });
+    await expect(host).toHaveAttribute("data-preview-count", "2");
 
-    // Get the bounding box to check if it has dimensions
-    const boundingBox = await previewContainer.boundingBox();
-
-    // Check if it has non-zero dimensions (alternative to toBeVisible for Shadow DOM)
+    // The host is sized to the palette, so a non-zero box proves it laid out.
+    const boundingBox = await host.boundingBox();
     expect(boundingBox).not.toBeNull();
     expect(boundingBox!.width).toBeGreaterThan(0);
     expect(boundingBox!.height).toBeGreaterThan(0);
 
-    // Branding header must render with the Clipio logo. The visible title was
-    // shortened to "Snippets" in 81cd5e5 — the logo carries the branding, so
-    // assert the logo rather than literal header copy.
-    const header = previewContainer.locator(
-      '[data-testid="clipio-preview-header"]'
-    );
-    await expect(header).toBeVisible();
-    await expect(header.locator('img[alt="Clipio"]')).toBeVisible();
-
-    // Check if snippets are listed (auto-retrying count avoids timing flakes)
-    await expect(
-      previewContainer.locator(".clipio-preview-item").first()
-    ).toBeVisible();
+    // The branding header and the rows live inside a CLOSED shadow root, so
+    // neither is selectable from the page world. Their rendering is asserted
+    // in src/lib/snippet-preview-ui.accessibility.test.ts, which runs as
+    // extension code via the @internal getInternalShadowRoot() accessor.
+    // Here we assert only what the host mirrors: open, with 2 rows.
   });
 
   test("filters snippets by query when typing after prefix", async ({
@@ -461,21 +457,15 @@ test.describe("Snippet Preview Feature", () => {
     // Type the trigger prefix + query
     await testPage.keyboard.type("/hello", { delay: 30 });
 
-    // Wait for preview to update
-    await testPage.waitForTimeout(200);
-
-    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
-    await expect(previewContainer).toBeVisible();
-
-    // Should only show filtered results (hello snippet)
-    const snippetItems = previewContainer.locator(".clipio-preview-item");
-    const count = await snippetItems.count();
-    expect(count).toBeLessThanOrEqual(2); // hello should match
-
-    // Check that the snippet name or shortcut contains "hello"
-    const firstItem = snippetItems.first();
-    const itemText = await firstItem.textContent();
-    expect(itemText?.toLowerCase()).toMatch(/hello/);
+    // Auto-retrying: poll until the filter has been applied.
+    // With 2 seeded snippets (/hello and /date) a query of "hello" must leave
+    // exactly 1 row. That is a stronger claim than the previous text match:
+    // it proves the non-matching snippet was actually excluded.
+    const host = testPage.locator("#clipio-snippet-preview-host");
+    await expect(host).toHaveAttribute("data-preview-visible", "true", {
+      timeout: 5_000,
+    });
+    await expect(host).toHaveAttribute("data-preview-count", "1");
   });
 
   test("hides preview when no matches", async ({ testPage, storageHelper }) => {
@@ -487,12 +477,12 @@ test.describe("Snippet Preview Feature", () => {
     // Type prefix with non-matching query
     await testPage.keyboard.type("/xyz123", { delay: 30 });
 
-    // Wait for preview to process
-    await testPage.waitForTimeout(200);
-
-    // Preview should be hidden when no matches
-    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
-    await expect(previewContainer).not.toBeVisible();
+    // Preview should be hidden when nothing matches
+    const host = testPage.locator("#clipio-snippet-preview-host");
+    await expect(host).toHaveAttribute("data-preview-visible", "false", {
+      timeout: 5_000,
+    });
+    await expect(host).toHaveAttribute("data-preview-count", "0");
   });
 
   test("navigates preview with keyboard", async ({
@@ -509,29 +499,26 @@ test.describe("Snippet Preview Feature", () => {
 
     // Type the trigger prefix to show preview
     await testPage.keyboard.type("/", { delay: 30 });
-    await testPage.waitForTimeout(200);
 
-    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
-    await expect(previewContainer).toBeVisible();
+    const host = testPage.locator("#clipio-snippet-preview-host");
+    await expect(host).toHaveAttribute("data-preview-count", "2", {
+      timeout: 5_000,
+    });
 
-    // First item should be selected by default
-    const firstItem = previewContainer.locator(".clipio-preview-item").first();
-    await expect(firstItem).toHaveClass(/selected/);
+    // First row is selected by default
+    await expect(host).toHaveAttribute("data-preview-selected", "0");
 
-    // Navigate down with arrow key
+    // ArrowDown moves the highlight to the second row
     await testPage.keyboard.press("ArrowDown");
-    await testPage.waitForTimeout(100);
+    await expect(host).toHaveAttribute("data-preview-selected", "1");
 
-    // Second item should now be selected
-    const secondItem = previewContainer.locator(".clipio-preview-item").nth(1);
-    await expect(secondItem).toHaveClass(/selected/);
-
-    // Navigate back up
+    // ArrowUp moves it back
     await testPage.keyboard.press("ArrowUp");
-    await testPage.waitForTimeout(100);
+    await expect(host).toHaveAttribute("data-preview-selected", "0");
 
-    // First item should be selected again
-    await expect(firstItem).toHaveClass(/selected/);
+    // The highlight must not run past the last row.
+    await testPage.keyboard.press("ArrowUp");
+    await expect(host).toHaveAttribute("data-preview-selected", "0");
   });
 
   test("selects snippet with Enter key", async ({
@@ -605,14 +592,13 @@ test.describe("Snippet Preview Feature", () => {
 
     // Use keyboard shortcut to manually trigger preview
     await testPage.keyboard.press("Control+Shift+Space");
-    await testPage.waitForTimeout(200);
 
-    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
-    await expect(previewContainer).toBeVisible();
-
-    // Should show all snippets when manually triggered
-    const snippetItems = previewContainer.locator(".clipio-preview-item");
-    expect(await snippetItems.count()).toBeGreaterThanOrEqual(2);
+    // Manual trigger lists every snippet, unfiltered
+    const host = testPage.locator("#clipio-snippet-preview-host");
+    await expect(host).toHaveAttribute("data-preview-visible", "true", {
+      timeout: 5_000,
+    });
+    await expect(host).toHaveAttribute("data-preview-count", "2");
   });
 
   test("works in textarea elements", async ({ testPage, storageHelper }) => {
@@ -872,10 +858,12 @@ test.describe("Untrusted event rejection", () => {
       );
     });
 
-    // The host element is injected at init regardless of visibility, so its
-    // presence proves nothing — assert on the rendered rows instead. A row
-    // means snippet data (label + shortcut) reached the page DOM.
-    await expect(testPage.locator(".clipio-preview-item")).toHaveCount(0);
+    // Assert on the host's mirrored state, not on row selectors: the shadow
+    // root is closed, so ".clipio-preview-item" is never in the light DOM and
+    // toHaveCount(0) would pass no matter what the extension did.
+    await expect(
+      testPage.locator("#clipio-snippet-preview-host")
+    ).toHaveAttribute("data-preview-visible", "false", { timeout: 5_000 });
     await expect(testPage.locator("#clipio-snippet-preview-host")).toBeHidden();
     // The page must not be able to swallow its own default action either.
     expect(await readPreventedFlag(testPage)).toBe(false);
@@ -919,7 +907,11 @@ test.describe("Untrusted event rejection", () => {
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
 
-    await expect(testPage.locator(".clipio-preview-item")).toHaveCount(0);
+    // Mirrored state, not a row count: with a closed root a row selector
+    // would always report 0 and assert nothing.
+    await expect(
+      testPage.locator("#clipio-snippet-preview-host")
+    ).toHaveAttribute("data-preview-visible", "false", { timeout: 5_000 });
   });
 
   test("synthetic input event does not expand a contenteditable", async ({
@@ -946,41 +938,42 @@ test.describe("Untrusted event rejection", () => {
     expect(text).toBe("/hello");
   });
 
-  test("synthetic click on a preview row does not insert a snippet", async ({
+  test("page script cannot reach preview rows, so cannot click one", async ({
     testPage,
     storageHelper,
   }) => {
     await setupTestPage(testPage, storageHelper, [helloSnippet()]);
 
-    // The user opens the preview legitimately (trusted input), so the row
-    // exists in the page DOM. The shadow root is mode:"open", so page script
-    // can then click it directly. That must not insert anything.
+    // Open the palette with trusted input, so a row genuinely exists.
     const input = testPage.locator('[data-testid="text-input"]');
     await input.click();
     await testPage.keyboard.press("Control+Shift+Space");
-    await expect(testPage.locator(".clipio-preview-item").first()).toBeVisible({
+    const host = testPage.locator("#clipio-snippet-preview-host");
+    await expect(host).toHaveAttribute("data-preview-count", "1", {
       timeout: 5_000,
     });
-    const value = await testPage.evaluate(async () => {
-      const target = document.querySelector<HTMLInputElement>(
-        '[data-testid="text-input"]'
-      );
-      if (!target) throw new Error("test input not found");
-      // The rows live inside the host's shadow root, which plain
-      // document.querySelector does NOT pierce (unlike Playwright locators).
-      const host = document.querySelector("#clipio-snippet-preview-host");
-      const shadowRoot = (host as HTMLElement | null)?.shadowRoot;
-      if (!shadowRoot) throw new Error("preview shadow root not found");
-      const row = shadowRoot.querySelector(".clipio-preview-item");
-      if (!row) throw new Error("preview row not found");
-      row.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true })
-      );
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      return target.value;
+
+    // The shadow root is closed, so the page has no handle on the row at all.
+    // This is the property that makes the row-click isTrusted guard
+    // unreachable rather than merely unexercised.
+    const reachable = await testPage.evaluate(() => {
+      const el = document.getElementById("clipio-snippet-preview-host");
+      return {
+        shadowRoot: el ? el.shadowRoot : "no-host",
+        rowsInLightDom: document.querySelectorAll(".clipio-preview-item")
+          .length,
+        bodyMentionsLabel:
+          document.body.textContent?.includes("Hello World") ?? false,
+      };
     });
 
-    expect(value).toBe("");
+    expect(reachable.shadowRoot).toBeNull();
+    expect(reachable.rowsInLightDom).toBe(0);
+    // The snippet label must not be readable from the page at all.
+    expect(reachable.bodyMentionsLabel).toBe(false);
+
+    // And no insertion happened.
+    expect(await input.inputValue()).toBe("");
   });
 
   test("trusted Enter on a preview row still inserts a snippet", async ({
@@ -995,9 +988,9 @@ test.describe("Untrusted event rejection", () => {
     const input = testPage.locator('[data-testid="text-input"]');
     await input.click();
     await testPage.keyboard.press("Control+Shift+Space");
-    await expect(testPage.locator(".clipio-preview-item").first()).toBeVisible({
-      timeout: 5_000,
-    });
+    await expect(
+      testPage.locator("#clipio-snippet-preview-host")
+    ).toHaveAttribute("data-preview-count", "1", { timeout: 5_000 });
 
     await testPage.keyboard.press("Enter");
     await expect(input).toHaveValue(/Hello, World!/, { timeout: 5_000 });
