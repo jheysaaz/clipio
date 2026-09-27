@@ -711,3 +711,211 @@ test.describe("Snippet Preview Feature", () => {
     await expect(previewContainer).not.toBeVisible();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Untrusted event rejection
+// spec: specs/content-script-trust.spec.md
+//
+// A Chrome isolated world shares the DOM event graph with the page, so a
+// page-dispatched (synthetic) event still reaches the content script's
+// capture-phase listeners. Before the isTrusted guard, a hostile page could
+// force snippet expansion — and, via {{clipboard}}, force the user's
+// clipboard into an attacker-controlled field.
+// ---------------------------------------------------------------------------
+
+test.describe("Untrusted event rejection", () => {
+  /**
+   * Install a document-capture probe that records whether the most recent
+   * keydown had preventDefault() called on it.
+   *
+   * The content script registered its listener first, so by the time this
+   * probe runs at the same node and phase, defaultPrevented already reflects
+   * whatever the extension decided.
+   */
+  async function installDefaultPreventedProbe(
+    page: import("@playwright/test").Page
+  ) {
+    await page.evaluate(() => {
+      const w = window as unknown as { __clipioPrevented?: boolean };
+      w.__clipioPrevented = false;
+      document.addEventListener(
+        "keydown",
+        (event) => {
+          w.__clipioPrevented = event.defaultPrevented;
+        },
+        true
+      );
+    });
+  }
+
+  async function readPreventedFlag(
+    page: import("@playwright/test").Page
+  ): Promise<boolean> {
+    return page.evaluate(
+      () =>
+        (window as unknown as { __clipioPrevented?: boolean })
+          .__clipioPrevented ?? false
+    );
+  }
+
+  test("synthetic keydown does not expand a snippet in a text input", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+    await installDefaultPreventedProbe(testPage);
+
+    // Page-authored script creates a field it fully controls, parks the
+    // caret after a valid shortcut, and dispatches a Space keydown.
+    const value = await testPage.evaluate(async () => {
+      const input = document.createElement("input");
+      input.value = "/hello";
+      document.body.appendChild(input);
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: " ",
+          code: "Space",
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      // Outlive the 300ms expansion debounce before reading back.
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      const result = input.value;
+      input.remove();
+      return result;
+    });
+
+    expect(value).toBe("/hello");
+    expect(value).not.toContain("Hello, World!");
+    // A page must not be able to swallow the host page's own default action.
+    expect(await readPreventedFlag(testPage)).toBe(false);
+  });
+
+  test("synthetic keydown does not expand a snippet in a contenteditable", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    const text = await testPage.evaluate(async () => {
+      const el = document.createElement("div");
+      el.contentEditable = "true";
+      document.body.appendChild(el);
+      const textNode = document.createTextNode("/hello");
+      el.appendChild(textNode);
+      el.focus();
+      // The caret must land inside the TEXT node: handleKeyDown bails unless
+      // range.startContainer is a text node, so selecting the element's
+      // contents would return early for an unrelated reason.
+      const range = document.createRange();
+      range.setStart(textNode, textNode.data.length);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      el.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: " ",
+          code: "Space",
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      const result = el.textContent ?? "";
+      el.remove();
+      return result;
+    });
+
+    expect(text).toBe("/hello");
+    expect(text).not.toContain("Hello, World!");
+  });
+
+  test("synthetic keydown does not open the preview palette", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    // Ctrl+Shift+Space is the default manual preview shortcut. If the guard
+    // is missing, this opens the palette and renders every snippet label and
+    // shortcut into the page DOM.
+    await testPage.evaluate(() => {
+      const input = document.querySelector<HTMLInputElement>(
+        '[data-testid="text-input"]'
+      );
+      if (!input) throw new Error("test input not found");
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: " ",
+          code: "Space",
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
+
+    // The host element is injected at init regardless of visibility, so its
+    // presence proves nothing — assert on the rendered rows instead. A row
+    // means snippet data (label + shortcut) reached the page DOM.
+    await expect(testPage.locator(".clipio-preview-item")).toHaveCount(0);
+    await expect(testPage.locator("#clipio-snippet-preview-host")).toBeHidden();
+  });
+
+  test("synthetic input event does not expand or arm the debounce", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    const value = await testPage.evaluate(async () => {
+      const input = document.querySelector<HTMLInputElement>(
+        '[data-testid="text-input"]'
+      );
+      if (!input) throw new Error("test input not found");
+      input.value = "/hello";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      return input.value;
+    });
+
+    expect(value).toBe("/hello");
+    expect(value).not.toContain("Hello, World!");
+  });
+
+  test("trusted keyboard input still expands a snippet", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    // Regression guard: the isTrusted guard must not disable the extension.
+    // Playwright's keyboard APIs dispatch trusted events.
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    const input = testPage.locator('[data-testid="text-input"]');
+    await input.click();
+    await testPage.keyboard.type("/hello");
+    await expect(input).toHaveValue(/Hello, World!/, { timeout: 5_000 });
+    expect(await input.inputValue()).not.toContain("/hello");
+  });
+
+  test("trusted Space keydown still expands a snippet immediately", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    const input = testPage.locator('[data-testid="text-input"]');
+    await input.click();
+    await testPage.keyboard.type("/hello");
+    await testPage.keyboard.press("Space");
+
+    await expect(input).toHaveValue(/Hello, World!/, { timeout: 5_000 });
+  });
+});

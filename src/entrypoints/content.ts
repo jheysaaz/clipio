@@ -1190,9 +1190,27 @@ export default defineContentScript({
     }
 
     function registerRuntimeListeners() {
+      // ── Trust boundary ────────────────────────────────────────────
+      // These two capture-phase listeners are the only path from page-authored
+      // events into every handler below them (handleInput,
+      // handleContentEditableInput, handleKeyDown, handlePreviewKeyboard, the
+      // manual preview shortcut, and the preview onSelect insertion path).
+      //
+      // A Chrome isolated world shares the DOM event graph with the page, so
+      // page-dispatched synthetic events ARE delivered here. `isTrusted` is
+      // read-only and UA-set: page script cannot forge a true value, it can
+      // only produce events that are false. Rejecting them stops a hostile
+      // page from driving our own expansion — most importantly from forcing
+      // a {{clipboard}} snippet to run document.execCommand("paste") into a
+      // field the page owns.
+      //
+      // spec: specs/content-script-trust.spec.md
+      const isUserGesture = (event: Event): boolean => event.isTrusted;
+
       document.addEventListener(
         "input",
         (event) => {
+          if (!isUserGesture(event)) return;
           const target = event.target as HTMLElement;
           if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
             handleInput(event);
@@ -1206,6 +1224,8 @@ export default defineContentScript({
       document.addEventListener(
         "keydown",
         (event) => {
+          if (!isUserGesture(event)) return;
+
           // Handle preview keyboard navigation first
           if (handlePreviewKeyboard(event)) {
             return; // Preview handled the event
