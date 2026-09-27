@@ -1,3 +1,4 @@
+import { stripInlineMarkdownMarks } from "@/lib/markdown";
 import { stripMediaPlaceholders } from "@/lib/media-placeholders";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -10,12 +11,15 @@ const PREVIEW_MAX_LENGTH = 60;
 // Strip markdown formatting and get plain text for preview
 function stripMarkdown(content: string): string {
   let text = content;
-  // Remove markdown formatting
-  text = text.replace(/\*\*([^*]+)\*\*/g, "$1"); // bold
-  text = text.replace(/_([^_]+)_/g, "$1"); // italic
-  text = text.replace(/~~([^~]+)~~/g, "$1"); // strikethrough
-  text = text.replace(/`([^`]+)`/g, "$1"); // code
-  text = text.replace(/<u>([^<]+)<\/u>/g, "$1"); // underline
+  // Remove markdown formatting, via the canonical implementation.
+  //
+  // The five regexes that used to be copied here included the pre-fix italic
+  // rule, so a snippet reading `first_name and last_name` lost both
+  // underscores in the sidebar preview. The placeholder mapping, legacy-HTML
+  // strip and entity decode below stay local, because they are this surface's
+  // decisions rather than markdown mechanics — notably `{{date:…}}` becomes
+  // "{{today}}" here, and a link keeps its label rather than becoming its URL.
+  text = stripInlineMarkdownMarks(text);
   // Convert placeholders to readable text
   text = text.replace(/\{\{clipboard\}\}/g, "{{clipboard}}");
   text = text.replace(/\{\{date:([a-z]+)\}\}/g, "{{today}}");

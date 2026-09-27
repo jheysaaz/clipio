@@ -213,8 +213,25 @@ export function markdownToPlainText(content: string): string {
   text = stripMediaPlaceholders(text);
   // Links → URL only (must run before stripping marks to avoid URL underscores matching italic)
   text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$2");
-  // Strip formatting marks
-  text = text.replace(/\*\*([^*]+)\*\*/g, "$1"); // bold
+  text = stripInlineMarkdownMarks(text);
+  return text;
+}
+
+/**
+ * Strip inline markdown marks, leaving the text.
+ *
+ * The marks half of `markdownToPlainText`, split out because the snippet list
+ * preview needs it too and had its own copy of all five regexes — including the
+ * pre-fix italic rule, so a sidebar preview of `first_name and last_name` lost
+ * both underscores to an emphasis run.
+ *
+ * Deliberately excludes link and placeholder handling: those are decisions, not
+ * mechanics. `markdownToPlainText` turns a link into its URL; the sidebar keeps
+ * the label, which is the more useful thing next to a snippet name.
+ */
+export function stripInlineMarkdownMarks(text: string): string {
+  let out = text;
+  out = out.replace(/\*\*([^*]+)\*\*/g, "$1"); // bold
   // Italic, minus the intraword case: `first_name` keeps its underscores
   // rather than becoming `firstname`. See markdownInlineToHtml.
   //
@@ -229,9 +246,9 @@ export function markdownToPlainText(content: string): string {
   // on it. The construct is not well-defined in CommonMark either and is
   // vanishingly rare in a snippet body, so it is left alone deliberately rather
   // than papered over with a rule that would be wrong elsewhere.
-  text = text.replace(/(?<![\p{L}\p{N}])_([^_]+)_(?![\p{L}\p{N}])/gu, "$1");
-  text = text.replace(/~~([^~]+)~~/g, "$1"); // strikethrough
-  text = text.replace(/`([^`]+)`/g, "$1"); // code
-  text = text.replace(/<u>([^<]+)<\/u>/g, "$1"); // underline
-  return text;
+  out = out.replace(/(?<![\p{L}\p{N}])_([^_]+)_(?![\p{L}\p{N}])/gu, "$1");
+  out = out.replace(/~~([^~]+)~~/g, "$1"); // strikethrough
+  out = out.replace(/`([^`]+)`/g, "$1"); // code
+  out = out.replace(/<u>([^<]+)<\/u>/g, "$1"); // underline
+  return out;
 }

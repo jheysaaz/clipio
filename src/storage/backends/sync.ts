@@ -25,7 +25,7 @@ import type { StorageBackend } from "../types";
 import { StorageQuotaError } from "../types";
 import type { Snippet } from "@/types";
 import { captureError } from "@/lib/sentry";
-import { migrateContentFormat } from "@/lib/content-format-migration";
+import { normalizeStoredSnippet } from "../normalize";
 
 const SNIPPET_PREFIX = "snip:";
 /** Legacy key used before the per-item layout — kept for migration only. */
@@ -58,13 +58,6 @@ type PendingWrite = {
   at: string;
 };
 
-function normalizeSnippet(snippet: Snippet): Snippet {
-  // Converts a legacy HTML body to markdown and strips the retired
-  // contentFormat key. A no-op for every snippet written since.
-  // spec: specs/content-format-migration.spec.md
-  return migrateContentFormat(snippet) as Snippet;
-}
-
 function snippetKey(id: string): string {
   return `${SNIPPET_PREFIX}${id}`;
 }
@@ -82,7 +75,7 @@ function parseSnippet(value: unknown): Snippet | null {
     if (!snippet || typeof snippet !== "object" || !("id" in snippet)) {
       return null;
     }
-    return normalizeSnippet(snippet);
+    return normalizeStoredSnippet(snippet);
   } catch {
     return null;
   }
@@ -185,7 +178,7 @@ export class SyncBackend implements StorageBackend {
         const raw = all[LEGACY_KEY];
         const snippets: Snippet[] =
           typeof raw === "string" ? JSON.parse(raw) : (raw as Snippet[]);
-        const normalized = snippets.map(normalizeSnippet);
+        const normalized = snippets.map(normalizeStoredSnippet);
         // Write to per-key layout then remove the legacy key
         await this.saveSnippets(normalized);
         await browser.storage.sync.remove(LEGACY_KEY);

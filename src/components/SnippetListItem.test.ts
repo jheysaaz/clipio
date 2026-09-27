@@ -61,3 +61,31 @@ describe("getContentPreview — other placeholders and markdown", () => {
     expect(preview.endsWith("…")).toBe(true);
   });
 });
+
+describe("getContentPreview — markdown marks come from the canonical stripper", () => {
+  it("keeps intraword underscores in the preview", () => {
+    // The sidebar had its own copy of the italic regex, using the pre-fix rule,
+    // so an identifier lost both underscores in the list.
+    expect(getContentPreview("use first_name and last_name")).toBe(
+      "use first_name and last_name"
+    );
+  });
+
+  it("strips real emphasis", () => {
+    expect(getContentPreview("_italic_ and **bold**")).toBe("italic and bold");
+  });
+
+  it("leaves a link's markdown untouched, unlike markdownToPlainText", () => {
+    // Pinned as-is, because this is the current behaviour and the sidebar
+    // deliberately does NOT do what markdownToPlainText does here (that one
+    // rewrites a link to its URL).
+    //
+    // It also means a snippet containing a link shows raw `[label](url)` in the
+    // list. That is a genuine rough edge, but whether to show the label or the
+    // URL is a product decision, not a refactor — so it is recorded rather than
+    // changed here. spec: specs/media-placeholders.spec.md
+    expect(getContentPreview("see [my site](https://x.test)")).toBe(
+      "see [my site](https://x.test)"
+    );
+  });
+});

@@ -178,7 +178,7 @@ describe("IndexedDBBackend — intent-based mutations", () => {
 
 describe("IndexedDBBackend — legacy contentFormat migration", () => {
   it("converts a legacy html body on read", async () => {
-    // Shares normalizeSnippet with the sync and local backends. Wave 3 changed
+    // Shares normalizeStoredSnippet with the sync and local backends. Wave 3 changed
     // that shared step, so this is the assertion that the backup did not drift
     // out of the migration.
     const legacy = {
