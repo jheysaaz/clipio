@@ -157,11 +157,36 @@ test.describe("Cross-Context Communication", () => {
 
     await extPage.close();
 
-    // Wait for storage.onChanged to propagate to the content script
-    await contentPage.waitForTimeout(500);
-
     // Verify the cache was updated by reading from an extension page
-    // (contentPage is an HTTP page and cannot access chrome.storage directly)
+    // (contentPage is an HTTP page and cannot access chrome.storage directly).
+    // Retried, rather than preceded by a sleep: the write above is async and the
+    // only thing that matters is when it lands.
+    await expect
+      .poll(
+        async () => {
+          const page = await context.newPage();
+          try {
+            await page.goto(`chrome-extension://${extensionId}/popup.html`);
+            const ids = await page.evaluate(async () => {
+              const ext =
+                (globalThis as any).chrome ?? (globalThis as any).browser;
+              const all = await ext.storage.local.get("cachedSnippets");
+              return ((all.cachedSnippets ?? []) as { id: string }[]).map(
+                (s) => s.id
+              );
+            });
+            return ids.includes("propagate-test");
+          } finally {
+            await page.close();
+          }
+        },
+        {
+          timeout: 5_000,
+          message: "cache never received the propagated snippet",
+        }
+      )
+      .toBe(true);
+
     const verifyPage = await context.newPage();
     await verifyPage.goto(`chrome-extension://${extensionId}/popup.html`);
     await verifyPage.waitForLoadState("domcontentloaded");
@@ -213,10 +238,6 @@ test.describe("Cross-Context Communication", () => {
       await ext.storage.local.set({ cachedSnippets: [snip] });
     }, multiTabSnippet);
     await popupPage.close();
-
-    // Give both content pages time to react to storage changes
-    await page1.waitForTimeout(500);
-    await page2.waitForTimeout(500);
 
     // Both tabs should have the snippet accessible in the shared storage.
     // Read from an extension page (chrome.storage is not available in HTTP pages)

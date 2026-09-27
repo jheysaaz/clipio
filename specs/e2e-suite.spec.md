@@ -50,6 +50,34 @@ instead of decorating the CI pipeline.
   the five post-reload blind sleeps in `content-script`,
   `contenteditable-multinode`, and `image-gif` specs. Assertions unchanged.
 
+## On `waitForTimeout`
+
+The suite used 64 fixed sleeps. **42 remain, and that is deliberate.**
+
+A sleep is only acceptable when asserting a **negative** — "this must never happen". A retrying
+assertion cannot prove a negative: it stops as soon as the value matches, and if it never matches
+it waits out the timeout and then fails, which is indistinguishable from "not yet". To prove
+absence you must wait out the debounce and read once. Every remaining sleep of that kind says so
+in a comment above it.
+
+Everything else was replaced, in descending order of value:
+
+1. **The `testPage` fixture's 500 ms** became `waitForContentScriptReady(page)` — despite the
+   helper already existing, the fixture that builds the page used a raw sleep, so it sat in front
+   of all 26 content-script tests.
+2. **Waits on an async side effect** — a storage write, a debounced save, a React effect — became
+   `expect.poll` on the thing that actually changes: the background's `syncDataLost` flag, the
+   typing-timeout persistence, the draft pre-fill, cross-context cache propagation.
+3. **Sleeps immediately before an auto-retrying `expect`** were deleted; the assertion already waits.
+
+One sweep over-read and was reverted. A mechanical pass converted every
+`const x = await locator.inputValue()` into a polling read. The intent was right — `inputValue()`
+is one-shot, so a sleep in front of it is a race — but the sweep could not tell a `<textarea>`
+from a `contenteditable`, and `Locator` exposes `inputValue` on both, where it throws. Ten
+failures, undone. The lesson is the one this project keeps learning the hard way: **a mechanical
+transform over code whose semantics you have not checked will find code you did not mean to
+touch.**
+
 ## Acceptance Criteria
 
 - [x] All 7 previously failing tests pass for behavioral reasons (verified
@@ -107,6 +135,6 @@ instead of decorating the CI pipeline.
 
 ## Change History
 
-| Date       | Change                     | Author |
-| ---------- | -------------------------- | ------ |
-| 2026-09-23 | Initial spec (e2e repair)  | —      |
+| Date       | Change                    | Author |
+| ---------- | ------------------------- | ------ |
+| 2026-09-23 | Initial spec (e2e repair) | —      |

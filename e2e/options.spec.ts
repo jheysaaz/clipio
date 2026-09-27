@@ -736,16 +736,23 @@ test.describe("Developers Section", () => {
     }
     await expect(slider).toHaveValue("600");
 
-    // Wait for the debounced save (400ms) + extra buffer
-    await optionsPage.waitForTimeout(1000);
-
-    // Verify storage was updated (WXT stores "local:typingTimeout" as key "typingTimeout")
-    const storedTimeout = await optionsPage.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const result = await ext.storage.local.get("typingTimeout");
-      return result.typingTimeout;
-    });
-    expect(storedTimeout).toBe(600);
+    // The slider is debounced, so poll the stored value rather than sleeping
+    // past the debounce plus a guessed buffer. Asserting the exact value, not
+    // merely "not the old one": an earlier version of this poll used
+    // `not.toBe(300)`, which a missing key satisfies trivially.
+    // (WXT stores "local:typingTimeout" as the bare key "typingTimeout".)
+    await expect
+      .poll(
+        async () =>
+          optionsPage.evaluate(async () => {
+            const ext =
+              (globalThis as any).chrome ?? (globalThis as any).browser;
+            const result = await ext.storage.local.get("typingTimeout");
+            return result.typingTimeout;
+          }),
+        { timeout: 5_000, message: "typingTimeout was never persisted as 600" }
+      )
+      .toBe(600);
   });
 
   // ── Debug Mode toggle ──────────────────────────────────────────────────

@@ -249,7 +249,6 @@ test.describe("Popup (Dashboard)", () => {
     await popupPage.keyboard.press("ArrowDown");
     await popupPage.waitForTimeout(100);
     await popupPage.keyboard.press("ArrowUp");
-    await popupPage.waitForTimeout(100);
 
     // Should not crash and page should still be responsive
     const body = popupPage.locator("body");

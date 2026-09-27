@@ -91,7 +91,6 @@ test.describe("Blocked sites", () => {
     // and previews — into the blocked page. That is the behaviour under test.
     await testPage.locator('[data-testid="text-input"]').click();
     await testPage.keyboard.press("Control+Shift+Space");
-    await testPage.waitForTimeout(200);
 
     // On a blocked host previewUI.init() is never called, so the host element
     // does not exist at all. Asserting its absence is the stronger claim — and
@@ -112,7 +111,6 @@ test.describe("Blocked sites", () => {
     const input = testPage.locator('[data-testid="text-input"]');
     await input.click();
     await testPage.keyboard.type("/he");
-    await testPage.waitForTimeout(200);
 
     await expect(testPage.locator("#clipio-snippet-preview-host")).toHaveCount(
       0,

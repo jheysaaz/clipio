@@ -207,7 +207,6 @@ test.describe("Image / GIF feature tests", () => {
     const popupPage = await context.newPage();
     await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
     await popupPage.waitForLoadState("domcontentloaded");
-    await popupPage.waitForTimeout(600);
 
     // Make an edit in the rich-text editor to dirty the form.
     // The PlateJS editor renders a contenteditable — it must be present
@@ -535,7 +534,6 @@ test.describe("Image / GIF feature tests", () => {
       .first();
     await expect(cancelButton).toBeVisible({ timeout: 5_000 });
     await cancelButton.click();
-    await popupPage.waitForTimeout(300);
 
     // After cancel, the detail/list returns to the NEWER snippet
     await expect(

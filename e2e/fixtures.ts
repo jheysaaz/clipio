@@ -10,6 +10,7 @@
  *   - `storageHelper` — utilities to seed/read extension storage
  */
 
+import { waitForContentScriptReady } from "./helpers/content-script.js";
 import {
   test as base,
   chromium,
@@ -149,8 +150,13 @@ export const test = base.extend<ClipioFixtures>({
     const page = await context.newPage();
     await page.goto(`http://localhost:${port}/test-page.html`);
     await page.waitForLoadState("domcontentloaded");
-    // Give the content script time to initialize
-    await page.waitForTimeout(500);
+    // Wait for the content script to actually bind its listeners, rather than
+    // guessing how long that takes. Typing before it is ready is silently
+    // dropped — no keydown listener means no debounce timer means no expansion —
+    // so a sleep that is too short produces a test that passes for the wrong
+    // reason, and one that is too long just makes the suite slower.
+    // spec: e2e/helpers/content-script.ts documents the failure mode.
+    await waitForContentScriptReady(page);
     await use(page);
     await page.close();
   },

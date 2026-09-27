@@ -366,8 +366,22 @@ test.describe("Content Script Expansion", () => {
     }, dynamicSnippet);
     await extPage.close();
 
-    // Wait for the content script to pick up the storage change
-    await testPage.waitForTimeout(500);
+    // Wait for the content script to re-index on the storage change.
+    //
+    // The sleep that stood here was not pointless, despite the next line merely
+    // building a locator: it was waiting for the content script to pick up the
+    // new snippet, and a locator construction waits for nothing. Typing before
+    // the index is rebuilt finds no match, so the expansion silently does not
+    // happen. Polling the cache states the actual condition.
+    await expect
+      .poll(
+        async () => {
+          const cached = await storageHelper.getLocal("cachedSnippets");
+          return Array.isArray(cached) && cached.length > 0;
+        },
+        { timeout: 5_000, message: "cache never picked up the new snippet" }
+      )
+      .toBe(true);
 
     // Now try to expand in the test page
     const input = testPage.locator('[data-testid="text-input"]');
@@ -533,14 +547,12 @@ test.describe("Snippet Preview Feature", () => {
 
     // Type the trigger prefix
     await testPage.keyboard.type("/", { delay: 30 });
-    await testPage.waitForTimeout(200);
 
     const previewContainer = testPage.locator("#clipio-snippet-preview-host");
     await expect(previewContainer).toBeVisible();
 
     // Press Enter to select the first snippet
     await testPage.keyboard.press("Enter");
-    await testPage.waitForTimeout(200);
 
     // Preview should be hidden after selection
     await expect(previewContainer).not.toBeVisible();
@@ -561,14 +573,12 @@ test.describe("Snippet Preview Feature", () => {
 
     // Type the trigger prefix
     await testPage.keyboard.type("/", { delay: 30 });
-    await testPage.waitForTimeout(200);
 
     const previewContainer = testPage.locator("#clipio-snippet-preview-host");
     await expect(previewContainer).toBeVisible();
 
     // Press Escape to close
     await testPage.keyboard.press("Escape");
-    await testPage.waitForTimeout(100);
 
     // Preview should be hidden
     await expect(previewContainer).not.toBeVisible();
@@ -609,7 +619,6 @@ test.describe("Snippet Preview Feature", () => {
 
     // Type the trigger prefix
     await testPage.keyboard.type("/", { delay: 30 });
-    await testPage.waitForTimeout(200);
 
     const previewContainer = testPage.locator("#clipio-snippet-preview-host");
     await expect(previewContainer).toBeVisible();
@@ -636,7 +645,6 @@ test.describe("Snippet Preview Feature", () => {
 
     // Type the trigger prefix
     await testPage.keyboard.type("/", { delay: 30 });
-    await testPage.waitForTimeout(200);
 
     const previewContainer = testPage.locator("#clipio-snippet-preview-host");
     await expect(previewContainer).toBeVisible();
@@ -663,7 +671,6 @@ test.describe("Snippet Preview Feature", () => {
 
     // Type the trigger prefix to open the preview popup
     await testPage.keyboard.type("/", { delay: 30 });
-    await testPage.waitForTimeout(200);
 
     const previewContainer = testPage.locator("#clipio-snippet-preview-host");
     await expect(previewContainer).toBeVisible();
@@ -692,7 +699,6 @@ test.describe("Snippet Preview Feature", () => {
 
     // Type the trigger prefix
     await testPage.keyboard.type("/", { delay: 30 });
-    await testPage.waitForTimeout(200);
 
     const previewContainer = testPage.locator("#clipio-snippet-preview-host");
     await expect(previewContainer).toBeVisible();
@@ -700,7 +706,6 @@ test.describe("Snippet Preview Feature", () => {
     // Click somewhere else to lose focus
     const textarea = testPage.locator('[data-testid="textarea-field"]');
     await textarea.click();
-    await testPage.waitForTimeout(100);
 
     // Preview should be hidden when focus is lost
     await expect(previewContainer).not.toBeVisible();

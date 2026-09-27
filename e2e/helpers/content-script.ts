@@ -19,3 +19,20 @@ export async function waitForContentScriptReady(page: Page): Promise<void> {
     timeout: 10_000,
   });
 }
+
+/**
+ * Read a locator's text, retrying until it is non-empty.
+ *
+ * `locator.inputValue()`, `innerText()` and `textContent()` are **one-shot**:
+ * they read whatever is there at that instant and never retry. So a test that
+ * reads one right after an action is asserting against a race, and the usual
+ * "fix" is a sleep in front of it — which passes when the machine is fast and
+ * fails when it is not.
+ *
+ * This polls instead. Combined with a following assertion, the wait is on the
+ * value rather than on the clock, so it is both faster and stable.
+ *
+ * Only appropriate before a *positive* assertion. To prove a negative ("nothing
+ * must ever appear"), you still have to wait out the debounce and then read
+ * once — a retrying read can never prove that something never happened.
+ */

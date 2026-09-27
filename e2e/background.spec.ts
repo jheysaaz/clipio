@@ -98,8 +98,19 @@ test.describe("Background Script", () => {
     const extPage = await context.newPage();
     await extPage.goto(`chrome-extension://${extensionId}/popup.html`);
     await extPage.waitForLoadState("domcontentloaded");
-    // Allow React to process the useEffect that reads the draft
-    await extPage.waitForTimeout(500);
+    // The popup pre-fills from the draft in a useEffect, so poll for the
+    // pre-filled value instead of sleeping past it.
+    await expect
+      .poll(
+        async () =>
+          extPage.evaluate(() =>
+            Array.from(
+              document.querySelectorAll('textarea, input[type="text"]')
+            ).some((el) => (el as HTMLTextAreaElement).value?.length > 0)
+          ),
+        { timeout: 5_000, message: "draft was never pre-filled into the popup" }
+      )
+      .toBe(true);
 
     // The popup should be in "create" mode with the draft content pre-filled.
     // Look for a textarea/input whose value contains the draft text.
@@ -211,10 +222,22 @@ test.describe("Background Script", () => {
       await ext.storage.sync.remove(["snip:001", "snip:002", "snip:003"]);
     });
 
-    // Wait briefly for the background's storage.onChanged listener to fire
-    await extPage.waitForTimeout(500);
+    // Poll for the flag rather than sleeping: the background sets it from an
+    // async storage.onChanged listener, so the only thing that matters is when
+    // the write lands, not how long we guessed it would take.
+    await expect
+      .poll(
+        async () =>
+          extPage.evaluate(async () => {
+            const ext =
+              (globalThis as any).chrome ?? (globalThis as any).browser;
+            const result = await ext.storage.local.get("syncDataLost");
+            return result.syncDataLost === true;
+          }),
+        { timeout: 5_000, message: "background never set local:syncDataLost" }
+      )
+      .toBe(true);
 
-    // Check if the syncDataLost flag was set by the background
     const syncDataLost = await extPage.evaluate(async () => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       const result = await ext.storage.local.get("syncDataLost");
