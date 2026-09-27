@@ -91,10 +91,30 @@ behind a system notification the user trusts.
   path is deliberate: a tampered response must not cause a fetch storm.
 - Never throws. All errors are captured to Sentry and swallowed.
 
-**No caching or rate limiting is implemented in this function.** An earlier revision of
-this spec claimed "Caches result for 24h in storage". It does not: the function writes
-`latestVersionCheckedAtItem` but never reads it, so it fetches on every invocation. Gating
-the read is tracked separately.
+### Throttling
+
+`shouldCheckForUpdate(lastCheckedAt, now)` is a pure gate, and `checkForUpdate()` consults it
+**before** fetching. A check within `UPDATE_CHECK_MIN_INTERVAL_HOURS` (24) of the last recorded
+check is skipped and **no network request is made**.
+
+The gate is necessary because the alarm is not a throttle on its own. `background.ts` calls
+`checkForUpdate()` at the top level of the service worker as well as on the 6-hour alarm, so it
+runs on _every_ wake-up — and an MV3 worker is evicted after roughly 30 seconds idle, which is
+many times a day. Unauthenticated GitHub API calls are rate limited per IP.
+
+The gate **fails open**: no timestamp, an unparseable one, or one in the future all mean
+"check". The asymmetry is deliberate — an unnecessary check costs one API call, whereas wrongly
+concluding "recently checked" means the user silently never learns about an update.
+
+A **failed** check also records the timestamp. Without that, a `403` from the rate limiter (an
+`!response.ok`, so it throws) left the timestamp untouched and the client retried on every
+wake-up, keeping its own rate limit alive. The trade-off is that a failed check delays the next
+attempt by up to 24 hours, which is the right way round: a day's delay on an update notice is
+harmless, whereas a throttled client that never backs off never recovers.
+
+An earlier revision of this spec claimed "Caches result for 24h in storage" while the
+implementation only ever wrote the timestamp. The claim described the intent; the code now
+implements it.
 
 ---
 
@@ -117,7 +137,8 @@ the read is tracked separately.
 
 ## Change History
 
-| Date       | Change                                              | Author |
-| ---------- | --------------------------------------------------- | ------ |
-| 2026-03-11 | Initial spec                                        | —      |
-| 2026-09-26 | Corrected the `checkForUpdate` signature; removed the `UpdateInfo` type and the false 24h-caching claim. Documented `sanitizeReleaseUrl` and `openReleasePage`. | — |
+| Date       | Change                                                                                                                                                                                                                     | Author |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 2026-03-11 | Initial spec                                                                                                                                                                                                               | —      |
+| 2026-09-26 | Corrected the `checkForUpdate` signature; removed the `UpdateInfo` type and the false 24h-caching claim. Documented `sanitizeReleaseUrl` and `openReleasePage`.                                                            | —      |
+| 2026-09-27 | Implemented the 24h throttle the previous revision had claimed but the code never did, and made a failed check record the timestamp so a rate-limited client backs off. spec: specs/test-infrastructure.spec.md (Wave 4.2) | —      |

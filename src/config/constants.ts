@@ -68,6 +68,21 @@ export const UPDATE_CHECK_ALARM_NAME = "clipio-update-check" as const;
 /** How often to check for updates (minutes). */
 export const UPDATE_CHECK_INTERVAL_MINUTES = 360 as const;
 
+/**
+ * Minimum gap between two update checks (hours).
+ *
+ * The alarm alone is not a throttle. `background.ts` also calls checkForUpdate()
+ * at the top level of the service worker, so it runs on every wake-up, and an
+ * MV3 worker is evicted after ~30s idle — many times a day. Unauthenticated
+ * GitHub API calls are rate limited per IP, so without this the extension can
+ * spend a large share of its quota on checks that mostly find nothing.
+ *
+ * Deliberately longer than UPDATE_CHECK_INTERVAL_MINUTES: the alarm is the
+ * floor for *when a check may happen*, this is the floor for *how often one
+ * actually does*.
+ */
+export const UPDATE_CHECK_MIN_INTERVAL_HOURS = 24 as const;
+
 // ---------------------------------------------------------------------------
 // Review prompt
 // ---------------------------------------------------------------------------

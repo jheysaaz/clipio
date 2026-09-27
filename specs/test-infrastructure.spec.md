@@ -85,20 +85,56 @@ matter:
 - Wave 4.2, the write-only `latestVersionCheckedAtItem`. Tracked separately below because it is
   a behavioural question (implement the cache, or delete the dead write) rather than a test gap.
 
-## Wave 4.2 — `latestVersionCheckedAtItem` is write-only
+## Wave 4.2 — the update checker has no throttle, though it records one
 
-Recorded here because it surfaced while verifying this wave, and it is a real defect rather
-than a test gap.
+Surfaced while verifying this wave. A real defect, not a test gap.
 
-`specs/update-checker.spec.md` claimed the update checker "caches the result for 24 hours". The
-implementation **writes** `latestVersionCheckedAtItem` on every check and **never reads it** —
-verified by grep: every reference is a `setValue`. So the documented 24-hour cache does not
-exist, and a tampered or failing response can trigger a check on every background wake-up,
-which is the fetch storm the cache was meant to prevent.
+`checkForUpdate()` **writes** `latestVersionCheckedAtItem` on every check and **never reads
+it** — verified by grep: every reference is a `setValue`. The item is dead state.
 
-The fix is a decision, not a mechanical change, so it is deferred to its own item rather than
-guessed at here. Two honest options: implement the cache (read the timestamp, skip within 24h),
-or delete the write and correct the spec. The spec must end up matching reality either way.
+Meanwhile `background.ts` calls `checkForUpdate()` in two places:
+
+- at the **top level of the service worker** (`:158`), so on _every_ wake-up, and
+- on a 6-hour alarm (`:166`).
+
+An MV3 service worker is evicted after roughly 30 seconds idle, so "every wake-up" is frequent
+in practice — many times a day for an idle extension. Every one of those is an unconditional
+`fetch` to the GitHub releases API. Unauthenticated GitHub API requests are rate limited per
+IP, and the failure mode compounds: a `403` is an `!response.ok`, so it throws into the `catch`,
+which does **not** write the timestamp — so a rate-limited client keeps retrying and makes the
+rate limit worse. That is the fetch storm the timestamp was evidently introduced to prevent.
+
+`specs/update-checker.spec.md` already claims a 24-hour cache, so the implementation is the
+thing that is wrong, not the spec.
+
+### Solution
+
+Read the timestamp and skip the network call when the last check was recent enough. Pure
+decision in a separately testable helper, so the time arithmetic is verifiable without mocking
+a clock into the fetch path.
+
+- `shouldCheckForUpdate(lastCheckedAt, now)` — pure. `true` when there is no timestamp, when the
+  timestamp is unparseable (fail open: a corrupt value must not disable updates forever), or
+  when more than 24 hours have elapsed.
+- `checkForUpdate()` consults it before fetching.
+- The `catch` writes the timestamp too, so a failing endpoint is backed off instead of retried on
+  every wake. **Stated trade-off:** a failed check now delays the next attempt by up to 24 hours.
+  That is the right way round — an update check arriving a day late is harmless, whereas a
+  rate-limited client that keeps hammering the API never recovers.
+
+### Acceptance Criteria
+
+- [x] A check is skipped when the previous check was less than 24 hours ago, and **no fetch is
+      made** (assert fetch was not called, not merely that nothing was stored).
+- [x] A check proceeds when there is no timestamp.
+- [x] A check proceeds when the timestamp is unparseable or in the future (fail open).
+- [x] A check proceeds once more than 24 hours have elapsed.
+- [x] A thrown fetch records the timestamp, so a failing endpoint is backed off.
+- [x] The throttle window is a named constant (`UPDATE_CHECK_MIN_INTERVAL_HOURS`), not a magic number at the call site.
+- [x] `specs/update-checker.spec.md` matches the implementation.
+- [x] Each new test is mutation-sensitive. Four mutations run, each caught by 3–4 tests:
+      shrinking the window to ~0, failing _closed_ on an unparseable timestamp, deleting the
+      failure-path timestamp write, and disabling the throttle call.
 
 ## Change History
 

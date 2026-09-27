@@ -11,8 +11,10 @@ import {
   shouldShowUpdateAlert,
   sanitizeReleaseUrl,
   openReleasePage,
+  shouldCheckForUpdate,
   type ReleaseInfo,
 } from "./update-checker";
+import { UPDATE_CHECK_MIN_INTERVAL_HOURS } from "@/config/constants";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -21,6 +23,12 @@ import {
 vi.mock("~/lib/sentry", () => ({
   captureError: vi.fn(),
   captureMessage: vi.fn(),
+}));
+
+// update-checker logs when it throttles. Mocked so the log's own failure path
+// can be exercised without a real storage read.
+vi.mock("~/lib/debug", () => ({
+  debugLog: vi.fn(async () => {}),
 }));
 
 import { captureError } from "@/lib/sentry";
@@ -32,8 +40,10 @@ const mockLatestVersionItem = vi.hoisted(() => ({
 }));
 
 const mockLatestVersionCheckedAtItem = vi.hoisted(() => ({
-  getValue: vi.fn(async () => null),
-  setValue: vi.fn(async () => {}),
+  // Typed explicitly: this is a `string | null` timestamp, and the throttle
+  // tests need to seed real ISO strings.
+  getValue: vi.fn(async (): Promise<string | null> => null),
+  setValue: vi.fn(async (_value: string) => {}),
 }));
 
 const mockDismissedUpdateVersionItem = vi.hoisted(() => ({
@@ -524,5 +534,213 @@ describe("openReleasePage", () => {
     await expect(
       openReleasePage("https://github.com/owner/repo/releases/tag/v1.2.0")
     ).resolves.toBe(false);
+  });
+});
+
+/**
+ * The update-check throttle.
+ * spec: specs/test-infrastructure.spec.md (Wave 4.2)
+ *
+ * `checkForUpdate()` is called at the top level of the service worker, so it
+ * runs on every wake-up, and an MV3 worker is evicted after ~30s idle. Before
+ * this, every one of those wake-ups made an unconditional GitHub API call,
+ * because `latestVersionCheckedAtItem` was written and never read. A 403 was an
+ * `!response.ok`, so it threw into the `catch`, which did not record the
+ * timestamp — meaning a rate-limited client retried forever and made its own
+ * rate limit worse.
+ */
+describe("shouldCheckForUpdate", () => {
+  const HOUR = 60 * 60 * 1000;
+  const now = new Date("2026-01-02T00:00:00.000Z").getTime();
+
+  it("checks when nothing has been recorded yet", () => {
+    expect(shouldCheckForUpdate(null, now)).toBe(true);
+  });
+
+  it("checks when the recorded timestamp is unparseable", () => {
+    // Fail open: a corrupt value must not disable update checks forever.
+    expect(shouldCheckForUpdate("not-a-date", now)).toBe(true);
+  });
+
+  it("checks when the recorded timestamp is in the future", () => {
+    // A clock that moved backwards, or a tampered value. Also fail open.
+    expect(
+      shouldCheckForUpdate(new Date(now + 5 * HOUR).toISOString(), now)
+    ).toBe(true);
+  });
+
+  it("skips when the last check was moments ago", () => {
+    expect(
+      shouldCheckForUpdate(new Date(now - 60 * 1000).toISOString(), now)
+    ).toBe(false);
+  });
+
+  it("skips when the last check was just inside the window", () => {
+    expect(
+      shouldCheckForUpdate(
+        new Date(
+          now - (UPDATE_CHECK_MIN_INTERVAL_HOURS * HOUR - HOUR)
+        ).toISOString(),
+        now
+      )
+    ).toBe(false);
+  });
+
+  it("checks once the window has elapsed", () => {
+    expect(
+      shouldCheckForUpdate(
+        new Date(
+          now - (UPDATE_CHECK_MIN_INTERVAL_HOURS * HOUR + HOUR)
+        ).toISOString(),
+        now
+      )
+    ).toBe(true);
+  });
+
+  it("uses the named window, so widening it is a deliberate edit", () => {
+    // Guards against the constant being inlined at the call site.
+    const justOver = new Date(
+      now - (UPDATE_CHECK_MIN_INTERVAL_HOURS * HOUR + 60 * 1000)
+    ).toISOString();
+    expect(shouldCheckForUpdate(justOver, now)).toBe(true);
+  });
+});
+
+describe("checkForUpdate — throttling", () => {
+  const HOUR = 60 * 60 * 1000;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(browser.runtime.getManifest).mockReturnValue({
+      version: "1.0.0",
+    } as never);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  it("makes NO network call when checked too recently", async () => {
+    // The decisive assertion: no fetch, rather than "nothing was written".
+    mockLatestVersionCheckedAtItem.getValue.mockResolvedValue(
+      new Date(Date.now() - HOUR).toISOString()
+    );
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    await checkForUpdate();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(mockLatestVersionItem.setValue).not.toHaveBeenCalled();
+  });
+
+  it("checks when the previous check is old enough", async () => {
+    mockLatestVersionCheckedAtItem.getValue.mockResolvedValue(
+      new Date(
+        Date.now() - (UPDATE_CHECK_MIN_INTERVAL_HOURS + 1) * HOUR
+      ).toISOString()
+    );
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => makeRelease(),
+    } as never);
+
+    await checkForUpdate();
+
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+
+  it("records the timestamp when the fetch throws, so failures back off", async () => {
+    // Without this, a failing or rate-limited endpoint is retried on every
+    // service-worker wake-up, which is the storm the timestamp exists to stop.
+    mockLatestVersionCheckedAtItem.getValue.mockResolvedValue(null);
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+
+    await checkForUpdate();
+
+    expect(mockLatestVersionCheckedAtItem.setValue).toHaveBeenCalled();
+  });
+
+  it("still records the timestamp when GitHub answers 403", async () => {
+    // A 403 is the state that actually caused the storm.
+    mockLatestVersionCheckedAtItem.getValue.mockResolvedValue(null);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 403,
+    } as never);
+
+    await checkForUpdate();
+
+    expect(mockLatestVersionCheckedAtItem.setValue).toHaveBeenCalled();
+  });
+});
+
+/**
+ * The throttle's own error paths.
+ * spec: specs/test-infrastructure.spec.md (Wave 4.2)
+ *
+ * Each of these is a place where a secondary failure could take down the update
+ * check — or, worse, be allowed to escape into the service worker's top level.
+ */
+describe("checkForUpdate — throttle error paths", () => {
+  const HOUR = 60 * 60 * 1000;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(browser.runtime.getManifest).mockReturnValue({
+      version: "1.0.0",
+    } as never);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  it("checks anyway when reading the timestamp fails", async () => {
+    // Reading the timestamp is best-effort. If it throws and we swallowed that
+    // by returning early, a storage fault would silently disable update checks.
+    mockLatestVersionCheckedAtItem.getValue.mockRejectedValue(
+      new Error("storage unavailable")
+    );
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => makeRelease(),
+    } as never);
+
+    await checkForUpdate();
+
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+
+  it("does not throw when recording a failure also fails", async () => {
+    // A quota error while writing the backoff timestamp must not escape; the
+    // background calls this at the top level with only a .catch() of its own.
+    mockLatestVersionCheckedAtItem.getValue.mockResolvedValue(null);
+    mockLatestVersionCheckedAtItem.setValue.mockRejectedValue(
+      new Error("QUOTA_BYTES exceeded")
+    );
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+
+    await expect(checkForUpdate()).resolves.not.toThrow();
+  });
+
+  it("reports the failed backoff write to Sentry", async () => {
+    mockLatestVersionCheckedAtItem.getValue.mockResolvedValue(null);
+    mockLatestVersionCheckedAtItem.setValue.mockRejectedValue(
+      new Error("QUOTA_BYTES exceeded")
+    );
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+
+    await checkForUpdate();
+
+    expect(captureError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ action: "checkForUpdate.recordFailure" })
+    );
+  });
+
+  it("does not throw when the debug log rejects on the throttled path", async () => {
+    const { debugLog } = await import("~/lib/debug");
+    vi.mocked(debugLog).mockRejectedValue(new Error("debug down"));
+    mockLatestVersionCheckedAtItem.getValue.mockResolvedValue(
+      new Date(Date.now() - HOUR).toISOString()
+    );
+
+    await expect(checkForUpdate()).resolves.not.toThrow();
   });
 });

@@ -21,6 +21,8 @@
 import { captureError } from "@/lib/sentry";
 import { latestVersionItem, latestVersionCheckedAtItem } from "@/storage/items";
 import { browser } from "wxt/browser";
+import { UPDATE_CHECK_MIN_INTERVAL_HOURS } from "@/config/constants";
+import { debugLog } from "@/lib/debug";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -156,9 +158,44 @@ export async function openReleasePage(htmlUrl: string): Promise<boolean> {
  * - Never throws — all errors are captured to Sentry and swallowed so
  *   the caller (background service worker) is never disrupted.
  */
+/**
+ * Should an update check be made now?
+ *
+ * Pure, so the window arithmetic is testable without a clock or a fetch mock.
+ *
+ * Fails **open** in every ambiguous case — no timestamp, an unparseable one, or
+ * one in the future. The asymmetry is deliberate: the cost of an unnecessary
+ * check is one API call, while the cost of wrongly concluding "recently
+ * checked" is that the user silently never learns about an update. A corrupt or
+ * clock-skewed value must not disable update checks indefinitely.
+ */
+export function shouldCheckForUpdate(
+  lastCheckedAt: string | null,
+  now: number
+): boolean {
+  if (!lastCheckedAt) return true;
+  const last = Date.parse(lastCheckedAt);
+  if (Number.isNaN(last)) return true;
+  // A future timestamp means the clock moved backwards or the value was
+  // tampered with. Do not let it suppress checks indefinitely.
+  if (last > now) return true;
+  return now - last >= UPDATE_CHECK_MIN_INTERVAL_HOURS * 60 * 60 * 1000;
+}
+
 export async function checkForUpdate(): Promise<void> {
   const repo = (import.meta.env.WXT_GITHUB_REPO as string | undefined)?.trim();
   if (!repo) return;
+
+  // Throttle before touching the network. The alarm is not a throttle on its
+  // own: the background also calls this at the top level of the service worker,
+  // so it runs on every wake-up, and an MV3 worker is evicted after ~30s idle.
+  const lastCheckedAt = await latestVersionCheckedAtItem
+    .getValue()
+    .catch(() => null);
+  if (!shouldCheckForUpdate(lastCheckedAt, Date.now())) {
+    debugLog("background", "update:check:throttled", {}).catch(() => {});
+    return;
+  }
 
   const url = `https://api.github.com/repos/${repo}/releases/latest`;
 
@@ -228,6 +265,17 @@ export async function checkForUpdate(): Promise<void> {
     await latestVersionCheckedAtItem.setValue(new Date().toISOString());
   } catch (err) {
     captureError(err, { action: "checkForUpdate", repo });
+    // Record the attempt even on failure. A 403 from GitHub's rate limiter is
+    // the case that matters: without this the client retries on every
+    // service-worker wake-up and keeps the rate limit alive. The trade-off is
+    // that a failed check delays the next attempt by up to the throttle window,
+    // which is the right way round — a day's delay on an update notice is
+    // harmless, whereas a throttled client that never backs off never recovers.
+    await latestVersionCheckedAtItem
+      .setValue(new Date().toISOString())
+      .catch((writeErr: unknown) => {
+        captureError(writeErr, { action: "checkForUpdate.recordFailure" });
+      });
   }
 }
 
