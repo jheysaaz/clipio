@@ -4,6 +4,7 @@
   "description": "A powerful browser extension for managing and inserting snippets with lightning speed and increase your productivity.",
   "version": "1.5.1",
   "type": "module",
+  "packageManager": "pnpm@12.5.1",
   "scripts": {
     "dev": "node scripts/dev-with-qa.mjs",
     "dev:wxt": "wxt",
@@ -17,6 +18,7 @@
     "postinstall": "wxt prepare",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "check:locales": "node scripts/check-locales.mjs",
     "format": "prettier --write \"./**/*.{ts,tsx,js,jsx,json,css,html}\"",
     "format:check": "prettier --check \"./**/*.{ts,tsx,js,jsx,json,css,html}\"",
     "test": "vitest run",
@@ -69,6 +71,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "fake-indexeddb": "^6.2.5",
     "happy-dom": "^20.10.6",
+    "js-yaml": "^5.4.2",
     "prettier": "^3.9.4",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.63.0",

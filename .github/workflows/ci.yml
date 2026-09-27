@@ -8,7 +8,7 @@ on:
 
 jobs:
   format-check:
-    name: Format Check
+    name: Static Checks
     runs-on: ubuntu-latest
 
     steps:
@@ -18,7 +18,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 12.5.1
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -32,6 +32,9 @@ jobs:
       - name: Check formatting
         run: pnpm format:check
 
+      - name: Check locale parity
+        run: pnpm check:locales
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
@@ -44,7 +47,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 12.5.1
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -93,7 +96,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 12.5.1
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -145,7 +148,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 12.5.1
 
       - name: Setup Node.js
         uses: actions/setup-node@v6

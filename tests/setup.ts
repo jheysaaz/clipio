@@ -7,7 +7,7 @@
  *   - console.error suppression for expected error paths
  */
 
-import { vi, beforeEach } from "vitest";
+import { vi, beforeEach, afterAll } from "vitest";
 import { mockBrowser } from "./mocks/browser";
 
 // ---------------------------------------------------------------------------
@@ -85,8 +85,13 @@ const SUPPRESSED_PREFIXES = [
   "Failed to clear",
 ];
 
+// Captured once, before any spying, so the forwarding target is always the
+// pristine implementation rather than a previously-installed mock.
 const originalConsoleError = console.error;
+
 beforeEach(() => {
+  // vitest's spyOn is idempotent: if console.error is already a mock it is
+  // reused rather than re-wrapped, so this does not stack across tests.
   vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     const message = String(args[0] ?? "");
     if (SUPPRESSED_PREFIXES.some((prefix) => message.startsWith(prefix))) {
@@ -94,4 +99,10 @@ beforeEach(() => {
     }
     originalConsoleError(...args);
   });
+});
+
+afterAll(() => {
+  // Hand console.error back so this global setup file does not leave the
+  // method mocked after the test file that loaded it has finished.
+  vi.restoreAllMocks();
 });

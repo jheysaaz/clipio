@@ -29,6 +29,10 @@ dashboard:
     heading: Aún no hay fragmentos
     body: Crea tu primer fragmento para guardar y reutilizar texto rápidamente.
     action: Crear tu primer fragmento
+  toast:
+    snippetSaved: Fragmento guardado
+    snippetDeleted: Fragmento eliminado
+    snippetUpdated: Fragmento actualizado
   detailPlaceholder: Selecciona un fragmento para ver los detalles
   snippetListLabel: Fragmentos
   warnings:
@@ -237,6 +241,11 @@ options:
       label: Descripción
       placeholder: Añade una descripción (se usa como texto alternativo)
       saved: Descripción guardada
+  previewSettings:
+    enabled: Vista previa activada
+    disabled: Vista previa desactivada
+    prefixUpdated: Prefijo de activación actualizado
+    shortcutUpdated: Atajo de teclado actualizado
   developers:
     title: Desarrolladores
     description: Configuraciones avanzadas para usuarios avanzados y desarrolladores.
@@ -247,6 +256,7 @@ options:
       placeholder: Introduce tu clave API de Giphy
       reset: Restablecer valor predeterminado
       saved: Clave API guardada
+      resetSuccess: Clave API restablecida
     blockedSites:
       title: Sitios bloqueados
       description: La expansión de fragmentos de Clipio está desactivada en estos sitios.
@@ -302,6 +312,7 @@ options:
       clearLog: Borrar registro
       copyLog: Copiar registro
       copiedLog: "¡Copiado!"
+      copyFailed: Error al copiar el registro de depuración
       emptyLog: Aún no hay entradas en el registro.
       contextContent: contenido
       contextBackground: fondo

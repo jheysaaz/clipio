@@ -19,7 +19,12 @@ export default defineConfig({
   testDir: "e2e",
   timeout: 30_000,
   globalTimeout: 5 * 60 * 1_000, // 5 minutes
-  retries: process.env.CI ? 1 : 0,
+  // Retries are disabled in CI as well as locally. A retry hides the flake
+  // instead of fixing it, and this suite runs serially against a real browser
+  // where a flake is always a real bug (AGENTS.md Testing Standards, rule 12).
+  // If a test proves genuinely environment-dependent, fix the wait condition
+  // or gate it on an explicit capability check — do not raise this number.
+  retries: 0,
   workers: 1, // Extensions share a single browser context — run serially
   reporter: process.env.CI
     ? [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]]
