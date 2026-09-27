@@ -23,12 +23,13 @@ import { IDB_CONFIG } from "@/config/constants";
 import type { StorageBackend } from "../types";
 import type { Snippet } from "@/types";
 import { captureError } from "@/lib/sentry";
+import { migrateContentFormat } from "@/lib/content-format-migration";
 
 function normalizeSnippet(snippet: Snippet): Snippet {
-  return {
-    ...snippet,
-    contentFormat: snippet.contentFormat ?? "markdown",
-  };
+  // Converts a legacy HTML body to markdown and strips the retired
+  // contentFormat key. A no-op for every snippet written since.
+  // spec: specs/content-format-migration.spec.md
+  return migrateContentFormat(snippet) as Snippet;
 }
 
 /**

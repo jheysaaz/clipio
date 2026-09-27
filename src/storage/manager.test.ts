@@ -3,7 +3,7 @@
  * spec: specs/storage.spec.md#StorageManager
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { StorageManager } from "./manager";
 import { StorageQuotaError } from "./types";
 import type { Snippet } from "@/types";
@@ -130,7 +130,6 @@ const makeSnippet = (overrides: Partial<Snippet> = {}): Snippet => ({
   label: "Test",
   shortcut: "ts",
   content: "content",
-  contentFormat: "markdown",
   tags: [],
   usageCount: 0,
   createdAt: "2025-01-01T00:00:00Z",
@@ -215,6 +214,95 @@ describe("StorageManager", () => {
       expect(mockLocalBackend.getSnippets).not.toHaveBeenCalled();
       expect(mockStorageMode.setValue).not.toHaveBeenCalled();
       expect(mockStorageModeReason.setValue).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── write-path quota fallback ─────────────────────────────────────────────
+  //
+  // The read path has a quota fallback; so does the write path, and it is a
+  // different shape. A sync WRITE that exceeds the quota must not simply fail:
+  // the manager switches to local, replays the same intent there, and rethrows
+  // so the caller knows the write did not land in the store it asked for.
+  // spec: specs/storage-durability.spec.md
+
+  describe("write-path quota fallback", () => {
+    beforeEach(() => {
+      mockStorageMode.getValue.mockResolvedValue("sync");
+    });
+
+    it("switches to local and replays the save when a sync write hits quota", async () => {
+      mockSyncBackend.upsertSnippets.mockRejectedValue(new StorageQuotaError());
+      mockLocalBackend.upsertSnippets.mockResolvedValue(undefined);
+
+      await expect(manager.saveSnippet(makeSnippet())).rejects.toThrow(
+        StorageQuotaError
+      );
+
+      expect(mockStorageMode.setValue).toHaveBeenCalledWith("local");
+      expect(mockStorageModeReason.setValue).toHaveBeenCalledWith("quota");
+      expect(mockLocalBackend.upsertSnippets).toHaveBeenCalled();
+    });
+
+    it("switches to local and replays the removal when a sync write hits quota", async () => {
+      mockSyncBackend.removeSnippetsById.mockRejectedValue(
+        new StorageQuotaError()
+      );
+      mockLocalBackend.removeSnippetsById.mockResolvedValue(undefined);
+
+      await expect(manager.deleteSnippet("s1")).rejects.toThrow(
+        StorageQuotaError
+      );
+
+      expect(mockStorageMode.setValue).toHaveBeenCalledWith("local");
+      expect(mockStorageModeReason.setValue).toHaveBeenCalledWith("quota");
+      expect(mockLocalBackend.removeSnippetsById).toHaveBeenCalledWith(["s1"]);
+    });
+
+    it("does not switch modes for a non-quota write error", async () => {
+      // Keyed on the error TYPE, never on message text — the same rule the read
+      // path follows. Flipping to local on a transient network error would
+      // strand the user's snippets in the wrong store.
+      mockSyncBackend.upsertSnippets.mockRejectedValue(
+        new Error("QUOTA_BYTES quota exceeded")
+      );
+
+      await expect(manager.saveSnippet(makeSnippet())).rejects.toThrow(
+        "QUOTA_BYTES quota exceeded"
+      );
+
+      expect(mockStorageMode.setValue).not.toHaveBeenCalled();
+      expect(mockLocalBackend.upsertSnippets).not.toHaveBeenCalled();
+    });
+
+    it("does not switch modes for a non-quota removal error", async () => {
+      mockSyncBackend.removeSnippetsById.mockRejectedValue(
+        new Error("Network error")
+      );
+
+      await expect(manager.deleteSnippet("s1")).rejects.toThrow(
+        "Network error"
+      );
+
+      expect(mockStorageMode.setValue).not.toHaveBeenCalled();
+      expect(mockLocalBackend.removeSnippetsById).not.toHaveBeenCalled();
+    });
+
+    it("writes straight to local when the mode is already local", async () => {
+      mockStorageMode.getValue.mockResolvedValue("local");
+
+      await manager.saveSnippet(makeSnippet());
+
+      expect(mockLocalBackend.upsertSnippets).toHaveBeenCalled();
+      expect(mockSyncBackend.upsertSnippets).not.toHaveBeenCalled();
+    });
+
+    it("deletes straight from local when the mode is already local", async () => {
+      mockStorageMode.getValue.mockResolvedValue("local");
+
+      await manager.deleteSnippet("s1");
+
+      expect(mockLocalBackend.removeSnippetsById).toHaveBeenCalledWith(["s1"]);
+      expect(mockSyncBackend.removeSnippetsById).not.toHaveBeenCalled();
     });
   });
 
@@ -454,6 +542,78 @@ describe("StorageManager", () => {
       consoleSpy.mockRestore();
       // Restore debugLog to default resolved for subsequent tests
       vi.mocked(debugLog).mockResolvedValue(undefined);
+    });
+  });
+
+  // ── fire-and-forget handlers ─────────────────────────────────────────────
+  //
+  // Every mutation attaches a `.catch()` to a debugLog call and a shadow-write
+  // to the IndexedDB backup, so neither a failing debug log nor a failing
+  // backup can fail the user's save. These assert the write actually landed,
+  // rather than merely that nothing threw.
+
+  describe("fire-and-forget handlers", () => {
+    let consoleSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      consoleSpy.mockRestore();
+    });
+
+    /** Make debugLog reject, so the `.catch(() => {})` handlers run. */
+    async function breakDebugLog() {
+      const { debugLog } = await import("~/lib/debug");
+      vi.mocked(debugLog).mockRejectedValue(new Error("debug error"));
+    }
+
+    afterEach(async () => {
+      const { debugLog } = await import("~/lib/debug");
+      vi.mocked(debugLog).mockResolvedValue(undefined);
+    });
+
+    it("still saves when the IndexedDB backup write fails", async () => {
+      mockStorageMode.getValue.mockResolvedValue("sync");
+      mockSyncBackend.saveSnippets.mockResolvedValue(undefined);
+      mockIdbBackend.saveSnippets.mockRejectedValue(new Error("idb down"));
+      const snippets = [makeSnippet({ id: "s1" })];
+
+      await manager.bulkSaveSnippets(snippets);
+
+      expect(mockSyncBackend.saveSnippets).toHaveBeenCalledWith(snippets);
+      await new Promise((r) => setTimeout(r, 10));
+      expect(consoleSpy).toHaveBeenCalled();
+    });
+
+    /**
+     * A failing debug log must not affect the mutation.
+     *
+     * There used to be four more tests here, one per log call site, asserting
+     * that a rejected debugLog still let the write through. They were theatre:
+     * the write succeeds whether or not the call site has a `.catch`, so all
+     * four passed with every handler deleted. The swallowed rejection is not
+     * observable from a test either — a floating rejected promise is absorbed
+     * by the runner, so an unhandled-rejection listener never fires.
+     *
+     * The contract now lives where it is actually enforceable: `debugLog`
+     * resolves unconditionally (see debug.test.ts), so no call site needs a
+     * handler. This test keeps the one case that is genuinely observable — a
+     * failing IndexedDB shadow-write, which must be reported rather than
+     * silently dropped.
+     */
+    it("saves even though the debug log rejects", async () => {
+      const { debugLog } = await import("~/lib/debug");
+      vi.mocked(debugLog).mockRejectedValue(new Error("debug error"));
+      mockStorageMode.getValue.mockResolvedValue("sync");
+      mockSyncBackend.saveSnippets.mockResolvedValue(undefined);
+      mockIdbBackend.saveSnippets.mockResolvedValue(undefined);
+      const snippets = [makeSnippet({ id: "s1" })];
+
+      await manager.bulkSaveSnippets(snippets);
+
+      expect(mockSyncBackend.saveSnippets).toHaveBeenCalledWith(snippets);
     });
   });
 

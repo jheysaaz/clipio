@@ -78,6 +78,24 @@ export async function debugLog(
   event: string,
   detail: Record<string, unknown> | string = {}
 ): Promise<void> {
+  // Logging is diagnostic. It must never be able to fail the operation that
+  // logged, so every path below is contained and this promise never rejects.
+  // Callers therefore do not need a `.catch()` on every log call — which is
+  // worth stating, because six of those defensive wrappers were untestable: a
+  // swallowed rejection cannot be observed from a test, so the wrappers could
+  // be deleted with every test still green.
+  try {
+    await writeDebugEntry(context, event, detail);
+  } catch {
+    // Deliberately swallowed. See above.
+  }
+}
+
+async function writeDebugEntry(
+  context: DebugLogEntry["context"],
+  event: string,
+  detail: Record<string, unknown> | string
+): Promise<void> {
   // Initialise the flag cache on first call (one async storage read ever).
   await ensureInitialised();
 

@@ -174,3 +174,45 @@ describe("debugLog", () => {
     expect(JSON.parse(written[0].detail)).toEqual({ count: 3 });
   });
 });
+
+/**
+ * debugLog must never reject.
+ *
+ * This is the contract that lets every call site skip a `.catch()`. Those six
+ * defensive wrappers were untestable — a swallowed rejection is invisible from
+ * a test, so the handlers could be deleted with the whole suite still green —
+ * so the safety was moved here, to the one place that can enforce it.
+ */
+describe("debugLog — never rejects", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    _resetDebugCache();
+    // Debug ON, so the write path is actually reached; the point of these
+    // tests is that the write path cannot reject.
+    mockDebugModeItem.getValue.mockResolvedValue(true);
+    mockDebugLogItem.getValue.mockResolvedValue([]);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    _resetDebugCache();
+  });
+
+  // The two storage paths cannot reject — ensureInitialised() and the entry
+  // write each have their own try/catch — so there is nothing to assert about
+  // them, and a test that "passes" for them would be decorative.
+  //
+  // The one vector that genuinely could reject is JSON.stringify on a detail
+  // object that is circular, which sits outside both of those try/catch blocks.
+  it("resolves when the detail cannot be serialised", async () => {
+    // A circular detail object throws in JSON.stringify. Logging must not be
+    // able to fail whatever called it.
+    const circular: Record<string, unknown> = {};
+    circular["self"] = circular;
+
+    await expect(
+      debugLog("storage", "some:event", circular)
+    ).resolves.toBeUndefined();
+  });
+});

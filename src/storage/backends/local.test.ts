@@ -32,7 +32,6 @@ const makeSnippet = (overrides: Partial<Snippet> = {}): Snippet => ({
   label: "Test",
   shortcut: "ts",
   content: "content",
-  contentFormat: "markdown",
   tags: [],
   usageCount: 0,
   createdAt: "2025-01-01T00:00:00Z",
@@ -68,22 +67,39 @@ describe("LocalBackend", () => {
     });
 
     // spec: specs/storage.spec.md#LocalBackend — legacy snippets without
-    // contentFormat are normalized to "markdown" on read
-    it("normalizes a snippet missing contentFormat to markdown", async () => {
-      const legacy = { ...makeSnippet() } as Partial<Snippet>;
-      delete legacy.contentFormat;
-      mockLocalSnippets.getValue.mockResolvedValue([legacy as Snippet]);
+    // The legacy contentFormat flag is converted away on read.
+    // spec: specs/content-format-migration.spec.md
+    it("converts a legacy HTML body to markdown and drops the flag", async () => {
+      const legacy = {
+        ...makeSnippet(),
+        content: "<strong>Bold</strong> and <em>italic</em>",
+        contentFormat: "html",
+      } as unknown as Snippet;
+      mockLocalSnippets.getValue.mockResolvedValue([legacy]);
       const result = await backend.getSnippets();
-      expect(result).toHaveLength(1);
-      expect(result[0].contentFormat).toBe("markdown");
+      expect(result[0].content).toContain("**Bold**");
+      expect(result[0].content).toContain("_italic_");
+      expect(Object.keys(result[0])).not.toContain("contentFormat");
     });
 
-    it("preserves an explicit contentFormat value", async () => {
-      mockLocalSnippets.getValue.mockResolvedValue([
-        makeSnippet({ contentFormat: "html" }),
-      ]);
+    it("leaves a markdown snippet untouched", async () => {
+      const plain = { ...makeSnippet(), content: "**already** markdown" };
+      mockLocalSnippets.getValue.mockResolvedValue([plain]);
       const result = await backend.getSnippets();
-      expect(result[0].contentFormat).toBe("html");
+      expect(result[0].content).toBe("**already** markdown");
+    });
+
+    it("preserves an unrecognised format value rather than guessing", async () => {
+      // A value this version does not know about must not be silently
+      // rewritten as markdown, or a future format would be destroyed on read.
+      const future = {
+        ...makeSnippet(),
+        content: "body",
+        contentFormat: "some-future-format",
+      } as unknown as Snippet;
+      mockLocalSnippets.getValue.mockResolvedValue([future]);
+      const result = await backend.getSnippets();
+      expect(result[0].content).toBe("body");
     });
   });
 
@@ -106,6 +122,99 @@ describe("LocalBackend", () => {
   });
 
   // ── clear ────────────────────────────────────────────────────────────────
+
+  // ── upsertSnippets / removeSnippetsById ─────────────────────────────────
+  //
+  // The intent-based API from specs/storage-durability.spec.md. These exist so
+  // two extension contexts can each change one snippet without the second
+  // write clobbering the first, which is what a whole-list save did.
+
+  describe("upsertSnippets", () => {
+    it("adds a snippet to an empty store", async () => {
+      mockLocalSnippets.getValue.mockResolvedValue([]);
+      const snippet = makeSnippet({ id: "a" });
+
+      await backend.upsertSnippets([snippet]);
+
+      expect(mockLocalSnippets.setValue).toHaveBeenCalledWith([snippet]);
+    });
+
+    it("keeps a snippet it did not mention", async () => {
+      // The regression this API exists for: a whole-list save would have
+      // dropped the untouched snippet.
+      const existing = makeSnippet({ id: "keep" });
+      mockLocalSnippets.getValue.mockResolvedValue([existing]);
+      const added = makeSnippet({ id: "added" });
+
+      await backend.upsertSnippets([added]);
+
+      expect(mockLocalSnippets.setValue).toHaveBeenCalledWith([
+        existing,
+        added,
+      ]);
+    });
+
+    it("replaces a snippet with the same id rather than duplicating it", async () => {
+      mockLocalSnippets.getValue.mockResolvedValue([
+        makeSnippet({ id: "a", content: "old" }),
+      ]);
+
+      await backend.upsertSnippets([makeSnippet({ id: "a", content: "new" })]);
+
+      const written = mockLocalSnippets.setValue.mock.calls[0]![0] as Snippet[];
+      expect(written).toHaveLength(1);
+      expect(written[0]!.content).toBe("new");
+    });
+
+    it("does not write at all for an empty list", async () => {
+      // A no-op write would still race another context's write.
+      mockLocalSnippets.getValue.mockResolvedValue([makeSnippet()]);
+
+      await backend.upsertSnippets([]);
+
+      expect(mockLocalSnippets.setValue).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("removeSnippetsById", () => {
+    it("removes only the named ids", async () => {
+      const keep = makeSnippet({ id: "keep" });
+      mockLocalSnippets.getValue.mockResolvedValue([
+        keep,
+        makeSnippet({ id: "drop1" }),
+        makeSnippet({ id: "drop2" }),
+      ]);
+
+      await backend.removeSnippetsById(["drop1", "drop2"]);
+
+      expect(mockLocalSnippets.setValue).toHaveBeenCalledWith([keep]);
+    });
+
+    it("leaves the store untouched when no id matches", async () => {
+      const existing = [makeSnippet({ id: "a" }), makeSnippet({ id: "b" })];
+      mockLocalSnippets.getValue.mockResolvedValue(existing);
+
+      await backend.removeSnippetsById(["absent"]);
+
+      expect(mockLocalSnippets.setValue).toHaveBeenCalledWith(existing);
+    });
+
+    it("ignores an id that is not present", async () => {
+      mockLocalSnippets.getValue.mockResolvedValue([makeSnippet({ id: "a" })]);
+
+      await backend.removeSnippetsById(["a", "ghost"]);
+
+      expect(mockLocalSnippets.setValue).toHaveBeenCalledWith([]);
+    });
+
+    it("does not write at all for an empty id list", async () => {
+      mockLocalSnippets.getValue.mockResolvedValue([makeSnippet()]);
+
+      await backend.removeSnippetsById([]);
+
+      expect(mockLocalSnippets.setValue).not.toHaveBeenCalled();
+    });
+  });
 
   describe("clear", () => {
     // spec: MUST call localSnippetsItem.removeValue

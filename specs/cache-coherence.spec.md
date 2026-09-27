@@ -40,7 +40,7 @@ reported in the field as "the shortcuts recover on the popup but inserting them 
 even after reloading".
 
 The related wipe path had the opposite problem: `background.ts` detected ≥2 `snip:` keys
-vanishing (a sign-out) and raised the recovery banner, but never handled keys *appearing*.
+vanishing (a sign-out) and raised the recovery banner, but never handled keys _appearing_.
 
 ## Solution
 
@@ -61,9 +61,31 @@ The background service worker is the only context that both outlives a page and 
 The refresh is best-effort: a failure is logged and reported but never surfaces, and the
 content script simply keeps whatever it had.
 
+### The cache has exactly one writer
+
+A read must **not** repair the cache, even when the cache is empty. This is the tempting fix
+for staleness, and it is wrong:
+
+- A read cannot know whether the cache is newer than the list it just read. If another context
+  saved or deleted snippets in between, a repair overwrites that newer state with an older
+  list.
+- The consequence is a resurrected snippet: the content script expands something the user just
+  deleted. That is more alarming, and harder to diagnose, than a briefly stale cache.
+- An empty cache is **not** the safe case. `[]` is the _correct_ value immediately after the
+  last snippet is deleted, so "the cache is empty, therefore it is stale" is simply false.
+
+So `StorageManager.getSnippets()` is a pure read. `updateContentScriptCache` is the single
+physical writer, and it has four call sites — `forceSetMode`, `persistSnippets`,
+`refreshDerivedStores`, and the background's debounced sync refresh. All four act on a change
+they observed (a mode switch, a save, a delete, a `storage.onChanged` event) rather than on a
+read that raced one; `refreshDerivedStores` re-reads the store _after_ the delete, so it is a
+post-change read. None of them is reachable from a plain read.
+
 ## Acceptance Criteria
 
 - [x] A snippet that arrives in `storage.sync` alone can be inserted on a page.
+- [x] A read never writes the content-script cache, so a read cannot resurrect a deleted
+      snippet or roll back a concurrent save.
 - [x] The popup and the content script agree after a sync-area change.
 - [x] A sync that lands while a tab is open is picked up without a reload.
 - [x] The cache projection itself is observably refreshed, independent of insertion.

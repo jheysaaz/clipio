@@ -18,7 +18,6 @@ const makeSnippet = (overrides: Partial<Snippet> = {}): Snippet => ({
   label: "One",
   shortcut: "/one",
   content: "one",
-  contentFormat: "markdown",
   tags: [],
   usageCount: 0,
   createdAt: "2025-01-01T00:00:00Z",

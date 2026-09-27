@@ -109,7 +109,31 @@ export class StorageManager {
   // Read
   // -------------------------------------------------------------------------
 
+  /**
+   * Read all snippets from the active backend.
+   *
+   * Deliberately does NOT write the content-script cache. A read cannot know
+   * whether the cache is newer than the list it just read: if another context
+   * saved or deleted snippets in between, a repair would overwrite that newer
+   * state with this older list, and the content script would then expand a
+   * snippet the user had just deleted. The empty case is not safe either — `[]`
+   * is the *correct* cache immediately after the last snippet is deleted, so
+   * "the cache is empty, therefore it is stale" is simply false.
+   *
+   * The cache therefore has a single writer, the background worker, which
+   * observes the very storage change that made the cache stale. The legacy
+   * contentFormat migration needs no second writer, which is why its converter
+   * is DOM-free: the background converts a body exactly as a page would, so
+   * the migration cannot depend on a page happening to read first.
+   *
+   * @see specs/cache-coherence.spec.md
+   */
   async getSnippets(): Promise<Snippet[]> {
+    return this.readActive();
+  }
+
+  /** Read from the active backend, applying the quota fallback. */
+  private async readActive(): Promise<Snippet[]> {
     const mode = await this.getMode();
     if (mode === "local") {
       return this.local.getSnippets();
@@ -163,10 +187,10 @@ export class StorageManager {
   private async persistSnippets(snippets: Snippet[]): Promise<void> {
     const mode = await this.getMode();
 
-    debugLog("storage", "persist:write", {
+    void debugLog("storage", "persist:write", {
       backend: mode,
       count: snippets.length,
-    }).catch(() => {});
+    });
 
     if (mode === "local") {
       await this.local.saveSnippets(snippets);
@@ -196,19 +220,12 @@ export class StorageManager {
     });
   }
 
-  /**
-   * The backend for the current mode.
-   *
-   * Note the content script cannot use the manager at all — `storage.sync` is
-   * unreachable from a content script's isolated world — so the manager is a
-   * per-JS-context singleton rather than a true process-wide one. The popup and
-   * the options page are separate contexts with separate instances, which is
-   * exactly why mutations below are intent-based rather than read-modify-write.
-   */
-  private async activeBackend() {
-    const mode = await this.getMode();
-    return mode === "local" ? this.local : this.sync;
-  }
+  // Note the content script cannot use the manager at all — `storage.sync` is
+  // unreachable from a content script's isolated world — so the manager is a
+  // per-JS-context singleton rather than a true process-wide one. The popup and
+  // the options page are separate contexts with separate instances, which is
+  // exactly why the mutations below are intent-based rather than
+  // read-modify-write.
 
   /**
    * Apply an upsert to the active backend, then refresh derived stores.
@@ -217,9 +234,9 @@ export class StorageManager {
    * there is nothing more to do for the primary.
    */
   private async applyUpsert(snippets: Snippet[]): Promise<void> {
-    debugLog("storage", "snippet:upsert", {
+    void debugLog("storage", "snippet:upsert", {
       count: snippets.length,
-    }).catch(() => {});
+    });
 
     const mode = await this.getMode();
     if (mode === "local") {
@@ -246,9 +263,7 @@ export class StorageManager {
 
   /** Apply a by-id removal to the active backend, then refresh derived stores. */
   private async applyRemoval(ids: string[]): Promise<void> {
-    debugLog("storage", "snippet:remove", { count: ids.length }).catch(
-      () => {}
-    );
+    void debugLog("storage", "snippet:remove", { count: ids.length });
 
     const mode = await this.getMode();
     if (mode === "local") {
@@ -301,18 +316,18 @@ export class StorageManager {
    * another extension context created in the meantime is not clobbered.
    */
   async saveSnippet(snippet: Snippet): Promise<void> {
-    debugLog("storage", "snippet:save", {
+    void debugLog("storage", "snippet:save", {
       id: snippet.id,
       shortcut: snippet.shortcut,
-    }).catch(() => {});
+    });
     await this.applyUpsert([snippet]);
   }
 
   async updateSnippet(updated: Snippet): Promise<void> {
-    debugLog("storage", "snippet:update", {
+    void debugLog("storage", "snippet:update", {
       id: updated.id,
       shortcut: updated.shortcut,
-    }).catch(() => {});
+    });
     await this.applyUpsert([updated]);
   }
 
@@ -326,7 +341,7 @@ export class StorageManager {
    * one context at a time.
    */
   async deleteSnippet(id: string): Promise<void> {
-    debugLog("storage", "snippet:delete", { id }).catch(() => {});
+    void debugLog("storage", "snippet:delete", { id });
     await this.applyRemoval([id]);
   }
 
@@ -336,9 +351,7 @@ export class StorageManager {
    * duplicates with the user.
    */
   async bulkSaveSnippets(snippets: Snippet[]): Promise<void> {
-    debugLog("storage", "snippet:bulkSave", { count: snippets.length }).catch(
-      () => {}
-    );
+    void debugLog("storage", "snippet:bulkSave", { count: snippets.length });
     await this.persistSnippets(snippets);
   }
 
@@ -348,7 +361,7 @@ export class StorageManager {
    * without affecting the primary sync/local storage.
    */
   async clearIDBBackup(): Promise<void> {
-    debugLog("storage", "idb:clear", {}).catch(() => {});
+    void debugLog("storage", "idb:clear", {});
     await this.idb.clear();
   }
 
