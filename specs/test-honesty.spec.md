@@ -56,15 +56,27 @@ maxWidth)` into exported functions, use `clampWidth` in both handlers (removing 
 
 ## Acceptance Criteria
 
-- [ ] `ResizableMediaWrapper`'s clamp is implemented once, not twice.
-- [ ] Its tests import the component module and fail if the clamp is broken.
-- [ ] `getScrollParentWidth` is tested against a real DOM.
-- [ ] No remaining test asserts on a value it constructed itself.
-- [x] No remaining e2e test can be silently skipped by a failed precondition.
-- [x] The one test that had to stop claiming more than it verifies says so in place, and the
-      gap is recorded below rather than papered over with a sleep.
-- [ ] Every rewritten test is mutation-sensitive — with one honest exception, below.
-- [ ] The suite's pass count may **go down**. That is the point, and it is not a regression.
+- [x] `ResizableMediaWrapper`'s clamp is implemented once, not twice.
+- [x] Its tests import the module that holds the clamp (`mediaResize.ts` — the component
+      itself imports `#i18n`, a WXT virtual module with no test alias, so it cannot be imported by a
+      unit test at all) and fail if the clamp is broken.
+- [x] `getScrollParentWidth` is tested against a real DOM.
+- [x] No remaining test in the files this wave touched asserts on a value it constructed
+      itself. The two exceptions found in `items.test.ts` were deleted rather than kept: they drove
+      the file's own `vi.mock`, so only mutating the mock could fail them.
+- [x] No e2e test can be silently skipped by a failed precondition. Three more guards of this
+      shape were found by review and removed (the feedback form in `options.spec.ts`, which filled
+      nothing if the fields were absent), along with a four-way `||` disjunction in
+      `popup.spec.ts` that was true of essentially any options page.
+- [x] No test claims less than it verifies. The Clipio import test originally stopped at
+      "wizard parsed the file", on a stated belief that the footer's Next button could not be
+      targeted at all. Review proved that belief false — all four selectors resolve — so the test
+      now drives the wizard through and asserts the imported snippets reached `storage.sync`.
+- [x] Every rewritten test is mutation-sensitive, with the two documented exceptions below
+      (the `debugLog` watcher's double guard, and the `unused`-key check, which is enforced by CI
+      rather than by a unit test).
+- [x] The suite's pass count went **down** (1373 → 1368 in `c339b04`) before rising again as
+      real tests were added. That is the point, and it is not a regression.
 
 ## A test that is robust to mutation for a legitimate reason
 
@@ -80,44 +92,46 @@ not claim to cover the `_watching` flag, because they do not.
 
 ## What this wave found by removing the guards
 
-Removing the vacuous guards exposed two things that had been invisible, both of which the
-green suite was actively hiding. That is the argument for doing this work.
+Removing the vacuous guards exposed two things the green suite was actively hiding. That is the
+argument for the work.
 
 ### 1. The Clipio import e2e never imported anything
 
-`options.spec.ts` "imports snippets from Clipio JSON file" looked for a button named
-`/import|confirm/i` and wrapped the click in `if (visible)`. The wizard is four steps and its
-footer button on step 1 is **"Next"**, so the selector matched nothing, the guard was always
-false, and the import was never performed. The test then asserted on whatever the page showed
-and passed.
+It looked for a button named `/import|confirm/i` and wrapped the click in `if (visible)`. The
+wizard is four steps and its footer button on step 1 is **"Next"**, so the selector matched
+nothing, the guard was always false, and the import was never performed. The test then asserted on
+whatever the page showed and passed.
 
-The guard is removed. The test now asserts what could be verified — the wizard opens and parses
-a Clipio export, shown by its own "Found 2 snippets" line — and explicitly documents that the
-import step is **not** verified.
+It now drives the wizard through and asserts the imported snippets reached `storage.sync`. Steps 2
+and 3 are skipped by the wizard itself when there are no unsupported placeholders or conflicts, so
+from a clean export it is one **Next** click and one **Import N snippets** click.
 
-It is not verified because the footer's primary button could not be targeted reliably: its
-rendered text is "Next" (confirmed by dumping the dialog's buttons), yet none of
-`getByRole("button", { name: "Next" })`, `filter({ hasText })`, `locator("button", { hasText })`,
-or positional selection resolved to it. Rather than hide that behind a bare `waitForTimeout`
-and a click on whatever happened to be last, the gap is left visible.
+Verified sensitive: not clicking the import button fails it with "imported snippets never reached
+storage".
 
-**The fix is small and belongs to a follow-up:** give the wizard's primary button a stable
-`data-testid`, exactly as `ImagesSection`'s rows got in this wave. With that handle the import
-path is testable in a few lines.
+**A note on how this was got wrong first.** An intermediate revision of this spec claimed the
+footer's Next button "could not be targeted by any of role+name, `filter({ hasText })`,
+`locator({ hasText })` or position, despite its text being exactly 'Next'", and left the import
+unverified on that basis, with a `data-testid` proposed as the fix. That was false, and it was
+false because the failure had been diagnosed once — a stale assumption about the wizard's labels —
+and then never re-tested. Every one of those selectors resolves. The rule this earns: a claim
+about _why_ something is hard is a claim like any other, and it gets the same verification as the
+fix.
 
 ### 2. The width-suffixed image test never opened the Images section
 
-`image-gif.spec.ts` loaded `options.html#images` and asserted the page text contained
-"image". The hash does not route — the page came up on the **Dashboard**, and the only "image"
-on screen was the sidebar's own "Images" link. The test passed without ever opening the section
-it claimed to test.
+`image-gif.spec.ts` loaded `options.html#images` and asserted the page text contained "image". The
+hash does not route — there is no hash routing in the options app at all; the page came up on the
+**Dashboard**, where the only "image" on screen is the sidebar's own "Images" link, and the string
+occurs exactly once on the page. The test passed without ever opening the section it claimed to
+test.
 
 It now clicks `options-nav-images`, waits for `aria-current="page"`, and asserts against the
 specific image's row via a new `image-row-<id>` testid, added to **both** view modes (the first
 attempt put it only on the grid row, and the default view is list, so the test still failed).
 
-Verified sensitive: removing the width-suffix support from `ImagesSection`'s reference regex
-(`\{\{image:([a-f0-9-]+)\}\}`) makes it fail with the row reading "Not used in any snippets".
+Verified sensitive at the e2e level: removing the width-suffix support from `ImagesSection`'s
+reference regex makes it fail with the row reading "Not used in any snippets".
 
 ## Edge Cases
 

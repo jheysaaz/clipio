@@ -18,6 +18,7 @@ import AxeBuilder from "@axe-core/playwright";
 import type { BrowserContext, Page } from "@playwright/test";
 import { test, expect, type StorageHelper } from "./fixtures.js";
 import { makeSnippets } from "./helpers/snippets.js";
+import { readSyncSnippets } from "./helpers/storage.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -164,49 +165,68 @@ test.describe("Options Page", () => {
     await fileInput.setInputFiles(tmpPath);
     await optionsPage.waitForTimeout(500);
 
-    // Drive the wizard to its final step.
-    //
-    // This is what the `if (visible)` guard was hiding. The old selector looked
-    // for a button named /import|confirm/i, but on the step the wizard was
-    // actually on, the footer button is "Next" — so the selector matched
-    // nothing, the guard was always false, and the import was **never
-    // performed**. The test then asserted on whatever the page happened to show
-    // and passed. Four steps: upload -> unsupported placeholders -> review ->
-    // import.
-    // ── KNOWN GAP, deliberately left visible ──────────────────────────────
-    //
-    // This test previously wrapped its confirm click in
-    // `if (await confirmBtn.isVisible())`. That guard was always false: the
-    // button it looked for was named /import|confirm/i, but on the step the
-    // wizard is actually on, the footer button is "Next". So the import was
-    // **never performed**, and the test then asserted on whatever the page
-    // happened to show and passed.
-    //
-    // The guard is gone, because a guard that silently skips the one action a
-    // test exists to perform is worse than no test. What is asserted below is
-    // what could be verified: the wizard opens and parses a Clipio export.
-    //
-    // What is NOT verified, and no longer pretends to be: clicking through to
-    // step 4 and completing the import. The footer's primary button could not be
-    // targeted reliably — its text renders as "Next" (confirmed by dumping the
-    // dialog) yet neither `getByRole("button", { name: "Next" })`,
-    // `filter({ hasText })` nor positional selection resolved to it. Rather than
-    // paper over that with a bare `waitForTimeout` and a click on whatever
-    // happened to be last, the import path is left untested and recorded here
-    // and in specs/test-honesty.spec.md.
-    //
-    // Fixing it properly means adding a stable testid to the wizard's primary
-    // button, the same treatment ImagesSection's rows got earlier in this wave.
-    // ───────────────────────────────────────────────────────────────────────
-    const wizard = optionsPage.locator('[role="dialog"]');
+    await fileInput.setInputFiles(tmpPath);
 
-    // Real assertions: the wizard opened, the file input is there, and the
-    // uploaded Clipio export was actually parsed — "Found 2 snippets" only
-    // appears once parsing succeeded.
-    await expect(wizard).toContainText(/Found \d+ snippets?/, {
-      timeout: 10_000,
-    });
-    await expect(wizard).toContainText("Clipio");
+    // The temp file is cleaned up in a finally. Removing the vacuous guard also
+    // removed the `unlinkSync` that used to follow it, so every run was leaving a
+    // file behind in test-results/ — while the two sibling tests in this file
+    // still cleaned up theirs.
+    try {
+      // Drive the wizard through and complete the import.
+      //
+      // This is what the `if (visible)` guard was hiding. The old selector
+      // looked for a button named /import|confirm/i, but the wizard's footer
+      // button on the first step is "Next" — so the selector matched nothing, the
+      // guard was always false, and **the import was never performed**. The test
+      // then asserted on whatever the page happened to show and passed.
+      //
+      // A previous revision of this comment claimed the footer button could not
+      // be targeted by any selector, and left the import unverified on that
+      // basis. That was wrong: `getByRole("button", { name: "Next" })` resolves
+      // fine. The original failure was a stale assumption about the wizard's
+      // labels, not a targeting problem.
+      const wizard = optionsPage.locator('[role="dialog"]');
+
+      // "Found 2 snippets" only appears once the upload has been parsed, so it
+      // is the readiness signal — real information, not a sleep.
+      await expect(wizard).toContainText(/Found \d+ snippets?/, {
+        timeout: 10_000,
+      });
+      await expect(wizard).toContainText("Clipio");
+
+      // Steps 2 (unsupported placeholders) and 3 (conflicts) are skipped by the
+      // wizard itself when there are none, so from a clean export one click
+      // reaches the final step.
+      const nextBtn = wizard.getByRole("button", { name: "Next" });
+      await expect(nextBtn).toBeEnabled();
+      await nextBtn.click();
+
+      const importBtn = wizard.getByRole("button", {
+        name: /Import \d+ snippets?/,
+      });
+      await expect(importBtn).toBeEnabled();
+      await importBtn.click();
+
+      // The decisive assertion: the snippets reached storage. Reading the snip:
+      // keys proves the import landed, rather than inferring it from the UI
+      // having looked right.
+      await expect
+        .poll(
+          async () => {
+            const ids = (await readSyncSnippets(optionsPage)).map((s) => s.id);
+            return (
+              ids.includes("import-test-0") && ids.includes("import-test-1")
+            );
+          },
+          {
+            timeout: 10_000,
+            message: "imported snippets never reached storage",
+          }
+        )
+        .toBe(true);
+    } finally {
+      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    }
   });
 
   test("imports from TextBlaze format", async ({ optionsPage }) => {

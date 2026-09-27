@@ -17,11 +17,11 @@ delivered to isolated-world listeners with `isTrusted === false`.
 
 The result is that the page can drive the extension's own legitimate code paths:
 
-1. `registerRuntimeListeners` (``registerRuntimeListeners``) registers the capture-phase listeners.
-2. `handleKeyDown` (``handleKeyDown``) matches a shortcut on `Space`/`Tab` and calls
+1. `registerRuntimeListeners` (`registerRuntimeListeners`) registers the capture-phase listeners.
+2. `handleKeyDown` (`handleKeyDown`) matches a shortcut on `Space`/`Tab` and calls
    `expandSnippet` with no check on event provenance.
 3. `expandSnippet` → `processSnippetContent` (`content-helpers.ts:181`) → when the snippet
-   contains `{{clipboard}}`, `readClipboardText()` (``readClipboardText``) runs
+   contains `{{clipboard}}`, `readClipboardText()` (`readClipboardText`) runs
    `document.execCommand("paste")` into a hidden textarea in the shared DOM.
 4. `expandSnippet` writes the result into the event target, which the page owns.
 

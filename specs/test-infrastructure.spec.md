@@ -56,7 +56,9 @@ matter:
       assumed, because this wave's original premise was that privacy coverage was missing.
       Verified: explicit "preserves non-sensitive keys" tests exist, and deleting `"content"`
       from the redaction list fails 3 tests.
-- [ ] Redaction is asserted in both directions, including the negative cases.
+- [x] Redaction is asserted in both directions, including the negative cases — by the
+      existing `sentry-scrub.test.ts`, verified here rather than duplicated. See the rejected-premise
+      section above for why no new tests were written for `sentry-content.ts`.
 - [x] Each new test is mutation-sensitive: breaking a key, a default, or a redaction rule makes
       the suite fail. Verified, not assumed. Four mutations run against `items.ts`, each caught by
       2–3 tests: renaming `local:themeMode`, flipping the `storageMode` default to `"local"`,
@@ -138,14 +140,14 @@ a clock into the fetch path.
 
 ## Wave 4.3 — the disaster-recovery path has no tests
 
-`src/storage/backends/indexeddb.ts` (265 lines) is excluded from coverage in `vitest.config.ts`
+`src/storage/backends/indexeddb.ts` (258 lines) is excluded from coverage in `vitest.config.ts`
 with the written admission _"coverage debt: unit tests not yet written"_. The exclusion is
 honest, which is why it is allowed to exist at all — but it is the **disaster-recovery path**.
 
 It is the layer that exists for the worst day of a user's life: they sign out of their browser
 account, `storage.sync` is wiped, and this database is the only thing that can give their
-snippets back. It has three schema migrations, an async content-hash backfill, and an
-asymmetric error contract, and not one test exercises any of it.
+snippets back. It has a three-version schema (v1 snippets store, v2 media store, v3 hash index — so
+two upgrades), an async content-hash backfill, and an asymmetric error contract, and not one test exercises any of it.
 
 The asymmetry is the part most likely to rot silently, because it looks like a typo:
 
@@ -187,7 +189,9 @@ Then remove the coverage exclusion, so the module is held to the same bar as eve
 - [x] `getSnippets` migrates a legacy `contentFormat: "html"` body, matching the other backends.
 - [x] The schema reaches v3 with all stores and the hash index present.
 - [x] The coverage exclusion for this file is **removed** and `pnpm test:coverage` still exits 0.
-      The module now reports 82% statements / 89% lines and is held to the same bar as everything else.
+      The module is now measured rather than excluded (80.8% statements / 89.1% lines). Note there is
+      no per-module threshold for it in `vitest.config.ts`, so those numbers are weighed against the
+      75% aggregate rather than a stricter per-file bar — "held to the same bar" would overstate it.
 - [x] Every test is mutation-sensitive. Five mutations run against the backend, each caught:
       removing the `store.clear()` (2 tests), removing the hash index (1), making
       `upsertSnippets` swallow (1), making `removeSnippetsById` swallow (1), and making

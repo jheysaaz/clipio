@@ -214,21 +214,28 @@ const unusedKeys = [...enKeys]
   .filter((k) => !usedKeys.has(k) && !isPluralArm(k) && !MANIFEST_KEYS.has(k))
   .sort();
 
-if (unusedKeys.length > 0) {
-  console.warn(
-    `\n⚠️  ${unusedKeys.length} key(s) in en.yml are never read by the code. Not an error —\n` +
-      "   a key may be reserved for in-progress work — but each one is a translation\n" +
-      "   someone maintains for nothing:"
+// A key reserved for work still in progress belongs here, so the exemption is
+// explicit and reviewable rather than a warning everybody learns to ignore.
+const RESERVED = new Set([]);
+
+const deadKeys = unusedKeys.filter((k) => !RESERVED.has(k));
+
+if (deadKeys.length > 0) {
+  console.error(
+    `\n❌ ${deadKeys.length} key(s) in en.yml are never read by the code. Each one is a\n` +
+      "   translation someone maintains for nothing. Either the code should call\n" +
+      "   it, or it should be deleted from en.yml AND every translation.\n" +
+      "   (A key genuinely reserved for in-progress work goes in RESERVED, in\n" +
+      "   scripts/check-locales.mjs, so the exemption is reviewable.)"
   );
-  unusedKeys.forEach((key) => console.warn(`   - ${key}`));
+  deadKeys.forEach((key) => console.error(`   - ${key}`));
+  passed = false;
 }
 
 if (passed) {
   console.log(
     `✅ All ${enKeys.size} keys from en.yml are present in ${TRANSLATIONS.join(", ")}` +
-      (unusedKeys.length
-        ? ` (${unusedKeys.length} unused — see the warning above)`
-        : " · no unused keys")
+      " · every key is read by the code"
   );
 } else {
   process.exit(1);

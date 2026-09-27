@@ -31,7 +31,7 @@ attributes and nothing else:
 | Attribute               | Discloses                   |
 | ----------------------- | --------------------------- |
 | `data-preview-visible`  | whether the preview is open |
-| `data-preview-count`    | how many rows there are     |
+| `data-preview-rows`     | how many rows there are     |
 | `data-preview-selected` | which row is highlighted    |
 
 Never a label, shortcut, or content. `specs/preview-encapsulation.spec.md` covers the

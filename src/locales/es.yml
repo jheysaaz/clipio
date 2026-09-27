@@ -115,7 +115,7 @@ options:
     optionsNav: Navegación de opciones
     previewToggle: Activar vista previa
     feedbackButton: Comentarios
-    typingTimeout: Tiempo de escritura
+    typingTimeout: Retardo antes de expandir
   nav:
     appearance: Apariencia
     images: Imágenes
