@@ -255,7 +255,6 @@ export default function SnippetDetailView({
           ref={editorRef}
           value={editedContent}
           onChange={setEditedContent}
-          contentFormat={snippet.contentFormat}
           placeholder={i18n.t("snippetDetail.editorPlaceholder")}
           onCopyError={() =>
             setActionError(i18n.t("snippetDetail.errors.failedToCopy"))

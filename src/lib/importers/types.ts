@@ -3,7 +3,6 @@
  */
 
 import type { Snippet } from "@/types";
-import type { ContentFormat } from "@/types";
 
 /** Supported import formats. */
 export type FormatId = "clipio" | "textblaze" | "powertext";
@@ -20,8 +19,6 @@ export interface ParsedSnippet {
   shortcut: string;
   /** Clipio markdown content — ready to store. */
   content: string;
-  /** Explicit content format for the editor. */
-  contentFormat: ContentFormat;
   tags: string[];
   /** Any placeholder tokens from the source format that we couldn't map. */
   unsupportedPlaceholders: string[];

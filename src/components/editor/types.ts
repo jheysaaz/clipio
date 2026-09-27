@@ -1,5 +1,4 @@
 import type { TElement, TRange } from "platejs";
-import type { ContentFormat } from "@/types";
 
 // Placeholder type constants
 export const CLIPBOARD_PLACEHOLDER = "clipboard_placeholder";
@@ -29,7 +28,6 @@ export type DateFormatId = (typeof DATE_FORMATS)[number]["id"];
 export interface RichTextEditorProps {
   value: string;
   onChange: (value: string) => void;
-  contentFormat?: ContentFormat;
   placeholder?: string;
   className?: string;
   /** Called when a cmd+c copy initiated from within the editor fails. */

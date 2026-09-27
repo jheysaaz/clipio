@@ -289,9 +289,13 @@ describe("TextBlazeParser.parse", () => {
   // Negative path: HTML conversion failure falls back to the text field
   // (htmlSnippetToMarkdown returns null → parseTBSnippet uses text).
   it("falls back to text field when HTML conversion throws", async () => {
+    // Spy on htmlToMarkdown, which is the function the parser calls. Spying on
+    // deserializeContent instead would not work: it is invoked from inside
+    // serialization.ts, so the call does not go through the module namespace
+    // and the spy would never fire.
     const serialization = await import("@/components/editor/serialization");
     const spy = vi
-      .spyOn(serialization, "deserializeContent")
+      .spyOn(serialization, "htmlToMarkdown")
       .mockImplementation(() => {
         throw new Error("parser exploded");
       });
@@ -320,9 +324,13 @@ describe("TextBlazeParser.parse", () => {
   // Negative path: HTML with no text fallback still yields a snippet
   // (content becomes empty string via replaceSupportedPlaceholders("")).
   it("still returns a snippet when HTML fails and text is missing", async () => {
+    // Spy on htmlToMarkdown, which is the function the parser calls. Spying on
+    // deserializeContent instead would not work: it is invoked from inside
+    // serialization.ts, so the call does not go through the module namespace
+    // and the spy would never fire.
     const serialization = await import("@/components/editor/serialization");
     const spy = vi
-      .spyOn(serialization, "deserializeContent")
+      .spyOn(serialization, "htmlToMarkdown")
       .mockImplementation(() => {
         throw new Error("parser exploded");
       });

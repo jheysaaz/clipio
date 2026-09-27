@@ -7,6 +7,8 @@ import { describe, it, expect } from "vitest";
 import {
   serializeToMarkdown,
   deserializeContent,
+  deserializeHtmlToNodes,
+  htmlToMarkdown,
   markdownToHtml,
   markdownToPlainText,
 } from "./serialization";
@@ -210,16 +212,15 @@ describe("deserializeContent", () => {
 
   // spec: delegates to HTML deserializer when content has HTML tags
   it("delegates to HTML deserializer for HTML content", () => {
-    const result = deserializeContent("<p>Hello</p>", "html");
+    const result = deserializeHtmlToNodes("<p>Hello</p>");
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe("p");
   });
 
   // spec: HTML <a> tags → LINK_ELEMENT
   it("deserializes HTML <a> tags as link elements", () => {
-    const result = deserializeContent(
-      '<p><a href="https://example.com">Click</a></p>',
-      "html"
+    const result = deserializeHtmlToNodes(
+      '<p><a href="https://example.com">Click</a></p>'
     );
     expect(result).toHaveLength(1);
     const link = result[0].children[0] as TElement & { url: string };
@@ -229,9 +230,8 @@ describe("deserializeContent", () => {
 
   // spec: HTML <a> with empty content → uses textContent fallback
   it("deserializes HTML <a> with no children", () => {
-    const result = deserializeContent(
-      '<p><a href="https://example.com"></a></p>',
-      "html"
+    const result = deserializeHtmlToNodes(
+      '<p><a href="https://example.com"></a></p>'
     );
     expect(result).toHaveLength(1);
     const link = result[0].children[0] as TElement & { url: string };
@@ -240,7 +240,7 @@ describe("deserializeContent", () => {
 
   // spec: HTML <br> → newline text node
   it("deserializes HTML <br> as newline text", () => {
-    const result = deserializeContent("<p>Line one<br>Line two</p>", "html");
+    const result = deserializeHtmlToNodes("<p>Line one<br>Line two</p>");
     expect(result).toHaveLength(1);
     const texts = result[0].children.map((c) =>
       "text" in c ? (c as TText).text : ""
@@ -250,10 +250,7 @@ describe("deserializeContent", () => {
 
   // spec: HTML <span> → recurse into children
   it("deserializes HTML <span> by recursing into children", () => {
-    const result = deserializeContent(
-      "<p><span>wrapped text</span></p>",
-      "html"
-    );
+    const result = deserializeHtmlToNodes("<p><span>wrapped text</span></p>");
     expect(result).toHaveLength(1);
     const text = result[0].children[0] as TText;
     expect(text.text).toBe("wrapped text");
@@ -261,12 +258,12 @@ describe("deserializeContent", () => {
 
   // spec: HTML inline formatting elements: <strong>, <em>, <code>, etc.
   it("deserializes HTML <strong> as bold mark", () => {
-    const result = deserializeContent("<p><strong>bold</strong></p>", "html");
+    const result = deserializeHtmlToNodes("<p><strong>bold</strong></p>");
     expect(result[0].children[0]).toMatchObject({ text: "bold", bold: true });
   });
 
   it("deserializes HTML <em> as italic mark", () => {
-    const result = deserializeContent("<p><em>italic</em></p>", "html");
+    const result = deserializeHtmlToNodes("<p><em>italic</em></p>");
     expect(result[0].children[0]).toMatchObject({
       text: "italic",
       italic: true,
@@ -274,12 +271,12 @@ describe("deserializeContent", () => {
   });
 
   it("deserializes HTML <code> as code mark", () => {
-    const result = deserializeContent("<p><code>code</code></p>", "html");
+    const result = deserializeHtmlToNodes("<p><code>code</code></p>");
     expect(result[0].children[0]).toMatchObject({ text: "code", code: true });
   });
 
   it("deserializes HTML <s> as strikethrough mark", () => {
-    const result = deserializeContent("<p><s>struck</s></p>", "html");
+    const result = deserializeHtmlToNodes("<p><s>struck</s></p>");
     expect(result[0].children[0]).toMatchObject({
       text: "struck",
       strikethrough: true,
@@ -288,9 +285,8 @@ describe("deserializeContent", () => {
 
   // spec: HTML nested inline marks: <strong><em>text</em></strong>
   it("deserializes nested HTML inline marks", () => {
-    const result = deserializeContent(
-      "<p><strong><em>bold italic</em></strong></p>",
-      "html"
+    const result = deserializeHtmlToNodes(
+      "<p><strong><em>bold italic</em></strong></p>"
     );
     expect(result[0].children[0]).toMatchObject({
       text: "bold italic",
@@ -301,7 +297,7 @@ describe("deserializeContent", () => {
 
   // spec: HTML <del> as strikethrough
   it("deserializes HTML <del> as strikethrough mark", () => {
-    const result = deserializeContent("<p><del>deleted</del></p>", "html");
+    const result = deserializeHtmlToNodes("<p><del>deleted</del></p>");
     expect(result[0].children[0]).toMatchObject({
       text: "deleted",
       strikethrough: true,
@@ -310,13 +306,13 @@ describe("deserializeContent", () => {
 
   // spec: HTML <b> as bold (alias for <strong>)
   it("deserializes HTML <b> as bold mark", () => {
-    const result = deserializeContent("<p><b>bold</b></p>", "html");
+    const result = deserializeHtmlToNodes("<p><b>bold</b></p>");
     expect(result[0].children[0]).toMatchObject({ text: "bold", bold: true });
   });
 
   // spec: HTML <i> as italic (alias for <em>)
   it("deserializes HTML <i> as italic mark", () => {
-    const result = deserializeContent("<p><i>italic</i></p>", "html");
+    const result = deserializeHtmlToNodes("<p><i>italic</i></p>");
     expect(result[0].children[0]).toMatchObject({
       text: "italic",
       italic: true,
@@ -325,7 +321,7 @@ describe("deserializeContent", () => {
 
   // spec: HTML <u> as underline
   it("deserializes HTML <u> inside a paragraph as underline mark", () => {
-    const result = deserializeContent("<p><u>underlined</u></p>", "html");
+    const result = deserializeHtmlToNodes("<p><u>underlined</u></p>");
     expect(result[0].children[0]).toMatchObject({
       text: "underlined",
       underline: true,
@@ -334,10 +330,7 @@ describe("deserializeContent", () => {
 
   // spec: HTML unknown elements → recurse into children
   it("deserializes unknown HTML elements by recursing into children", () => {
-    const result = deserializeContent(
-      "<p><section>content</section></p>",
-      "html"
-    );
+    const result = deserializeHtmlToNodes("<p><section>content</section></p>");
     // The content should still appear
     const allText = result
       .flatMap((el) =>
@@ -349,7 +342,7 @@ describe("deserializeContent", () => {
 
   // spec: HTML <div> → paragraph
   it("deserializes HTML <div> as paragraph", () => {
-    const result = deserializeContent("<div>div content</div>", "html");
+    const result = deserializeHtmlToNodes("<div>div content</div>");
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe("p");
   });
@@ -459,7 +452,7 @@ describe("deserializeContent (markdown path)", () => {
 
   // spec: underline
   it("deserializes <u>text</u> as underline text node", () => {
-    const result = deserializeContent("<u>underlined</u>", "html");
+    const result = deserializeHtmlToNodes("<u>underlined</u>");
     expect(result[0].children[0]).toMatchObject({
       text: "underlined",
       underline: true,
@@ -796,5 +789,36 @@ describe("markdownToPlainText", () => {
   // spec: MUST convert {{gif:<id>}} → [GIF]
   it("converts gif placeholder to [GIF]", () => {
     expect(markdownToPlainText("{{gif:abc123XYZ}}")).toBe("[GIF]");
+  });
+});
+
+/**
+ * htmlToMarkdown is the editor-side converter used by the TextBlaze and Power
+ * Text importers. It is DOM-based, so it only runs in a page — the legacy
+ * contentFormat migration deliberately uses a different, DOM-free converter so
+ * it can also run in the MV3 service worker. See specs/content-format-migration.spec.md
+ */
+describe("htmlToMarkdown", () => {
+  it("returns empty for empty input", () => {
+    expect(htmlToMarkdown("")).toBe("");
+  });
+
+  it("returns empty for whitespace-only input", () => {
+    expect(htmlToMarkdown("   ")).toBe("");
+  });
+
+  it("converts a strong tag to bold markdown", () => {
+    expect(htmlToMarkdown("<strong>x</strong>")).toContain("**x**");
+  });
+
+  it("passes plain text through", () => {
+    expect(htmlToMarkdown("hello")).toContain("hello");
+  });
+
+  it("does not execute script content — only text is extracted", () => {
+    // DOMParser produces an inert document, so nothing runs; the script's text
+    // is what survives, not its behaviour.
+    const out = htmlToMarkdown("<script>alert(1)</script>");
+    expect(out).not.toContain("<script");
   });
 });

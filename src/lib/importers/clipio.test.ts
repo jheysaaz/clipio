@@ -20,7 +20,6 @@ const makeSnippet = (overrides = {}) => ({
   label: "Test Snippet",
   shortcut: "ts",
   content: "Test content",
-  contentFormat: "markdown",
   tags: ["tag1"],
   createdAt: "2025-01-01T00:00:00Z",
   updatedAt: "2025-01-01T00:00:00Z",
@@ -68,6 +67,60 @@ describe("ClipioParser.canParse", () => {
 
   it("returns false when first element is missing content", () => {
     expect(ClipioParser.canParse([{ id: "x", shortcut: "hi" }])).toBe(false);
+  });
+});
+
+/**
+ * The Clipio format is the only importer whose payload can carry the retired
+ * `contentFormat: "html"` flag — a 1.x export does. It is also the only path
+ * where the flag is the sole record that the body is HTML, so if the flag is
+ * stripped without converting, the body is stored as markdown for good and
+ * inserts as visible escaped text with no way back.
+ * spec: specs/content-format-migration.spec.md
+ */
+describe("ClipioParser.parse — legacy contentFormat", () => {
+  it("converts a legacy html body to markdown", () => {
+    const parsed = ClipioParser.parse([
+      {
+        ...makeSnippet({
+          id: "legacy",
+          content: "<p>Line one</p><p>Line two</p>",
+        }),
+        contentFormat: "html",
+      },
+    ]);
+
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]!.content).toBe("Line one\n\nLine two");
+  });
+
+  it("does not leave raw markup in the parsed body", () => {
+    const parsed = ClipioParser.parse([
+      {
+        ...makeSnippet({ content: "<p><strong>Bold</strong> body</p>" }),
+        contentFormat: "html",
+      },
+    ]);
+
+    expect(parsed[0]!.content).not.toContain("<p>");
+    expect(parsed[0]!.content).toBe("**Bold** body");
+  });
+
+  it("leaves a markdown body untouched", () => {
+    const parsed = ClipioParser.parse([
+      {
+        ...makeSnippet({ content: "**bold** body" }),
+        contentFormat: "markdown",
+      },
+    ]);
+
+    expect(parsed[0]!.content).toBe("**bold** body");
+  });
+
+  it("leaves a body with no flag untouched", () => {
+    const parsed = ClipioParser.parse([makeSnippet({ content: "plain body" })]);
+
+    expect(parsed[0]!.content).toBe("plain body");
   });
 });
 

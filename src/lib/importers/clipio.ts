@@ -10,6 +10,7 @@ import type { Snippet } from "@/types";
 import type { MediaMetadata } from "@/storage/backends/media";
 import { unzipSync } from "fflate";
 import { isValidImportedSnippet } from "@/lib/snippet-schema";
+import { migrateContentFormat } from "@/lib/content-format-migration";
 import { MEDIA_LIMITS } from "@/config/constants";
 
 interface ClipioEnvelope {
@@ -35,13 +36,22 @@ export interface ClipioZipImportResult {
  */
 const isValidSnippet = isValidImportedSnippet;
 
-function snippetToParsed(snippet: Snippet): ParsedSnippet {
+function snippetToParsed(raw: Snippet): ParsedSnippet {
+  // This function, not the shared validator, is what turns a Clipio record into
+  // a snippet: `parse` filters with a boolean predicate and then maps the RAW
+  // records, so nothing downstream has normalised them. A 1.x record carrying
+  // `contentFormat: "html"` therefore has to be converted right here — the flag
+  // is the only record that the body is HTML, and once it is dropped the body
+  // is treated as markdown for good and inserts as visible escaped text.
+  //
+  // Both Clipio entry points (the JSON file and the v2 ZIP) funnel through
+  // here, so one call covers both. spec: specs/content-format-migration.spec.md
+  const snippet = migrateContentFormat(raw);
   return {
     suggestedId: snippet.id,
     label: snippet.label,
     shortcut: snippet.shortcut,
     content: snippet.content,
-    contentFormat: snippet.contentFormat ?? "markdown",
     tags: snippet.tags ?? [],
     // Clipio snippets are already in our format — no unsupported placeholders
     unsupportedPlaceholders: [],

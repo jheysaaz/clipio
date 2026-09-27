@@ -7,14 +7,11 @@
  * Conversion rules:
  *  - type "text"  → use `text` field; map {cursor} → {{cursor}}, {clipboard} → {{clipboard}}
  *  - type "html"  → strip data-mce-style attrs, map placeholders, then convert HTML → markdown
- *    via deserializeContent() → serializeToMarkdown()
+ *    via htmlToMarkdown()
  */
 
 import type { ParsedSnippet, FormatParser } from "./types";
-import {
-  deserializeContent,
-  serializeToMarkdown,
-} from "@/components/editor/serialization";
+import { htmlToMarkdown } from "@/components/editor/serialization";
 
 // ---------------------------------------------------------------------------
 // Placeholder handling
@@ -86,8 +83,7 @@ function htmlSnippetToMarkdown(html: string): string | null {
     cleaned = replaceSupportedPlaceholders(cleaned);
 
     // 4. Parse HTML → Plate nodes → Markdown
-    const nodes = deserializeContent(cleaned, "html");
-    return serializeToMarkdown(nodes);
+    return htmlToMarkdown(cleaned);
   } catch {
     return null;
   }
@@ -162,7 +158,6 @@ function parseTBSnippet(
     label,
     shortcut,
     content,
-    contentFormat: "markdown",
     tags,
     unsupportedPlaceholders: [...new Set(unsupportedPlaceholders)],
   };

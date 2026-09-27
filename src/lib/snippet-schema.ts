@@ -9,7 +9,8 @@
  * spec: specs/import-validation.spec.md
  */
 
-import type { Snippet, ContentFormat } from "@/types";
+import type { Snippet } from "@/types";
+import { migrateContentFormat } from "./content-format-migration";
 
 /**
  * Hard bounds applied to an imported snippet set.
@@ -70,11 +71,14 @@ function isIsoTimestamp(value: unknown): value is string {
 /**
  * Validate and normalise one imported record.
  *
- * Normalisation is deliberate rather than rejection: a missing
- * `contentFormat` is filled in, timestamps default to now, and a nonsensical
- * `usageCount` is clamped. Those are recoverable and refusing them would lose
- * a user's real snippet over a cosmetic defect. Everything that is a genuine
- * integrity or safety problem is rejected.
+ * Normalisation is deliberate rather than rejection: timestamps default to now,
+ * and a nonsensical `usageCount` is clamped. Those are recoverable and refusing
+ * them would lose a user's real snippet over a cosmetic defect. Everything that
+ * is a genuine integrity or safety problem is rejected.
+ *
+ * A legacy `contentFormat` is accepted on the wire and dropped here rather than
+ * stored; the body itself is migrated on read by `migrateContentFormat`, which
+ * is the only place that knows how to convert it.
  */
 export function validateImportedSnippet(raw: unknown): ValidationResult {
   if (!isPlainObject(raw)) return { ok: false, reason: "not-an-object" };
@@ -112,10 +116,20 @@ export function validateImportedSnippet(raw: unknown): ValidationResult {
     return { ok: false, reason: "content-too-long" };
   }
 
-  // contentFormat is the vestigial pre-1.x HTML flag. It is accepted on the
-  // wire for backwards compatibility but normalised to "markdown" here: the
-  // editor always serialises markdown, so an "html" label on a markdown body
-  // is the data-corruption vector, not a supported format.
+  // contentFormat is the retired pre-1.x HTML flag. It is still accepted on
+  // the wire, because a 1.x export carries it, and it is converted HERE rather
+  // than on a later read.
+  //
+  // It has to happen here. This is the only import path that carries the flag:
+  // the TextBlaze and Power Text importers always wrote markdown, so they have
+  // nothing to convert. If the flag were merely stripped and the HTML body
+  // stored as-is, the body would be treated as markdown for the rest of its
+  // life and inserted as visible escaped text — and because the flag that
+  // recorded the true format would be gone, that would be unrecoverable.
+  //
+  // Converting at validation also means the stored snippet is already
+  // canonical, so the on-read migration later sees no flag and does no work.
+  // spec: specs/content-format-migration.spec.md
   const rawFormat = raw["contentFormat"];
   if (
     rawFormat !== undefined &&
@@ -125,8 +139,6 @@ export function validateImportedSnippet(raw: unknown): ValidationResult {
   ) {
     return { ok: false, reason: "bad-content-format" };
   }
-  const contentFormat: ContentFormat = "markdown";
-
   const rawTags = raw["tags"];
   let tags: string[] = [];
   if (rawTags !== undefined && rawTags !== null) {
@@ -171,20 +183,28 @@ export function validateImportedSnippet(raw: unknown): ValidationResult {
       ? Math.max(0, rawUsage)
       : 0;
 
-  return {
-    ok: true,
-    snippet: {
-      id,
-      label,
-      shortcut,
-      content,
-      contentFormat,
-      tags,
-      usageCount,
-      createdAt: (createdAt as string | undefined) ?? now,
-      updatedAt: (updatedAt as string | undefined) ?? now,
-    },
+  const snippet: Snippet = {
+    id,
+    label,
+    shortcut,
+    content,
+    tags,
+    usageCount,
+    createdAt: (createdAt as string | undefined) ?? now,
+    updatedAt: (updatedAt as string | undefined) ?? now,
   };
+
+  // The length cap above is checked against the raw payload, which is the right
+  // thing to bound: it is what the file on disk costs to read. Conversion can
+  // only shrink the body, so it cannot smuggle an oversized snippet past it.
+  if (rawFormat === "html") {
+    return {
+      ok: true,
+      snippet: migrateContentFormat({ ...snippet, contentFormat: "html" }),
+    };
+  }
+
+  return { ok: true, snippet };
 }
 
 export type ImportValidation = {

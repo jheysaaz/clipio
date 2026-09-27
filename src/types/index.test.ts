@@ -21,7 +21,10 @@ describe("createSnippet", () => {
     expect(snippet).toHaveProperty("label");
     expect(snippet).toHaveProperty("shortcut");
     expect(snippet).toHaveProperty("content");
-    expect(snippet).toHaveProperty("contentFormat");
+    // The pre-1.x `contentFormat` flag is retired: it must never be recreated
+    // on a new snippet, or the migration would run again on its own output.
+    // spec: specs/content-format-migration.spec.md
+    expect(snippet).not.toHaveProperty("contentFormat");
     expect(snippet).toHaveProperty("tags");
     expect(snippet).toHaveProperty("usageCount");
     expect(snippet).toHaveProperty("createdAt");
@@ -69,9 +72,12 @@ describe("createSnippet", () => {
     expect(snippet.content).toBe("Hello **world**!");
   });
 
-  it('defaults contentFormat to "markdown"', () => {
+  it("does not carry a contentFormat key", () => {
+    // The field was retired: the editor always serialised markdown while the
+    // flag was carried forward onto the markdown body, corrupting HTML-format
+    // snippets on open/save. spec: specs/content-format-migration.spec.md
     const snippet = createSnippet({ label: "L", shortcut: "s", content: "c" });
-    expect(snippet.contentFormat).toBe("markdown");
+    expect(Object.keys(snippet)).not.toContain("contentFormat");
   });
 
   // spec: MUST set tags to form.tags when provided

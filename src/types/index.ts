@@ -2,13 +2,20 @@
  * Type definitions for the application.
  */
 
-export type ContentFormat = "markdown" | "html";
-
+/**
+ * Snippet content is always markdown.
+ *
+ * The former `contentFormat: "markdown" | "html"` field was retired: the editor
+ * always serialised markdown while the flag was carried forward onto the
+ * markdown body, so opening and saving an HTML-format snippet corrupted it.
+ * Legacy HTML bodies are converted once, on read — see
+ * specs/content-format-migration.spec.md.
+ */
 export interface Snippet {
   id: string;
   label: string;
+  /** Always markdown. */
   content: string;
-  contentFormat: ContentFormat;
   shortcut: string;
   tags?: string[];
   usageCount?: number;
@@ -34,7 +41,6 @@ export function createSnippet(form: SnippetFormData): Snippet {
     label: form.label,
     shortcut: form.shortcut,
     content: form.content,
-    contentFormat: "markdown",
     tags: form.tags ?? [],
     usageCount: 0,
     createdAt: now,

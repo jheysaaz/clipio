@@ -379,3 +379,109 @@ describe("markdownToPlainText", () => {
     );
   });
 });
+
+/**
+ * Regression: intraword underscores.
+ *
+ * The `_` emphasis run is anchored at the scan position, so a naive
+ * `^_([^_]+)_` matches across a whole phrase. Anything with two underscores —
+ * `first_name and last_name`, `__pwned`, and Clipio's own `{{raw_html:…}}`
+ * placeholder — silently lost characters to an `<em>`.
+ */
+describe("markdownInlineToHtml — intraword underscores are literal", () => {
+  it("keeps the underscores in two identifiers in one phrase", () => {
+    expect(markdownInlineToHtml("first_name and last_name")).toBe(
+      "first_name and last_name"
+    );
+  });
+
+  it("does not emit an <em> for a snake_case identifier", () => {
+    expect(markdownInlineToHtml("first_name")).not.toContain("<em>");
+  });
+
+  it("keeps a leading double underscore", () => {
+    expect(markdownInlineToHtml("__pwned")).toBe("__pwned");
+  });
+
+  it("keeps the Clipio raw_html placeholder name intact", () => {
+    // The body needs a second underscore pair for the emphasis run to reach
+    // across and eat the placeholder's own underscore — which is exactly what
+    // a preserved <script> body contains. This is the e2e input.
+    expect(
+      markdownInlineToHtml("{{raw_html:<script>window.__pwned=1</script>}}")
+    ).toBe("{{raw_html:&lt;script&gt;window.__pwned=1&lt;/script&gt;}}");
+  });
+
+  it("keeps a single-underscore placeholder name intact", () => {
+    expect(markdownInlineToHtml("{{raw_html:<b>x</b>}}")).toBe(
+      "{{raw_html:&lt;b&gt;x&lt;/b&gt;}}"
+    );
+  });
+
+  it("keeps snake_case identifiers intact when several appear", () => {
+    // The real corruption: one match spanning two separate identifiers.
+    expect(markdownInlineToHtml("call do_thing with user_id here")).toBe(
+      "call do_thing with user_id here"
+    );
+  });
+
+  it("still renders genuine emphasis", () => {
+    expect(markdownInlineToHtml("_italic_")).toBe("<em>italic</em>");
+  });
+
+  it("still renders emphasis after punctuation", () => {
+    expect(markdownInlineToHtml("say _hi_ now")).toBe("say <em>hi</em> now");
+  });
+
+  it("still renders bold and italic together", () => {
+    expect(markdownInlineToHtml("**_both_**")).toBe(
+      "<strong><em>both</em></strong>"
+    );
+  });
+
+  it("escapes the angle brackets inside a raw_html placeholder", () => {
+    const html = markdownInlineToHtml("{{raw_html:<script>x</script>}}");
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+});
+
+describe("markdownToPlainText — intraword underscores are literal", () => {
+  it("keeps the underscores in two identifiers in one phrase", () => {
+    expect(markdownToPlainText("first_name and last_name")).toBe(
+      "first_name and last_name"
+    );
+  });
+
+  it("still strips real emphasis", () => {
+    expect(markdownToPlainText("_italic_")).toBe("italic");
+  });
+
+  it("keeps the raw_html placeholder name", () => {
+    expect(
+      markdownToPlainText("{{raw_html:<script>window.__pwned=1</script>}}")
+    ).toBe("{{raw_html:<script>window.__pwned=1</script>}}");
+  });
+
+  it("keeps two snake_case identifiers in one phrase", () => {
+    expect(markdownToPlainText("call do_thing with user_id here")).toBe(
+      "call do_thing with user_id here"
+    );
+  });
+});
+
+describe("markdownToPlainText — adjacent emphasis", () => {
+  it("strips two emphases separated by a space", () => {
+    // The separator is a single character. A captured leading boundary would
+    // consume it and leave the second span unmatched.
+    expect(markdownToPlainText("_a_ and _b_")).toBe("a and b");
+  });
+
+  it("strips emphases with a single character between them", () => {
+    expect(markdownToPlainText("a _b_ c _d_ e")).toBe("a b c d e");
+  });
+
+  it("strips three emphases in a row", () => {
+    expect(markdownToPlainText("_a_ _b_ _c_")).toBe("a b c");
+  });
+});

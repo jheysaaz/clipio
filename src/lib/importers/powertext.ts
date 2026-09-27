@@ -13,10 +13,7 @@
  */
 
 import type { ParsedSnippet, FormatParser } from "./types";
-import {
-  deserializeContent,
-  serializeToMarkdown,
-} from "@/components/editor/serialization";
+import { htmlToMarkdown } from "@/components/editor/serialization";
 
 // ---------------------------------------------------------------------------
 // Placeholder handling
@@ -89,8 +86,7 @@ const HTML_TAG_RE = /<[a-z][\s\S]*>/i;
 function maybeConvertHtml(raw: string): string | null {
   if (!HTML_TAG_RE.test(raw)) return null;
   try {
-    const nodes = deserializeContent(raw, "html");
-    return serializeToMarkdown(nodes);
+    return htmlToMarkdown(raw);
   } catch {
     return null;
   }
@@ -137,7 +133,6 @@ export const PowerTextParser: FormatParser = {
         label: trimmedShortcut,
         shortcut: trimmedShortcut,
         content,
-        contentFormat: "markdown",
         tags: ["power_text"],
         unsupportedPlaceholders: [...new Set(unsupported)],
       });

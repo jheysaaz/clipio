@@ -111,12 +111,28 @@ export function markdownInlineToHtml(text: string): string {
       continue;
     }
 
-    // Italic _text_
+    // Italic _text_ — but NOT when the underscores are intraword.
+    //
+    // The `_` emphasis run is anchored at the current scan position, so without
+    // a boundary check `first_name and last_name` matches across the whole
+    // phrase and loses both underscores to an <em>. That silently rewrites the
+    // user's text, and it also mangles any identifier containing two
+    // underscores — including Clipio's own `{{raw_html:…}}` placeholder, whose
+    // name would render as `{{rawhtml:`. This is the CommonMark rule for `_`:
+    // it may not open or close emphasis intraword.
     const italicMatch = remaining.match(/^_([^_]+)_/);
     if (italicMatch) {
-      result += `<em>${markdownInlineToHtml(italicMatch[1])}</em>`;
-      remaining = remaining.slice(italicMatch[0].length);
-      continue;
+      const consumed = text.length - remaining.length;
+      const before = consumed > 0 ? text[consumed - 1]! : "";
+      const after = remaining[italicMatch[0].length] ?? "";
+      const opensIntraword = /[\p{L}\p{N}]/u.test(before);
+      const closesIntraword = /[\p{L}\p{N}]/u.test(after);
+      if (!opensIntraword && !closesIntraword) {
+        result += `<em>${markdownInlineToHtml(italicMatch[1])}</em>`;
+        remaining = remaining.slice(italicMatch[0].length);
+        continue;
+      }
+      // Not emphasis: fall through so it is emitted as a literal underscore.
     }
 
     // Strikethrough ~~text~~
@@ -193,7 +209,21 @@ export function markdownToPlainText(content: string): string {
   text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$2");
   // Strip formatting marks
   text = text.replace(/\*\*([^*]+)\*\*/g, "$1"); // bold
-  text = text.replace(/_([^_]+)_/g, "$1"); // italic
+  // Italic, minus the intraword case: `first_name` keeps its underscores
+  // rather than becoming `firstname`. See markdownInlineToHtml.
+  //
+  // The boundary is a zero-width lookbehind rather than a captured leading
+  // character: a captured one is consumed, so two emphases whose separator is
+  // that single character can leave the second match with no boundary left to
+  // match on. A lookbehind cannot be consumed, so adjacent spans are
+  // independent.
+  //
+  // Known limitation: a run of underscores shared between two spans (`_a__b_`)
+  // is not resolved here, and this path and markdownInlineToHtml can disagree
+  // on it. The construct is not well-defined in CommonMark either and is
+  // vanishingly rare in a snippet body, so it is left alone deliberately rather
+  // than papered over with a rule that would be wrong elsewhere.
+  text = text.replace(/(?<![\p{L}\p{N}])_([^_]+)_(?![\p{L}\p{N}])/gu, "$1");
   text = text.replace(/~~([^~]+)~~/g, "$1"); // strikethrough
   text = text.replace(/`([^`]+)`/g, "$1"); // code
   text = text.replace(/<u>([^<]+)<\/u>/g, "$1"); // underline

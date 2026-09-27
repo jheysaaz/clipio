@@ -1,5 +1,4 @@
 import type { TText, TElement, Descendant } from "platejs";
-import type { ContentFormat } from "@/types";
 import {
   CLIPBOARD_PLACEHOLDER,
   DATE_PLACEHOLDER,
@@ -105,20 +104,46 @@ function serializeNode(node: Descendant): string {
   return children;
 }
 
-// Deserializer that uses an explicit content format.
-export function deserializeContent(
-  content: string,
-  contentFormat: ContentFormat = "markdown"
-): TElement[] {
+// Deserializer for markdown, which is the only format the editor writes.
+export function deserializeContent(content: string): TElement[] {
   if (!content || content.trim() === "") {
     return [{ type: "p", children: [{ text: "" }] }];
   }
+  return deserializeFromMarkdown(content);
+}
 
-  if (contentFormat === "html") {
-    return deserializeFromHtml(content);
-  } else {
-    return deserializeFromMarkdown(content);
+/**
+ * Convert an HTML snippet body to markdown.
+ *
+ * Reuses the pipeline the TextBlaze and Power Text importers run:
+ * HTML -> Plate nodes -> markdown.
+ *
+ * This is the PAGE-side converter, and it needs a DOM. The legacy
+ * contentFormat migration does NOT use it: an MV3 service worker has no
+ * `DOMParser`, so a migration built on this function would convert in a popup
+ * and silently fail in the background, leaving the result dependent on which
+ * context read the snippet first. The migration uses the DOM-free converter in
+ * src/lib/html-to-markdown.ts instead, in every context.
+ *
+ * spec: specs/content-format-migration.spec.md
+ */
+export function htmlToMarkdown(html: string): string {
+  if (!html || html.trim() === "") return "";
+  return serializeToMarkdown(deserializeFromHtml(html));
+}
+
+/**
+ * Deserialise HTML into Plate nodes.
+ *
+ * Exists so the HTML branch of deserializeContent is callable on its own; the
+ * editor uses it for the "open an HTML snippet" path. Needs a DOM, like
+ * htmlToMarkdown above.
+ */
+export function deserializeHtmlToNodes(html: string): TElement[] {
+  if (!html || html.trim() === "") {
+    return [{ type: "p", children: [{ text: "" }] }];
   }
+  return deserializeFromHtml(html);
 }
 
 // Deserialize Markdown to Plate value

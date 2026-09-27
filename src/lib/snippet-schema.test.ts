@@ -47,27 +47,68 @@ describe("validateImportedSnippet — accepted", () => {
   it("accepts and normalises a well-formed record", () => {
     const s = accept(valid());
     expect(s.id).toBe("abc-123");
-    expect(s.contentFormat).toBe("markdown");
     expect(s.tags).toEqual([]);
     expect(s.usageCount).toBe(0);
   });
 
-  it("fills a missing contentFormat with markdown", () => {
-    expect(accept(valid()).contentFormat).toBe("markdown");
+  it("does not carry a contentFormat key into storage", () => {
+    // The field was retired. A 1.x export still carries it, so it is accepted
+    // on the wire, but it must not survive into a stored snippet.
+    // spec: specs/content-format-migration.spec.md
+    expect(Object.keys(accept(valid()))).not.toContain("contentFormat");
+    expect(Object.keys(accept(valid({ contentFormat: "html" })))).not.toContain(
+      "contentFormat"
+    );
+    expect(
+      Object.keys(accept(valid({ contentFormat: "markdown" })))
+    ).not.toContain("contentFormat");
   });
 
-  it("normalises an html contentFormat to markdown", () => {
-    // The editor always serialises markdown, so an "html" label on a markdown
-    // body is the corruption vector, not a supported format.
-    expect(accept(valid({ contentFormat: "html" })).contentFormat).toBe(
-      "markdown"
-    );
+  it("still accepts a legacy contentFormat on the wire", () => {
+    // Rejection would lock a user out of their own 1.x export.
+    expect(accept(valid({ contentFormat: "html" })).id).toBe("abc-123");
   });
 
-  it("accepts an explicit markdown contentFormat", () => {
-    expect(accept(valid({ contentFormat: "markdown" })).contentFormat).toBe(
-      "markdown"
+  /**
+   * The body must be CONVERTED, not merely stripped of its flag.
+   *
+   * These two are easy to confuse and only one of them is correct. Stripping
+   * the flag while leaving an HTML body stores HTML that is thereafter treated
+   * as markdown — it inserts as visible escaped text, and because the flag that
+   * recorded the true format is now gone, there is no way back. This validator
+   * is also the storage-level import path, so it is the last point at which the
+   * body can be fixed.
+   * spec: specs/content-format-migration.spec.md
+   */
+  it("converts a legacy html body to markdown", () => {
+    const out = accept(
+      valid({ contentFormat: "html", content: "<p>Hi</p><p>There</p>" })
     );
+    expect(out.content).toBe("Hi\n\nThere");
+  });
+
+  it("leaves no markup in a converted body", () => {
+    const out = accept(
+      valid({ contentFormat: "html", content: "<p><strong>Bold</strong></p>" })
+    );
+    expect(out.content).not.toContain("<p>");
+    expect(out.content).toBe("**Bold**");
+  });
+
+  it("does not convert a body already marked markdown", () => {
+    expect(
+      accept(valid({ contentFormat: "markdown", content: "**bold** body" }))
+        .content
+    ).toBe("**bold** body");
+  });
+
+  it("converts a legacy html body with no flag change to its id", () => {
+    // The conversion must not disturb the rest of the record.
+    const out = accept(
+      valid({ id: "keep-id", contentFormat: "html", content: "<p>x</p>" })
+    );
+    expect(out.id).toBe("keep-id");
+    expect(out.content).toBe("x");
   });
 
   it("keeps valid timestamps", () => {
