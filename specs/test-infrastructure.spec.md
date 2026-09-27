@@ -136,9 +136,75 @@ a clock into the fetch path.
       shrinking the window to ~0, failing _closed_ on an unparseable timestamp, deleting the
       failure-path timestamp write, and disabling the throttle call.
 
+## Wave 4.3 — the disaster-recovery path has no tests
+
+`src/storage/backends/indexeddb.ts` (265 lines) is excluded from coverage in `vitest.config.ts`
+with the written admission _"coverage debt: unit tests not yet written"_. The exclusion is
+honest, which is why it is allowed to exist at all — but it is the **disaster-recovery path**.
+
+It is the layer that exists for the worst day of a user's life: they sign out of their browser
+account, `storage.sync` is wiped, and this database is the only thing that can give their
+snippets back. It has three schema migrations, an async content-hash backfill, and an
+asymmetric error contract, and not one test exercises any of it.
+
+The asymmetry is the part most likely to rot silently, because it looks like a typo:
+
+| Method                                                    | On failure                               |
+| --------------------------------------------------------- | ---------------------------------------- |
+| `getSnippets`, `saveSnippets`, `getSnippetCount`, `clear` | swallow — returns `[]`/`0`, never throws |
+| `upsertSnippets`, `removeSnippetsById`                    | **re-throws**                            |
+
+The reasoning is sound: a read or a whole-list save that failed can safely report "nothing
+changed", but an intent-based mutation that failed _must_ surface, or the caller believes a
+deletion succeeded while the record is still on disk. Nothing documents that, so nothing would
+catch a well-meaning "let's make these consistent" change — which would silently turn a failed
+delete into a delete the user believes succeeded.
+
+### Solution
+
+Test the real thing against `fake-indexeddb`, already a devDependency and already used by
+`media-idb-errors.test.ts`. Pin:
+
+- the round trip, and that `getSnippets` applies the legacy `contentFormat` migration (it shares
+  `normalizeSnippet` with the other backends, and that shared step is what Wave 3 changed);
+- `saveSnippets` clears before writing, so a snippet the user deleted does not come back from
+  the backup;
+- `upsertSnippets` writes only what it was given, and `removeSnippetsById` deletes only the ids
+  it was given — the two properties that make the backup safe to write alongside the primary
+  store;
+- **the error contract above, in both directions**, so the asymmetry cannot be "tidied up" by
+  accident;
+- the v1→v3 schema migration, since a failed upgrade leaves a user with no backup at all.
+
+Then remove the coverage exclusion, so the module is held to the same bar as everything else.
+
+### Acceptance Criteria
+
+- [x] The round trip works against a real IndexedDB implementation (`fake-indexeddb`, a fresh `IDBFactory` per test).
+- [x] `saveSnippets` replaces the contents rather than merging.
+- [x] `upsertSnippets` leaves untouched records alone; `removeSnippetsById` leaves others alone.
+- [x] The four swallowing methods never throw; the two mutating methods re-throw.
+- [x] `getSnippets` migrates a legacy `contentFormat: "html"` body, matching the other backends.
+- [x] The schema reaches v3 with all stores and the hash index present.
+- [x] The coverage exclusion for this file is **removed** and `pnpm test:coverage` still exits 0.
+      The module now reports 82% statements / 89% lines and is held to the same bar as everything else.
+- [x] Every test is mutation-sensitive. Five mutations run against the backend, each caught:
+      removing the `store.clear()` (2 tests), removing the hash index (1), making
+      `upsertSnippets` swallow (1), making `removeSnippetsById` swallow (1), and making
+      `getSnippets` re-throw (2). Two tests that could not fail were removed rather than kept:
+      "an empty argument writes nothing" is true whether or not the early return exists.
+
+## Known gaps recorded, not fixed here
+
+- **`backfillMediaHashes`** (`indexeddb.ts`) is still uncovered: it assigns SHA-256 hashes to
+  media entries written before schema v3. It concerns **media**, not the snippet store, so it is
+  not on the snippet-recovery path this wave set out to cover. It is named here rather than left
+  as an unexplained dip in the coverage report.
+
 ## Change History
 
 | Date       | Change                                                                                                                                                                                | Author |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | 2026-09-27 | Initial spec                                                                                                                                                                          | —      |
+| 2026-09-27 | Wave 4.3: the IndexedDB disaster-recovery path tested and its coverage exclusion removed.                                                                                             |
 | 2026-09-27 | `items.ts` tested. The wave's premise about `sentry-content.ts` was investigated and **rejected** on evidence: the redaction boundary is `sentry-scrub.ts`, which is already covered. | —      |

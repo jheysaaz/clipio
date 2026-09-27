@@ -56,9 +56,10 @@ export default defineConfig({
         // Trivial class-merge helper (shadcn cn-style)
         "src/lib/utils.ts",
         // Re-export barrel / browser-API wrapper — coverage debt: unit tests
-        // not yet written, exercised only via e2e integration paths
+        // not yet written, exercised only via e2e integration paths.
+        // (indexeddb.ts was here too and no longer is: the disaster-recovery
+        // path is now unit-tested against fake-indexeddb.)
         "src/storage/index.ts",
-        "src/storage/backends/indexeddb.ts",
       ],
 
       // Per-module coverage thresholds
