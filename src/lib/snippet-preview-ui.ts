@@ -2,7 +2,7 @@
  * Shadow DOM UI component for the snippet preview feature.
  *
  * Creates a styled popup with snippet list, keyboard navigation, and hover tooltips.
- * Uses Shadow DOM with "open" mode for E2E test compatibility.
+ * Uses Shadow DOM with a CLOSED shadow root (see specs/preview-encapsulation.spec.md).
  *
  * spec: specs/snippet-preview.spec.md
  */
@@ -363,14 +363,30 @@ export class SnippetPreviewUI {
       "data-preview-visible",
       this.visible ? "true" : "false"
     );
-    this.shadowHost.setAttribute(
-      "data-preview-count",
-      String(this.filteredSnippets.length)
-    );
+    this.shadowHost.setAttribute("data-preview-rows", this.rowsBucket());
     this.shadowHost.setAttribute(
       "data-preview-selected",
       String(this.selectedIndex)
     );
+  }
+
+  /**
+   * Coarse row-count bucket for e2e, deliberately NOT the exact number.
+   *
+   * The palette opens either on a "/" query (a filter over the library) or on
+   * the manual shortcut, which lists every snippet. An exact count would
+   * therefore disclose the size of the user's whole library, and would act as
+   * an oracle: a page that owns a field can type prefixes and read the count
+   * after each genuine keystroke to work out which shortcuts exist.
+   *
+   * "0" / "1" / "many" is enough for the e2e assertions, which are about
+   * whether the palette opened and whether filtering narrowed the result set.
+   */
+  private rowsBucket(): string {
+    const n = this.filteredSnippets.length;
+    if (n === 0) return "0";
+    if (n === 1) return "1";
+    return "many";
   }
 
   /**
@@ -548,14 +564,15 @@ export class SnippetPreviewUI {
       item.appendChild(contentWrap);
 
       // Add click handler.
-      // Guarded on isTrusted: the shadow root is mode:"open" and the host is
-      // in the page DOM, so once the user legitimately opens this preview,
-      // page script can querySelector('.clipio-preview-item').click() and
-      // force onSelect — which reaches insertSnippetIn* and, for a
-      // {{clipboard}} snippet, forces a clipboard read into a field the page
-      // controls. `isTrusted` is UA-set and unforgeable; element.click() and
-      // dispatchEvent() both produce false.
-      // spec: specs/content-script-trust.spec.md
+      // Defence in depth. The shadow root is mode:"closed", so page script has
+      // no handle on a row and cannot reach this handler at all — see
+      // specs/preview-encapsulation.spec.md. This guard covers the case where
+      // the root is ever reopened, and it was a live exploit before the root
+      // was closed: a page could querySelector('.clipio-preview-item').click()
+      // and reach onSelect -> insertSnippetIn*, which for a {{clipboard}}
+      // snippet forces a clipboard read into a field the page controls.
+      // isTrusted is UA-set and unforgeable; element.click() and dispatchEvent()
+      // both produce false. spec: specs/content-script-trust.spec.md
       item.addEventListener("click", (event: MouseEvent) => {
         if (!event.isTrusted) return;
         if (this.onSelect) {

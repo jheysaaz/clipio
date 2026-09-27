@@ -118,7 +118,7 @@ describe("SnippetPreviewUI encapsulation", () => {
     // from one where the observable-state code never ran.
     const host = document.getElementById("clipio-snippet-preview-host")!;
     expect(host.getAttribute("data-preview-visible")).toBe("false");
-    expect(host.getAttribute("data-preview-count")).toBe("0");
+    expect(host.getAttribute("data-preview-rows")).toBe("0");
     expect(host.getAttribute("data-preview-selected")).toBe("0");
   });
 
@@ -137,7 +137,7 @@ describe("SnippetPreviewUI encapsulation", () => {
       makeFiltered("C", "/c", "c", "3"),
     ]);
 
-    expect(host.getAttribute("data-preview-count")).toBe("3");
+    expect(host.getAttribute("data-preview-rows")).toBe("many");
     expect(host.getAttribute("data-preview-selected")).toBe("0");
 
     ui.handleKeyDown(new KeyboardEvent("keydown", { key: "ArrowDown" }));
@@ -173,13 +173,12 @@ describe("SnippetPreviewUI encapsulation", () => {
     expect(host.getAttribute("data-preview-visible")).toBe("false");
   });
 
-  it("clears rendered rows on hide so content does not linger in the root", () => {
+  it("marks the palette hidden on hide()", () => {
+    const host = document.getElementById("clipio-snippet-preview-host")!;
     showWith(makeFiltered(SECRET_LABEL, SECRET_SHORTCUT, "x", "a"));
-    expect(ui.getInternalShadowRoot()!.textContent).toContain(SECRET_LABEL);
+    expect(host.getAttribute("data-preview-visible")).toBe("true");
     ui.hide();
-    // updateList is not re-run on hide, so the rows are detached with the
-    // container only when the list is emptied. Assert the visible state
-    // instead, which is the contract callers rely on.
+    expect(host.getAttribute("data-preview-visible")).toBe("false");
     expect(ui.isVisible()).toBe(false);
   });
 
@@ -192,5 +191,57 @@ describe("SnippetPreviewUI encapsulation", () => {
     ui.cleanup();
     expect(document.getElementById("clipio-snippet-preview-host")).toBeNull();
     expect(document.body.textContent).not.toContain(SECRET_LABEL);
+  });
+
+  // The row-click guard is defence in depth: the closed root means page script
+  // has no handle on a row at all, so this is not reachable from e2e. It is
+  // still worth pinning, because it is the guard that would matter if the root
+  // were ever reopened.
+  describe("row click guard (defence in depth)", () => {
+    it("ignores a synthetic click on a row", () => {
+      let selectCalls = 0;
+      ui.setEventHandlers(
+        () => {
+          selectCalls += 1;
+        },
+        () => {}
+      );
+      showWith(makeFiltered("A", "/a", "a", "1"));
+      const item = ui
+        .getInternalShadowRoot()!
+        .querySelector(".clipio-preview-item")!;
+      // A dispatched MouseEvent always has isTrusted === false.
+      item.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      expect(selectCalls).toBe(0);
+    });
+
+    it("still handles Enter, which is the documented selection path", () => {
+      let selected: unknown = null;
+      ui.setEventHandlers(
+        (s) => {
+          selected = s;
+        },
+        () => {}
+      );
+      showWith(makeFiltered("A", "/a", "a", "1"));
+      const handled = ui.handleKeyDown(
+        new KeyboardEvent("keydown", { key: "Enter" })
+      );
+      expect(handled).toBe(true);
+      expect(selected).not.toBeNull();
+    });
+  });
+
+  // ---- S13: identify the tooltip specifically, not "the first div" ----
+  it("keeps the tooltip identifiable inside the root, not just absent from body", () => {
+    const root = ui.getInternalShadowRoot()!;
+    showWith(makeFiltered(SECRET_LABEL, SECRET_SHORTCUT, "x", "a"));
+    // The tooltip is the last child of the root, after the container.
+    const tooltip = root.lastElementChild as HTMLElement;
+    // It carries the higher z-index of the two, which is what makes it paint
+    // above the list. Asserting that is what proves the element we moved is
+    // the tooltip and not merely some div.
+    expect(tooltip.style.zIndex).toBe("2147483648");
+    expect(root.querySelectorAll("div").length).toBeGreaterThan(1);
   });
 });

@@ -83,18 +83,13 @@ export function getCurrentVersion(): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch the latest release from GitHub and persist it to local storage.
+ * Pure helper: allow only an https URL whose hostname is exactly
+ * `github.com` or `www.github.com`.
  *
- * - Only writes to latestVersionItem when the remote version is strictly
- *   newer than the installed version (so the item stays null for up-to-date
- *   installs).
- * - Always updates latestVersionCheckedAtItem so background can track
- *   when the last check happened (regardless of whether an update was found).
- * - Never throws — all errors are captured to Sentry and swallowed so
- *   the caller (background service worker) is never disrupted.
- */
-/**
- * Pure helper: allow only a GitHub release page URL.
+ * Only the scheme and the hostname are checked, NOT the path. That is
+ * sufficient for the stated threat (a tampered response redirecting the user
+ * off github.com) and avoids rejecting a legitimate URL whose path shape
+ * changes.
  *
  * `checkForUpdate` reads `html_url` out of the GitHub API response and stores
  * it; three call sites later hand it to `browser.tabs.create`. A GitHub API
@@ -150,6 +145,17 @@ export async function openReleasePage(htmlUrl: string): Promise<boolean> {
   }
 }
 
+/**
+ * Fetch the latest release from GitHub and persist it to local storage.
+ *
+ * - Only writes to latestVersionItem when the remote version is strictly
+ *   newer than the installed version (so the item stays null for up-to-date
+ *   installs).
+ * - Always updates latestVersionCheckedAtItem so background can track
+ *   when the last check happened (regardless of whether an update was found).
+ * - Never throws — all errors are captured to Sentry and swallowed so
+ *   the caller (background service worker) is never disrupted.
+ */
 export async function checkForUpdate(): Promise<void> {
   const repo = (import.meta.env.WXT_GITHUB_REPO as string | undefined)?.trim();
   if (!repo) return;

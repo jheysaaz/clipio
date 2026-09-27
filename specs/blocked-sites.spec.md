@@ -14,7 +14,7 @@ UI is injected into the page unconditionally.
 
 ## Problem
 
-`isBlocked` was resolved in `initialize()` (`content.ts:836`) and checked by:
+`isBlocked` was resolved in `initialize()` (during `initialize`) and checked by:
 
 | Path | Checked? |
 |---|---|
@@ -33,7 +33,7 @@ Worse, `snippetPreviewUI.init()` was called whenever `previewSettings.enabled`, 
 of `isBlocked`, so on a blocked site the host element and tooltip were injected into the
 page and persisted for the session.
 
-The matcher itself (`content.ts:66-77`) was a file-local function that was neither exported
+The matcher itself (the matcher, now `src/lib/blocked-sites.ts`) was a file-local function that was neither exported
 nor tested, so it had **zero** unit coverage and **zero** e2e coverage — the only
 normalisation logic lived in an unrelated component (`SnippetsSection.tsx:34`).
 
@@ -86,12 +86,12 @@ Pure, exported, and the single source of truth for the three consumers:
 - **Shadow DOM**: events retarget to the host so `isContentEditable` is false and
   expansion does not run there. Unchanged by this work.
 - **Blocked-site entries added while a tab is open** are picked up live by the
-  `blockedSitesItem.watch` handler at `content.ts:1312`; no reload needed.
+  `blockedSitesItem.watch` handler at the `blockedSitesItem` watch handler; no reload needed.
 
 ## Non-Goals
 
 - Closing the preview shadow root so page JS cannot read the snippet list on *unblocked*
-  sites. Tracked separately in Wave 1.6.
+  sites. Done — see `specs/preview-encapsulation.spec.md`.
 - Per-path blocking (blocking only `{{clipboard}}` snippets). All-or-nothing is the
   existing product behaviour.
 

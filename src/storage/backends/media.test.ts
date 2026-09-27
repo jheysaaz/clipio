@@ -873,17 +873,23 @@ describe("restoreMediaEntry — validates an untrusted import", () => {
 
   it("rejects an SVG blob, which is script-capable in some contexts", async () => {
     const entry = base({ blob: makeBlob(64, "image/svg+xml") });
-    await expect(restoreMediaEntry(entry)).rejects.toThrow();
+    await expect(restoreMediaEntry(entry)).rejects.toThrow(
+      "media.errors.unsupportedType"
+    );
   });
 
   it("rejects a text/html blob", async () => {
     const entry = base({ blob: makeBlob(64, "text/html") });
-    await expect(restoreMediaEntry(entry)).rejects.toThrow();
+    await expect(restoreMediaEntry(entry)).rejects.toThrow(
+      "media.errors.unsupportedType"
+    );
   });
 
   it("rejects an empty MIME type", async () => {
     const entry = base({ blob: makeBlob(64, "") });
-    await expect(restoreMediaEntry(entry)).rejects.toThrow();
+    await expect(restoreMediaEntry(entry)).rejects.toThrow(
+      "media.errors.unsupportedType"
+    );
   });
 
   // --- per-file size ---
@@ -896,7 +902,9 @@ describe("restoreMediaEntry — validates an untrusted import", () => {
       }
     );
     const entry = base({ blob: oversized, mimeType: "image/png" });
-    await expect(restoreMediaEntry(entry)).rejects.toThrow();
+    await expect(restoreMediaEntry(entry)).rejects.toThrow(
+      "media.errors.tooLarge"
+    );
   });
 
   it("does not write an oversized blob to the store", async () => {
@@ -908,11 +916,65 @@ describe("restoreMediaEntry — validates an untrusted import", () => {
     );
     await expect(
       restoreMediaEntry(base({ id: "too-big", blob: oversized }))
-    ).rejects.toThrow();
+    ).rejects.toThrow("media.errors.tooLarge");
     expect(await getMedia("too-big")).toBeNull();
   });
 
   // --- total quota ---
+
+  // --- total quota, through the real function ---
+  // The quota predicate is unit tested in isolation; this proves the wiring,
+  // which was previously untested. The store is seeded directly rather than by
+  // writing ~50 MB through saveMedia.
+  it("rejects an import that would exceed MAX_TOTAL_SIZE, and writes nothing", async () => {
+    const nearlyFull = MEDIA_LIMITS.MAX_TOTAL_SIZE - 1;
+    // "idb" is not resolvable from the test environment, so use the raw API.
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open("clipio-backup", 3);
+      req.onupgradeneeded = () => {
+        const d = req.result;
+        if (!d.objectStoreNames.contains("snippets")) {
+          d.createObjectStore("snippets", { keyPath: "id" });
+        }
+        if (!d.objectStoreNames.contains("media")) {
+          const ms = d.createObjectStore("media", { keyPath: "id" });
+          ms.createIndex("hash", "hash", { unique: false });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("media", "readwrite");
+      tx.objectStore("media").put({
+        id: "bulk-filler",
+        mimeType: "image/png",
+        width: 1,
+        height: 1,
+        // getTotalSize() sums this field, so a small blob with a large declared
+        // size is enough to fill the store without allocating 50 MB.
+        size: nearlyFull,
+        originalSize: 1,
+        createdAt: new Date().toISOString(),
+        blob: new Blob([new Uint8Array([1])], { type: "image/png" }),
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    expect(await getTotalSize()).toBe(nearlyFull);
+
+    const blob = makeBlob(64, "image/png");
+    await expect(
+      restoreMediaEntry(
+        base({ id: "quota-rejected", blob, mimeType: "image/png" })
+      )
+    ).rejects.toThrow("media.errors.storageFull");
+
+    // Neither the entry nor the accounting moved.
+    expect(await getMedia("quota-rejected")).toBeNull();
+    expect(await getTotalSize()).toBe(nearlyFull);
+    db.close();
+  });
 
   // --- the stored size field must not be trusted ---
 
@@ -943,7 +1005,9 @@ describe("restoreMediaEntry — validates an untrusted import", () => {
       mimeType: "image/png",
       size: 1, // lies
     });
-    await expect(restoreMediaEntry(entry)).rejects.toThrow();
+    await expect(restoreMediaEntry(entry)).rejects.toThrow(
+      "media.errors.tooLarge"
+    );
   });
 
   // --- the happy path must be unaffected ---

@@ -81,20 +81,7 @@ test.describe("Blocked sites", () => {
   // Preview must not render — this is the gap that was actually exploitable
   // -------------------------------------------------------------------------
 
-  test("does not inject the preview host element on a blocked host", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setup(testPage, storageHelper, { blocked: true });
-
-    // init() appends the host to the document unconditionally, so on a
-    // blocked host nothing at all should have been injected.
-    await expect(testPage.locator("#clipio-snippet-preview-host")).toHaveCount(
-      0
-    );
-  });
-
-  test("does not render snippet rows for the manual shortcut on a blocked host", async ({
+  test("does not open the preview on the manual shortcut when blocked", async ({
     testPage,
     storageHelper,
   }) => {
@@ -116,7 +103,7 @@ test.describe("Blocked sites", () => {
     );
   });
 
-  test("does not render snippet rows for a slash trigger on a blocked host", async ({
+  test("does not open the preview on a slash trigger when blocked", async ({
     testPage,
     storageHelper,
   }) => {
@@ -127,10 +114,6 @@ test.describe("Blocked sites", () => {
     await testPage.keyboard.type("/he");
     await testPage.waitForTimeout(200);
 
-    // On a blocked host previewUI.init() is never called, so the host element
-    // does not exist at all. Asserting its absence is the stronger claim — and
-    // unlike a ".clipio-preview-item" count it is not vacuous, because the
-    // shadow root is closed and rows are never in the light DOM anywhere.
     await expect(testPage.locator("#clipio-snippet-preview-host")).toHaveCount(
       0,
       { timeout: 5_000 }
@@ -154,7 +137,7 @@ test.describe("Blocked sites", () => {
     await expect(input).toHaveValue(/Hello, World!/, { timeout: 5_000 });
   });
 
-  test("still renders the preview for the manual shortcut on an unblocked host", async ({
+  test("still opens the preview on the manual shortcut when unblocked", async ({
     testPage,
     storageHelper,
   }) => {
@@ -167,10 +150,10 @@ test.describe("Blocked sites", () => {
     // The manual shortcut lists every snippet, so at least one row must render.
     await expect(
       testPage.locator("#clipio-snippet-preview-host")
-    ).toHaveAttribute("data-preview-count", "1", { timeout: 5_000 });
+    ).toHaveAttribute("data-preview-rows", "1", { timeout: 5_000 });
   });
 
-  test("still renders the preview for a slash trigger on an unblocked host", async ({
+  test("still opens the preview on a slash trigger when unblocked", async ({
     testPage,
     storageHelper,
   }) => {
@@ -182,14 +165,18 @@ test.describe("Blocked sites", () => {
 
     await expect(
       testPage.locator("#clipio-snippet-preview-host")
-    ).toHaveAttribute("data-preview-count", "1", { timeout: 5_000 });
+    ).toHaveAttribute("data-preview-rows", "1", { timeout: 5_000 });
   });
 
   // -------------------------------------------------------------------------
   // Wildcard matching reaches the content script, not just the pure function
   // -------------------------------------------------------------------------
 
-  test("a wildcard blocklist entry blocks subdomains but not the apex", async ({
+  // This only proves the apex half. The subdomain half needs a host that is
+  // actually a subdomain of the pattern, which localhost is not, so it is
+  // covered by the unit tests (blocked-sites.test.ts) instead of being
+  // overclaimed here.
+  test("a wildcard entry does not block the bare apex hostname", async ({
     testPage,
     storageHelper,
   }) => {

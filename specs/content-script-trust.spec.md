@@ -17,11 +17,11 @@ delivered to isolated-world listeners with `isTrusted === false`.
 
 The result is that the page can drive the extension's own legitimate code paths:
 
-1. `registerRuntimeListeners` (`content.ts:1192`) registers the capture-phase listeners.
-2. `handleKeyDown` (`content.ts:731`) matches a shortcut on `Space`/`Tab` and calls
+1. `registerRuntimeListeners` (``registerRuntimeListeners``) registers the capture-phase listeners.
+2. `handleKeyDown` (``handleKeyDown``) matches a shortcut on `Space`/`Tab` and calls
    `expandSnippet` with no check on event provenance.
 3. `expandSnippet` → `processSnippetContent` (`content-helpers.ts:181`) → when the snippet
-   contains `{{clipboard}}`, `readClipboardText()` (`content.ts:356-366`) runs
+   contains `{{clipboard}}`, `readClipboardText()` (``readClipboardText``) runs
    `document.execCommand("paste")` into a hidden textarea in the shared DOM.
 4. `expandSnippet` writes the result into the event target, which the page owns.
 
@@ -112,10 +112,9 @@ behaviour is only observable across the context boundary.
 
 ## Non-Goals
 
-- Closing the preview shadow root so page JS cannot read the snippet library. Tracked
-  separately; `mode: "open"` is currently a deliberate test affordance.
-- Enforcing `blockedSites` on the preview-shortcut path. Tracked separately — that path
-  genuinely lacks the `isBlocked` check its siblings have.
+None outstanding. Both items originally listed here are done:
+`specs/blocked-sites.spec.md` (the `isBlocked` gap on the preview-shortcut path) and
+`specs/preview-encapsulation.spec.md` (the closed shadow root and the tooltip move).
 
 ## Change History
 

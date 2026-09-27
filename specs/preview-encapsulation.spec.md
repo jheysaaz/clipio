@@ -61,14 +61,23 @@ the host nor the root has a transform, filter or `contain`.
 ### Observable state for e2e
 
 Playwright's CSS engine pierces **open** shadow roots only, so a closed root makes the
-palette unassertable from the page world. Rather than weaken the encapsulation, the host
-carries a state attribute:
+palette unassertable from the page world. Rather than weaken the encapsulation, the host mirrors
+three attributes:
 
 - `data-preview-visible="true" | "false"`
+- `data-preview-rows="0" | "1" | "many"`
+- `data-preview-selected="<index>"`
 
-This is **state, not content** — it reveals whether the palette is open, which is already
-inferable from the host's own `style.width`/`style.height`, and nothing about which snippet
-or how many exist.
+**Exactly what this discloses:** whether the palette is open, a *bucketed* row count, and
+which row index is highlighted. Never a label, a shortcut, or snippet content.
+
+The count is a bucket rather than a number on purpose. The palette opens either on a `/`
+query (a filter over the library) or on the manual shortcut, which lists *every* snippet —
+so an exact count would disclose the size of the user's whole library. Worse, it would be
+an oracle: a page that owns a field can type prefixes and read the count after each genuine
+keystroke to work out which shortcuts exist. `0`/`1`/`many` is sufficient for the e2e
+assertions, which are about whether the palette opened and whether filtering narrowed the
+result set.
 
 ### Internal accessor for the accessibility unit test
 
@@ -85,10 +94,16 @@ internal method on the class is not a page-facing surface. The closed root prote
       known unique label and shortcut string appears nowhere in `document.body.textContent`.
 - [x] The tooltip element is a descendant of the shadow root, not of `document.body`.
 - [x] A hover tooltip's content is not readable from the page world.
-- [x] `data-preview-visible` reflects show/hide.
+- [x] `data-preview-visible` reflects show/hide, and is published by `init()` so a palette
+      that has never been shown is distinguishable from one that never ran.
+- [x] `data-preview-rows` is a bucket, not the exact library size.
+- [x] `data-preview-selected` tracks arrow-key navigation and clamps at the last row.
 - [x] The palette still renders and is still navigable with the keyboard, verified through
       the a11y unit suite (real ARIA: `role=listbox`, `aria-activedescendant`,
       `aria-selected`, `aria-live`).
+- [x] The row-click `isTrusted` guard rejects a synthetic click. Reachable only as a unit
+      test via the internal accessor, since the closed root means page script cannot reach
+      a row; see Non-Goals.
 - [x] Trusted `Enter` on a highlighted row still inserts a snippet.
 - [x] Blocked hosts still render nothing.
 
@@ -107,9 +122,10 @@ internal method on the class is not a page-facing surface. The closed root prote
 
 ## Non-Goals
 
-- Removing the row-click `isTrusted` guard. It is retained as defence in depth; with a
-  closed root the page can no longer reach the row, so it is no longer reachable from
-  e2e. That is the intended outcome, not a gap.
+- Removing the row-click `isTrusted` guard. It is retained as defence in depth, and it is
+  covered by a unit test rather than an e2e one: the closed root means page script has no
+  handle on a row at all, which is the intended outcome. The unit test pins the guard for
+  the case where the root is ever reopened.
 - Rendering the palette as a `chrome-extension://` iframe. That would be a larger
   architectural change and is not needed once the root is closed.
 

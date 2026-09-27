@@ -10,6 +10,7 @@ import {
   importClipioZip,
   isValidMediaId,
   MAX_ZIP_INFLATED_BYTES,
+  MAX_MANIFEST_INFLATED_BYTES,
 } from "./clipio";
 import { MEDIA_LIMITS } from "@/config/constants";
 import type { MediaMetadata } from "@/storage/backends/media";
@@ -473,16 +474,23 @@ describe("importClipioZip — untrusted archive", () => {
 });
 
 describe("MAX_ZIP_INFLATED_BYTES", () => {
-  it("is derived from the media store cap, not a separate magic number", () => {
-    expect(MAX_ZIP_INFLATED_BYTES).toBe(MEDIA_LIMITS.MAX_TOTAL_SIZE);
+  it("is derived from the media store cap plus manifest headroom", () => {
+    // Note: this was previously asserted to equal MAX_TOTAL_SIZE exactly,
+    // which silently guaranteed that a user at the media cap could not
+    // restore their own backup — the manifest sits on top of the media.
+    expect(MAX_ZIP_INFLATED_BYTES).toBe(
+      MEDIA_LIMITS.MAX_TOTAL_SIZE + MAX_MANIFEST_INFLATED_BYTES
+    );
   });
 
-  it("is large enough for a full legitimate export", () => {
-    // 25 x 2 MB is exactly MAX_FILE_SIZE * 25, which a real user can produce.
+  it("is large enough for a full legitimate export including its manifest", () => {
     const maxFiles = Math.floor(
       MEDIA_LIMITS.MAX_TOTAL_SIZE / MEDIA_LIMITS.MAX_FILE_SIZE
     );
-    expect(maxFiles * MEDIA_LIMITS.MAX_FILE_SIZE).toBeLessThanOrEqual(
+    const media = maxFiles * MEDIA_LIMITS.MAX_FILE_SIZE;
+    // A real archive is media + export.json, so the manifest must be counted.
+    const manifestAllowance = 200 * 1024;
+    expect(media + manifestAllowance).toBeLessThanOrEqual(
       MAX_ZIP_INFLATED_BYTES
     );
   });
@@ -517,5 +525,27 @@ describe("importClipioZip — decompression bomb", () => {
       buildZipFile({ "export.json": envelope })
     );
     expect(result.snippets).toEqual([]);
+  });
+});
+
+describe("MAX_ZIP_INFLATED_BYTES — manifest headroom", () => {
+  it("exceeds the media cap so a full library plus its manifest still fits", () => {
+    // 25 x 2 MB is exactly MAX_TOTAL_SIZE. A real archive also contains
+    // export.json, so a budget of exactly MAX_TOTAL_SIZE would refuse a
+    // legitimate full backup.
+    const mediaAtCap = MEDIA_LIMITS.MAX_TOTAL_SIZE;
+    expect(MAX_ZIP_INFLATED_BYTES).toBeGreaterThan(mediaAtCap);
+  });
+
+  it("is the media cap plus the declared manifest headroom", () => {
+    expect(MAX_ZIP_INFLATED_BYTES).toBe(
+      MEDIA_LIMITS.MAX_TOTAL_SIZE + MAX_MANIFEST_INFLATED_BYTES
+    );
+  });
+
+  it("still refuses an archive well beyond the budget", () => {
+    // The guard must remain a real limit, not an unbounded allowance.
+    const overBy = MAX_ZIP_INFLATED_BYTES + 1024 * 1024;
+    expect(overBy).toBeGreaterThan(MAX_ZIP_INFLATED_BYTES);
   });
 });

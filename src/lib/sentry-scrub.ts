@@ -27,6 +27,9 @@ const SENSITIVE_KEYS = new Set([
   "oldValue",
   "cachedSnippets",
   "items",
+  // A shortcut is frequently a user-authored phrase ("my address", "/sig"),
+  // and it is one of the few snippet fields sent as an extra.
+  "shortcut",
   // Location fields. Call sites should send a hostBucket() value rather than a
   // raw hostname so the diagnostic survives, but redactObject matches on key
   // name and is the only backstop if a future call site leaks one.
@@ -43,8 +46,19 @@ const SENSITIVE_KEYS = new Set([
   "location",
 ]);
 
-/** Longest message/excerpt we are willing to send. */
+/** Longest error message we are willing to send. */
 const MAX_MESSAGE_LENGTH = 200;
+
+/**
+ * Longest stack trace we are willing to send.
+ *
+ * Deliberately far larger than the message cap. A real Chrome stack runs
+ * 300-2000+ characters, and Sentry's grouping depends on the frames; capping a
+ * stack at 200 chars keeps the top two frames and makes crashes far harder to
+ * triage. Stacks are code paths, not user data, and the URL-stripping below is
+ * the part that actually matters for them.
+ */
+const MAX_STACK_LENGTH = 2000;
 
 /**
  * Common multi-part public suffixes, so "bbc.co.uk" buckets to "bbc.co.uk"
@@ -109,14 +123,19 @@ export function hostBucket(hostname: string | undefined | null): string {
   if (labels.length <= 2) return labels.join(".");
 
   const lastTwo = labels.slice(-2).join(".");
-  if (MULTI_PART_SUFFIXES.has(lastTwo) && labels.length >= 3) {
+  if (MULTI_PART_SUFFIXES.has(lastTwo)) {
     return labels.slice(-3).join(".");
   }
   return lastTwo;
 }
 
-/** Matches an http(s) URL so query strings and paths can be stripped from free text. */
-const URL_LIKE = /https?:\/\/[^\s"'<>)\]]+/gi;
+/**
+ * Matches URL-shaped substrings in free text, so their query strings can be
+ * stripped. Covers absolute http(s) URLs, protocol-relative "//host/path",
+ * and data: URIs — a protocol-relative or data: form in a message is just as
+ * capable of carrying user data as an absolute one.
+ */
+const URL_LIKE = /(?:https?:)?\/\/[^\s"'<>)\]]+|data:[^\s"'<>)\]]+/gi;
 
 /**
  * Bound a free-text field that cannot be redacted by key name.
@@ -124,11 +143,11 @@ const URL_LIKE = /https?:\/\/[^\s"'<>)\]]+/gi;
  * Truncates to MAX_MESSAGE_LENGTH and replaces URL-shaped substrings, whose
  * query strings are the most likely accidental carrier of user data.
  */
-function sanitizeMessage(value: unknown): unknown {
+function sanitizeMessage(value: unknown, maxLength: number): unknown {
   if (typeof value !== "string") return value;
   let out = value.replace(URL_LIKE, "[url]");
-  if (out.length > MAX_MESSAGE_LENGTH) {
-    out = out.slice(0, MAX_MESSAGE_LENGTH) + " [truncated]";
+  if (out.length > maxLength) {
+    out = out.slice(0, maxLength) + " [truncated]";
   }
   return out;
 }
@@ -172,15 +191,19 @@ export function scrubEvent(event: Event): Event {
 
   // Free-text fields: bounded and URL-stripped, not removed, because the
   // message is the single most useful field for debugging.
-  event.message = sanitizeMessage(event.message) as string;
+  event.message = sanitizeMessage(event.message, MAX_MESSAGE_LENGTH) as string;
 
   const exceptionValues = (event.exception as { values?: unknown })?.values;
   if (Array.isArray(exceptionValues)) {
     for (const entry of exceptionValues) {
       if (entry && typeof entry === "object") {
         const record = entry as Record<string, unknown>;
-        if ("value" in record) record.value = sanitizeMessage(record.value);
-        if ("stack" in record) record.stack = sanitizeMessage(record.stack);
+        if ("value" in record) {
+          record.value = sanitizeMessage(record.value, MAX_MESSAGE_LENGTH);
+        }
+        if ("stack" in record) {
+          record.stack = sanitizeMessage(record.stack, MAX_STACK_LENGTH);
+        }
       }
     }
   }

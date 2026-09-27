@@ -47,9 +47,14 @@ export function isHostnameBlocked(
   // caught upstream but would leave isBlocked unset, so stay total rather than
   // trusting the storage shape.
   if (!Array.isArray(blockedPatterns)) return false;
-  const target = hostname.toLowerCase();
+  const target = normalizeHostname(hostname);
+  if (!target) return false;
   return blockedPatterns.some((pattern) => {
-    const normalized = String(pattern).trim().toLowerCase();
+    // Normalize at MATCH time, not just at write time. Entries stored before
+    // the writer learned to strip ports and schemes are still sitting in users'
+    // storage; without this a legacy "mail.example.com:443" would never match
+    // location.hostname and the site would silently stay unblocked.
+    const normalized = normalizeHostname(String(pattern));
     if (!normalized) return false;
     if (normalized.startsWith("*.")) {
       const base = normalized.slice(2); // e.g. "example.com"

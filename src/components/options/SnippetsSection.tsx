@@ -32,15 +32,6 @@ export function SnippetsSection() {
       .catch(console.warn);
   }, []);
 
-  // Hostname normalisation is owned by src/lib/blocked-sites.ts so the
-  // options form, the context-menu path and the content-script matcher all
-  // agree. This local copy previously did not strip an explicit port, so
-  // pasting "https://mail.example.com:443/inbox" stored an entry that could
-  // never match location.hostname. spec: specs/blocked-sites.spec.md
-  function normaliseHostname(raw: string): string {
-    return normalizeHostname(raw);
-  }
-
   function isValidHostname(hostname: string): boolean {
     if (hostname.startsWith("*.")) {
       const rest = hostname.slice(2);
@@ -55,7 +46,7 @@ export function SnippetsSection() {
   }
 
   const handleAddSite = async () => {
-    const hostname = normaliseHostname(addSiteValue);
+    const hostname = normalizeHostname(addSiteValue);
     if (!isValidHostname(hostname)) {
       setAddSiteError(
         i18n.t("options.generalSection.blockedSites.errorInvalid")

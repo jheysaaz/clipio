@@ -18,10 +18,13 @@ const extensionPath = path.resolve(".output/chrome-mv3");
 export default defineConfig({
   testDir: "e2e",
   timeout: 30_000,
-  // 128 tests run serially (workers: 1 — extensions share one browser
-  // context), which works out to roughly 6-7 minutes. The previous 5-minute
-  // budget was hit around test 102, so the tail of the suite never ran.
-  // This is a wall-clock budget for the whole run, not a per-test allowance.
+  // Tests run serially (workers: 1 — extensions share one browser context).
+  // A full green run measures around 4 minutes, but a run with several
+  // auto-retrying 5s assertions waiting out their timeouts reaches 5+ and the
+  // previous 5-minute budget died around test 102, so the tail never ran and
+  // the exit code was a false failure. 15 minutes leaves headroom for a slow
+  // CI machine while still failing a genuine hang. This is a wall-clock budget
+  // for the whole run, not a per-test allowance.
   globalTimeout: 15 * 60 * 1_000,
   // Retries are disabled in CI as well as locally. A retry hides the flake
   // instead of fixing it, and this suite runs serially against a real browser

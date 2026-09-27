@@ -54,10 +54,16 @@ Uses fflate's `UnzipFileInfo.originalSize`, which is available in the `filter` c
 *before* extraction, to enforce a total-inflated-bytes budget. The budget is derived from
 `MEDIA_LIMITS.MAX_TOTAL_SIZE` rather than hard-coded, so the two cannot drift.
 
-`media.id` is additionally required to match the UUID shape that `crypto.randomUUID()`
-produces, because the id is interpolated into `{{image:<id>}}` placeholders and used to
-build the archive path. Without this, an export can inject `{{image:anything}}` tokens that
-the editor could never create but the insertion path would still honour.
+`media.id` must be a short opaque token matching `[A-Za-z0-9_-]{1,64}`, because the id is
+interpolated into `{{image:<id>}}` placeholders and used to build the `media/<id>.` archive
+path. Without this, an export can inject `{{image:anything}}` tokens that the editor could
+never create but the insertion path would still honour.
+
+This is deliberately **not** a strict UUID match. `saveMedia` uses `crypto.randomUUID()`,
+but a strict pattern would refuse any export whose ids came from a different scheme, and a
+user restoring their own backup is not an attack. What matters is that an id cannot contain
+a path separator, a dot, or the brace/colon characters that would let it escape into a
+placeholder. A rejected id is reported in `missingMediaIds` rather than dropped silently.
 
 ## Acceptance Criteria
 
@@ -69,14 +75,17 @@ the editor could never create but the insertion path would still honour.
 - [x] A rejected entry does not consume quota.
 - [x] `saveMedia`'s existing validation is unchanged and still passes its tests.
 - [x] `importClipioZip` aborts when the declared total inflated size exceeds the budget.
-- [x] `importClipioZip` rejects a `media[].id` that is not a UUID.
+- [x] `importClipioZip` rejects a `media[].id` that is not a safe opaque token.
 - [x] A legitimate export round-trips unchanged.
 
 ## Edge Cases
 
-- **A legitimate large export** (e.g. 25 × 2 MB images = 50 MB) is exactly at the budget.
-  The budget is `MAX_TOTAL_SIZE`, so it passes; anything beyond it is refused, which is the
-  same limit the upload path enforces.
+- **A legitimate full export.** 25 × 2 MB images is exactly `MAX_TOTAL_SIZE`, and the
+  archive also contains `export.json` on top. The budget is therefore
+  `MAX_TOTAL_SIZE + MAX_MANIFEST_INFLATED_BYTES`, not `MAX_TOTAL_SIZE` — without the
+  headroom a user at the media cap could not restore their own backup. An earlier revision
+  of this spec got that arithmetic wrong, and the test written to match it asserted the
+  opposite of its own name.
 - **A `meta.mimeType` that is missing** falls back to `guessMimeFromPath`, and the result
   is still validated. A `.txt` renamed to `.png` is refused at the MIME check.
 - **A `meta.size` that disagrees with the blob** is not an error — the blob is

@@ -422,14 +422,55 @@ describe("scrubEvent — free-text fields", () => {
     expect(scrubbed.exception.values[0].value).not.toContain("leak=1");
   });
 
-  it("bounds exception.values[].stack", () => {
+  it("bounds exception.values[].stack, but far less aggressively than a message", () => {
     const event = {
       exception: { values: [{ stack: "z".repeat(5000) }] },
     } as never;
     const scrubbed = scrubEvent(event) as unknown as {
       exception: { values: { stack: string }[] };
     };
-    expect(scrubbed.exception.values[0].stack.length).toBeLessThan(300);
+    // A real Chrome stack is 300-2000+ chars and Sentry's grouping depends on
+    // the frames, so this cap must be an order of magnitude looser than the
+    // 200-char message cap. It was previously 200, which kept the top two
+    // frames and made crashes far harder to triage.
+    expect(scrubbed.exception.values[0].stack.length).toBe(
+      2000 + " [truncated]".length
+    );
+  });
+
+  it("leaves a realistic stack length untouched", () => {
+    const stack = `Error: boom\n${"  at fn (https://x.test/a.js:1:1)\n".repeat(40)}`;
+    expect(stack.length).toBeGreaterThan(200);
+    const event = { exception: { values: [{ stack }] } } as never;
+    const scrubbed = scrubEvent(event) as unknown as {
+      exception: { values: { stack: string }[] };
+    };
+    // Only the URL is replaced; the frames survive.
+    expect(scrubbed.exception.values[0].stack).toContain("[url]");
+    expect(scrubbed.exception.values[0].stack).toContain("Error: boom");
+  });
+
+  it("redacts a shortcut, which is often a user-authored phrase", () => {
+    const event = { extra: { shortcut: "my home address" } } as never;
+    const scrubbed = scrubEvent(event) as unknown as {
+      extra: Record<string, unknown>;
+    };
+    expect(scrubbed.extra.shortcut).toBe("[REDACTED]");
+  });
+
+  it("strips a protocol-relative URL from a message", () => {
+    const event = { message: "failed at //evil.test/p?token=abc" } as never;
+    const scrubbed = scrubEvent(event) as unknown as { message: string };
+    expect(scrubbed.message).not.toContain("abc");
+  });
+
+  it("strips a data: URI from a message", () => {
+    const event = {
+      message: "leaked data:text/plain;base64,c2VjcmV0MTIz",
+    } as never;
+    const scrubbed = scrubEvent(event) as unknown as { message: string };
+    expect(scrubbed.message).not.toContain("c2VjcmV0MTIz");
+    expect(scrubbed.message).toContain("[url]");
   });
 
   it("leaves a normal exception value intact", () => {

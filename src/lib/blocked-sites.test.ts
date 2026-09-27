@@ -266,3 +266,58 @@ describe("normalizeHostname / isHostnameBlocked round trip", () => {
     expect(isHostnameBlocked("example.com", patterns)).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Legacy stored entries
+//
+// The writer learned to strip a port and scheme, but entries written before
+// that are still in users' storage. Matching must normalize them too, or a
+// site the user blocked stays unblocked forever.
+// ---------------------------------------------------------------------------
+
+describe("isHostnameBlocked — legacy stored entries", () => {
+  it("matches an entry stored with an explicit port", () => {
+    expect(
+      isHostnameBlocked("mail.example.com", ["mail.example.com:443"])
+    ).toBe(true);
+  });
+
+  it("matches an entry stored as a full URL", () => {
+    expect(
+      isHostnameBlocked("mail.example.com", ["https://mail.example.com/inbox"])
+    ).toBe(true);
+  });
+
+  it("matches an entry stored with a trailing dot", () => {
+    expect(isHostnameBlocked("example.com", ["example.com."])).toBe(true);
+  });
+
+  it("matches an entry stored with mixed case and padding", () => {
+    expect(isHostnameBlocked("example.com", ["  EXAMPLE.com  "])).toBe(true);
+  });
+
+  it("still honours a legacy wildcard entry", () => {
+    expect(isHostnameBlocked("mail.example.com", ["*.Example.com"])).toBe(true);
+  });
+
+  it("still requires a real subdomain for a legacy wildcard entry", () => {
+    expect(isHostnameBlocked("example.com", ["*.Example.com"])).toBe(false);
+  });
+
+  it("normalizes the target hostname too", () => {
+    // location.hostname is always lowercase, but be robust if a caller
+    // passes something else.
+    expect(isHostnameBlocked("MAIL.Example.com", ["mail.example.com"])).toBe(
+      true
+    );
+  });
+
+  it("returns false for an empty target hostname", () => {
+    // file:// reports an empty hostname; it must stay unblocked.
+    expect(isHostnameBlocked("", ["example.com"])).toBe(false);
+  });
+
+  it("still never blocks an empty-string pattern against an empty hostname", () => {
+    expect(isHostnameBlocked("", [""])).toBe(false);
+  });
+});

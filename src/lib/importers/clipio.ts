@@ -111,10 +111,17 @@ export const ClipioParser: FormatParser = {
  * `unzipSync` inflates the whole archive before any per-entry validation runs,
  * so without a budget a 42-byte ZIP can exhaust memory in the options page.
  * The budget is derived from MEDIA_LIMITS.MAX_TOTAL_SIZE so the archive limit
- * and the store limit cannot drift apart.
+ * and the store limit cannot drift apart, plus headroom for export.json — a
+ * user at the media cap produces media of exactly MAX_TOTAL_SIZE, and the
+ * manifest is on top of it. Without the headroom such a user cannot restore
+ * their own backup.
  * spec: specs/media-import-hardening.spec.md
  */
-export const MAX_ZIP_INFLATED_BYTES = MEDIA_LIMITS.MAX_TOTAL_SIZE;
+/** Headroom for export.json, which is not media and is not quota-bound. */
+export const MAX_MANIFEST_INFLATED_BYTES = 8 * 1024 * 1024;
+
+export const MAX_ZIP_INFLATED_BYTES =
+  MEDIA_LIMITS.MAX_TOTAL_SIZE + MAX_MANIFEST_INFLATED_BYTES;
 
 /**
  * Media IDs are produced by crypto.randomUUID() and are interpolated into

@@ -427,7 +427,7 @@ test.describe("Snippet Preview Feature", () => {
     await expect(host).toHaveAttribute("data-preview-visible", "true", {
       timeout: 5_000,
     });
-    await expect(host).toHaveAttribute("data-preview-count", "2");
+    await expect(host).toHaveAttribute("data-preview-rows", "many");
 
     // The host is sized to the palette, so a non-zero box proves it laid out.
     const boundingBox = await host.boundingBox();
@@ -465,7 +465,7 @@ test.describe("Snippet Preview Feature", () => {
     await expect(host).toHaveAttribute("data-preview-visible", "true", {
       timeout: 5_000,
     });
-    await expect(host).toHaveAttribute("data-preview-count", "1");
+    await expect(host).toHaveAttribute("data-preview-rows", "1");
   });
 
   test("hides preview when no matches", async ({ testPage, storageHelper }) => {
@@ -482,7 +482,7 @@ test.describe("Snippet Preview Feature", () => {
     await expect(host).toHaveAttribute("data-preview-visible", "false", {
       timeout: 5_000,
     });
-    await expect(host).toHaveAttribute("data-preview-count", "0");
+    await expect(host).toHaveAttribute("data-preview-rows", "0");
   });
 
   test("navigates preview with keyboard", async ({
@@ -501,7 +501,7 @@ test.describe("Snippet Preview Feature", () => {
     await testPage.keyboard.type("/", { delay: 30 });
 
     const host = testPage.locator("#clipio-snippet-preview-host");
-    await expect(host).toHaveAttribute("data-preview-count", "2", {
+    await expect(host).toHaveAttribute("data-preview-rows", "many", {
       timeout: 5_000,
     });
 
@@ -598,7 +598,7 @@ test.describe("Snippet Preview Feature", () => {
     await expect(host).toHaveAttribute("data-preview-visible", "true", {
       timeout: 5_000,
     });
-    await expect(host).toHaveAttribute("data-preview-count", "2");
+    await expect(host).toHaveAttribute("data-preview-rows", "many");
   });
 
   test("works in textarea elements", async ({ testPage, storageHelper }) => {
@@ -949,7 +949,7 @@ test.describe("Untrusted event rejection", () => {
     await input.click();
     await testPage.keyboard.press("Control+Shift+Space");
     const host = testPage.locator("#clipio-snippet-preview-host");
-    await expect(host).toHaveAttribute("data-preview-count", "1", {
+    await expect(host).toHaveAttribute("data-preview-rows", "1", {
       timeout: 5_000,
     });
 
@@ -968,12 +968,15 @@ test.describe("Untrusted event rejection", () => {
     });
 
     expect(reachable.shadowRoot).toBeNull();
-    expect(reachable.rowsInLightDom).toBe(0);
     // The snippet label must not be readable from the page at all.
     expect(reachable.bodyMentionsLabel).toBe(false);
 
-    // And no insertion happened.
+    // And no insertion happened, while the extension is demonstrably
+    // functional in this same page: a trusted keystroke still expands.
     expect(await input.inputValue()).toBe("");
+    await input.click();
+    await testPage.keyboard.type("/hello");
+    await expect(input).toHaveValue(/Hello, World!/, { timeout: 5_000 });
   });
 
   test("trusted Enter on a preview row still inserts a snippet", async ({
@@ -990,7 +993,7 @@ test.describe("Untrusted event rejection", () => {
     await testPage.keyboard.press("Control+Shift+Space");
     await expect(
       testPage.locator("#clipio-snippet-preview-host")
-    ).toHaveAttribute("data-preview-count", "1", { timeout: 5_000 });
+    ).toHaveAttribute("data-preview-rows", "1", { timeout: 5_000 });
 
     await testPage.keyboard.press("Enter");
     await expect(input).toHaveValue(/Hello, World!/, { timeout: 5_000 });
