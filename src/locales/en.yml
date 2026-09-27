@@ -15,13 +15,10 @@ dashboard:
   noSnippetsFound: No snippets found
   noSnippetsYet: No snippets yet
   tryDifferentSearch: Try a different search term
-  importSuggestion: Already using another tool? Import your snippets.
   importButton: Import snippets
   draftLabel: Untitled
   draftShortcut: /...
   addSnippet: Add Snippet
-  switchToDark: Switch to dark mode
-  switchToLight: Switch to light mode
   settingsAndExport: Settings & Import/Export
   createSnippetButton: Create snippet
   openSettings: Open settings
@@ -38,7 +35,6 @@ dashboard:
   warnings:
     uninstall:
       body: Uninstalling will delete all snippets. Back up from Preferences first.
-      action: Export backup →
     quotaFull:
       body: Sync storage full — snippets saved locally only.
       action: Export backup →
@@ -113,20 +109,20 @@ confirmDialog:
   defaultCancel: Cancel
 
 options:
-  sidebarSettings: Preferences
-  menu: Menu
+  # Accessible names for controls that carry no visible text. Read by screen
+  # readers, so a Spanish user should hear Spanish. spec: specs/i18n.spec.md
+  a11y:
+    optionsNav: Options navigation
+    previewToggle: Enable Preview
+    feedbackButton: Feedback
+    typingTimeout: Typing Timeout
   nav:
-    general: General
-    importExport: Import & Export
-    feedback: Feedback
     appearance: Appearance
     images: Images
     dashboard: Dashboard
     snippets: Snippets
     advanced: Advanced
   theme:
-    darkMode: Dark mode
-    lightMode: Light mode
     light: Light
     dark: Dark
     system: System
@@ -150,9 +146,6 @@ options:
     localTooltip: "Estimated size of your snippets on this device. Local storage has a much higher limit (~5 MB) and is used as fallback when sync quota is exceeded."
     quotaExceeded: Sync quota exceeded — snippets are stored locally only.
   generalSection:
-    title: General
-    description: General settings will appear here in a future update.
-    comingSoon: Coming soon
     blockedSites:
       title: Blocked Sites
       description: Clipio snippet expansion is disabled on these sites. Right-click on any page → Clipio → Hide on this site to add from the browser.
@@ -185,9 +178,6 @@ options:
     submitting: Sending...
     success: Thank you! Your feedback has been sent.
     error: Failed to send feedback. Please try again.
-    cardTitle: Share Your Feedback
-    cardDescription: Help us improve Clipio with your thoughts and suggestions.
-    cardAction: Send Feedback
     donationAction: Support Clipio
     donationTitle: If Clipio saves you time, consider supporting its development.
     reviewBannerTitle: "Enjoying Clipio?"
@@ -201,7 +191,6 @@ options:
       title: Export snippets
       description: Download your snippet library as a JSON file. Compatible with Clipio on any device.
       button: Export
-      exported: Exported!
     importCard:
       title: Import snippets
       description: Import from a Clipio or other tools export file. Conflicts and unsupported placeholders are resolved step-by-step.
@@ -215,7 +204,6 @@ options:
   warnings:
     uninstall:
       body: Uninstalling Clipio will permanently delete all your snippets. Export a backup before uninstalling.
-      action: Export a backup →
   errors:
     failedExport: Failed to export snippets.
   images:
@@ -240,7 +228,6 @@ options:
     altText:
       label: Description
       placeholder: Add a description (used as alt text)
-      saved: Description saved
   previewSettings:
     enabled: Preview enabled
     disabled: Preview disabled
@@ -257,19 +244,6 @@ options:
       reset: Reset to default
       saved: API key saved
       resetSuccess: API key reset
-    blockedSites:
-      title: Blocked Sites
-      description: Clipio snippet expansion is disabled on these sites.
-      empty: "No sites blocked. Right-click on any page → Clipio → Hide on this site."
-      remove: Remove
-      removed: Site removed from blocklist
-    versionUpdate:
-      title: Extension Version & Update
-      description: Current installed version and available updates.
-      currentVersion: "Version: $1"
-      updateAvailable: "New version available: $1"
-      openRelease: View release
-      upToDate: Up to date
     contentScriptHealth:
       title: Content Script Health
       description: Ping the active tab's content script to verify it is running.
@@ -291,20 +265,6 @@ options:
       confirmSwitchToSync: Confirm switch to sync
       confirmSwitchToLocal: Confirm switch to local
       switchError: Failed to switch storage backend. Please try again.
-      progressLabel: "Sync quota: $1% used"
-      progressEmpty: No sync data
-      localModeHint: Using local storage — not synced across devices
-    typingTimeout:
-      title: Typing Timeout
-      description: "How long Clipio waits after you stop typing before attempting to expand a snippet. Lower = faster but may expand mid-word. Default: 300 ms."
-      label: "$1 ms"
-      reset: Reset to default
-      saved: Saved
-    topUsage:
-      title: Top 5 Usage
-      description: The five most-used snippets by insertion count.
-      empty: No usage data yet.
-      count: "$1 uses"
     debugMode:
       title: Debug Mode
       description: Logs extension activity to the console and this panel. May impact performance. For troubleshooting only.
@@ -314,17 +274,12 @@ options:
       copiedLog: Copied!
       copyFailed: Failed to copy debug log
       emptyLog: No log entries yet.
-      contextContent: content
-      contextBackground: background
-      contextStorage: storage
     clearIdb:
       title: Clear IDB Backup
       description: Wipe the IndexedDB snippets backup store. Use this to reset the local backup after a clean reinstall.
       button: Clear backup
       confirm: Confirm clear
       cleared: Cleared
-      status: "Backup status: $1 snippet(s) stored"
-      noBackup: "Backup status: Empty (no snippets stored)"
 
 importWizard:
   steps:
@@ -472,7 +427,6 @@ imagePicker:
   uploadNew: Upload new image
   empty: No images yet. Upload one to get started.
   noResults: No images match "$1"
-  dropHere: Drop image here
   dragging: Drop to upload
   ariaLabel: Image picker
 

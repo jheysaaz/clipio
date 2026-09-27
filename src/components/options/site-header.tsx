@@ -1,3 +1,4 @@
+import { i18n } from "#i18n";
 import { MessageSquareText } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,7 @@ export function SiteHeader({
         variant="ghost"
         size="icon"
         onClick={onFeedback}
-        aria-label="Feedback"
+        aria-label={i18n.t("options.a11y.feedbackButton")}
       >
         <Icon icon={MessageSquareText} size="lg" />
       </Button>

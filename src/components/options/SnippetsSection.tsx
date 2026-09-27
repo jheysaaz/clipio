@@ -281,7 +281,7 @@ export function SnippetsSection() {
             value={typingTimeout}
             onChange={(e) => handleTimeoutChange(Number(e.target.value))}
             className="flex-1 h-2 accent-primary cursor-pointer"
-            aria-label="Typing Timeout"
+            aria-label={i18n.t("options.a11y.typingTimeout")}
           />
           <span className="text-sm font-mono w-20 text-right shrink-0 text-foreground">
             {typingTimeout} ms

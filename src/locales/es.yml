@@ -15,13 +15,10 @@ dashboard:
   noSnippetsFound: No se encontraron fragmentos
   noSnippetsYet: Aún no hay fragmentos
   tryDifferentSearch: Prueba con otro término de búsqueda
-  importSuggestion: "¿Ya usas otra herramienta? Importa tus fragmentos."
   importButton: Importar fragmentos
   draftLabel: Sin título
   draftShortcut: /...
   addSnippet: Agregar fragmento
-  switchToDark: Cambiar a modo oscuro
-  switchToLight: Cambiar a modo claro
   settingsAndExport: Ajustes e Importar/Exportar
   createSnippetButton: Crear fragmento
   openSettings: Abrir ajustes
@@ -38,7 +35,6 @@ dashboard:
   warnings:
     uninstall:
       body: Desinstalar eliminará todos los fragmentos. Haz una copia desde Preferencias primero.
-      action: Exportar copia de seguridad →
     quotaFull:
       body: Almacenamiento de sincronización lleno — los fragmentos se guardan solo localmente.
       action: Exportar copia de seguridad →
@@ -113,20 +109,20 @@ confirmDialog:
   defaultCancel: Cancelar
 
 options:
-  sidebarSettings: Preferencias
-  menu: Menú
+  # Nombres accesibles de controles sin texto visible. Los lee un lector de
+  # pantalla, así que un usuario en español debe oír español.
+  a11y:
+    optionsNav: Navegación de opciones
+    previewToggle: Activar vista previa
+    feedbackButton: Comentarios
+    typingTimeout: Tiempo de escritura
   nav:
-    general: General
-    importExport: Importar y Exportar
-    feedback: Comentarios
     appearance: Apariencia
     images: Imágenes
     dashboard: Panel
     snippets: Fragmentos
     advanced: Avanzado
   theme:
-    darkMode: Modo oscuro
-    lightMode: Modo claro
     light: Claro
     dark: Oscuro
     system: Sistema
@@ -150,9 +146,6 @@ options:
     localTooltip: "Tamaño estimado de tus fragmentos en este dispositivo. El almacenamiento local tiene un límite mucho mayor (~5 MB) y se usa como alternativa cuando se supera la cuota de sincronización."
     quotaExceeded: Cuota de sincronización superada — los fragmentos se almacenan solo localmente.
   generalSection:
-    title: General
-    description: Los ajustes generales aparecerán aquí en una actualización futura.
-    comingSoon: Próximamente
     blockedSites:
       title: Sitios bloqueados
       description: La expansión de fragmentos de Clipio está desactivada en estos sitios. Haz clic derecho en cualquier página → Clipio → Ocultar en este sitio para añadir desde el navegador.
@@ -185,9 +178,6 @@ options:
     submitting: Enviando...
     success: ¡Gracias! Tus comentarios han sido enviados.
     error: Error al enviar comentarios. Por favor, inténtalo de nuevo.
-    cardTitle: Comparte tus comentarios
-    cardDescription: Ayúdanos a mejorar Clipio con tus opiniones y sugerencias.
-    cardAction: Enviar comentarios
     donationAction: Apoyar Clipio
     donationTitle: Si Clipio te ahorra tiempo, considera apoyar su desarrollo.
     reviewBannerTitle: "¿Disfrutas Clipio?"
@@ -201,7 +191,6 @@ options:
       title: Exportar fragmentos
       description: Descarga tu biblioteca de fragmentos como un archivo JSON. Compatible con Clipio en cualquier dispositivo.
       button: Exportar
-      exported: "¡Exportado!"
     importCard:
       title: Importar fragmentos
       description: Importa desde un archivo de exportación de Clipio u otras herramientas. Los conflictos y marcadores no compatibles se resuelven paso a paso.
@@ -215,7 +204,6 @@ options:
   warnings:
     uninstall:
       body: Desinstalar Clipio eliminará permanentemente todos tus fragmentos. Exporta una copia de seguridad antes de desinstalar.
-      action: Exportar una copia de seguridad →
   errors:
     failedExport: Error al exportar los fragmentos.
   images:
@@ -240,7 +228,6 @@ options:
     altText:
       label: Descripción
       placeholder: Añade una descripción (se usa como texto alternativo)
-      saved: Descripción guardada
   previewSettings:
     enabled: Vista previa activada
     disabled: Vista previa desactivada
@@ -257,19 +244,6 @@ options:
       reset: Restablecer valor predeterminado
       saved: Clave API guardada
       resetSuccess: Clave API restablecida
-    blockedSites:
-      title: Sitios bloqueados
-      description: La expansión de fragmentos de Clipio está desactivada en estos sitios.
-      empty: "No hay sitios bloqueados. Haz clic derecho en cualquier página → Clipio → Ocultar en este sitio."
-      remove: Eliminar
-      removed: Sitio eliminado de la lista de bloqueo
-    versionUpdate:
-      title: Versión y actualizaciones
-      description: Versión instalada actualmente y actualizaciones disponibles.
-      currentVersion: "Versión: $1"
-      updateAvailable: "Nueva versión disponible: $1"
-      openRelease: Ver lanzamiento
-      upToDate: Al día
     contentScriptHealth:
       title: Estado del script de contenido
       description: Hacer ping al script de contenido de la pestaña activa para verificar que está en ejecución.
@@ -291,20 +265,6 @@ options:
       confirmSwitchToSync: Confirmar cambio a sincronización
       confirmSwitchToLocal: Confirmar cambio a local
       switchError: Error al cambiar el backend de almacenamiento. Por favor, inténtalo de nuevo.
-      progressLabel: "Cuota de sincronización: $1% usado"
-      progressEmpty: Sin datos de sincronización
-      localModeHint: Usando almacenamiento local — no sincronizado entre dispositivos
-    typingTimeout:
-      title: Tiempo de espera al escribir
-      description: "Cuánto tiempo espera Clipio después de que dejas de escribir antes de intentar expandir un fragmento. Menos = más rápido pero puede expandirse a mitad de palabra. Por defecto: 300 ms."
-      label: "$1 ms"
-      reset: Restablecer valor por defecto
-      saved: Guardado
-    topUsage:
-      title: Top 5 de uso
-      description: Los cinco fragmentos más utilizados por recuento de inserciones.
-      empty: Aún no hay datos de uso.
-      count: "$1 usos"
     debugMode:
       title: Modo depuración
       description: Registra la actividad de la extensión en la consola y este panel. Puede afectar el rendimiento. Solo para diagnóstico.
@@ -314,17 +274,12 @@ options:
       copiedLog: "¡Copiado!"
       copyFailed: Error al copiar el registro de depuración
       emptyLog: Aún no hay entradas en el registro.
-      contextContent: contenido
-      contextBackground: fondo
-      contextStorage: almacenamiento
     clearIdb:
       title: Limpiar copia de seguridad IDB
       description: Eliminar el almacén de copia de seguridad de fragmentos de IndexedDB. Úsalo para restablecer la copia de seguridad local tras una reinstalación limpia.
       button: Limpiar copia de seguridad
       confirm: Confirmar limpieza
       cleared: Limpiado
-      status: "Estado de copia: $1 fragmento(s) almacenados"
-      noBackup: "Estado de copia: Vacío (sin fragmentos)"
 
 importWizard:
   steps:
@@ -472,7 +427,6 @@ imagePicker:
   uploadNew: Subir nueva imagen
   empty: Aún no hay imágenes. Sube una para comenzar.
   noResults: No se encontraron imágenes para "$1"
-  dropHere: Suelta la imagen aquí
   dragging: Suelta para subir
   ariaLabel: Selector de imágenes
 

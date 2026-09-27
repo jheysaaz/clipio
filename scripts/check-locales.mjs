@@ -1,15 +1,25 @@
 /**
  * Locale parity checker
- * Ensures every key in en.yml exists in all other locale files,
- * and flags any extra keys in translations that don't exist in en.
+ *
+ * Three checks:
+ *   1. every key in en.yml exists in all other locale files
+ *   2. no translation defines a key that en.yml does not
+ *   3. every placeholder ($1, {{name}}, …) matches en.yml
+ *   4. **every key in en.yml is actually referenced by the code**
+ *
+ * The fourth is the one that was missing, and its absence is why 32 dead keys
+ * accumulated: nothing complained when a key stopped being read, so removing the
+ * last call site of a feature left its strings behind forever. It is reported
+ * rather than enforced, because a key can legitimately be reserved for a
+ * feature still being built — but it can no longer rot unnoticed.
  *
  * Usage: pnpm check:locales
  *
  * Wired into CI (.github/workflows/ci.yml) so locale drift cannot land again.
  */
 
-import { readFileSync } from "fs";
-import { resolve, dirname } from "path";
+import { readFileSync, readdirSync, statSync } from "fs";
+import { resolve, dirname, join } from "path";
 import { fileURLToPath } from "url";
 // js-yaml v5 exposes named exports only — there is no default export.
 import { load } from "js-yaml";
@@ -85,7 +95,9 @@ for (const file of TRANSLATIONS) {
   // Keys in en but missing from the translation
   const missing = [...enKeys].filter((k) => !localeKeys.has(k));
   if (missing.length) {
-    console.error(`\n❌ Keys in en.yml missing from ${file} (${missing.length}):`);
+    console.error(
+      `\n❌ Keys in en.yml missing from ${file} (${missing.length}):`
+    );
     missing.forEach((k) => console.error(`   - ${k}`));
     passed = false;
   }
@@ -111,7 +123,10 @@ for (const file of TRANSLATIONS) {
     if (!(key in localeLeaves)) continue; // already reported as missing
     const expected = placeholdersOf(source);
     const actual = placeholdersOf(localeLeaves[key]);
-    if (sortedPlaceholders(expected).join(",") === sortedPlaceholders(actual).join(",")) {
+    if (
+      sortedPlaceholders(expected).join(",") ===
+      sortedPlaceholders(actual).join(",")
+    ) {
       if (expected.join(",") !== actual.join(",")) reordered.push(key);
       continue;
     }
@@ -134,9 +149,86 @@ for (const file of TRANSLATIONS) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Unused keys
+// ---------------------------------------------------------------------------
+
+/** Every .ts/.tsx file under src/, so the scan covers components and lib. */
+function sourceFiles(dir) {
+  const out = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      out.push(...sourceFiles(full));
+    } else if (/\.tsx?$/.test(entry) && !entry.endsWith(".d.ts")) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+const SRC_DIR = resolve(__dirname, "../src");
+const sources = sourceFiles(SRC_DIR)
+  .map((f) => readFileSync(f, "utf8"))
+  .join("\n");
+
+/**
+ * Keys the code actually asks for.
+ *
+ * Only static `i18n.t("…")` calls are counted, and a scan confirms there are no
+ * template-literal or concatenated key accesses in src/ — if one is ever added
+ * this check will under-report, so the scan is asserted rather than assumed.
+ */
+const dynamicAccess = sources.match(/i18n\.t\(\s*(?!\s*["'])[^)]/g);
+if (dynamicAccess) {
+  console.warn(
+    `\n⚠️  Found ${dynamicAccess.length} non-literal i18n.t() call(s). Unused-key detection\n` +
+      "   only understands static keys, so its result is incomplete:"
+  );
+  dynamicAccess
+    .slice(0, 5)
+    .forEach((line) => console.warn(`   ${line.trim()}`));
+}
+
+// Any string literal in src/ that is exactly a locale key counts as a use, not
+// just a direct `i18n.t("…")` call. That covers keys reached indirectly through
+// a data table — the sidebar's `labelKey: "options.nav.dashboard"` is looked up
+// with `i18n.t(item.labelKey)` and would otherwise be reported as dead while
+// being very much alive.
+const usedKeys = new Set(
+  [...sources.matchAll(/["']([A-Za-z][\w]*(?:\.[A-Za-z][\w]*)+)["']/g)].map(
+    (m) => m[1]
+  )
+);
+// Plural arms (the `1:` / `n:` entries under a plural key) are not referenced
+// individually: the code calls `t(key, [n])` and the runtime picks the arm. The
+// parent key is the one that has to be present, and it is checked by the
+// parity check above.
+const isPluralArm = (key) => /\.(1|n)$/.test(key);
+
+// Consumed by the build, not by `i18n.t`: the manifest name and description are
+// read by the browser from the generated manifest.json.
+const MANIFEST_KEYS = new Set(["extName", "extDescription"]);
+
+const unusedKeys = [...enKeys]
+  .filter((k) => !usedKeys.has(k) && !isPluralArm(k) && !MANIFEST_KEYS.has(k))
+  .sort();
+
+if (unusedKeys.length > 0) {
+  console.warn(
+    `\n⚠️  ${unusedKeys.length} key(s) in en.yml are never read by the code. Not an error —\n` +
+      "   a key may be reserved for in-progress work — but each one is a translation\n" +
+      "   someone maintains for nothing:"
+  );
+  unusedKeys.forEach((key) => console.warn(`   - ${key}`));
+}
+
 if (passed) {
   console.log(
-    `✅ All ${enKeys.size} keys from en.yml are present in ${TRANSLATIONS.join(", ")}`
+    `✅ All ${enKeys.size} keys from en.yml are present in ${TRANSLATIONS.join(", ")}` +
+      (unusedKeys.length
+        ? ` (${unusedKeys.length} unused — see the warning above)`
+        : " · no unused keys")
   );
 } else {
   process.exit(1);

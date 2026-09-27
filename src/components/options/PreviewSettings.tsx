@@ -93,7 +93,7 @@ export function PreviewSettings() {
           <Button
             role="switch"
             aria-checked={previewEnabled}
-            aria-label="Enable Preview"
+            aria-label={i18n.t("options.a11y.previewToggle")}
             variant={previewEnabled ? "default" : "outline"}
             size="sm"
             onClick={handleTogglePreview}
