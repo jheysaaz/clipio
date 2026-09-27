@@ -41,7 +41,11 @@ interface GiphyResult {
 ## Error Handling
 
 - Returns empty array on failure.
-- Does not throw.
+- Throws a **typed** error rather than returning an empty list. `search()` rejects with
+  `GiphyAuthError` when no API key is configured, `GiphyRateLimitError` on HTTP 429, and
+  `GiphyNetworkError` on any other failure. Callers are expected to catch and handle these —
+  `giphy.test.ts` asserts all three with `rejects.toThrow`. An earlier revision of this spec
+  said "returns `[]`, never throw", which contradicted both the implementation and its tests.
 
 ---
 

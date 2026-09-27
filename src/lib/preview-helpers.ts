@@ -60,12 +60,11 @@ export interface TriggerMatch {
   query: string;
 }
 
-export interface PreviewSettings {
-  enabled: boolean;
-  triggerPrefix: string;
-  keyboardShortcut: string;
-}
-
+// A byte-identical second declaration of PreviewSettings used to sit here.
+// TypeScript merges interface declarations, so it compiled — but it was a trap:
+// the first edit to one copy would either be silently shadowed or break the
+// build depending on which copy was touched, and a reader could not tell there
+// was only meant to be one.
 // ---------------------------------------------------------------------------
 // Fuzzy matching
 // ---------------------------------------------------------------------------
