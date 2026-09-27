@@ -57,6 +57,7 @@ import {
 import { snippetPreviewUI } from "@/lib/snippet-preview-ui";
 import { locateTextRange, getCaretTextOffset } from "@/lib/dom-text-range";
 import { isHostnameBlocked } from "@/lib/blocked-sites";
+import { hostBucket } from "@/lib/sentry-scrub";
 
 /**
  * Blocklist matching lives in src/lib/blocked-sites.ts so it can be unit
@@ -492,7 +493,7 @@ export default defineContentScript({
       if (now - lastRevertReportTime < REVERT_REPORT_COOLDOWN_MS) return;
       lastRevertReportTime = now;
       captureMessage("Snippet insertion reverted by host", "warning", {
-        host: window.location.hostname,
+        hostBucket: hostBucket(window.location.hostname),
         elementType,
       });
     }
@@ -647,7 +648,7 @@ export default defineContentScript({
             action: "expandSnippetInContentEditable",
             snippetId: snippet.id,
             shortcut: snippet.shortcut,
-            host: window.location.hostname,
+            hostBucket: hostBucket(window.location.hostname),
           }
         );
         debugLog("expand:skipped", {
@@ -1093,7 +1094,7 @@ export default defineContentScript({
               action: "insertSnippetInContentEditable",
               snippetId: snippet.id,
               shortcut: snippet.shortcut,
-              host: window.location.hostname,
+              hostBucket: hostBucket(window.location.hostname),
             }
           );
           debugLog("preview:insert-skipped", {

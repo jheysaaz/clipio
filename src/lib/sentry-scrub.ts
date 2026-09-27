@@ -27,7 +27,111 @@ const SENSITIVE_KEYS = new Set([
   "oldValue",
   "cachedSnippets",
   "items",
+  // Location fields. Call sites should send a hostBucket() value rather than a
+  // raw hostname so the diagnostic survives, but redactObject matches on key
+  // name and is the only backstop if a future call site leaks one.
+  "host",
+  "hostname",
+  "url",
+  "href",
+  "pathname",
+  "path",
+  "search",
+  "query",
+  "referrer",
+  "documentUrl",
+  "location",
 ]);
+
+/** Longest message/excerpt we are willing to send. */
+const MAX_MESSAGE_LENGTH = 200;
+
+/**
+ * Common multi-part public suffixes, so "bbc.co.uk" buckets to "bbc.co.uk"
+ * rather than "co.uk". Not exhaustive — this is an approximation of the public
+ * suffix list, which is a ~250 KB data file and is not shipped. An unlisted
+ * multi-part suffix degrades to the last two labels, which is coarser than
+ * ideal but never more revealing than sending the hostname itself.
+ */
+const MULTI_PART_SUFFIXES = new Set([
+  "co.uk",
+  "org.uk",
+  "ac.uk",
+  "gov.uk",
+  "com.au",
+  "net.au",
+  "org.au",
+  "co.jp",
+  "or.jp",
+  "ne.jp",
+  "co.nz",
+  "com.br",
+  "com.mx",
+  "co.in",
+  "co.za",
+  "com.sg",
+  "com.hk",
+  "com.cn",
+  "co.kr",
+]);
+
+/**
+ * Reduce a hostname to its registrable domain for reporting.
+ *
+ * The content script sends `window.location.hostname` with every
+ * insertion-failure event, which is a partial browsing-history stream to a
+ * third party. Full redaction would destroy the diagnostic value — "is this
+ * Gmail-specific?" is the question these events exist to answer — so the
+ * hostname is bucketed to its registrable domain instead.
+ *
+ * Returns "" for input that is not a plausible hostname, rather than echoing
+ * an arbitrary string back to Sentry.
+ *
+ * @example
+ * hostBucket("mail.google.com")   // "google.com"
+ * hostBucket("bbc.co.uk")         // "bbc.co.uk"
+ * hostBucket("")                  // ""
+ */
+export function hostBucket(hostname: string | undefined | null): string {
+  if (typeof hostname !== "string") return "";
+  const value = hostname.trim().toLowerCase();
+  if (!value) return "";
+  // Reject anything with scheme, path, port, whitespace or userinfo. A hostname
+  // is labels separated by dots only.
+  if (!/^[a-z0-9.-]+$/.test(value)) return "";
+  // Reject bare IPs: bucketing 192.168.1.1 to 168.1 would be meaningless and
+  // an IPv4 literal is already not very identifying, so report nothing.
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return "";
+  // "localhost" has no registrable domain.
+  if (value === "localhost") return "";
+
+  const labels = value.split(".").filter(Boolean);
+  if (labels.length <= 2) return labels.join(".");
+
+  const lastTwo = labels.slice(-2).join(".");
+  if (MULTI_PART_SUFFIXES.has(lastTwo) && labels.length >= 3) {
+    return labels.slice(-3).join(".");
+  }
+  return lastTwo;
+}
+
+/** Matches an http(s) URL so query strings and paths can be stripped from free text. */
+const URL_LIKE = /https?:\/\/[^\s"'<>)\]]+/gi;
+
+/**
+ * Bound a free-text field that cannot be redacted by key name.
+ *
+ * Truncates to MAX_MESSAGE_LENGTH and replaces URL-shaped substrings, whose
+ * query strings are the most likely accidental carrier of user data.
+ */
+function sanitizeMessage(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  let out = value.replace(URL_LIKE, "[url]");
+  if (out.length > MAX_MESSAGE_LENGTH) {
+    out = out.slice(0, MAX_MESSAGE_LENGTH) + " [truncated]";
+  }
+  return out;
+}
 
 function redactObject(obj: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
@@ -45,8 +149,10 @@ function redactObject(obj: Record<string, unknown>): Record<string, unknown> {
 
 /**
  * Scrub a Sentry event before it is sent.
- * Redacts sensitive fields in `extra` and `contexts` while leaving
- * error messages, stack traces, and tags intact.
+ *
+ * Redacts sensitive keyed fields in `extra` and `contexts`, and bounds the
+ * free-text fields (`message`, exception values and stacks) that key-based
+ * redaction structurally cannot reach.
  */
 export function scrubEvent(event: Event): Event {
   if (event.extra && typeof event.extra === "object") {
@@ -62,6 +168,21 @@ export function scrubEvent(event: Event): Event {
           : ({} as Record<string, unknown>);
     }
     event.contexts = scrubbed;
+  }
+
+  // Free-text fields: bounded and URL-stripped, not removed, because the
+  // message is the single most useful field for debugging.
+  event.message = sanitizeMessage(event.message) as string;
+
+  const exceptionValues = (event.exception as { values?: unknown })?.values;
+  if (Array.isArray(exceptionValues)) {
+    for (const entry of exceptionValues) {
+      if (entry && typeof entry === "object") {
+        const record = entry as Record<string, unknown>;
+        if ("value" in record) record.value = sanitizeMessage(record.value);
+        if ("stack" in record) record.stack = sanitizeMessage(record.stack);
+      }
+    }
   }
 
   return event;

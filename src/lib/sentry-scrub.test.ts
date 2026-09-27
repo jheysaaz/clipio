@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { scrubEvent, scrubBreadcrumb } from "./sentry-scrub";
+import { scrubEvent, scrubBreadcrumb, hostBucket } from "./sentry-scrub";
 import type { Event } from "@sentry/browser";
 import type { Breadcrumb } from "@sentry/core";
 
@@ -134,7 +134,21 @@ describe("scrubBreadcrumb", () => {
     };
     scrubBreadcrumb(crumb);
     expect(crumb.data!.content).toBe("[REDACTED]");
-    expect(crumb.data!.url).toBe("https://example.com");
+    // A breadcrumb url is the page the user was on, which is the browsing
+    // history leak this module exists to prevent. It was previously preserved;
+    // "url" is now in SENSITIVE_KEYS. Note the Breadcrumbs integration is
+    // excluded from both Sentry clients, so in practice these rarely occur.
+    expect(crumb.data!.url).toBe("[REDACTED]");
+  });
+
+  it("preserves a non-sensitive breadcrumb field so the crumb stays useful", () => {
+    const crumb: Breadcrumb = {
+      category: "fetch",
+      data: { status_code: 500, method: "GET" },
+    };
+    scrubBreadcrumb(crumb);
+    expect(crumb.data!.status_code).toBe(500);
+    expect(crumb.data!.method).toBe("GET");
   });
 
   // spec: MUST handle missing breadcrumb.data gracefully
@@ -203,5 +217,248 @@ describe("scrubBreadcrumb", () => {
     const crumb: Breadcrumb = { category: "console", data: { text: "hi" } };
     const returned = scrubBreadcrumb(crumb);
     expect(returned).toBe(crumb);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// hostBucket — coarse site attribution without disclosing the exact site
+// spec: specs/sentry-scrub.spec.md
+// ---------------------------------------------------------------------------
+
+describe("hostBucket", () => {
+  it("reduces a subdomain to its registrable domain", () => {
+    expect(hostBucket("mail.google.com")).toBe("google.com");
+  });
+
+  it("reduces a deep subdomain to its registrable domain", () => {
+    expect(hostBucket("a.b.c.example.co.uk")).toBe("example.co.uk");
+  });
+
+  it("returns an already-bare domain unchanged", () => {
+    expect(hostBucket("example.com")).toBe("example.com");
+  });
+
+  it("keeps a known multi-part public suffix", () => {
+    expect(hostBucket("bbc.co.uk")).toBe("bbc.co.uk");
+  });
+
+  it("keeps a subdomain under a known multi-part suffix", () => {
+    expect(hostBucket("news.bbc.co.uk")).toBe("bbc.co.uk");
+  });
+
+  it("handles com.au", () => {
+    expect(hostBucket("shop.example.com.au")).toBe("example.com.au");
+  });
+
+  it("lowercases the input", () => {
+    expect(hostBucket("MAIL.GOOGLE.COM")).toBe("google.com");
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(hostBucket("  mail.google.com  ")).toBe("google.com");
+  });
+
+  it("discards a trailing dot", () => {
+    expect(hostBucket("mail.google.com.")).toBe("google.com");
+  });
+
+  // --- negative cases: never echo something that is not a hostname ---
+
+  it("returns empty for an empty string", () => {
+    expect(hostBucket("")).toBe("");
+  });
+
+  it("returns empty for whitespace only", () => {
+    expect(hostBucket("   ")).toBe("");
+  });
+
+  it("returns empty for undefined", () => {
+    expect(hostBucket(undefined)).toBe("");
+  });
+
+  it("returns empty for null", () => {
+    expect(hostBucket(null)).toBe("");
+  });
+
+  it("returns empty for a full URL (has a scheme and path)", () => {
+    expect(hostBucket("https://mail.google.com/inbox?x=1")).toBe("");
+  });
+
+  it("returns empty for a bare IPv4 address", () => {
+    // Bucketing 192.168.1.1 to 168.1 would be meaningless.
+    expect(hostBucket("192.168.1.1")).toBe("");
+  });
+
+  it("returns empty for localhost, which has no registrable domain", () => {
+    expect(hostBucket("localhost")).toBe("");
+  });
+
+  it("returns empty for a string containing a space", () => {
+    expect(hostBucket("mail google com")).toBe("");
+  });
+
+  it("returns empty for a path traversal attempt", () => {
+    expect(hostBucket("../../etc/passwd")).toBe("");
+  });
+
+  it("returns empty for a non-string value at runtime", () => {
+    expect(hostBucket(42 as unknown as string)).toBe("");
+  });
+
+  it("returns empty for an object at runtime", () => {
+    expect(hostBucket({} as unknown as string)).toBe("");
+  });
+
+  it("never returns a value that is a strict prefix of the input subdomain", () => {
+    // The whole point: the subdomain must not survive.
+    const bucket = hostBucket("secret-internal.corp.example.com");
+    expect(bucket).toBe("example.com");
+    expect(bucket).not.toContain("secret-internal");
+    expect(bucket).not.toContain("corp");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Location-field redaction (the backstop for a raw-hostname leak)
+// ---------------------------------------------------------------------------
+
+describe("scrubEvent — location fields", () => {
+  const cases = [
+    "host",
+    "hostname",
+    "url",
+    "href",
+    "pathname",
+    "path",
+    "search",
+    "query",
+    "referrer",
+    "documentUrl",
+    "location",
+  ] as const;
+
+  for (const key of cases) {
+    it(`redacts a raw "${key}" so a leaking call site is still caught`, () => {
+      const event = {
+        extra: { [key]: "mail.google.com", action: "expandSnippet" },
+      } as never;
+      const scrubbed = scrubEvent(event) as unknown as {
+        extra: Record<string, unknown>;
+      };
+      expect(scrubbed.extra[key]).toBe("[REDACTED]");
+      // The non-sensitive sibling must survive so the event is still useful.
+      expect(scrubbed.extra.action).toBe("expandSnippet");
+    });
+  }
+
+  it("preserves a hostBucket value, which is already coarse", () => {
+    const event = {
+      extra: { hostBucket: "google.com", elementType: "INPUT" },
+    } as never;
+    const scrubbed = scrubEvent(event) as unknown as {
+      extra: Record<string, unknown>;
+    };
+    expect(scrubbed.extra.hostBucket).toBe("google.com");
+    expect(scrubbed.extra.elementType).toBe("INPUT");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Free-text fields that key-based redaction structurally cannot reach
+// ---------------------------------------------------------------------------
+
+describe("scrubEvent — free-text fields", () => {
+  it("truncates a long event.message to 200 chars", () => {
+    const event = { message: "x".repeat(5000) } as never;
+    const scrubbed = scrubEvent(event) as unknown as { message: string };
+    expect(scrubbed.message.length).toBe(200 + " [truncated]".length);
+    expect(scrubbed.message.endsWith("[truncated]")).toBe(true);
+  });
+
+  it("leaves a short event.message intact", () => {
+    const event = { message: "Snippet insertion reverted by host" } as never;
+    const scrubbed = scrubEvent(event) as unknown as { message: string };
+    expect(scrubbed.message).toBe("Snippet insertion reverted by host");
+  });
+
+  it("strips a URL with a query string from event.message", () => {
+    const event = {
+      message: "failed loading https://app.example.com/inbox?token=secret123",
+    } as never;
+    const scrubbed = scrubEvent(event) as unknown as { message: string };
+    expect(scrubbed.message).not.toContain("secret123");
+    expect(scrubbed.message).not.toContain("token=");
+    expect(scrubbed.message).toContain("[url]");
+  });
+
+  it("strips every URL from a message containing several", () => {
+    const event = {
+      message: "a https://x.test/?p=1 then b http://y.test/?q=2 end",
+    } as never;
+    const scrubbed = scrubEvent(event) as unknown as { message: string };
+    expect(scrubbed.message).not.toContain("p=1");
+    expect(scrubbed.message).not.toContain("q=2");
+  });
+
+  it("truncates exception.values[].value", () => {
+    const event = {
+      exception: { values: [{ type: "Error", value: "y".repeat(1000) }] },
+    } as never;
+    const scrubbed = scrubEvent(event) as unknown as {
+      exception: { values: { value: string }[] };
+    };
+    expect(scrubbed.exception.values[0].value.length).toBeLessThan(300);
+  });
+
+  it("strips a URL from exception.values[].value", () => {
+    const event = {
+      exception: {
+        values: [{ type: "Error", value: "boom at https://a.test/?leak=1" }],
+      },
+    } as never;
+    const scrubbed = scrubEvent(event) as unknown as {
+      exception: { values: { value: string }[] };
+    };
+    expect(scrubbed.exception.values[0].value).not.toContain("leak=1");
+  });
+
+  it("bounds exception.values[].stack", () => {
+    const event = {
+      exception: { values: [{ stack: "z".repeat(5000) }] },
+    } as never;
+    const scrubbed = scrubEvent(event) as unknown as {
+      exception: { values: { stack: string }[] };
+    };
+    expect(scrubbed.exception.values[0].stack.length).toBeLessThan(300);
+  });
+
+  it("leaves a normal exception value intact", () => {
+    const event = {
+      exception: { values: [{ type: "Error", value: "Invalid state" }] },
+    } as never;
+    const scrubbed = scrubEvent(event) as unknown as {
+      exception: { values: { value: string }[] };
+    };
+    expect(scrubbed.exception.values[0].value).toBe("Invalid state");
+  });
+
+  it("tolerates an event with no message and no exception", () => {
+    const event = { extra: { action: "x" } } as never;
+    const scrubbed = scrubEvent(event) as unknown as {
+      message?: string;
+      extra: Record<string, unknown>;
+    };
+    expect(scrubbed.message).toBeUndefined();
+    expect(scrubbed.extra.action).toBe("x");
+  });
+
+  it("tolerates a non-array exception.values", () => {
+    const event = { exception: { values: "not-an-array" } } as never;
+    expect(() => scrubEvent(event)).not.toThrow();
+  });
+
+  it("tolerates a non-string message", () => {
+    const event = { message: 42 } as never;
+    expect(() => scrubEvent(event)).not.toThrow();
   });
 });
