@@ -26,6 +26,15 @@ import type { Snippet } from "../src/types/index.js";
 export type StorageHelper = {
   /** Seed a list of snippets into both sync (per-key) and local cache. */
   seedSnippets: (snippets: Snippet[]) => Promise<void>;
+  /**
+   * Seed ONLY browser.storage.sync, leaving the content-script cache alone.
+   *
+   * This is what the browser does on its own when the user signs into a Google
+   * account or another device syncs: storage.sync is populated externally and
+   * no extension code runs. Used to reproduce the reported bug where snippets
+   * appear in the popup but will not insert on a page.
+   */
+  seedSyncOnly: (snippets: Snippet[]) => Promise<void>;
   /** Read all snip:* keys from sync storage. */
   readSyncSnippets: () => Promise<Snippet[]>;
   /** Read cachedSnippets from local storage. */
@@ -173,6 +182,25 @@ export const test = base.extend<ClipioFixtures>({
             await ext.storage.sync.set(syncEntries);
             // Also update the local cache used by the content script
             await ext.storage.local.set({ cachedSnippets: snips });
+          }, snippets);
+        } finally {
+          await page.close();
+        }
+      },
+
+      seedSyncOnly: async (snippets: Snippet[]) => {
+        const page = await getExtPage();
+        try {
+          await page.evaluate(async (snips: Snippet[]) => {
+            const syncEntries: Record<string, Snippet> = {};
+            for (const s of snips) {
+              syncEntries[`snip:${s.id}`] = s;
+            }
+            const ext =
+              (globalThis as any).chrome ?? (globalThis as any).browser;
+            // Deliberately NOT touching local:cachedSnippets — that is the
+            // whole point: an external sync populates only storage.sync.
+            await ext.storage.sync.set(syncEntries);
           }, snippets);
         } finally {
           await page.close();

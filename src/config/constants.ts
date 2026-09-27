@@ -45,6 +45,15 @@ export const MEDIA_LIMITS = {
 export const TIMING = {
   /** Milliseconds after typing stops before attempting snippet expansion. */
   TYPING_TIMEOUT: 300,
+
+  /**
+   * Coalescing window (ms) for refreshing the content-script cache after a
+   * change in `storage.sync`.
+   *
+   * `storage.sync` fires once per key, so a bulk import would otherwise
+   * trigger one full store read per snippet.
+   */
+  CACHE_REFRESH_DEBOUNCE_MS: 250,
 } as const;
 
 /** Runtime message type for dev-only Sentry test (content script). */

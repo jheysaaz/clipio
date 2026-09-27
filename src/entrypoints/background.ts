@@ -5,6 +5,7 @@ import {
   REVIEW_CHECK_ALARM_NAME,
   REVIEW_CHECK_INTERVAL_MINUTES,
   ONBOARDING_SUPPORTED_LOCALES,
+  TIMING,
 } from "@/config/constants";
 import {
   contextMenuDraftItem,
@@ -23,6 +24,8 @@ import {
   type MediaGetDataUrlResponse,
 } from "@/lib/messages";
 import { getMedia } from "@/storage/backends/media";
+import { updateContentScriptCache } from "@/storage/backends/local";
+import { storageManager } from "@/storage";
 import { checkForUpdate, openReleasePage } from "@/lib/update-checker";
 import { addBlockedSite } from "@/lib/blocked-sites";
 import { debugLog } from "@/lib/debug";
@@ -463,16 +466,81 @@ export default defineBackground(() => {
   // ---------------------------------------------------------------------------
   // Sign-out / sync-wipe detection
   // ---------------------------------------------------------------------------
+  // Content-script cache refresh
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Coalescing handle for the cache refresh.
+   *
+   * `storage.sync` fires once per key, so a bulk import of hundreds of
+   * snippets would otherwise trigger hundreds of full store reads.
+   */
+  let cacheRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function refreshContentScriptCacheFromSync(): Promise<void> {
+    try {
+      const snippets = await storageManager.getSnippets();
+      await updateContentScriptCache(snippets);
+      debugLog("storage", "cache:refreshFromSync", {
+        count: snippets.length,
+      }).catch(() => {});
+    } catch (err) {
+      // The cache write is best-effort and must never surface an error; the
+      // content script will fall back to whatever it already had.
+      console.warn("[Clipio] Failed to refresh content script cache:", err);
+      captureError(err, { action: "cacheRefreshFromSync" });
+    }
+  }
+
+  function scheduleCacheRefreshFromSync(): void {
+    if (cacheRefreshTimer !== null) clearTimeout(cacheRefreshTimer);
+    // Long enough to coalesce a burst of per-key events, short enough that a
+    // user who just signed in does not have to wait to start typing.
+    cacheRefreshTimer = setTimeout(() => {
+      cacheRefreshTimer = null;
+      void refreshContentScriptCacheFromSync();
+    }, TIMING.CACHE_REFRESH_DEBOUNCE_MS);
+  }
+
+  // ---------------------------------------------------------------------------
   browser.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "sync") return;
 
+    const snipChanges = Object.entries(changes).filter(([key]) =>
+      key.startsWith(SNIPPET_PREFIX)
+    );
+    if (snipChanges.length === 0) return;
+
+    // -----------------------------------------------------------------------
+    // Refresh the content-script cache when sync gains or changes a snippet.
+    //
+    // The popup reads storage.sync directly, but the content script reads only
+    // `local:cachedSnippets`, and the only thing that ever wrote it was
+    // StorageManager.persistSnippets — i.e. a user action in the popup or the
+    // options page.
+    //
+    // So whenever the browser populates storage.sync on its own — a Google
+    // sign-in, or a sync from another device — no extension code runs, the
+    // cache is never written, and the content script keeps serving whatever it
+    // had. The user then sees their snippets listed in the popup and finds that
+    // none of them will insert on any page, and that reloading the page does
+    // not help because the reload re-reads the same stale cache.
+    //
+    // The background worker is the only context that both outlives a page and
+    // can observe a sync-area change, so it is where this belongs.
+    // spec: specs/cache-coherence.spec.md
+    const gainedOrChanged = snipChanges.some(
+      ([, change]) => change.newValue !== undefined
+    );
+    if (gainedOrChanged) {
+      scheduleCacheRefreshFromSync();
+    }
+
     // If multiple snip: keys disappear at once it is almost certainly a
     // browser sign-out (Chrome wipes storage.sync on account removal).
-    const removedSnipKeys = Object.entries(changes).filter(
-      ([key, change]) =>
-        key.startsWith(SNIPPET_PREFIX) &&
-        change.oldValue !== undefined &&
-        change.newValue === undefined
+    const removedSnipKeys = snipChanges.filter(
+      ([, change]) =>
+        change.oldValue !== undefined && change.newValue === undefined
     );
 
     if (removedSnipKeys.length >= 2) {

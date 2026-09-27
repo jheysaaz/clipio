@@ -25,7 +25,8 @@ import {
   extractMediaIds,
 } from "@/lib/exporters/clipio";
 import { getMedia, listMedia } from "@/storage/backends/media";
-import { captureError } from "@/lib/sentry";
+import { captureError, captureMessage } from "@/lib/sentry";
+import { validateImportPayload } from "@/lib/snippet-schema";
 import { debugLog } from "@/lib/debug";
 import {
   storageModeItem,
@@ -417,25 +418,31 @@ export class StorageManager {
       throw new Error("File must contain a JSON array of snippets.");
     }
 
-    // Basic shape validation
-    const valid = parsed.filter(
-      (item): item is Snippet =>
-        typeof item === "object" &&
-        item !== null &&
-        typeof (item as Snippet).id === "string" &&
-        typeof (item as Snippet).label === "string" &&
-        typeof (item as Snippet).shortcut === "string" &&
-        typeof (item as Snippet).content === "string"
-    );
+    // Full validation, shared with the format importers. The previous inline
+    // filter only checked that four fields were strings — no bounds, no
+    // timestamps, no tags, no prototype keys — so a single 10 KB `content`
+    // string in a hostile file could permanently exhaust the sync quota.
+    // spec: specs/import-validation.spec.md
+    const { accepted, rejected, tooManySnippets } =
+      validateImportPayload(parsed);
 
-    if (valid.length === 0) {
+    if (accepted.length === 0) {
       throw new Error("No valid snippets found in the file.");
+    }
+
+    if (tooManySnippets || rejected.length > 0) {
+      captureMessage("Some imported records were rejected", "warning", {
+        action: "importSnippets",
+        accepted: accepted.length,
+        rejected: rejected.length,
+        tooManySnippets,
+      });
     }
 
     // Merge: existing snippets not in the import keep their data
     const existing = await this.getSnippets();
     const existingIds = new Set(existing.map((s) => s.id));
-    const toAdd = valid.filter((s) => !existingIds.has(s.id));
+    const toAdd = accepted.filter((s) => !existingIds.has(s.id));
 
     await this.persistSnippets([...existing, ...toAdd]);
     return { imported: toAdd.length };

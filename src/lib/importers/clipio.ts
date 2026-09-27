@@ -9,6 +9,7 @@ import type { ParsedSnippet, FormatParser } from "./types";
 import type { Snippet } from "@/types";
 import type { MediaMetadata } from "@/storage/backends/media";
 import { unzipSync } from "fflate";
+import { isValidImportedSnippet } from "@/lib/snippet-schema";
 import { MEDIA_LIMITS } from "@/config/constants";
 
 interface ClipioEnvelope {
@@ -27,19 +28,12 @@ export interface ClipioZipImportResult {
   missingMediaIds: string[];
 }
 
-function isValidSnippet(item: unknown): item is Snippet {
-  return (
-    typeof item === "object" &&
-    item !== null &&
-    typeof (item as Snippet).id === "string" &&
-    typeof (item as Snippet).label === "string" &&
-    typeof (item as Snippet).shortcut === "string" &&
-    typeof (item as Snippet).content === "string" &&
-    ((item as Snippet).contentFormat === undefined ||
-      (item as Snippet).contentFormat === "markdown" ||
-      (item as Snippet).contentFormat === "html")
-  );
-}
+/**
+ * Validation lives in src/lib/snippet-schema.ts, shared with the storage-level
+ * import path. A second, weaker copy here is exactly how the two drifted
+ * apart: this one never checked bounds, timestamps, tags, or prototype keys.
+ */
+const isValidSnippet = isValidImportedSnippet;
 
 function snippetToParsed(snippet: Snippet): ParsedSnippet {
   return {
