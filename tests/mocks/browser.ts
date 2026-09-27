@@ -237,6 +237,24 @@ export function simulateSyncQuotaError() {
   );
 }
 
+/**
+ * A *sustained* quota failure, which is what a real one looks like: the
+ * account is over its limit, so every subsequent write fails too.
+ *
+ * `simulateSyncQuotaError` fails only the next call, which is no longer
+ * sufficient now that a write journals its intent before applying it.
+ */
+export function simulateSyncQuotaErrorSustained(
+  message = "QUOTA_BYTES_PER_ITEM quota exceeded"
+) {
+  mockStorageSync.set.mockRejectedValue(new Error(message));
+}
+
+/** Restore the sync set mock after a sustained failure. */
+export function clearSyncSetFailure() {
+  mockStorageSync.set.mockReset();
+}
+
 /** Directly populate the sync store (bypasses mock tracking). */
 export function seedSyncStore(data: Record<string, unknown>) {
   Object.assign(syncStore, data);

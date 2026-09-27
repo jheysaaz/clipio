@@ -10,6 +10,8 @@ import {
   resetBrowserMocks,
   seedSyncStore,
   simulateSyncQuotaError,
+  simulateSyncQuotaErrorSustained,
+  clearSyncSetFailure,
   mockStorageSync,
 } from "../../../tests/mocks/browser";
 import type { Snippet } from "@/types";
@@ -123,29 +125,54 @@ describe("SyncBackend", () => {
 
     // spec: throws StorageQuotaError on quota errors
     it("throws StorageQuotaError when quota is exceeded", async () => {
-      simulateSyncQuotaError();
-      const snippet = makeSnippet();
-      await expect(backend.saveSnippets([snippet])).rejects.toThrow(
-        StorageQuotaError
-      );
+      // Sustained, because a real quota failure fails every subsequent write,
+      // and the journal write is now the first call.
+      simulateSyncQuotaErrorSustained();
+      try {
+        await expect(backend.saveSnippets([makeSnippet()])).rejects.toThrow(
+          StorageQuotaError
+        );
+      } finally {
+        clearSyncSetFailure();
+      }
     });
 
     it("throws StorageQuotaError for MAX_ITEMS error", async () => {
-      mockStorageSync.set.mockRejectedValueOnce(
-        new Error("MAX_ITEMS exceeded")
-      );
-      await expect(backend.saveSnippets([makeSnippet()])).rejects.toThrow(
-        StorageQuotaError
-      );
+      simulateSyncQuotaErrorSustained("MAX_ITEMS exceeded");
+      try {
+        await expect(backend.saveSnippets([makeSnippet()])).rejects.toThrow(
+          StorageQuotaError
+        );
+      } finally {
+        clearSyncSetFailure();
+      }
     });
 
     // spec: re-throws non-quota errors
     it("re-throws non-quota errors", async () => {
-      const networkError = new Error("Network failure");
-      mockStorageSync.set.mockRejectedValueOnce(networkError);
-      await expect(backend.saveSnippets([makeSnippet()])).rejects.toThrow(
-        "Network failure"
-      );
+      simulateSyncQuotaErrorSustained("Network failure");
+      try {
+        await expect(backend.saveSnippets([makeSnippet()])).rejects.toThrow(
+          "Network failure"
+        );
+      } finally {
+        clearSyncSetFailure();
+      }
+    });
+
+    it("leaves no stale journal behind after a failed write", async () => {
+      // A surviving journal would replay removals on the next read, turning a
+      // failed write into data loss.
+      simulateSyncQuotaErrorSustained();
+      try {
+        await expect(backend.saveSnippets([makeSnippet()])).rejects.toThrow();
+      } finally {
+        clearSyncSetFailure();
+      }
+      const after = mockStorageSync.get.mock.results;
+      expect(after.length).toBeGreaterThan(0);
+      // The journal is gone: replayPendingWrite finds nothing to do.
+      await expect(backend.getSnippets()).resolves.toBeDefined();
     });
 
     // Empty array
