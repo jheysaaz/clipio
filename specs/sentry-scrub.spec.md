@@ -62,13 +62,13 @@ An empty, non-hostname, or IP-shaped input returns `""` rather than being echoed
 - Truncates `event.message` to 200 characters and strips URL-shaped substrings from it.
 - Applies the same treatment to `exception.values[].value` and `exception.values[].stack`.
 
-**Why the message pass exists.** `redactObject` matches on *key names*, so it is
+**Why the message pass exists.** `redactObject` matches on _key names_, so it is
 structurally incapable of protecting a bare string field. A `SENSITIVE_KEYS` entry cannot
 help, because the payload is not keyed. Today no call site leaks here, but the hole is one
 `throw new Error(\`bad snippet ${snippet.content}\`)` away, so the guard is added now rather
 than after a report.
 
-Message truncation is deliberately *not* redaction: the message is the single most useful
+Message truncation is deliberately _not_ redaction: the message is the single most useful
 field for debugging, so it is bounded and URL-stripped rather than removed.
 
 ---
@@ -92,7 +92,7 @@ field for debugging, so it is bounded and URL-stripped rather than removed.
 
 ## Change History
 
-| Date       | Change                                                                                     | Author |
-| ---------- | ------------------------------------------------------------------------------------------ | ------ |
-| 2026-03-11 | Initial spec                                                                               | —      |
-| 2026-09-26 | Corrected the documented export name (`scrubSentryEvent` did not exist; the functions are `scrubEvent` and `scrubBreadcrumb`). Added `hostBucket` and the message/exception pass, and an explicit threat model. | — |
+| Date       | Change                                                                                                                                                                                                          | Author |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 2026-03-11 | Initial spec                                                                                                                                                                                                    | —      |
+| 2026-09-26 | Corrected the documented export name (`scrubSentryEvent` did not exist; the functions are `scrubEvent` and `scrubBreadcrumb`). Added `hostBucket` and the message/exception pass, and an explicit threat model. | —      |

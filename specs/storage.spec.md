@@ -34,6 +34,10 @@ internals.
 - MUST have `name === "StorageQuotaError"`.
 - MUST have a default message of `"browser.storage.sync quota exceeded"`.
 - MUST accept a custom message via constructor parameter.
+- MUST accept an optional second parameter carrying `readonly QuotaBreach[]`, exposed as
+  `reasons`, naming which limit broke and by how much. Present when the breach was predicted
+  by the preflight; absent when it was discovered from the browser.
+  See `specs/storage-quota-preflight.spec.md`.
 
 ---
 

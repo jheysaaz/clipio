@@ -72,7 +72,8 @@ overwrite the first.
 
 `maxSnippets` is set above the 512 sync cap on purpose: in **local** mode a user legitimately
 holds far more than 512 snippets, and rejecting the import at 512 would be a regression.
-Sync mode degrades through the existing quota fallback, which is the designed behaviour.
+Sync mode refuses an oversized import with a `StorageQuotaError` carrying the reasons; it
+no longer silently degrades to local mode. See `specs/storage-quota-preflight.spec.md`.
 
 ## Acceptance Criteria
 

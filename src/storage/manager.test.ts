@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { StorageManager } from "./manager";
 import { StorageQuotaError } from "./types";
 import type { Snippet } from "@/types";
+import { SYNC_QUOTA } from "@/config/constants";
 
 // ---------------------------------------------------------------------------
 // Mock all backends and dependencies
@@ -20,7 +21,11 @@ const {
   mockStorageMode,
   mockSyncDataLost,
   mockStorageModeReason,
+  mockCaptureError,
+  mockCaptureMessage,
 } = vi.hoisted(() => ({
+  mockCaptureError: vi.fn(),
+  mockCaptureMessage: vi.fn(),
   mockSyncBackend: {
     getSnippets: vi.fn(),
     saveSnippets: vi.fn(),
@@ -93,6 +98,23 @@ vi.mock("./items", () => ({
 // debugLog is a no-op in tests — it's a separate unit with its own test file
 vi.mock("~/lib/debug", () => ({
   debugLog: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Mocked under BOTH specifiers. `manager.ts` imports `@/lib/sentry`, and in this
+// suite `vi.mock("~/lib/sentry")` did not intercept it — the module the manager
+// received was the real one, so `captureError` assertions silently tested
+// nothing. Registering the alias the source actually uses is the fix; the second
+// registration is for the test file's own imports.
+// The factory must RETURN the hoisted mock. Creating a fresh `vi.fn()` inside it
+// produces a different function, so every assertion against `mockCaptureError`
+// would have been testing an object the module never called.
+vi.mock("@/lib/sentry", () => ({
+  captureError: mockCaptureError,
+  captureMessage: mockCaptureMessage,
+}));
+vi.mock("~/lib/sentry", () => ({
+  captureError: mockCaptureError,
+  captureMessage: mockCaptureMessage,
 }));
 
 vi.mock("~/storage/backends/media", () => ({
@@ -217,20 +239,23 @@ describe("StorageManager", () => {
     });
   });
 
-  // ── write-path quota fallback ─────────────────────────────────────────────
+  // ── write-path quota handling ────────────────────────────────────────────
   //
-  // The read path has a quota fallback; so does the write path, and it is a
-  // different shape. A sync WRITE that exceeds the quota must not simply fail:
-  // the manager switches to local, replays the same intent there, and rethrows
-  // so the caller knows the write did not land in the store it asked for.
-  // spec: specs/storage-durability.spec.md
+  // This block used to assert that a quota-failed sync write switches the whole
+  // install to local mode, permanently, with no prompt. That silent, permanent
+  // loss of cross-device sync is the behaviour Wave 9 removed; the write is now
+  // refused and the user chooses. See specs/storage-quota-preflight.spec.md.
+  //
+  // The read path keeps its fallback, which is a different question: sync being
+  // *unreadable* is not the user's fault and there is nothing to prompt about.
 
-  describe("write-path quota fallback", () => {
+  describe("write-path quota handling", () => {
     beforeEach(() => {
       mockStorageMode.getValue.mockResolvedValue("sync");
     });
 
-    it("switches to local and replays the save when a sync write hits quota", async () => {
+    it("refuses the save without switching mode or writing to local", async () => {
+      mockSyncBackend.getSnippets.mockResolvedValue([]);
       mockSyncBackend.upsertSnippets.mockRejectedValue(new StorageQuotaError());
       mockLocalBackend.upsertSnippets.mockResolvedValue(undefined);
 
@@ -238,12 +263,14 @@ describe("StorageManager", () => {
         StorageQuotaError
       );
 
-      expect(mockStorageMode.setValue).toHaveBeenCalledWith("local");
-      expect(mockStorageModeReason.setValue).toHaveBeenCalledWith("quota");
-      expect(mockLocalBackend.upsertSnippets).toHaveBeenCalled();
+      // The old contract switched to local here, permanently and silently.
+      expect(mockStorageMode.setValue).not.toHaveBeenCalledWith("local");
+      expect(mockStorageModeReason.setValue).not.toHaveBeenCalledWith("quota");
+      expect(mockLocalBackend.upsertSnippets).not.toHaveBeenCalled();
     });
 
-    it("switches to local and replays the removal when a sync write hits quota", async () => {
+    it("refuses the removal without switching mode or writing to local", async () => {
+      mockSyncBackend.getSnippets.mockResolvedValue([]);
       mockSyncBackend.removeSnippetsById.mockRejectedValue(
         new StorageQuotaError()
       );
@@ -253,9 +280,8 @@ describe("StorageManager", () => {
         StorageQuotaError
       );
 
-      expect(mockStorageMode.setValue).toHaveBeenCalledWith("local");
-      expect(mockStorageModeReason.setValue).toHaveBeenCalledWith("quota");
-      expect(mockLocalBackend.removeSnippetsById).toHaveBeenCalledWith(["s1"]);
+      expect(mockStorageMode.setValue).not.toHaveBeenCalledWith("local");
+      expect(mockLocalBackend.removeSnippetsById).not.toHaveBeenCalled();
     });
 
     it("does not switch modes for a non-quota write error", async () => {
@@ -419,26 +445,98 @@ describe("StorageManager", () => {
     });
   });
 
-  // ── Quota fallback in write path ──────────────────────────────────────────
+  // ── Quota handling in the write path ─────────────────────────────────────
+  //
+  // These used to assert the opposite. A sync write that hit the quota switched
+  // the whole install to local mode, permanently, with no prompt — the user lost
+  // cross-device sync and the only signal was an amber banner on a settings page
+  // they might not open for weeks. The write is now refused instead, and nothing
+  // is mutated. The options page has a manual storage-mode switch, so refusing
+  // cannot strand them.
+  //
+  // spec: specs/storage-quota-preflight.spec.md
 
-  describe("persistSnippets quota handling", () => {
-    it("switches to local mode on StorageQuotaError and re-throws", async () => {
+  describe("quota handling in the write path", () => {
+    beforeEach(() => {
+      mockStorageMode.getValue.mockResolvedValue("sync");
+    });
+
+    it("refuses a quota-failed upsert without switching mode", async () => {
+      mockSyncBackend.upsertSnippets.mockRejectedValue(new StorageQuotaError());
+
+      await expect(manager.saveSnippet(makeSnippet())).rejects.toThrow(
+        StorageQuotaError
+      );
+
+      expect(mockStorageMode.setValue).not.toHaveBeenCalled();
+      expect(mockStorageModeReason.setValue).not.toHaveBeenCalled();
+      expect(mockLocalBackend.upsertSnippets).not.toHaveBeenCalled();
+    });
+
+    it("refuses a quota-failed removal without falling back to local", async () => {
+      mockSyncBackend.removeSnippetsById.mockRejectedValue(
+        new StorageQuotaError()
+      );
+
+      await expect(manager.deleteSnippet("s1")).rejects.toThrow(
+        StorageQuotaError
+      );
+
+      expect(mockLocalBackend.removeSnippetsById).not.toHaveBeenCalled();
+      expect(mockStorageMode.setValue).not.toHaveBeenCalled();
+    });
+
+    it("reports a preflight miss, which means the projection is wrong", async () => {
+      // The preflight said this would fit and the browser disagreed. The only
+      // way that bug is ever found is if we say so.
+      mockSyncBackend.getSnippets.mockResolvedValue([]);
       mockSyncBackend.upsertSnippets.mockRejectedValue(new StorageQuotaError());
       await expect(manager.saveSnippet(makeSnippet())).rejects.toThrow(
         StorageQuotaError
       );
-      expect(mockStorageMode.setValue).toHaveBeenCalledWith("local");
-      expect(mockLocalBackend.upsertSnippets).toHaveBeenCalled();
+      expect(mockCaptureError).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ action: "storage.quotaPreflightMiss" })
+      );
+    });
+  });
+
+  // ── Quota preflight ───────────────────────────────────────────────────────
+
+  describe("quota preflight", () => {
+    beforeEach(() => {
+      mockStorageMode.getValue.mockResolvedValue("sync");
     });
 
-    it("falls back to a by-id removal when a delete hits the quota", async () => {
-      mockSyncBackend.removeSnippetsById.mockRejectedValue(
-        new StorageQuotaError()
-      );
-      await expect(manager.deleteSnippet("s1")).rejects.toThrow(
-        StorageQuotaError
-      );
-      expect(mockLocalBackend.removeSnippetsById).toHaveBeenCalledWith(["s1"]);
+    it("refuses an oversized snippet before writing anything", async () => {
+      mockSyncBackend.getSnippets.mockResolvedValue([]);
+      const huge = makeSnippet({
+        id: "huge",
+        content: "x".repeat(SYNC_QUOTA.BYTES_PER_ITEM + 1),
+      });
+
+      const error = await manager.saveSnippet(huge).catch((e) => e);
+
+      expect(error).toBeInstanceOf(StorageQuotaError);
+      expect(
+        error.reasons?.some((r: { kind: string }) => r.kind === "per-item")
+      ).toBe(true);
+      expect(mockSyncBackend.upsertSnippets).not.toHaveBeenCalled();
+      expect(mockLocalBackend.upsertSnippets).not.toHaveBeenCalled();
+    });
+
+    it("does not run the preflight in local mode", async () => {
+      // local storage has no such limit, so the preflight must not fire.
+      mockStorageMode.getValue.mockResolvedValue("local");
+      mockLocalBackend.upsertSnippets.mockResolvedValue(undefined);
+      const huge = makeSnippet({
+        id: "huge",
+        content: "x".repeat(SYNC_QUOTA.BYTES_PER_ITEM * 4),
+      });
+
+      await manager.saveSnippet(huge);
+
+      expect(mockLocalBackend.upsertSnippets).toHaveBeenCalled();
     });
   });
 

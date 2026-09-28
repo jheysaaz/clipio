@@ -230,7 +230,10 @@ describe("StorageManager cross-context concurrency", () => {
     expect([...shared.store.keys()]).toEqual(["fresh"]);
   });
 
-  it("falls back to local and re-throws on a quota error from an upsert", async () => {
+  it("does not switch storage mode on a quota error from an upsert", async () => {
+    // A quota-failed write is refused, not redirected. Flipping the install to
+    // local mode here — silently and permanently — is what Wave 9 removed.
+    // spec: specs/storage-quota-preflight.spec.md
     const shared = createSharedStore([]);
     shared.upsertSnippets = vi.fn(async () => {
       throw new StorageQuotaError();
@@ -240,6 +243,6 @@ describe("StorageManager cross-context concurrency", () => {
     await expect(m.saveSnippet(makeSnippet({ id: "A" }))).rejects.toThrow(
       StorageQuotaError
     );
-    expect(hoisted.mockStorageMode.setValue).toHaveBeenCalledWith("local");
+    expect(hoisted.mockStorageMode.setValue).not.toHaveBeenCalledWith("local");
   });
 });

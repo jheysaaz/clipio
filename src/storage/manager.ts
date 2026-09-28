@@ -15,6 +15,7 @@ import { SyncBackend } from "./backends/sync";
 import { LocalBackend, updateContentScriptCache } from "./backends/local";
 import { IndexedDBBackend } from "./backends/indexeddb";
 import { StorageQuotaError } from "./types";
+import { checkQuota } from "./quota-preflight";
 import type { StorageMode, StorageStatus } from "./types";
 import type { Snippet } from "@/types";
 import {
@@ -192,23 +193,18 @@ export class StorageManager {
       count: snippets.length,
     });
 
-    if (mode === "local") {
-      await this.local.saveSnippets(snippets);
-    } else {
-      try {
-        await this.sync.saveSnippets(snippets);
-      } catch (error) {
-        if (error instanceof StorageQuotaError) {
-          // Switch to local permanently for this session and beyond
-          await this.setMode("local");
-          await storageModeReasonItem.setValue("quota");
-          await this.local.saveSnippets(snippets);
-          // Re-throw so callers can surface the warning to the user once
-          throw error;
-        }
-        throw error;
-      }
-    }
+    // One quota rule for every sync write — see `withQuotaPreflight`.
+    await this.withQuotaPreflight(
+      mode,
+      async () => ({
+        existing: await this.sync.getSnippets(),
+        incoming: snippets,
+      }),
+      () =>
+        mode === "local"
+          ? this.local.saveSnippets(snippets)
+          : this.sync.saveSnippets(snippets)
+    );
 
     // Always keep the content-script cache current
     await updateContentScriptCache(snippets);
@@ -228,10 +224,53 @@ export class StorageManager {
   // read-modify-write.
 
   /**
-   * Apply an upsert to the active backend, then refresh derived stores.
+   * Run a mutation against the active backend with a quota preflight.
    *
-   * With the quota fallback the data has already been written to local, so
-   * there is nothing more to do for the primary.
+   * Every sync write goes through here, so the quota rule lives in exactly one
+   * place. Before the write, the projected post-write state is checked against
+   * all three sync limits; if it would not fit, nothing is written, no mode is
+   * changed, and a `StorageQuotaError` carrying the reasons is thrown for the
+   * caller to explain.
+   *
+   * spec: specs/storage-quota-preflight.spec.md
+   *
+   * @param project what the store will look like after `mutate` succeeds.
+   * @param mutate performs the write against whichever backend is active.
+   */
+  private async withQuotaPreflight<T>(
+    mode: StorageMode,
+    project: () => Promise<{ existing: Snippet[]; incoming: Snippet[] }>,
+    mutate: () => Promise<T>
+  ): Promise<T> {
+    if (mode === "local") return mutate();
+
+    const projected = await project();
+    const check = checkQuota(projected.existing, projected.incoming);
+    if (!check.ok) {
+      void debugLog("storage", "quota:preflightRejected", {
+        reasons: check.reasons.length,
+      });
+      throw new StorageQuotaError(undefined, check.reasons);
+    }
+
+    try {
+      return await mutate();
+    } catch (error) {
+      if (error instanceof StorageQuotaError) {
+        // The browser disagreed with the preflight, so `checkQuota`'s
+        // projection is inaccurate. Report it — that is a bug in the preflight
+        // and saying so is the only way to find it. We deliberately do NOT
+        // switch to local: doing so silently and permanently is exactly the
+        // behaviour this change exists to remove, and no data is at risk either
+        // way because sync writes are journalled and rolled back.
+        captureError(error, { action: "storage.quotaPreflightMiss" });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Apply an upsert to the active backend, then refresh derived stores.
    */
   private async applyUpsert(snippets: Snippet[]): Promise<void> {
     void debugLog("storage", "snippet:upsert", {
@@ -239,24 +278,19 @@ export class StorageManager {
     });
 
     const mode = await this.getMode();
-    if (mode === "local") {
-      await this.local.upsertSnippets(snippets);
-    } else {
-      try {
-        await this.sync.upsertSnippets(snippets);
-      } catch (error) {
-        if (error instanceof StorageQuotaError) {
-          // Fall back for this write. The previous list was read by the caller
-          // in most paths; for a single-snippet upsert there is nothing to
-          // re-read, so merge onto whatever local already holds.
-          await this.setMode("local");
-          await storageModeReasonItem.setValue("quota");
-          await this.local.upsertSnippets(snippets);
-          throw error;
-        }
-        throw error;
-      }
-    }
+    await this.withQuotaPreflight(
+      mode,
+      async () => {
+        const existing = await this.sync.getSnippets();
+        const byId = new Map(existing.map((s) => [s.id, s]));
+        for (const s of snippets) byId.set(s.id, s);
+        return { existing, incoming: [...byId.values()] };
+      },
+      () =>
+        mode === "local"
+          ? this.local.upsertSnippets(snippets)
+          : this.sync.upsertSnippets(snippets)
+    );
 
     await this.refreshDerivedStores(mode);
   }
@@ -266,21 +300,21 @@ export class StorageManager {
     void debugLog("storage", "snippet:remove", { count: ids.length });
 
     const mode = await this.getMode();
-    if (mode === "local") {
-      await this.local.removeSnippetsById(ids);
-    } else {
-      try {
-        await this.sync.removeSnippetsById(ids);
-      } catch (error) {
-        if (error instanceof StorageQuotaError) {
-          await this.setMode("local");
-          await storageModeReasonItem.setValue("quota");
-          await this.local.removeSnippetsById(ids);
-          throw error;
-        }
-        throw error;
-      }
-    }
+    await this.withQuotaPreflight(
+      mode,
+      async () => {
+        const existing = await this.sync.getSnippets();
+        const drop = new Set(ids);
+        return {
+          existing,
+          incoming: existing.filter((s) => !drop.has(s.id)),
+        };
+      },
+      () =>
+        mode === "local"
+          ? this.local.removeSnippetsById(ids)
+          : this.sync.removeSnippetsById(ids)
+    );
 
     await this.refreshDerivedStores(mode);
   }

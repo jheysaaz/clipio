@@ -27,19 +27,19 @@ icons, because the wrapper always emits a `size-*` class that trips the
 
 ```ts
 export const ICON_SIZE = {
-  xs:  "size-2.5", // 10px
-  sm:  "size-3",   // 12px
-  md:  "size-3.5", // 14px
-  lg:  "size-4",   // 16px
-  xl:  "size-5",   // 20px
+  xs: "size-2.5", // 10px
+  sm: "size-3", // 12px
+  md: "size-3.5", // 14px
+  lg: "size-4", // 16px
+  xl: "size-5", // 20px
   "2xl": "size-6", // 24px
   "3xl": "size-8", // 32px
 } as const;
 
 export const ICON_STROKE = {
   default: 1.5, // chrome / nav / info / actions
-  emphasis: 2,  // explicit emphasized state: close / formatting / hover-active overlays
-  micro: 2.5,   // EXCEPTION: 10px micro-icons only (editor placeholders + 10px status checks). Do NOT generalize.
+  emphasis: 2, // explicit emphasized state: close / formatting / hover-active overlays
+  micro: 2.5, // EXCEPTION: 10px micro-icons only (editor placeholders + 10px status checks). Do NOT generalize.
 } as const;
 ```
 
@@ -55,13 +55,13 @@ No icon re-export barrel: icon components stay as direct
 <Icon icon={Film} size="xs" strokeWidth={ICON_STROKE.micro} /> // 10px exception
 ```
 
-| Prop | Type | Default | Notes |
-|------|------|---------|-------|
-| `icon` | `LucideIcon` | — | Also composes with the icon-as-prop pattern |
-| `size` | `keyof typeof ICON_SIZE` | `"md"` | Sole sizing mechanism; maps to `ICON_SIZE` class |
-| `stroke` | `"default" \| "emphasis"` | `"default"` | Maps to `ICON_STROKE`; the ONLY sanctioned way to get stroke 2 |
-| `strokeWidth` | `number` | — | Escape hatch, **only** valid with `ICON_STROKE.micro` (2.5) on 10px micro-icons; any other value must be flagged, not used |
-| `className` | `string` | — | Merged via `cn()`; may add color/spin/margins, or override size **only** for documented non-square exceptions |
+| Prop          | Type                      | Default     | Notes                                                                                                                      |
+| ------------- | ------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `icon`        | `LucideIcon`              | —           | Also composes with the icon-as-prop pattern                                                                                |
+| `size`        | `keyof typeof ICON_SIZE`  | `"md"`      | Sole sizing mechanism; maps to `ICON_SIZE` class                                                                           |
+| `stroke`      | `"default" \| "emphasis"` | `"default"` | Maps to `ICON_STROKE`; the ONLY sanctioned way to get stroke 2                                                             |
+| `strokeWidth` | `number`                  | —           | Escape hatch, **only** valid with `ICON_STROKE.micro` (2.5) on 10px micro-icons; any other value must be flagged, not used |
+| `className`   | `string`                  | —           | Merged via `cn()`; may add color/spin/margins, or override size **only** for documented non-square exceptions              |
 
 Guaranteed on every render: `aria-hidden="true"`, `shrink-0`, one
 `ICON_SIZE`-derived class, one stroke value derived from the constants.
@@ -77,16 +77,16 @@ Direct `<X className=… strokeWidth={…} />` rendering is forbidden.
 
 ## Stroke mapping rules
 
-| Current | Maps to | Rationale |
-|---------|---------|-----------|
-| `strokeWidth={1}` | `default` (1.5) | Two-value collapse (user-approved; slight weight change flagged) |
-| `strokeWidth={1.5}` or omitted-in-chrome-context | `default` | Unchanged |
-| `strokeWidth={2}` on close/formatting/active-overlay | `emphasis` | Unchanged; explicit variant replaces ad hoc number |
-| `strokeWidth={2}` on plain actions/nav | `default` | Step 2: actions move to 1.5 (flagged weight change) |
-| omitted (lucide default 2) on close | `emphasis` | Preserves rendered weight |
-| omitted (lucide default 2) on chrome/actions | `default` | Directed normalization |
-| `strokeWidth={2.5}` at 10px | `strokeWidth={ICON_STROKE.micro}` | Documented exception |
-| `strokeWidth={2.5}` at 12px | `emphasis` | Outside exception scope (user-approved normalization) |
+| Current                                              | Maps to                           | Rationale                                                        |
+| ---------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------- |
+| `strokeWidth={1}`                                    | `default` (1.5)                   | Two-value collapse (user-approved; slight weight change flagged) |
+| `strokeWidth={1.5}` or omitted-in-chrome-context     | `default`                         | Unchanged                                                        |
+| `strokeWidth={2}` on close/formatting/active-overlay | `emphasis`                        | Unchanged; explicit variant replaces ad hoc number               |
+| `strokeWidth={2}` on plain actions/nav               | `default`                         | Step 2: actions move to 1.5 (flagged weight change)              |
+| omitted (lucide default 2) on close                  | `emphasis`                        | Preserves rendered weight                                        |
+| omitted (lucide default 2) on chrome/actions         | `default`                         | Directed normalization                                           |
+| `strokeWidth={2.5}` at 10px                          | `strokeWidth={ICON_STROKE.micro}` | Documented exception                                             |
+| `strokeWidth={2.5}` at 12px                          | `emphasis`                        | Outside exception scope (user-approved normalization)            |
 
 ## Size mapping rules (based on RENDERED size, not declared class)
 
@@ -100,23 +100,23 @@ button size is: `default`/`icon`/`lg` → 16px, `sm` → 14px, `xs` → 12px.
 default Button is dead code today.) Tokens are chosen to preserve the
 **rendered** size:
 
-| Context / declared class | Rendered today | Token |
-|--------------------------|----------------|-------|
-| inside shadcn `Button` size `default`/`icon`/`lg`, any declared class | 16px | `lg` |
-| inside shadcn `Button` size `sm` | 14px | `md` |
-| inside shadcn `Button` size `xs`/`icon-xs` | 12px | `sm` |
-| inside `Select` trigger/item/scroll arrows without `size-*` | 16px | `lg` |
-| inside `Alert` (`*:[svg:not([class*='size-'])]:size-4`) without `size-*` | 16px | `lg` |
-| direct child of `sidebar.tsx` `[&>svg]:size-4` (unguarded) | 16px | `lg` (token is overridden anyway; keep intent explicit) |
-| inside `Badge` (`[&>svg]:size-3!`) | 12px | `sm` (matches forced size) |
-| raw `<button>` / standalone, `h-2.5 w-2.5` | 10px | `xs` |
-| raw `<button>` / standalone, `h-3 w-3` / `size-3` | 12px | `sm` |
-| raw `<button>` / standalone, `h-3.5 w-3.5` / `size-3.5` | 14px | `md` |
-| raw `<button>` / standalone, `h-4 w-4` / `size-4` | 16px | `lg` |
-| raw `<button>` / standalone, `h-5 w-5` | 20px | `xl` |
-| raw `<button>` / standalone, `h-6 w-6` | 24px | `2xl` |
-| raw `<button>` / standalone, `h-8 w-8` (icon) | 32px | `3xl` |
-| non-square `w-3 h-8` (GripVertical drag handle) | 12×32 | `size="sm"` + documented `className="h-8 w-3"` override — the one non-square exception |
+| Context / declared class                                                 | Rendered today | Token                                                                                  |
+| ------------------------------------------------------------------------ | -------------- | -------------------------------------------------------------------------------------- |
+| inside shadcn `Button` size `default`/`icon`/`lg`, any declared class    | 16px           | `lg`                                                                                   |
+| inside shadcn `Button` size `sm`                                         | 14px           | `md`                                                                                   |
+| inside shadcn `Button` size `xs`/`icon-xs`                               | 12px           | `sm`                                                                                   |
+| inside `Select` trigger/item/scroll arrows without `size-*`              | 16px           | `lg`                                                                                   |
+| inside `Alert` (`*:[svg:not([class*='size-'])]:size-4`) without `size-*` | 16px           | `lg`                                                                                   |
+| direct child of `sidebar.tsx` `[&>svg]:size-4` (unguarded)               | 16px           | `lg` (token is overridden anyway; keep intent explicit)                                |
+| inside `Badge` (`[&>svg]:size-3!`)                                       | 12px           | `sm` (matches forced size)                                                             |
+| raw `<button>` / standalone, `h-2.5 w-2.5`                               | 10px           | `xs`                                                                                   |
+| raw `<button>` / standalone, `h-3 w-3` / `size-3`                        | 12px           | `sm`                                                                                   |
+| raw `<button>` / standalone, `h-3.5 w-3.5` / `size-3.5`                  | 14px           | `md`                                                                                   |
+| raw `<button>` / standalone, `h-4 w-4` / `size-4`                        | 16px           | `lg`                                                                                   |
+| raw `<button>` / standalone, `h-5 w-5`                                   | 20px           | `xl`                                                                                   |
+| raw `<button>` / standalone, `h-6 w-6`                                   | 24px           | `2xl`                                                                                  |
+| raw `<button>` / standalone, `h-8 w-8` (icon)                            | 32px           | `3xl`                                                                                  |
+| non-square `w-3 h-8` (GripVertical drag handle)                          | 12×32          | `size="sm"` + documented `className="h-8 w-3"` override — the one non-square exception |
 
 Baseline reference for before/after comparison:
 `/var/folders/sb/vzq_85v102924mx3z5q18f2r0000gn/T/opencode/baseline-icons.json`
@@ -183,16 +183,12 @@ planned usage in this refactor needs icon-adjacent padding (buttons use `gap-*`)
       10× stroke 2→1.5 (directed chrome/action normalization, incl. old
       wrapper's blanket stroke-2 default); 2× `aria-hidden` gained
       (InfoTooltip a11y). **Zero size changes.**
-- [ ] `pnpm test:coverage`, `pnpm compile`, `pnpm lint` pass.
-      - `pnpm compile` ✅ and `pnpm build` ✅.
-      - `pnpm test` ✅ 915/917 (2 pre-existing failures in
-        `textblaze.test.ts` / `powertext.test.ts`, unrelated to icons).
-      - `pnpm lint` reports 15 errors — **all verified identical at HEAD**
-        (unused imports/vars, useless escapes, empty blocks in
-        AdvancedSection/DashboardSection/ImagesSection/SnippetsSection);
-        zero new issues from this change.
-      - `pnpm test:coverage` blocked by the 2 pre-existing test failures;
-        `src/lib/icons.ts` measured 2/2 statements (100%) directly.
+- [ ] `pnpm test:coverage`, `pnpm compile`, `pnpm lint` pass. - `pnpm compile` ✅ and `pnpm build` ✅. - `pnpm test` ✅ 915/917 (2 pre-existing failures in
+      `textblaze.test.ts` / `powertext.test.ts`, unrelated to icons). - `pnpm lint` reports 15 errors — **all verified identical at HEAD**
+      (unused imports/vars, useless escapes, empty blocks in
+      AdvancedSection/DashboardSection/ImagesSection/SnippetsSection);
+      zero new issues from this change. - `pnpm test:coverage` blocked by the 2 pre-existing test failures;
+      `src/lib/icons.ts` measured 2/2 statements (100%) directly.
 - [x] Independent review agent approves (report:
       `/var/folders/sb/vzq_85v102924mx3z5q18f2r0000gn/T/opencode/icon-review-report.md`).
 
@@ -219,6 +215,6 @@ either run — the row-click locator doesn't match).
 
 ## Change History
 
-| Date | Change | Author |
-|------|--------|--------|
-| 2026-09-22 | Initial spec (icon system consolidation) | — |
+| Date       | Change                                   | Author |
+| ---------- | ---------------------------------------- | ------ |
+| 2026-09-22 | Initial spec (icon system consolidation) | —      |

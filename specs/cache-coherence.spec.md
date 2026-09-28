@@ -50,7 +50,8 @@ The background service worker is the only context that both outlives a page and 
 - Its existing `storage.onChanged` listener now also schedules a cache refresh when any
   `snip:` key is **added or changed** in the sync area.
 - The refresh reads through the `StorageManager` rather than touching `storage.sync`
-  directly, so it respects the active mode and the quota fallback.
+  directly, so it respects the active mode and the **read-path** quota fallback. (The
+  _write_ path no longer has one — see `specs/storage-quota-preflight.spec.md`.)
 - Events are **coalesced** over `TIMING.CACHE_REFRESH_DEBOUNCE_MS` (250 ms), because
   `storage.sync` fires once per key and a bulk import would otherwise trigger one full store
   read per snippet.
@@ -91,7 +92,7 @@ post-change read. None of them is reachable from a plain read.
 - [x] The cache projection itself is observably refreshed, independent of insertion.
 - [x] The refresh is coalesced, so a burst of per-key events does not cause one read each.
 - [x] A removal-only sync change does **not** blank the cache (wipe flow owns that case).
-- [x] The refresh goes through the manager, so local mode and the quota fallback still apply.
+- [x] The refresh goes through the manager, so local mode and the read-path quota fallback still apply.
 - [x] A failing refresh does not throw into the storage listener.
 - [x] Normal user-driven saves still refresh the cache exactly as before.
 

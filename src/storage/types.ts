@@ -10,6 +10,7 @@
  */
 
 import type { Snippet } from "@/types";
+import type { QuotaBreach } from "./quota-preflight";
 
 // ---------------------------------------------------------------------------
 // Backend interface
@@ -92,12 +93,24 @@ export interface StorageStatus {
 // ---------------------------------------------------------------------------
 
 /**
- * Thrown by SyncBackend when browser.storage.sync quota is exceeded.
- * The manager catches this and transparently switches to LocalBackend.
+ * Thrown when a write to `browser.storage.sync` would exceed its quota.
+ *
+ * `reasons` is present when the breach was predicted by the preflight
+ * (`checkQuota`) rather than discovered from the browser, and names which
+ * limit broke and by how much. The UI needs it to say anything more useful
+ * than "quota exceeded".
+ *
+ * spec: specs/storage-quota-preflight.spec.md
  */
 export class StorageQuotaError extends Error {
-  constructor(message = "browser.storage.sync quota exceeded") {
+  readonly reasons?: readonly QuotaBreach[];
+
+  constructor(
+    message = "browser.storage.sync quota exceeded",
+    reasons?: readonly QuotaBreach[]
+  ) {
     super(message);
     this.name = "StorageQuotaError";
+    if (reasons) this.reasons = reasons;
   }
 }

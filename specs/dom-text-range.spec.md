@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Resolves the caret position inside editable DOM elements to a *global* text
+Resolves the caret position inside editable DOM elements to a _global_ text
 offset so trigger detection works in fields with multiple text nodes.
 
 ## Scope
@@ -21,10 +21,10 @@ offset so trigger detection works in fields with multiple text nodes.
 **Behavior:**
 
 - Returns the number of text characters in `element.textContent` that precede
-  the caret (a global offset, not `Selection.focusOffset`, which is *local* to
+  the caret (a global offset, not `Selection.focusOffset`, which is _local_ to
   the focused text node).
 - Uses `Range.selectNodeContents(element)` + `Range.setEnd(focusNode,
-  focusOffset)` and measures `cloneContents().textContent.length`.
+focusOffset)` and measures `cloneContents().textContent.length`.
 
 **Edge cases:**
 
@@ -78,6 +78,6 @@ reproduction Gmail/Notion session).
 
 ## Change History
 
-| Date       | Change                                              | Author    |
-| ---------- | --------------------------------------------------- | --------- |
-| 2026-08-19 | Initial spec (fixes multi-node preview trigger bug) | —         |
+| Date       | Change                                              | Author |
+| ---------- | --------------------------------------------------- | ------ |
+| 2026-08-19 | Initial spec (fixes multi-node preview trigger bug) | —      |
