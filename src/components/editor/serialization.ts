@@ -1,4 +1,9 @@
 import type { TText, TElement, Descendant } from "platejs";
+import { parseBlocks } from "./block-grammar";
+import {
+  formatImagePlaceholder,
+  formatGifPlaceholder,
+} from "@/lib/media-placeholders";
 import {
   CLIPBOARD_PLACEHOLDER,
   DATE_PLACEHOLDER,
@@ -35,7 +40,14 @@ const REGEX_PATTERNS = {
 
 // Serialize Plate value to Markdown
 export function serializeToMarkdown(nodes: Descendant[]): string {
-  return nodes.map((node) => serializeNode(node)).join("\n");
+  // Top-level blocks are separated by a blank line. A single newline is enough
+  // to start a new block in CommonMark, but a paragraph needs a blank line
+  // before it — joining with "\n" meant every block boundary was ambiguous and
+  // a document lost all its structure on the next parse.
+  return nodes
+    .map((node) => serializeNode(node))
+    .filter((text) => text !== "")
+    .join("\n\n");
 }
 
 function serializeNode(node: Descendant): string {
@@ -87,14 +99,21 @@ function serializeNode(node: Descendant): string {
 
   if (element.type === IMAGE_PLACEHOLDER) {
     const mediaId = (element as TElement & { mediaId?: string }).mediaId || "";
-    const width = (element as TElement & { width?: number }).width;
-    return width ? `{{image:${mediaId}:${width}}}` : `{{image:${mediaId}}}`;
+    // `formatImagePlaceholder` distinguishes `undefined` from `0`. The inline
+    // `width ? ... : ...` this replaced treated a zero width as absent, so
+    // `{{image:id:0}}` silently lost its width on every save.
+    return formatImagePlaceholder(
+      mediaId,
+      (element as TElement & { width?: number }).width
+    );
   }
 
   if (element.type === GIF_PLACEHOLDER) {
     const giphyId = (element as TElement & { giphyId?: string }).giphyId || "";
-    const width = (element as TElement & { width?: number }).width;
-    return width ? `{{gif:${giphyId}:${width}}}` : `{{gif:${giphyId}}}`;
+    return formatGifPlaceholder(
+      giphyId,
+      (element as TElement & { width?: number }).width
+    );
   }
 
   if (element.type === LINK_ELEMENT) {
@@ -102,7 +121,146 @@ function serializeNode(node: Descendant): string {
     return `[${children}](${url})`;
   }
 
+  // --- block elements ---------------------------------------------------
+  //
+  // These previously fell through to `return children`, which is what erased
+  // every block marker on save. spec: specs/markdown-block-grammar.spec.md
+  const heading = element.type.match(/^h([1-6])$/);
+  if (heading) {
+    // No trailing space for an empty heading, so `#` round-trips as `#`.
+    return children
+      ? `${"#".repeat(Number(heading[1]))} ${children}`
+      : "#".repeat(Number(heading[1]));
+  }
+
+  if (element.type === "hr") {
+    return "---";
+  }
+
+  if (element.type === "code") {
+    const language =
+      (element as TElement & { language?: string }).language ?? "";
+    // ```` when the body itself contains a triple fence, so the fence cannot be
+    // closed early by its own contents.
+    const longestFence = (children.match(/`{3,}/g) ?? []).reduce(
+      (max, run) => Math.max(max, run.length),
+      0
+    );
+    const fence = "`".repeat(Math.max(3, longestFence + 1));
+    return `${fence}${language}\n${children}\n${fence}`;
+  }
+
+  if (element.type === "blockquote") {
+    return (element.children as Descendant[])
+      .map((child) => serializeNode(child))
+      .join("\n")
+      .split("\n")
+      .map((line) => `> ${line}`.trimEnd())
+      .join("\n");
+  }
+
+  if (element.type === "ul" || element.type === "ol") {
+    return serializeList(element, "");
+  }
+
+  if (element.type === "table") {
+    return serializeTable(element);
+  }
+
   return children;
+}
+
+/** Serialise a list, indenting nested lists by two spaces per level. */
+function serializeList(element: TElement, indent: string): string {
+  const ordered = element.type === "ol";
+  const start = (element as TElement & { start?: number }).start ?? 1;
+  const items = (element.children ?? []) as Descendant[];
+
+  const lines: string[] = [];
+  items.forEach((item, index) => {
+    const li = item as TElement & { children?: Descendant[] };
+    const blocks = (li.children ?? []) as Descendant[];
+
+    let first = true;
+    for (const block of blocks) {
+      const text = serializeNode(block);
+      if (text === "") continue;
+      const marker = ordered ? `${start + index}. ` : "- ";
+      for (const piece of text.split("\n")) {
+        lines.push(
+          first ? `${indent}${marker}${piece}` : `${indent}  ${piece}`
+        );
+        first = false;
+      }
+    }
+  });
+
+  return lines.join("\n");
+}
+
+/** Serialise a table, always emitting the delimiter row. */
+function serializeTable(element: TElement): string {
+  const sections = (element.children ?? []) as Descendant[];
+  const headRows: Descendant[] = [];
+  const bodyRows: Descendant[] = [];
+
+  for (const section of sections) {
+    const s = section as TElement;
+    const rows = (s.children ?? []) as Descendant[];
+    if (s.type === "thead") headRows.push(...rows);
+    else if (s.type === "tbody") bodyRows.push(...rows);
+  }
+
+  const widths = Math.max(
+    headRows.length > 0 ? cellsOf(headRows[0]).length : 0,
+    ...bodyRows.map((r) => cellsOf(r).length),
+    0
+  );
+
+  const renderRow = (row: Descendant) => {
+    const cells = cellsOf(row);
+    const padded = [...cells];
+    while (padded.length < widths) padded.push("");
+    return `| ${padded.map((c) => c.replace(/\|/g, "\\|")).join(" | ")} |`;
+  };
+
+  const out: string[] = [];
+  if (headRows.length > 0) out.push(renderRow(headRows[0]));
+
+  // The delimiter row is what keeps two cells from becoming one string. It is
+  // never optional.
+  const alignments = headRows.length > 0 ? alignsOf(headRows[0]) : [];
+  out.push(
+    `| ${Array.from({ length: widths }, (_, c) => {
+      switch (alignments[c]) {
+        case "center":
+          return ":---:";
+        case "right":
+          return "---:";
+        case "left":
+          return ":---";
+        default:
+          return "---";
+      }
+    }).join(" | ")} |`
+  );
+
+  const rest = headRows.slice(1).concat(bodyRows);
+  for (const row of rest) out.push(renderRow(row));
+
+  return out.join("\n");
+}
+
+function cellsOf(row: Descendant): string[] {
+  const r = row as TElement;
+  return ((r.children ?? []) as Descendant[]).map((c) => serializeNode(c));
+}
+
+function alignsOf(row: Descendant): (string | null)[] {
+  const r = row as TElement;
+  return ((r.children ?? []) as Descendant[]).map(
+    (c) => ((c as TElement & { align?: string }).align ?? null) as string | null
+  );
 }
 
 // Deserializer for markdown, which is the only format the editor writes.
@@ -157,15 +315,15 @@ function deserializeFromMarkdown(markdown: string): TElement[] {
     return [{ type: "p", children: [{ text: "" }] }];
   }
 
-  const paragraphs = markdown.split(/\n/);
-  const result: TElement[] = [];
-
-  for (const para of paragraphs) {
-    const children = parseMarkdownInline(para);
-    if (children.length > 0) {
-      result.push({ type: "p", children });
-    }
-  }
+  // Block structure is decided by the grammar, not by splitting on newlines.
+  // The previous version wrapped every line in a paragraph, so headings lost
+  // their `##`, lists became indistinguishable paragraphs, and a two-cell table
+  // serialised to `"ab"` with no separator at all.
+  //
+  // spec: specs/markdown-block-grammar.spec.md
+  const result = parseBlocks(markdown, (text) =>
+    parseMarkdownInline(text)
+  ) as TElement[];
 
   return result.length > 0 ? result : [{ type: "p", children: [{ text: "" }] }];
 }
@@ -229,7 +387,7 @@ function parseMarkdownInline(text: string): Descendant[] {
       nodes.push({
         type: IMAGE_PLACEHOLDER,
         mediaId: imageMatch[1],
-        ...(width ? { width } : {}),
+        ...(width === undefined ? {} : { width }),
         children: [{ text: "" }],
       } as TElement & { mediaId: string; width?: number });
       remaining = remaining.slice(imageMatch[0].length);
@@ -243,7 +401,7 @@ function parseMarkdownInline(text: string): Descendant[] {
       nodes.push({
         type: GIF_PLACEHOLDER,
         giphyId: gifMatch[1],
-        ...(width ? { width } : {}),
+        ...(width === undefined ? {} : { width }),
         children: [{ text: "" }],
       } as TElement & { giphyId: string; width?: number });
       remaining = remaining.slice(gifMatch[0].length);

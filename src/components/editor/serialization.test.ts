@@ -169,13 +169,16 @@ describe("serializeToMarkdown", () => {
     );
   });
 
-  // spec: multiple paragraphs joined with \n
-  it("joins multiple paragraphs with newline", () => {
+  // spec: multiple paragraphs joined with a blank line
+  it("joins multiple paragraphs with a blank line", () => {
+    // A single \n is enough to *start* a new block in CommonMark, but a
+    // paragraph must be preceded by a blank line or it is absorbed into the
+    // previous one. Joining with "\n" made every block boundary ambiguous.
     const result = serializeToMarkdown([
       p([text("First line")]),
       p([text("Second line")]),
     ]);
-    expect(result).toBe("First line\nSecond line");
+    expect(result).toBe("First line\n\nSecond line");
   });
 
   // spec: mixed content in same paragraph
@@ -459,9 +462,19 @@ describe("deserializeContent (markdown path)", () => {
     });
   });
 
-  // spec: multi-paragraph — one paragraph per \n line
-  it("creates one paragraph per line", () => {
+  // spec: a single newline is a soft break, not a paragraph boundary
+  it("keeps a soft-wrapped line in one paragraph", () => {
+    // This used to produce two paragraphs, one per line, which is wrong: in
+    // markdown a lone newline inside a paragraph is a soft break. It also made
+    // a hard-wrapped snippet gain a paragraph break on every save.
     const result = deserializeContent("Line one\nLine two");
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe("p");
+    expect(result[0].children[0]).toMatchObject({ text: "Line one\nLine two" });
+  });
+
+  it("splits on a blank line", () => {
+    const result = deserializeContent("Line one\n\nLine two");
     expect(result).toHaveLength(2);
     expect(result[0].children[0]).toMatchObject({ text: "Line one" });
     expect(result[1].children[0]).toMatchObject({ text: "Line two" });
