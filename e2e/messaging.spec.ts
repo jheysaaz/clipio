@@ -13,6 +13,10 @@
 
 import { test, expect } from "./fixtures.js";
 import { makeSnippet } from "./helpers/snippets.js";
+import {
+  waitForContentScriptReady,
+  waitForExtensionStorageApi,
+} from "./helpers/content-script.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -64,7 +68,7 @@ test.describe("Cross-Context Communication", () => {
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/popup.html`);
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(300);
+    await waitForExtensionStorageApi(page);
 
     await page.evaluate(async () => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
@@ -87,13 +91,13 @@ test.describe("Cross-Context Communication", () => {
     const contentPage = await context.newPage();
     await contentPage.goto(TEST_PAGE_URL);
     await contentPage.waitForLoadState("domcontentloaded");
-    await contentPage.waitForTimeout(600);
+    await waitForContentScriptReady(contentPage);
 
     // Open the options page and send a Sentry test message
     const optionsPage = await context.newPage();
     await optionsPage.goto(`chrome-extension://${extensionId}/options.html`);
     await optionsPage.waitForLoadState("domcontentloaded");
-    await optionsPage.waitForTimeout(300);
+    await waitForExtensionStorageApi(optionsPage);
 
     // Send the SENTRY_TEST_MESSAGE_TYPE message via the options page
     const sendResult = await optionsPage.evaluate(async () => {
@@ -129,13 +133,13 @@ test.describe("Cross-Context Communication", () => {
     const contentPage = await context.newPage();
     await contentPage.goto(TEST_PAGE_URL);
     await contentPage.waitForLoadState("domcontentloaded");
-    await contentPage.waitForTimeout(600);
+    await waitForContentScriptReady(contentPage);
 
     // Create a snippet via the popup (simulating real usage)
     const extPage = await context.newPage();
     await extPage.goto(`chrome-extension://${extensionId}/popup.html`);
     await extPage.waitForLoadState("domcontentloaded");
-    await extPage.waitForTimeout(300);
+    await waitForExtensionStorageApi(extPage);
 
     const newSnippet = makeSnippet({
       id: "propagate-test",
@@ -212,12 +216,12 @@ test.describe("Cross-Context Communication", () => {
     const page1 = await context.newPage();
     await page1.goto(TEST_PAGE_URL);
     await page1.waitForLoadState("domcontentloaded");
-    await page1.waitForTimeout(600);
+    await waitForContentScriptReady(page1);
 
     const page2 = await context.newPage();
     await page2.goto(TEST_PAGE_URL);
     await page2.waitForLoadState("domcontentloaded");
-    await page2.waitForTimeout(600);
+    await waitForContentScriptReady(page2);
 
     const multiTabSnippet = makeSnippet({
       id: "multitab-test",
@@ -230,7 +234,7 @@ test.describe("Cross-Context Communication", () => {
     const popupPage = await context.newPage();
     await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
     await popupPage.waitForLoadState("domcontentloaded");
-    await popupPage.waitForTimeout(300);
+    await waitForExtensionStorageApi(popupPage);
 
     await popupPage.evaluate(async (snip) => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
@@ -276,7 +280,7 @@ test.describe("Cross-Context Communication", () => {
     const popupPage = await context.newPage();
     await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
     await popupPage.waitForLoadState("domcontentloaded");
-    await popupPage.waitForTimeout(300);
+    await waitForExtensionStorageApi(popupPage);
 
     const flagValue = await popupPage.evaluate(async () => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;

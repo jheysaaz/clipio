@@ -267,9 +267,7 @@ export function SnippetsSection() {
             {i18n.t("options.copy.typingTimeout")}
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            How long Clipio waits after you stop typing before attempting to
-            expand a snippet. Lower = faster but may expand mid-word. Default:
-            300 ms.
+            {i18n.t("options.copy.typingTimeoutHint")}
           </p>
         </div>
         <div className="flex items-center gap-4">

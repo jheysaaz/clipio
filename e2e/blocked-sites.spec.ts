@@ -72,6 +72,10 @@ test.describe("Blocked sites", () => {
     await input.click();
     await testPage.keyboard.type("/hello");
     await testPage.keyboard.press("Space");
+    // Negative assertion: this proves an *absence*, so the wait cannot be a
+    // poll. An auto-retrying assertion stops as soon as its predicate holds and
+    // so cannot tell "has not happened yet" from "will never happen"; the only
+    // way to prove absence is to outlast the debounce and then read once.
     await testPage.waitForTimeout(TYPING_TIMEOUT + 200);
 
     expect(await input.inputValue()).not.toContain("Hello, World!");

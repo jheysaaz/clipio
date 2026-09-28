@@ -27,6 +27,9 @@ async function getExtPage(
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await page.waitForLoadState("domcontentloaded");
+  // Settle after the extension page loads so React has committed its first
+  // paint before a test does a one-shot read. Genuine render settle, not a
+  // stand-in for a condition: tests that wait for data poll for that data.
   await page.waitForTimeout(300);
   return page;
 }

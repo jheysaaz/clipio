@@ -13,7 +13,7 @@ function ErrorFallback() {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
       <p className="text-sm text-destructive font-medium">
-        Something went wrong. Please close and reopen the extension.
+        {i18n.t("common.errorPopup")}
       </p>
       <button
         className="text-xs underline text-muted-foreground"

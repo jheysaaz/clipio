@@ -181,7 +181,7 @@ export function DashboardSection() {
             {i18n.t("options.copy.extensionVersion")}
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Current installed version and available updates.
+            {i18n.t("options.copy.extensionVersionHint")}
           </p>
         </div>
         <p className="text-sm text-foreground">Version: {currentVersion}</p>
@@ -222,9 +222,11 @@ export function DashboardSection() {
         className="rounded-xl border p-5 space-y-4"
       >
         <div>
-          <h3 className="text-sm font-medium text-foreground">Top 5 Usage</h3>
+          <h3 className="text-sm font-medium text-foreground">
+            {i18n.t("options.copy.topUsageHeading")}
+          </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            The five most-used snippets by insertion count.
+            {i18n.t("options.copy.topUsageHint")}
           </p>
         </div>
         {usageLoaded && topUsage.length === 0 && (
@@ -232,7 +234,7 @@ export function DashboardSection() {
             data-testid="top-usage-empty"
             className="text-xs text-muted-foreground"
           >
-            No usage data yet.
+            {i18n.t("options.copy.topUsageEmpty")}
           </p>
         )}
         {topUsage.length > 0 && (

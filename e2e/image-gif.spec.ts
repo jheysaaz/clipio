@@ -38,6 +38,9 @@ async function getExtPage(
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await page.waitForLoadState("domcontentloaded");
+  // Settle after the extension page loads so React has committed its first
+  // paint before a test does a one-shot read. Genuine render settle, not a
+  // stand-in for a condition: tests that wait for data poll for that data.
   await page.waitForTimeout(400);
   return page;
 }
@@ -173,11 +176,13 @@ test.describe("Image / GIF feature tests", () => {
     const popupPage = await context.newPage();
     await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
     await popupPage.waitForLoadState("domcontentloaded");
-    await popupPage.waitForTimeout(600);
 
-    // The detail panel on the right should display the *newest* snippet's label
-    const bodyText = await popupPage.textContent("body");
-    expect(bodyText).toContain("Newest Snippet");
+    // The detail panel should display the *newest* snippet's label. Poll for it:
+    // the selection is restored asynchronously after mount, so a one-shot read
+    // of `body` can land before it.
+    await expect(popupPage.getByText("Newest Snippet").first()).toBeVisible({
+      timeout: 10_000,
+    });
 
     await popupPage.close();
   });
@@ -520,7 +525,6 @@ test.describe("Image / GIF feature tests", () => {
     const popupPage = await context.newPage();
     await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
     await popupPage.waitForLoadState("domcontentloaded");
-    await popupPage.waitForTimeout(600);
 
     // Click the "Add Snippet" button (stable testid)
     const newButton = popupPage.getByTestId("add-snippet");

@@ -185,6 +185,9 @@ test.describe("Content Script Expansion", () => {
     await input.click();
     await testPage.keyboard.type("/hello", { delay: 30 });
     await testPage.keyboard.press("Space");
+    // Settle so the expansion handler has run before the one-shot read below. A
+    // poll would not help here: the read is a single `inputValue()`, and it is
+    // the resulting *value* being asserted, not merely its presence.
     await testPage.waitForTimeout(200);
 
     const value = await input.inputValue();
@@ -624,6 +627,8 @@ test.describe("Snippet Preview Feature", () => {
     await expect(previewContainer).toBeVisible();
 
     // Select snippet with Enter
+    // Let the Enter handler insert the snippet before the one-shot text read
+    // below.
     await testPage.keyboard.press("Enter");
     await testPage.waitForTimeout(200);
 
@@ -650,6 +655,8 @@ test.describe("Snippet Preview Feature", () => {
     await expect(previewContainer).toBeVisible();
 
     // Select snippet with Enter
+    // Let the Enter handler insert the snippet before the one-shot text read
+    // below.
     await testPage.keyboard.press("Enter");
     await testPage.waitForTimeout(200);
 
@@ -676,6 +683,8 @@ test.describe("Snippet Preview Feature", () => {
     await expect(previewContainer).toBeVisible();
 
     // Select the snippet with Enter
+    // Let the Enter handler insert the snippet before the one-shot text read
+    // below.
     await testPage.keyboard.press("Enter");
     await testPage.waitForTimeout(200);
 

@@ -92,10 +92,10 @@ test.describe("Popup (Dashboard)", () => {
     const newButton = popupPage.getByTestId("add-snippet");
     await expect(newButton).toBeVisible({ timeout: 5_000 });
     await newButton.click();
-    await popupPage.waitForTimeout(300);
 
-    // Fill in snippet form fields (stable name-based testids)
+    // Wait for the form the button is supposed to open.
     const labelInput = popupPage.getByTestId("snippet-label-input");
+    await expect(labelInput).toBeVisible({ timeout: 5_000 });
     const shortcutInput = popupPage.getByTestId("snippet-shortcut-input");
 
     await expect(labelInput).toBeVisible();
@@ -113,17 +113,20 @@ test.describe("Popup (Dashboard)", () => {
     const saveButton = popupPage.getByTestId("snippet-create-save");
     await expect(saveButton).toBeEnabled();
     await saveButton.click();
-    await popupPage.waitForTimeout(500);
 
-    // Verify snippet was stored in sync storage
-    const syncSnippets = await popupPage.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const all = await ext.storage.sync.get(null);
-      return Object.keys(all).filter((k) => k.startsWith("snip:"));
-    });
-
-    // The created snippet must now exist
-    expect(syncSnippets.length).toBeGreaterThanOrEqual(1);
+    // Poll the persisted value: the save handler writes asynchronously.
+    await expect
+      .poll(
+        () =>
+          popupPage.evaluate(async () => {
+            const ext =
+              (globalThis as any).chrome ?? (globalThis as any).browser;
+            const all = await ext.storage.sync.get(null);
+            return Object.keys(all).filter((k) => k.startsWith("snip:")).length;
+          }),
+        { timeout: 5_000, message: "snippet never reached sync storage" }
+      )
+      .toBeGreaterThanOrEqual(1);
     await expect(popupPage.getByTestId("snippet-list")).toBeVisible();
   });
 
@@ -243,16 +246,50 @@ test.describe("Popup (Dashboard)", () => {
     }));
     await seedAndReload(popupPage, snippets);
 
-    // Click somewhere in the list to focus it, then use arrow keys
-    await popupPage.keyboard.press("ArrowDown");
-    await popupPage.waitForTimeout(100);
-    await popupPage.keyboard.press("ArrowDown");
-    await popupPage.waitForTimeout(100);
-    await popupPage.keyboard.press("ArrowUp");
+    // The list is a `role="listbox"` using virtual focus: `aria-activedescendant`
+    // names the active option and `document.activeElement` never leaves the
+    // container. So that is what has to be asserted.
+    //
+    // The previous version slept 100 ms between presses and then checked that
+    // `body` was visible, which is true whether or not anything handled the
+    // keystroke.
+    const list = popupPage.getByTestId("snippet-list");
+    await expect(list).toBeVisible();
 
-    // Should not crash and page should still be responsive
-    const body = popupPage.locator("body");
-    await expect(body).toBeVisible();
+    const activeDescendant = () =>
+      list.evaluate((el) => el.getAttribute("aria-activedescendant"));
+
+    // The first row is pre-selected on mount, so the assertion is about
+    // *movement*, not about the initial state being empty.
+    const initial = await activeDescendant();
+    expect(initial).toBeTruthy();
+
+    await popupPage.keyboard.press("ArrowDown");
+    const second = await expect
+      .poll(activeDescendant, {
+        message: "ArrowDown never advanced the active option",
+      })
+      .not.toBe(initial)
+      .then(() => activeDescendant());
+
+    await popupPage.keyboard.press("ArrowDown");
+    const third = await expect
+      .poll(activeDescendant, {
+        message: "a second ArrowDown did not advance the active option",
+      })
+      .not.toBe(second)
+      .then(() => activeDescendant());
+
+    // Three distinct rows across three positions, so the keys really walked the
+    // list rather than repeatedly reporting the same id.
+    expect(new Set([initial, second, third]).size).toBe(3);
+
+    await popupPage.keyboard.press("ArrowUp");
+    await expect
+      .poll(activeDescendant, {
+        message: "ArrowUp did not return to the previous option",
+      })
+      .toBe(second);
   });
 
   test("copies snippet to clipboard", async ({ popupPage }) => {
@@ -357,14 +394,20 @@ test.describe("Popup (Dashboard)", () => {
     await expect(confirmButton).toBeVisible({ timeout: 5_000 });
     await confirmButton.click();
 
-    // Storage verification — the seeded snippet must be gone
-    await popupPage.waitForTimeout(500);
-    const syncKeys = await popupPage.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const all = await ext.storage.sync.get(null);
-      return Object.keys(all).filter((k) => k.startsWith("snip:"));
-    });
-    expect(syncKeys).toHaveLength(0);
+    // Storage verification — the seeded snippet must be gone. Poll: the delete
+    // handler writes asynchronously.
+    await expect
+      .poll(
+        () =>
+          popupPage.evaluate(async () => {
+            const ext =
+              (globalThis as any).chrome ?? (globalThis as any).browser;
+            const all = await ext.storage.sync.get(null);
+            return Object.keys(all).filter((k) => k.startsWith("snip:")).length;
+          }),
+        { timeout: 5_000, message: "deleted snippet never left sync storage" }
+      )
+      .toBe(0);
     await expect(popupPage.getByTestId("empty-state")).toBeVisible();
   });
 

@@ -57,14 +57,21 @@ The suite used 64 fixed sleeps. **42 remain, and that is deliberate.**
 A sleep is only acceptable when asserting a **negative** — "this must never happen". A retrying
 assertion cannot prove a negative: it stops as soon as the value matches, and if it never matches
 it waits out the timeout and then fails, which is indistinguishable from "not yet". To prove
-absence you must wait out the debounce and read once. Every remaining sleep of that kind says so
-in a comment above it.
+absence you must wait out the debounce and read once. Every remaining sleep carries a comment
+above it saying why it cannot be a poll.
+
+**Counts, verified with `rg -c`:** 64 fixed sleeps before this work, **15 now**. A later review
+round removed most of the remainder, so an earlier draft of this file claiming "every remaining
+sleep says so in a comment" was false at the time it was written — 18 had no comment. All 15 are
+now either a load/render settle with a one-shot read behind it, or a debounce outlive in front of a
+negative assertion, and each says which.
 
 Everything else was replaced, in descending order of value:
 
 1. **The `testPage` fixture's 500 ms** became `waitForContentScriptReady(page)` — despite the
    helper already existing, the fixture that builds the page used a raw sleep, so it sat in front
-   of all 26 content-script tests.
+   of all 36 tests in `content-script.spec.ts`, plus `blocked-sites`, `contenteditable-multinode`
+   and `image-gif`, which use the same fixture.
 2. **Waits on an async side effect** — a storage write, a debounced save, a React effect — became
    `expect.poll` on the thing that actually changes: the background's `syncDataLost` flag, the
    typing-timeout persistence, the draft pre-fill, cross-context cache propagation.
@@ -108,9 +115,12 @@ touch.**
 - `specs/developers-section.spec.md` (original content from `a91ac61`) says
   all five cards live in the Developers section and all strings must be
   i18n'd; the implementation now splits cards across Dashboard/Developers/
-  Snippets with hardcoded English (`DashboardSection`, `SnippetsSection`),
-  leaving dead `options.developers.versionUpdate|topUsage|typingTimeout`
-  keys in `en.yml`/`es.yml`.
+  Snippets. **This gap is now closed** — the hardcoded English in
+  `DashboardSection`/`SnippetsSection` is translated, and the
+  `options.developers.versionUpdate|topUsage|typingTimeout` keys are deleted
+  rather than dead (an earlier version of this list still described them as
+  dead keys sitting in `en.yml`, which had stopped being true in `505ef7a` and
+  would now fail `pnpm check:locales`).
 - Card title "Extension Version" (rendered) vs i18n
   `options.developers.versionUpdate.title: "Extension Version & Update"`.
 - The sidebar item is labelled "Advanced" while the section heading it opens

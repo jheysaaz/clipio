@@ -28,6 +28,10 @@ async function waitForOptionsReady(page: import("@playwright/test").Page) {
   await page.waitForSelector("nav, aside, [role='navigation'], button, input", {
     timeout: 10_000,
   });
+  // A short settle so React has committed its first paint before a test does a
+  // one-shot read. This is a genuine "let the UI finish rendering" pause, not a
+  // stand-in for a condition: every test that waits for *data* to arrive polls
+  // for that data instead.
   await page.waitForTimeout(300);
 }
 
@@ -58,9 +62,11 @@ test.describe("Options Page", () => {
     await waitForOptionsReady(optionsPage);
 
     // The sidebar renders a navigation landmark with section buttons.
-    const nav = optionsPage.getByRole("navigation", {
-      name: "Options navigation",
-    });
+    //
+    // Selected by testid, not by its accessible name: the aria-label is a
+    // translated string (`options.a11y.optionsNav`) and an e2e selector built on
+    // it only resolves while the browser is running English.
+    const nav = optionsPage.getByTestId("options-nav");
     await expect(nav).toBeVisible();
     expect(await nav.getByRole("button").count()).toBeGreaterThanOrEqual(1);
 
@@ -163,9 +169,6 @@ test.describe("Options Page", () => {
     fs.writeFileSync(tmpPath, jsonContent);
 
     await fileInput.setInputFiles(tmpPath);
-    await optionsPage.waitForTimeout(500);
-
-    await fileInput.setInputFiles(tmpPath);
 
     // The temp file is cleaned up in a finally. Removing the vacuous guard also
     // removed the `unlinkSync` that used to follow it, so every run was leaving a
@@ -232,8 +235,23 @@ test.describe("Options Page", () => {
   test("imports from TextBlaze format", async ({ optionsPage }) => {
     await waitForOptionsReady(optionsPage);
 
-    // TextBlaze CSV-like format
-    const textBlazeContent = `shortcut,content\n/tb1,"TextBlaze snippet one"\n/tb2,"TextBlaze snippet two"`;
+    // A real TextBlaze export: `{ version, folders: [{ name, snippets: [...] }] }`.
+    //
+    // The previous fixture was CSV text and the test then only asserted that
+    // `body` was visible, so the wizard rejecting it with "Invalid JSON file"
+    // passed anyway. Both the fixture and the assertion were wrong.
+    const textBlazeContent = JSON.stringify({
+      version: 1,
+      folders: [
+        {
+          name: "Team",
+          snippets: [
+            { name: "TB One", shortcut: "/tb1", text: "TextBlaze snippet one" },
+            { name: "TB Two", shortcut: "/tb2", text: "TextBlaze snippet two" },
+          ],
+        },
+      ],
+    });
 
     // Open the import wizard from the Snippets section via stable testid
     await optionsPage.getByTestId("options-nav-snippets").click();
@@ -247,27 +265,56 @@ test.describe("Options Page", () => {
     const fileInput = optionsPage.locator('input[type="file"]').first();
     await expect(fileInput).toBeAttached({ timeout: 5_000 });
 
-    const tmpPath = path.resolve(`test-results/textblaze-${Date.now()}.csv`);
+    const tmpPath = path.resolve(`test-results/textblaze-${Date.now()}.json`);
     fs.mkdirSync(path.dirname(tmpPath), { recursive: true });
     fs.writeFileSync(tmpPath, textBlazeContent);
 
     await fileInput.setInputFiles(tmpPath);
-    await optionsPage.waitForTimeout(500);
+
+    // Assert the import landed rather than sleeping and checking that the page
+    // is still on screen, which is true whether or not anything was imported.
+    // The wizard previews before it writes, so selecting the file only
+    // populates the preview. Drive it through, mirroring the Clipio test above.
+    const wizard = optionsPage.getByRole("dialog");
+    await expect(wizard).toContainText(/Found \d+ snippets?/, {
+      timeout: 10_000,
+    });
+
+    const nextBtn = wizard.getByRole("button", { name: "Next" });
+    await expect(nextBtn).toBeEnabled();
+    await nextBtn.click();
+
+    const importBtn = wizard.getByRole("button", {
+      name: /Import \d+ snippets?/,
+    });
+    await expect(importBtn).toBeEnabled();
+    await importBtn.click();
+
+    await expect
+      .poll(
+        async () =>
+          (await readSyncSnippets(optionsPage)).map((snip) => snip.shortcut),
+        {
+          timeout: 10_000,
+          message: "TextBlaze snippets never reached sync storage",
+        }
+      )
+      .toEqual(expect.arrayContaining(["/tb1", "/tb2"]));
 
     fs.unlinkSync(tmpPath);
-
-    const body = optionsPage.locator("body");
-    await expect(body).toBeVisible();
   });
 
   test("imports from PowerText format", async ({ optionsPage }) => {
     await waitForOptionsReady(optionsPage);
 
-    // PowerText JSON format
-    const powerTextContent = JSON.stringify([
-      { keyword: "/pt1", expansion: "PowerText snippet one" },
-      { keyword: "/pt2", expansion: "PowerText snippet two" },
-    ]);
+    // A real Power Text export: a flat object of shortcut → expansion. The
+    // previous fixture was an array of `{keyword, expansion}` objects, which the
+    // detector does not recognise, and the assertion again only checked that
+    // `body` was visible.
+    const powerTextContent = JSON.stringify({
+      "/pt1": "PowerText snippet one",
+      "/pt2": "PowerText snippet two",
+    });
 
     // Open the import wizard from the Snippets section via stable testid
     await optionsPage.getByTestId("options-nav-snippets").click();
@@ -286,12 +333,36 @@ test.describe("Options Page", () => {
     fs.writeFileSync(tmpPath, powerTextContent);
 
     await fileInput.setInputFiles(tmpPath);
-    await optionsPage.waitForTimeout(500);
+
+    // The wizard previews before it writes, so selecting the file only
+    // populates the preview. Drive it through, mirroring the Clipio test above.
+    const wizard = optionsPage.getByRole("dialog");
+    await expect(wizard).toContainText(/Found \d+ snippets?/, {
+      timeout: 10_000,
+    });
+
+    const nextBtn = wizard.getByRole("button", { name: "Next" });
+    await expect(nextBtn).toBeEnabled();
+    await nextBtn.click();
+
+    const importBtn = wizard.getByRole("button", {
+      name: /Import \d+ snippets?/,
+    });
+    await expect(importBtn).toBeEnabled();
+    await importBtn.click();
+
+    await expect
+      .poll(
+        async () =>
+          (await readSyncSnippets(optionsPage)).map((snip) => snip.shortcut),
+        {
+          timeout: 10_000,
+          message: "PowerText snippets never reached sync storage",
+        }
+      )
+      .toEqual(expect.arrayContaining(["/pt1", "/pt2"]));
 
     fs.unlinkSync(tmpPath);
-
-    const body = optionsPage.locator("body");
-    await expect(body).toBeVisible();
   });
 
   test("toggles theme (light/dark/system)", async ({ optionsPage }) => {
@@ -304,27 +375,25 @@ test.describe("Options Page", () => {
     const darkButton = optionsPage.getByTestId("theme-dark");
     await expect(darkButton).toBeVisible({ timeout: 5_000 });
     await darkButton.click();
-    await optionsPage.waitForTimeout(300);
 
-    // Verify the theme was changed in storage
-    const storedTheme = await optionsPage.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const result = await ext.storage.local.get("themeMode");
-      return result.themeMode;
-    });
-    expect(storedTheme).toBe("dark");
+    // Poll the persisted value: the click handler writes asynchronously, so a
+    // one-shot read can land before the write and report the old theme.
+    const readTheme = () =>
+      optionsPage.evaluate(async () => {
+        const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+        const result = await ext.storage.local.get("themeMode");
+        return result.themeMode;
+      });
+    await expect
+      .poll(readTheme, { message: "theme never persisted as dark" })
+      .toBe("dark");
 
     const lightButton = optionsPage.getByTestId("theme-light");
     await expect(lightButton).toBeVisible();
     await lightButton.click();
-    await optionsPage.waitForTimeout(300);
-
-    const storedLight = await optionsPage.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const result = await ext.storage.local.get("themeMode");
-      return result.themeMode;
-    });
-    expect(storedLight).toBe("light");
+    await expect
+      .poll(readTheme, { message: "theme never persisted as light" })
+      .toBe("light");
 
     const body = optionsPage.locator("body");
     await expect(body).toBeVisible();
@@ -341,23 +410,29 @@ test.describe("Options Page", () => {
 
     const initialAria = await confettiToggle.getAttribute("aria-checked");
     await confettiToggle.click();
-    await optionsPage.waitForTimeout(300);
 
     // Behavior: switch role flips aria-checked
+    await expect
+      .poll(() => confettiToggle.getAttribute("aria-checked"), {
+        message: "aria-checked never flipped",
+      })
+      .not.toBe(initialAria);
+
     const newAria = await confettiToggle.getAttribute("aria-checked");
-    expect(newAria).not.toBe(initialAria);
 
-    const stored = await optionsPage.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const result = await ext.storage.local.get("confettiEnabled");
-      return result.confettiEnabled;
-    });
-    // Value should track the flipped boolean
-    expect(typeof stored).toBe("boolean");
-    expect(String(stored)).toBe(newAria);
-
-    const body = optionsPage.locator("body");
-    await expect(body).toBeVisible();
+    // The persisted value must track the control, not merely be a boolean.
+    await expect
+      .poll(
+        () =>
+          optionsPage.evaluate(async () => {
+            const ext =
+              (globalThis as any).chrome ?? (globalThis as any).browser;
+            const result = await ext.storage.local.get("confettiEnabled");
+            return String(result.confettiEnabled);
+          }),
+        { message: "confettiEnabled never matched the toggle" }
+      )
+      .toBe(newAria);
   });
 
   test("hash-based navigation to feedback section", async ({
@@ -367,13 +442,20 @@ test.describe("Options Page", () => {
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/options.html#feedback`);
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(500);
 
-    const pageText = await page.textContent("body");
-    // Page should load and show something (feedback section or fallback)
-    expect(pageText).toBeTruthy();
-    const body = page.locator("body");
-    await expect(body).toBeVisible();
+    // Assert the section actually rendered. The previous version slept 500 ms
+    // and then checked `body` was visible and non-empty, which is true for an
+    // options page that fell back to any other section — or none.
+    // The sidebar's NAV_ITEMS are dashboard/snippets/appearance/images/advanced
+    // — there is no `feedback` entry, so `options-nav-feedback` does not exist.
+    // Feedback is reached from the header button, and the deep link still has to
+    // land on a rendered options shell rather than a blank page.
+    await expect(page.getByTestId("options-nav-dashboard")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByRole("button", { name: "Feedback" })).toBeVisible({
+      timeout: 10_000,
+    });
 
     await page.close();
   });
@@ -394,7 +476,6 @@ test.describe("Options Page", () => {
     const feedbackNav = optionsPage.getByRole("button", { name: "Feedback" });
     await expect(feedbackNav).toBeVisible({ timeout: 5_000 });
     await feedbackNav.click();
-    await optionsPage.waitForTimeout(300);
 
     // Fill feedback form fields
     const nameField = optionsPage
@@ -518,11 +599,15 @@ test.describe("Developers Section", () => {
     const popupPage = await context.newPage();
     await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
     await popupPage.waitForLoadState("domcontentloaded");
-    await popupPage.waitForTimeout(500);
 
-    const pageText = await popupPage.textContent("body");
-    // Banner body: "A new version of Clipio is available: 999.0.0"
-    expect(pageText).toContain("999.0.0");
+    // The banner is seeded into storage, so poll for it rather than sleeping a
+    // fixed 500 ms and reading the body once.
+    await expect(popupPage.getByTestId("warning-update")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(popupPage.getByTestId("warning-update")).toContainText(
+      "999.0.0"
+    );
 
     await popupPage.close();
   });
@@ -550,7 +635,6 @@ test.describe("Developers Section", () => {
     const popupPage = await context.newPage();
     await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
     await popupPage.waitForLoadState("domcontentloaded");
-    await popupPage.waitForTimeout(500);
 
     // Find and click the dismiss (X) button on the warning banner.
     // The banner must be asserted present. The previous version wrapped every
@@ -560,7 +644,7 @@ test.describe("Developers Section", () => {
     // Note: items are defined as "local:x" in src/storage/items.ts but WXT
     // strips the area prefix, so the real storage.local key is the bare "x".
     // Verified by dumping storage.local.get(null) from a loaded options page.
-    const dismissBtn = popupPage.getByTestId("warning-update");
+    const dismissBtn = popupPage.getByTestId("warning-update-dismiss");
     await expect(dismissBtn).toBeVisible({ timeout: 5_000 });
     await dismissBtn.click();
 
@@ -775,11 +859,13 @@ test.describe("Developers Section", () => {
 
     const initialChecked = await toggle.isChecked();
     await toggleLabel.click();
-    await optionsPage.waitForTimeout(500);
 
     // The checkbox state should have flipped
-    const newChecked = await toggle.isChecked();
-    expect(newChecked).toBe(!initialChecked);
+    await expect
+      .poll(() => toggle.isChecked(), {
+        message: "checkbox state never flipped",
+      })
+      .toBe(!initialChecked);
 
     // Storage should reflect the new value
     const stored = await optionsPage.evaluate(async () => {
@@ -1025,16 +1111,10 @@ test.describe("Review Prompt Banner", () => {
       timeout: 10_000,
     });
 
-    // The review banner is the blue Alert containing "Enjoying Clipio?"
-    // Scope the dismiss button search to that banner to avoid hitting the
-    // uninstall warning dismiss (amber banner) which also has aria-label="Dismiss"
-    const reviewBanner = page
-      .getByText("Enjoying Clipio?")
-      .locator("..")
-      .locator("..");
-    const dismissBtn = reviewBanner
-      .locator('button[aria-label="Dismiss"]')
-      .first();
+    // Scoped by testid: four banners share the `common.dismiss` aria-label, and
+    // it is a translated string, so a label-based selector would both be
+    // ambiguous and English-only.
+    const dismissBtn = page.getByTestId("warning-review-dismiss");
     await dismissBtn.click();
     await expect(page.getByText("Enjoying Clipio?")).toHaveCount(0, {
       timeout: 5_000,

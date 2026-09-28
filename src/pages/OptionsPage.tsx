@@ -78,6 +78,7 @@ export default function OptionsPage() {
                     }}
                     className="opacity-50 hover:opacity-100 transition-opacity"
                     aria-label={i18n.t("common.dismiss")}
+                    data-testid="warning-uninstall-dismiss"
                   >
                     <Icon icon={X} stroke="emphasis" />
                   </button>
@@ -114,6 +115,7 @@ export default function OptionsPage() {
                       aria-label={i18n.t(
                         "options.feedback.reviewBannerDismiss"
                       )}
+                      data-testid="warning-review-dismiss"
                     >
                       <Icon icon={X} stroke="emphasis" />
                     </button>

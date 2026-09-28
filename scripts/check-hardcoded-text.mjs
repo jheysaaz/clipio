@@ -8,7 +8,7 @@
  *
  * So this does the other half: find literal text in the UI. It covers
  *
- *   - JSX text nodes:        >Save<
+ *   - JSX text nodes: the literal characters between `>` and `<`
  *   - accessibility labels:  aria-label="…", title="…", placeholder="…"
  *
  * and reports each one with file:line. Run via `pnpm check:hardcoded-text`, and
@@ -18,12 +18,26 @@
  * be translated — a brand name, a format token, a unit. Anything added to it
  * should be a string a native speaker would agree must stay as-is.
  *
- * KNOWN LIMITATION: this only sees text that reaches the DOM as a JSX text node
- * or as one of the three attributes above. It cannot see a string produced
- * inside a JSX expression — `{enabled ? "Enabled" : "Disabled"}` was found by
- * reading, not by this script, and had to be fixed by hand. Closing that would
- * mean parsing JSX, which is a much larger piece of work than the problem
- * justifies. The check is a cheap net for the common case, not a proof.
+ * WHAT THIS DOES NOT SEE — read this before trusting a green run:
+ *
+ *   1. A string produced inside a JSX expression, such as
+ *      `{enabled ? "Enabled" : "Disabled"}` or `title={someVar}`. The character
+ *      class excludes braces, so those are invisible. Every case of this found
+ *      while building the check was fixed by reading, not by running it.
+ *   2. String props on components that render them, e.g.
+ *      `<EmptyState message="Delete all snippets" />`. Only the three attributes
+ *      above are read.
+ *   3. Content set through `dangerouslySetInnerHTML` from a string literal.
+ *   4. `.ts` files. Only files ending in `.tsx` under `src` are walked. A helper
+ *      in `src/lib` that returns a translated-or-not string for a component to
+ *      render is not seen.
+ *
+ * The first version of this check was narrower still — it required a capital
+ * initial and letters-and-spaces only, so "Top 5 Usage", "No usage data yet."
+ * and "Send test exception (options)" all passed a green run. Widening it found
+ * 15 more real strings on the first attempt, all now translated. Expect the same
+ * to happen again after any change to the patterns below: a green run means "no
+ * *known* shape of hardcoded text", not "no hardcoded text".
  */
 
 import { readFileSync, readdirSync, statSync } from "fs";
@@ -72,11 +86,6 @@ const ALLOWLIST = [
   "MB",
 ];
 
-/** Files whose literal text is structural rather than user-facing. */
-const SKIP_FILES = new Set([
-  // Test fixtures and stories.
-]);
-
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
@@ -89,20 +98,28 @@ function walk(dir, out = []) {
   return out;
 }
 
-// >Some Words< — a JSX text node. Requires a capital and at least one space, so
-// it does not fire on `{'x'}` or on a lone word inside an expression.
+// A JSX text node: the literal characters between `>` and `<`.
 //
-// Matched across newlines (`\s` with the `s` flag) because JSX text is very
-// often formatted on its own line:
+// The character class excludes `<`, `>` and braces. That matters: it means a
+// match is *purely literal* prose, with no interpolation and no element boundary
+// inside it. `>of {n} KB<` therefore does not match, which is right — there is
+// no untranslated string there, just two words around a variable.
+//
+// An earlier version required a capital initial and letters-and-spaces only. It
+// silently missed "Top 5 Usage", "No usage data yet." and "Send test exception
+// (options)" — real untranslated strings, in files this gate was supposed to be
+// covering. Because the words are now collected loosely and filtered in JS
+// below, digits and punctuation are handled without enumerating them here.
+//
+// The `s` flag is what lets a text node span newlines, which is how JSX is
+// conventionally formatted:
 //
 //     <h3 className="...">
 //       Snippet Preview
 //     </h3>
 //
-// A line-based scan misses every one of those, which is most of them. The
-// leading \s* matters just as much: JSX conventionally puts the text on its own
-// line, so `>Enable Preview<` and `>\n  Snippet Preview\n<` are the same case.
-const JSX_TEXT = />\s*([A-Z][a-z]+(?:[ \t\r\n]+[a-zA-Z]+)+)\s*</gs;
+// A line-based scan misses every one of those, which is most of them.
+const JSX_TEXT = />([^<>{}]{2,})</gs;
 // A label that is always read aloud or always shown as a placeholder.
 const ATTR = /\b(aria-label|title|placeholder)="([^"]{2,60})"/g;
 
@@ -110,7 +127,6 @@ const findings = [];
 
 for (const file of walk(SRC)) {
   const rel = relative(ROOT, file);
-  if (SKIP_FILES.has(rel)) continue;
   const content = readFileSync(file, "utf8");
   const lines = content.split("\n");
 
@@ -124,9 +140,22 @@ for (const file of walk(SRC)) {
   let m;
   while ((m = JSX_TEXT.exec(content)) !== null) {
     const text = m[1].replace(/\s+/g, " ").trim();
+    // At least two words, so a lone identifier or unit does not trip it.
+    if (!/[A-Za-z]{2,}/.test(text)) continue;
+    if (text.split(/\s+/).length < 2) continue;
+    // Prose starts with a capital. A lowercase-initial run between tags is
+    // overwhelmingly a fragment sitting next to an interpolation, CSS or an
+    // entity, and flagging those produces noise nobody acts on.
+    if (!/^[A-Z]/.test(text)) continue;
     if (ALLOWLIST.includes(text)) continue;
+    // Punctuation only ever trails real prose; strip it before the allowlist
+    // lookup so "KB." matches the allowlisted "KB".
+    if (ALLOWLIST.includes(text.replace(/[.,:;!?)]+$/, ""))) continue;
     const line = lineFor(m.index);
-    if (line.includes("//") || line.includes("*")) continue;
+    // A `//` line comment is not user-visible. Braces are already excluded by
+    // the character class, so a trailing {/* … */} cannot suppress a match —
+    // which is exactly what a `line.includes("*")` test used to do, silently.
+    if (line.includes("//")) continue;
     // Already localised on this very line.
     if (/i18n\.t\(|\bt\(|getMessage\(/.test(line)) continue;
     findings.push({ file: rel, line: lineAt(m.index), text, kind: "text" });
@@ -144,7 +173,11 @@ for (const file of walk(SRC)) {
 }
 
 if (findings.length === 0) {
-  console.log("✅ No hardcoded user-visible text found in src/**/*.tsx");
+  console.log(
+    "✅ No hardcoded text of the shapes this script recognises (JSX text nodes\n" +
+      "   and aria-label/title/placeholder) in .tsx files under src/.\n" +
+      "   It does NOT see strings inside JSX expressions, string props, or .ts files."
+  );
 } else {
   console.error(
     `\n❌ ${findings.length} piece(s) of user-visible text are hardcoded rather than\n` +

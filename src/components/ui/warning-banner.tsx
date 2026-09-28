@@ -11,8 +11,10 @@ interface WarningBannerProps {
   /**
    * Distinguishes this banner from the other WarningBanner instances on the
    * page for e2e selectors. Four banners render in Dashboard.tsx and they all
-   * share `aria-label={i18n.t("common.dismiss")}`, so a generic testid would match whichever
-   * one happened to come first in the DOM.
+   * share the same `aria-label`, which is a translated string, so a
+   * label-based selector would be ambiguous *and* English-only.
+   *
+   * It lands on the banner root; the dismiss button gets `${testId}-dismiss`.
    */
   testId?: string;
 }
@@ -27,6 +29,7 @@ export function WarningBanner({
   return (
     <div
       role="alert"
+      data-testid={testId}
       className={cn(
         "flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-[10px]",
         className
@@ -53,7 +56,7 @@ export function WarningBanner({
           onClick={onDismiss}
           className="shrink-0 opacity-50 hover:opacity-100 transition-opacity"
           aria-label={i18n.t("common.dismiss")}
-          data-testid={testId}
+          data-testid={testId ? `${testId}-dismiss` : undefined}
         >
           <Icon icon={X} stroke="emphasis" />
         </button>

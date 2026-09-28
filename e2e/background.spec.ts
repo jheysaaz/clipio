@@ -98,36 +98,41 @@ test.describe("Background Script", () => {
     const extPage = await context.newPage();
     await extPage.goto(`chrome-extension://${extensionId}/popup.html`);
     await extPage.waitForLoadState("domcontentloaded");
-    // The popup pre-fills from the draft in a useEffect, so poll for the
-    // pre-filled value instead of sleeping past it.
+    // The popup pre-fills from the draft in a useEffect, so poll for the value
+    // rather than sleeping past it.
+    //
+    // The draft lands in a Plate.js rich-text editor, which renders into a
+    // `contenteditable` element — not a textarea or an input. The previous
+    // version queried `textarea, input[type="text"]`, which therefore never
+    // matched anything, and the assertion it fed into could not fail either.
     await expect
       .poll(
-        async () =>
-          extPage.evaluate(() =>
-            Array.from(
-              document.querySelectorAll('textarea, input[type="text"]')
-            ).some((el) => (el as HTMLTextAreaElement).value?.length > 0)
-          ),
+        () =>
+          extPage
+            .locator('[contenteditable="true"]')
+            .first()
+            .textContent()
+            .catch(() => null),
         { timeout: 5_000, message: "draft was never pre-filled into the popup" }
       )
-      .toBe(true);
+      .toContain("selected test text");
 
-    // The popup should be in "create" mode with the draft content pre-filled.
-    // Look for a textarea/input whose value contains the draft text.
-    const hasContent = await extPage
-      .locator('textarea, input[type="text"]')
-      .filter({ hasText: "selected test text" })
-      .count()
-      .then((c) => c > 0)
-      .catch(() => false);
+    // The draft is also consumed from storage, so it does not reappear on reopen.
+    await expect
+      .poll(
+        () =>
+          sw.evaluate(async () => {
+            const ext =
+              (globalThis as any).chrome ?? (globalThis as any).browser;
+            const result = await ext.storage.local.get("contextMenuDraft");
+            return result.contextMenuDraft ?? null;
+          }),
+        { timeout: 5_000, message: "draft was never consumed" }
+      )
+      .toBeNull();
 
-    // Also acceptable: the draft content appears somewhere in the DOM
-    const pageContent = await extPage.content();
-    expect(
-      storedDraft === "selected test text" ||
-        pageContent.includes("selected test text") ||
-        hasContent
-    ).toBe(true);
+    // And the value read back before the popup opened was correct.
+    expect(storedDraft).toBe("selected test text");
 
     await extPage.close();
   });

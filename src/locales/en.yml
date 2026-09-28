@@ -14,6 +14,11 @@ common:
   dismissError: Dismiss error
   toggleSidebar: Toggle sidebar
   close: Close
+  reload: Reload
+  # Error-boundary copy. The two fallbacks differ only in what the user should
+  # do next, so they need two strings rather than one generic apology.
+  errorOptions: Something went wrong. Please reload the options page.
+  errorPopup: Something went wrong. Please close and reopen the extension.
 
   # Editor placeholder chrome
   editor:
@@ -131,6 +136,8 @@ options:
     previewOn: Enabled
     previewOff: Disabled
     previewTriggerPrefix: Trigger Prefix
+    previewTriggerHint: Character that triggers the preview menu. Leave empty to always show preview.
+    previewShortcutHintFormat: "Use format: Ctrl+Shift+Space, Cmd+K, etc."
     previewShortcut: Manual Trigger Shortcut
     previewShortcutHint: Keyboard shortcut to manually show all snippets
     typingTimeout: Typing Timeout
@@ -140,6 +147,11 @@ options:
     localStorage: Local Storage
     storageMode: Storage Mode
     extensionVersion: Extension Version
+    extensionVersionHint: Current installed version and available updates.
+    topUsageHeading: Top 5 Usage
+    topUsageHint: The five most-used snippets by insertion count.
+    topUsageEmpty: No usage data yet.
+    typingTimeoutHint: "How long Clipio waits after you stop typing before attempting to expand a snippet. Lower = faster but may expand mid-word. Default: 300 ms."
     viewRelease: View release
     upToDate: Up to date
     simulateNotification: Simulate notification
@@ -147,6 +159,16 @@ options:
     triggerContentScriptTest: Trigger test in content script
   # Accessible names for controls that carry no visible text. Read by screen
   # readers, so a Spanish user should hear Spanish. spec: specs/i18n.spec.md
+  # Development-only controls. They render only when MODE !== "production", but
+  # they are still user-visible to a developer running a Spanish build, so they
+  # are translated like everything else.
+  dev:
+    testReviewPrompt: "Development – Test Review Prompt"
+    testReviewPromptHint: Simulate the full review prompt flow — fires the real browser notification and transitions state to "shown". Only visible in development.
+    testSentry: "Development – Test Sentry"
+    testSentryHint: Send test events to Sentry to verify capture in each context. Only visible in development.
+    sendTestExceptionOptions: Send test exception (options)
+    sendTestMessageOptions: Send test message (options)
   a11y:
     optionsNav: Options navigation
     previewToggle: Enable Preview

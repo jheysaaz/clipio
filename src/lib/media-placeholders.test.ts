@@ -137,7 +137,7 @@ describe("formatting", () => {
     expect(parsed).toEqual({ kind: "gif", id: "abc", width: 64 });
   });
 
-  it("omits a width of zero only when explicitly undefined", () => {
+  it("keeps an explicit width of zero rather than treating it as absent", () => {
     expect(formatImagePlaceholder(UUID, 0)).toBe(`{{image:${UUID}:0}}`);
   });
 });

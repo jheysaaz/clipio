@@ -70,7 +70,10 @@ export function AppSidebar({
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <nav aria-label={i18n.t("options.a11y.optionsNav")}>
+        <nav
+          aria-label={i18n.t("options.a11y.optionsNav")}
+          data-testid="options-nav"
+        >
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu>

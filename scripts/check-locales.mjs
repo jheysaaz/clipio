@@ -1,7 +1,7 @@
 /**
  * Locale parity checker
  *
- * Three checks:
+ * Four checks:
  *   1. every key in en.yml exists in all other locale files
  *   2. no translation defines a key that en.yml does not
  *   3. every placeholder ($1, {{name}}, …) matches en.yml
@@ -9,9 +9,9 @@
  *
  * The fourth is the one that was missing, and its absence is why 32 dead keys
  * accumulated: nothing complained when a key stopped being read, so removing the
- * last call site of a feature left its strings behind forever. It is reported
- * rather than enforced, because a key can legitimately be reserved for a
- * feature still being built — but it can no longer rot unnoticed.
+ * last call site of a feature left its strings behind forever. It is enforced:
+ * a key with no reader is a hard failure, and the only way to keep one is to
+ * list it in RESERVED below. It can no longer rot unnoticed.
  *
  * Usage: pnpm check:locales
  *
@@ -54,18 +54,12 @@ function flattenLeaves(obj, prefix = "", out = {}) {
 }
 
 /**
- * Placeholders an i18n string may contain, mapped to the argument index they
- * consume. WXT's i18n runtime substitutes "$1"-style placeholders (30 of them
- * in en.yml); the brace form is accepted too so a future migration cannot
- * silently pass. A translation that drops or reorders one renders the wrong
- * sentence, so a mismatch is a hard failure rather than a warning.
- */
-/**
  * Placeholder indices used by a string, in source order.
  *
- * WXT's i18n runtime substitutes "$1"-style placeholders (30 of them in
- * en.yml); the brace form is accepted too so a future migration cannot
- * silently pass.
+ * WXT's i18n runtime substitutes "$1"-style placeholders; the brace form is
+ * accepted too so a future migration cannot silently pass. A translation that
+ * drops or reorders one renders the wrong sentence, so a mismatch is a hard
+ * failure rather than a warning.
  */
 function placeholdersOf(value) {
   if (typeof value !== "string") return [];
@@ -175,9 +169,12 @@ const sources = sourceFiles(SRC_DIR)
 /**
  * Keys the code actually asks for.
  *
- * Only static `i18n.t("…")` calls are counted, and a scan confirms there are no
- * template-literal or concatenated key accesses in src/ — if one is ever added
- * this check will under-report, so the scan is asserted rather than assumed.
+ * Only static `i18n.t("…")` calls are counted, so a template-literal or
+ * concatenated key would make this check under-report. A scan for those prints
+ * a warning. It is a warning, not a gate: it cannot currently be proven clean,
+ * because `i18n.t(key)` with a variable is a legitimate pattern and is
+ * indistinguishable from a computed lookup at this level of analysis. See the
+ * warning below for the one call that trips it today.
  */
 const dynamicAccess = sources.match(/i18n\.t\(\s*(?!\s*["'])[^)]/g);
 if (dynamicAccess) {

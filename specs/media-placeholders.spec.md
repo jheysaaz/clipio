@@ -123,8 +123,11 @@ shape. The exporter's is now `collectReferencedMediaIds`.
 
 - The two `nextSpecial` scanners described above, which disagree about which placeholders are
   worth stopping for. That belongs with the markdown block-grammar work.
-- The `{{image:}}` charset itself. It is deliberately left exactly as strict as it was; see Edge
-  Cases.
+- Narrowing the `{{image:}}` charset. It was _widened_ in this work — uppercase hex now matches, so
+  an id like `{{image:3F2A…}}` is no longer left as literal text. That was unintentional drift, and
+  an earlier version of this file claimed the charset was untouched; that claim was wrong. Nothing
+  security-relevant rides on it: the charset still cannot contain `"`, `<`, `>` or `:`, and callers
+  escape the id before it reaches the DOM.
 
 ## Change History
 

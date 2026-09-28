@@ -21,18 +21,22 @@ export async function waitForContentScriptReady(page: Page): Promise<void> {
 }
 
 /**
- * Read a locator's text, retrying until it is non-empty.
+ * Wait until an extension page has the `chrome.storage` API available.
  *
- * `locator.inputValue()`, `innerText()` and `textContent()` are **one-shot**:
- * they read whatever is there at that instant and never retry. So a test that
- * reads one right after an action is asserting against a race, and the usual
- * "fix" is a sleep in front of it — which passes when the machine is fast and
- * fails when it is not.
+ * Several messaging tests do `page.evaluate(() => chrome.storage.local.get(…))`
+ * straight after navigating to popup.html or options.html. A `waitForTimeout`
+ * in front of that is guessing how long the extension context takes to come up.
  *
- * This polls instead. Combined with a following assertion, the wait is on the
- * value rather than on the clock, so it is both faster and stable.
- *
- * Only appropriate before a *positive* assertion. To prove a negative ("nothing
- * must ever appear"), you still have to wait out the debounce and then read
- * once — a retrying read can never prove that something never happened.
+ * This polls the actual precondition instead, so the wait ends as soon as the API
+ * is there rather than always costing the full interval.
  */
+export async function waitForExtensionStorageApi(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () =>
+      typeof chrome !== "undefined" &&
+      chrome?.storage?.local !== undefined &&
+      typeof chrome?.storage?.local?.get === "function",
+    undefined,
+    { timeout: 10_000 }
+  );
+}

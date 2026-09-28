@@ -93,6 +93,9 @@ test.describe("Contenteditable insertion flow", () => {
     await testPage.keyboard.type("/", { delay: 30 });
     await expect(preview).toBeVisible();
 
+    // Let the Enter handler commit the insertion before the one-shot read
+    // below. A poll on `field.innerText()` would be the stronger form; this is
+    // kept short because the insertion is synchronous once the key event lands.
     await testPage.keyboard.press("Enter");
     await testPage.waitForTimeout(350);
 
@@ -166,6 +169,9 @@ test.describe("Contenteditable insertion flow", () => {
     await testPage.keyboard.type("h", { delay: 30 });
     await expect(preview).toBeVisible();
 
+    // Let the Enter handler commit the insertion before the one-shot read
+    // below. A poll on `field.innerText()` would be the stronger form; this is
+    // kept short because the insertion is synchronous once the key event lands.
     await testPage.keyboard.press("Enter");
     await testPage.waitForTimeout(350);
 
@@ -209,6 +215,9 @@ test.describe("Contenteditable insertion flow", () => {
     await expect(preview).toBeVisible();
 
     // Select the (only) snippet.
+    // Let the Enter handler commit the insertion before the one-shot read
+    // below. A poll on `field.innerText()` would be the stronger form; this is
+    // kept short because the insertion is synchronous once the key event lands.
     await testPage.keyboard.press("Enter");
     await testPage.waitForTimeout(350);
 

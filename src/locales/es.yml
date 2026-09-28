@@ -10,10 +10,13 @@ common:
   save: Guardar
   # Generic UI affordances, shared by the dialog, banner and sidebar primitives.
   # spec: specs/i18n.spec.md
-  dismiss: Descartar
-  dismissError: Descartar error
-  toggleSidebar: Alternar barra lateral
+  dismiss: Cerrar
+  dismissError: Cerrar error
+  toggleSidebar: Mostrar u ocultar la barra lateral
   close: Cerrar
+  reload: Recargar
+  errorOptions: Algo ha salido mal. Recarga la página de opciones.
+  errorPopup: Algo ha salido mal. Cierra y vuelve a abrir la extensión.
 
   # Chrome del editor
   editor:
@@ -129,7 +132,9 @@ options:
     previewEnableHint: Muestra el menú de vista previa mientras escribes
     previewOn: Activado
     previewOff: Desactivado
-    previewTriggerPrefix: Prefijo activador
+    previewTriggerPrefix: Prefijo de activación
+    previewTriggerHint: Carácter que abre el menú de vista previa. Déjalo vacío para mostrarla siempre.
+    previewShortcutHintFormat: "Formato: Ctrl+Shift+Space, Cmd+K, etc."
     previewShortcut: Atajo manual
     previewShortcutHint: Atajo de teclado para mostrar todos los fragmentos manualmente
     typingTimeout: Tiempo de espera
@@ -139,6 +144,11 @@ options:
     localStorage: Almacenamiento local
     storageMode: Modo de almacenamiento
     extensionVersion: Versión de la extensión
+    extensionVersionHint: Versión instalada actualmente y actualizaciones disponibles.
+    topUsageHeading: Los 5 más usados
+    topUsageHint: Los cinco fragmentos más usados por número de inserciones.
+    topUsageEmpty: Todavía no hay datos de uso.
+    typingTimeoutHint: "Cuánto espera Clipio tras dejar de escribir antes de intentar expandir un fragmento. Un valor menor es más rápido, pero puede expandir a mitad de palabra. Predeterminado: 300 ms."
     viewRelease: Ver la publicación
     upToDate: Actualizado
     simulateNotification: Simular notificación
@@ -146,6 +156,13 @@ options:
     triggerContentScriptTest: Probar en el script de contenido
   # Nombres accesibles de controles sin texto visible. Los lee un lector de
   # pantalla, así que un usuario en español debe oír español.
+  dev:
+    testReviewPrompt: "Desarrollo – Probar el aviso de reseña"
+    testReviewPromptHint: 'Simula el flujo completo del aviso de reseña: dispara la notificación real del navegador y cambia el estado a "shown". Solo visible en desarrollo.'
+    testSentry: "Desarrollo – Probar Sentry"
+    testSentryHint: Envía eventos de prueba a Sentry para verificar la captura en cada contexto. Solo visible en desarrollo.
+    sendTestExceptionOptions: Enviar excepción de prueba (opciones)
+    sendTestMessageOptions: Enviar mensaje de prueba (opciones)
   a11y:
     optionsNav: Navegación de opciones
     previewToggle: Activar vista previa

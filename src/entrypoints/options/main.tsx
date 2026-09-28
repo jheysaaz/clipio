@@ -13,13 +13,13 @@ function ErrorFallback() {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
       <p className="text-sm text-destructive font-medium">
-        Something went wrong. Please reload the options page.
+        {i18n.t("common.errorOptions")}
       </p>
       <button
         className="text-xs underline text-muted-foreground"
         onClick={() => window.location.reload()}
       >
-        Reload
+        {i18n.t("common.reload")}
       </button>
     </div>
   );

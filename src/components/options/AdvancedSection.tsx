@@ -586,12 +586,10 @@ export function AdvancedSection() {
       {(import.meta.env.MODE as string) !== "production" && (
         <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-6 space-y-3">
           <h3 className="text-sm font-semibold text-foreground">
-            Development – Test Review Prompt
+            {i18n.t("options.dev.testReviewPrompt")}
           </h3>
           <p className="text-xs text-muted-foreground">
-            Simulate the full review prompt flow — fires the real browser
-            notification and transitions state to "shown". Only visible in
-            development.
+            {i18n.t("options.dev.testReviewPromptHint")}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -628,11 +626,10 @@ export function AdvancedSection() {
       {(import.meta.env.MODE as string) !== "production" && (
         <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-6 space-y-3">
           <h3 className="text-sm font-semibold text-foreground">
-            Development – Test Sentry
+            {i18n.t("options.dev.testSentry")}
           </h3>
           <p className="text-xs text-muted-foreground">
-            Send test events to Sentry to verify capture in each context. Only
-            visible in development.
+            {i18n.t("options.dev.testSentryHint")}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -645,7 +642,7 @@ export function AdvancedSection() {
                 );
               }}
             >
-              Send test exception (options)
+              {i18n.t("options.dev.sendTestExceptionOptions")}
             </Button>
             <Button
               type="button"
@@ -655,7 +652,7 @@ export function AdvancedSection() {
                 captureMessage("Clipio Sentry test message (options)", "info");
               }}
             >
-              Send test message (options)
+              {i18n.t("options.dev.sendTestMessageOptions")}
             </Button>
             <Button
               type="button"

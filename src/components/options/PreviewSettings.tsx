@@ -112,8 +112,7 @@ export function PreviewSettings() {
             {i18n.t("options.copy.previewTriggerPrefix")}
           </Label>
           <p className="text-xs text-muted-foreground">
-            Character that triggers the preview menu. Leave empty to always show
-            preview.
+            {i18n.t("options.copy.previewTriggerHint")}
           </p>
           <div className="flex gap-2 items-center">
             <div className="relative flex-1 max-w-xs">
@@ -166,7 +165,7 @@ export function PreviewSettings() {
               />
             </div>
             <span className="text-xs text-muted-foreground">
-              Use format: Ctrl+Shift+Space, Cmd+K, etc.
+              {i18n.t("options.copy.previewShortcutHintFormat")}
             </span>
           </div>
         </div>

@@ -72,9 +72,11 @@ maxWidth)` into exported functions, use `clampWidth` in both handlers (removing 
       "wizard parsed the file", on a stated belief that the footer's Next button could not be
       targeted at all. Review proved that belief false — all four selectors resolve — so the test
       now drives the wizard through and asserts the imported snippets reached `storage.sync`.
-- [x] Every rewritten test is mutation-sensitive, with the two documented exceptions below
-      (the `debugLog` watcher's double guard, and the `unused`-key check, which is enforced by CI
-      rather than by a unit test).
+- [x] Every rewritten test is mutation-sensitive, with the one exception documented below (the
+      `debugLog` watcher's double guard). A review round caught this line claiming _two_
+      exceptions while documenting only one; the second, the `unused`-key check, is not a test
+      exception at all — it is enforced by `pnpm check:locales` failing the build, which is
+      mutation-verified, so it is listed under the gates rather than here.
 - [x] The suite's pass count went **down** (1373 → 1368 in `c339b04`) before rising again as
       real tests were added. That is the point, and it is not a regression.
 
@@ -89,6 +91,28 @@ So no single-line mutation is caught, and this is recorded rather than papered o
 defence in depth rather than a gap: the behaviour is pinned, and it would take changing both
 guards at once to break it. The test names and comments describe the behaviour and explicitly do
 not claim to cover the `_watching` flag, because they do not.
+
+## What strengthening the vacuous e2e assertions exposed
+
+Once those assertions stopped being able to pass, four tests failed — and three of the
+failures were the tests being wrong, not the product:
+
+- **The TextBlaze and PowerText imports never imported anything.** Both fixtures were the
+  wrong shape: a CSV string, and an array of `{keyword, expansion}` objects. The wizard parses
+  JSON, and the real TextBlaze export is `{version, folders:[…]}` while Power Text is a flat
+  `shortcut → expansion` object. Each test then slept and asserted that `body` was visible, so
+  the wizard saying _"Invalid JSON file. Please check the file and try again."_ passed the
+  suite. Both now use real export shapes and assert the shortcuts reached `storage.sync`.
+- **The context-menu draft test asserted against the wrong element.** The draft is pre-filled
+  into a Plate.js editor, which renders into a `contenteditable`; the test queried
+  `textarea, input[type="text"]` and therefore matched nothing. It now polls the contenteditable
+  and additionally asserts the draft is _consumed_ from storage.
+- **The arrow-key test asserted `body` was visible** after sleeping 100 ms between presses. The
+  list is a `role="listbox"` using virtual focus via `aria-activedescendant`, so it now asserts
+  three distinct active descendants across three positions and that ArrowUp walks back.
+
+All three are mutation-verified: neutering the PowerText `Object.entries` loop, the
+`content: draft` pre-fill, and the `ArrowDown` index advance each fail the corresponding test.
 
 ## What this wave found by removing the guards
 
