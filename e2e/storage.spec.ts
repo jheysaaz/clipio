@@ -14,7 +14,10 @@
 
 import { test, expect } from "./fixtures.js";
 import { makeSnippet, makeSnippets } from "./helpers/snippets.js";
-import { readIndexedDbSnippets } from "./helpers/storage.js";
+import {
+  readIndexedDbSnippets,
+  writeBackupSnippets,
+} from "./helpers/storage.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -210,33 +213,11 @@ test.describe("Storage Integration", () => {
       content: "IndexedDB backup content",
     });
 
-    // Write directly to IndexedDB (as the backup system would)
-    await page.evaluate(async (snip) => {
-      await new Promise<void>((resolve, reject) => {
-        const openReq = indexedDB.open("clipio-backup", 1);
-        openReq.onupgradeneeded = (e) => {
-          const db = (e.target as IDBOpenDBRequest).result;
-          if (!db.objectStoreNames.contains("snippets")) {
-            db.createObjectStore("snippets", { keyPath: "id" });
-          }
-        };
-        openReq.onsuccess = () => {
-          const db = openReq.result;
-          const tx = db.transaction("snippets", "readwrite");
-          const store = tx.objectStore("snippets");
-          store.put(snip);
-          tx.oncomplete = () => {
-            db.close();
-            resolve();
-          };
-          tx.onerror = () => {
-            db.close();
-            reject(tx.error);
-          };
-        };
-        openReq.onerror = () => reject(openReq.error);
-      });
-    }, snippet);
+    // Write directly to the backup store, as the backup system would. This
+    // uses the shared helper rather than a third hand-rolled `indexedDB.open`
+    // block — the previous copy hardcoded version 1, which would throw
+    // `VersionError` once the schema moved past it.
+    await writeBackupSnippets(page, [snippet]);
 
     // Read back via the helper
     const idbSnippets = await readIndexedDbSnippets(page);

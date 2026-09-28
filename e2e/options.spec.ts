@@ -90,12 +90,23 @@ test.describe("Options Page", () => {
     await optionsPage.reload();
     await waitForOptionsReady(optionsPage);
 
-    const pageText = await optionsPage.textContent("body");
-    // Should show some numeric stats (byte counts, snippet count, etc.)
-    expect(pageText).toBeTruthy();
-    // Page loads and renders content without crashing
-    const body = optionsPage.locator("body");
-    await expect(body).toBeVisible();
+    // Assert the rendered figures. The previous version read `body` text and
+    // checked it was truthy, which passed with the whole statistics panel
+    // replaced by an early `return null`.
+    const syncStat = optionsPage.getByTestId("stat-sync-kb");
+    await expect(syncStat).toBeVisible();
+    // `<used> / <quota> KB` — the em-dash is the loading placeholder.
+    await expect(syncStat).toHaveText(/^\d+(\.\d)? \/ \d+ KB$/);
+
+    const localStat = optionsPage.getByTestId("stat-local-kb");
+    await expect(localStat).toBeVisible();
+    // `~<estimate> KB`
+    await expect(localStat).toHaveText(/^~\d+(\.\d)? KB$/);
+
+    // Five seeded snippets must show in the top-usage card's own count, so the
+    // numbers are not just formatted correctly but sourced from real data.
+    const topUsage = optionsPage.getByTestId("card-top-usage");
+    await expect(topUsage).toBeVisible();
   });
 
   test("exports snippets to JSON file", async ({ optionsPage }) => {
@@ -113,23 +124,34 @@ test.describe("Options Page", () => {
     const exportButton = optionsPage.getByTestId("export-json");
     await expect(exportButton).toBeVisible({ timeout: 5_000 });
 
-    const downloadPromise = optionsPage
-      .waitForEvent("download", { timeout: 5_000 })
-      .catch(() => null);
+    // No `.catch(() => null)` and no `if (download)` / `existsSync` guard: both
+    // silently skipped the entire content check, so a failed save produced a
+    // green run. A missing download is a failure, not a branch.
+    const downloadPromise = optionsPage.waitForEvent("download", {
+      timeout: 10_000,
+    });
     await exportButton.click();
     const download = await downloadPromise;
-    expect(download).not.toBeNull();
-    if (download) {
-      expect(download.suggestedFilename()).toMatch(/\.json$/i);
-      // Read the downloaded file
-      const tmpPath = path.resolve(`test-results/export-${Date.now()}.json`);
-      await download.saveAs(tmpPath).catch(() => {});
-      if (fs.existsSync(tmpPath)) {
-        const content = fs.readFileSync(tmpPath, "utf-8");
-        const parsed = JSON.parse(content);
-        expect(Array.isArray(parsed) || typeof parsed === "object").toBe(true);
-        fs.unlinkSync(tmpPath);
-      }
+
+    expect(download.suggestedFilename()).toMatch(/\.json$/i);
+
+    const tmpPath = path.resolve(`test-results/export-${Date.now()}.json`);
+    try {
+      await download.saveAs(tmpPath);
+      expect(fs.existsSync(tmpPath)).toBe(true);
+
+      // Assert the export really contains the seeded snippets, not merely that
+      // it parses as JSON — `Array.isArray(x) || typeof x === "object"` is
+      // true for any `JSON.parse` result and so asserted nothing.
+      const parsed = JSON.parse(fs.readFileSync(tmpPath, "utf-8")) as {
+        snippets?: { shortcut?: string }[];
+      };
+      expect(Array.isArray(parsed.snippets)).toBe(true);
+      expect(parsed.snippets?.map((snip) => snip.shortcut)).toEqual(
+        expect.arrayContaining(["/exp0", "/exp1", "/exp2"])
+      );
+    } finally {
+      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
     }
 
     // Smoke test: page is still responsive
@@ -490,10 +512,15 @@ test.describe("Options Page", () => {
       )
       .first();
 
-    if (await nameField.isVisible()) await nameField.fill("E2E Tester");
-    if (await emailField.isVisible()) await emailField.fill("e2e@test.com");
-    if (await messageField.isVisible())
-      await messageField.fill("E2E test feedback message");
+    // Asserted, not guarded. A prior version wrapped each in
+    // `if (await field.isVisible())`, so the form could be submitted empty and
+    // the test would still pass.
+    await expect(nameField).toBeVisible();
+    await expect(emailField).toBeVisible();
+    await expect(messageField).toBeVisible();
+    await nameField.fill("E2E Tester");
+    await emailField.fill("e2e@test.com");
+    await messageField.fill("E2E test feedback message");
 
     // Submit the form
     const submitButton = optionsPage

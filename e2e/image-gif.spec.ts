@@ -26,6 +26,7 @@
 import { test, expect } from "./fixtures.js";
 import { makeSnippet, makeSnippets } from "./helpers/snippets.js";
 import { waitForContentScriptReady } from "./helpers/content-script.js";
+import { writeBackupMedia } from "./helpers/storage.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -86,54 +87,24 @@ async function seedMediaEntry(
   entry: { id: string; alt?: string }
 ) {
   const page = await getExtPage(context, extensionId);
-  await page.evaluate(async (e) => {
-    await new Promise<void>((resolve, reject) => {
-      const openReq = indexedDB.open("clipio-backup", 2);
-      openReq.onupgradeneeded = (ev) => {
-        const db = (ev.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains("media")) {
-          db.createObjectStore("media", { keyPath: "id" });
-        }
-      };
-      openReq.onsuccess = () => {
-        const db = openReq.result;
-        const tx = db.transaction("media", "readwrite");
-        const store = tx.objectStore("media");
-        // Minimal 1×1 PNG blob
-        const png = new Uint8Array([
-          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00,
-          0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
-          0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xde,
-          0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63,
-          0xf8, 0xcf, 0xc0, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21,
-          0xbc, 0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
-          0x42, 0x60, 0x82,
-        ]);
-        const blob = new Blob([png], { type: "image/png" });
-        const record = {
-          id: e.id,
-          blob,
-          mimeType: "image/png",
-          width: 1,
-          height: 1,
-          size: png.length,
-          originalSize: png.length,
-          createdAt: new Date().toISOString(),
-          ...(e.alt !== undefined ? { alt: e.alt } : {}),
-        };
-        store.put(record);
-        tx.oncomplete = () => {
-          db.close();
-          resolve();
-        };
-        tx.onerror = () => {
-          db.close();
-          reject(tx.error);
-        };
-      };
-      openReq.onerror = () => reject(openReq.error);
-    });
-  }, entry);
+  // Minimal 1x1 PNG
+  const png = [
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+    0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+    0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xde, 0x00, 0x00, 0x00,
+    0x0c, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
+    0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc, 0x33, 0x00, 0x00, 0x00,
+    0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+  ];
+  await writeBackupMedia(page, {
+    id: entry.id,
+    bytes: png,
+    mimeType: "image/png",
+    width: 1,
+    height: 1,
+    ...(entry.alt !== undefined ? { alt: entry.alt } : {}),
+  });
+
   await page.close();
 }
 
@@ -270,8 +241,9 @@ test.describe("Image / GIF feature tests", () => {
 
     // The handler should have processed the request (not silently dropped it)
     // and returned {dataUrl: null} because the media ID doesn't exist.
+    // No `expect(typeof response).toBe("object")` here — that pattern is
+    // unfailable and was deleted from messaging.spec.ts for exactly that reason.
     expect(response).not.toBeUndefined();
-    expect(typeof response).toBe("object");
     expect((response as Record<string, unknown>)["dataUrl"]).toBeNull();
 
     await popupPage.close();

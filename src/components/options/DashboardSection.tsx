@@ -122,7 +122,10 @@ export function DashboardSection() {
                 </span>
                 <InfoTooltip text={i18n.t("options.overview.syncTooltip")} />
               </div>
-              <span className="text-xs tabular-nums text-muted-foreground">
+              <span
+                className="text-xs tabular-nums text-muted-foreground"
+                data-testid="stat-sync-kb"
+              >
                 {stats.loading ? "—" : `${syncKB} / ${syncTotalKB} KB`}
               </span>
             </div>
@@ -157,7 +160,10 @@ export function DashboardSection() {
               </span>
               <InfoTooltip text={i18n.t("options.overview.localTooltip")} />
             </div>
-            <span className="text-xs tabular-nums text-muted-foreground">
+            <span
+              className="text-xs tabular-nums text-muted-foreground"
+              data-testid="stat-local-kb"
+            >
               {stats.loading ? "—" : `~${localKB} KB`}
             </span>
           </div>

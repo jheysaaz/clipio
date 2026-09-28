@@ -11,7 +11,7 @@ common:
   # Generic UI affordances, shared by the dialog, banner and sidebar primitives.
   # spec: specs/i18n.spec.md
   dismiss: Cerrar
-  dismissError: Cerrar error
+  dismissError: Cerrar aviso
   toggleSidebar: Mostrar u ocultar la barra lateral
   close: Cerrar
   reload: Recargar
@@ -157,8 +157,8 @@ options:
   # Nombres accesibles de controles sin texto visible. Los lee un lector de
   # pantalla, así que un usuario en español debe oír español.
   dev:
-    testReviewPrompt: "Desarrollo – Probar el aviso de reseña"
-    testReviewPromptHint: 'Simula el flujo completo del aviso de reseña: dispara la notificación real del navegador y cambia el estado a "shown". Solo visible en desarrollo.'
+    testReviewPrompt: "Desarrollo – Probar la solicitud de valoración"
+    testReviewPromptHint: 'Simula el flujo completo de la solicitud de valoración: dispara la notificación real del navegador y cambia el estado a "shown". Solo visible en desarrollo.'
     testSentry: "Desarrollo – Probar Sentry"
     testSentryHint: Envía eventos de prueba a Sentry para verificar la captura en cada contexto. Solo visible en desarrollo.
     sendTestExceptionOptions: Enviar excepción de prueba (opciones)

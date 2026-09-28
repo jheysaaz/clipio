@@ -214,10 +214,37 @@ test.describe("Popup (Dashboard)", () => {
     await popupPage.reload();
     await waitForPopupReady(popupPage);
 
-    // The popup should consume the draft and show it in the form
-    const pageText = await popupPage.textContent("body");
-    // Either the draft text appears in the form, or the popup loaded without crashing
-    expect(pageText).toBeTruthy();
+    // The draft lands in a Plate.js editor — a `contenteditable`, not a
+    // textarea. The previous version read `body` text and checked it was
+    // truthy, which passed with draft consumption removed outright
+    // (`if (typeof draft === "string" && draft)` → `if (false)`).
+
+    // The draft is rendered...
+    await expect
+      .poll(
+        () =>
+          popupPage
+            .locator('[contenteditable="true"]')
+            .first()
+            .textContent()
+            .catch(() => null),
+        { timeout: 5_000, message: "draft was never pre-filled" }
+      )
+      .toContain(draftText);
+
+    // ...and consumed, so reopening does not restore it.
+    await expect
+      .poll(
+        () =>
+          popupPage.evaluate(async () => {
+            const ext =
+              (globalThis as any).chrome ?? (globalThis as any).browser;
+            const r = await ext.storage.local.get("contextMenuDraft");
+            return r.contextMenuDraft ?? null;
+          }),
+        { timeout: 5_000, message: "draft was never consumed" }
+      )
+      .toBeNull();
   });
 
   test("popup viewport is approximately 680x460", async ({

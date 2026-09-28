@@ -42,6 +42,10 @@
  *   7. Text that shares a source line with a JSX expression container, e.g.
  *      `<p>{i18n.t("a")} Hardcoded tail</p>`. The braces exclude the whole
  *      expression, so the literal tail inside it is not seen either.
+ *   8. A `//` inside *JSX text* is treated as the start of a comment, so a
+ *      visible URL is truncated at `https:`. The finding is still reported —
+ *      nothing is missed — but the string shown stops there. Deciding otherwise
+ *      needs a real JSX parser, which is the larger piece of work noted above.
  *
  * The first version of this check was narrower still — it required a capital
  * initial and letters-and-spaces only, so "Top 5 Usage", "No usage data yet."
@@ -97,6 +101,77 @@ const ALLOWLIST = [
   "MB",
 ];
 
+/**
+ * Replace comment content with spaces, preserving every offset and newline.
+ *
+ * The scan has to know whether a match sits inside a comment, and three cheaper
+ * approaches were tried and rejected, each for the same reason — they suppress
+ * or fabricate findings:
+ *
+ *   - `line.includes("*")` dropped any hardcoded string sharing a line with a
+ *     a JSX comment block, but it was also the only thing stopping such a
+ *     block from being reported as user-visible text.
+ *   - `line.includes("//")` had the same problem in the other direction.
+ *   - Testing whether `//` occurs *earlier on the line* than the match looked
+ *     position-precise and was not: `https://` contains `//`, so
+ *     `<a href="https://x.io">Delete all snippets</a>` lost its finding while
+ *     the comment claimed the URL case was the bug being fixed.
+ *
+ * Blanking is the only version that answers the actual question. Comments are
+ * replaced with spaces rather than removed so that byte offsets — and therefore
+ * the reported line numbers — stay identical to the original file.
+ *
+ * String state is tracked so that a `//` or `/*` inside a quoted string or a
+ * template literal is left alone.
+ */
+function blankComments(source) {
+  const out = source.split("");
+  let i = 0;
+  const n = source.length;
+  // Stack of string states we are inside, so `"a 'b // c'"` is handled.
+  const blank = (from, to) => {
+    for (let k = from; k < to && k < n; k++) {
+      if (out[k] !== "\n") out[k] = " ";
+    }
+  };
+  while (i < n) {
+    const c = source[i];
+    const next = source[i + 1];
+    if (c === "/" && next === "/") {
+      const end = source.indexOf("\n", i);
+      const stop = end === -1 ? n : end;
+      blank(i, stop);
+      i = stop;
+      continue;
+    }
+    if (c === "/" && next === "*") {
+      const end = source.indexOf("*/", i + 2);
+      const stop = end === -1 ? n : end + 2;
+      blank(i, stop);
+      i = stop;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      const quote = c;
+      i++;
+      while (i < n) {
+        if (source[i] === "\\") {
+          i += 2;
+          continue;
+        }
+        if (source[i] === quote) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    i++;
+  }
+  return out.join("");
+}
+
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
@@ -139,6 +214,9 @@ const findings = [];
 for (const file of walk(SRC)) {
   const rel = relative(ROOT, file);
   const content = readFileSync(file, "utf8");
+  // Scanned copy has comments blanked; `content` keeps the real text so
+  // findings report what a user would actually see.
+  const scannable = blankComments(content);
   const lines = content.split("\n");
 
   /** 1-indexed line number for a character offset. */
@@ -149,7 +227,7 @@ for (const file of walk(SRC)) {
 
   JSX_TEXT.lastIndex = 0;
   let m;
-  while ((m = JSX_TEXT.exec(content)) !== null) {
+  while ((m = JSX_TEXT.exec(scannable)) !== null) {
     const text = m[1].replace(/\s+/g, " ").trim();
     // At least two words, so a lone identifier or unit does not trip it.
     if (!/[A-Za-z]{2,}/.test(text)) continue;
@@ -162,35 +240,22 @@ for (const file of walk(SRC)) {
     // Punctuation only ever trails real prose; strip it before the allowlist
     // lookup so "KB." matches the allowlisted "KB".
     if (ALLOWLIST.includes(text.replace(/[.,:;!?)]+$/, ""))) continue;
-    // Skip a match that is *itself* inside a `//` line comment — a commented-out
-    // JSX line is not user-visible.
-    //
-    // This is position-precise on purpose. The previous two versions used
-    // `line.includes("*")` and then `line.includes("//")`, which dropped the
-    // whole finding whenever the *source line* happened to contain those
-    // characters — so a hardcoded string sharing a line with a URL or an
-    // arithmetic operator vanished silently. Position, not co-line presence.
-    const lineStart = content.lastIndexOf("\n", m.index) + 1;
-    const before = content.slice(lineStart, m.index);
-    if (before.lastIndexOf("//") > before.lastIndexOf("*")) continue;
-
-    // No `i18n.t` co-line check here. A JSX text node cannot be an i18n call —
-    // the character class excludes braces, so `{i18n.t("…")}` never matches in
-    // the first place. Skipping on co-line presence only hid real strings such
-    // as `<p onClick={() => t("k")}>Delete all snippets</p>`.
+    // No comment check is needed here and no `i18n.t` co-line check either.
+    // Comments are already blanked out of `scannable`, and a JSX text node
+    // cannot be an `i18n.t` call — the character class excludes braces, so
+    // `{i18n.t("…")}` never matches in the first place. Skipping on co-line
+    // presence only ever hid real strings, e.g.
+    // `<p onClick={() => t("k")}>Delete all snippets</p>`.
     findings.push({ file: rel, line: lineAt(m.index), text, kind: "text" });
   }
 
   ATTR.lastIndex = 0;
-  while ((m = ATTR.exec(content)) !== null) {
+  while ((m = ATTR.exec(scannable)) !== null) {
     // m[1] is the attribute name, m[2] its value — the value is the text.
     const text = m[2].trim();
     if (ALLOWLIST.includes(text)) continue;
-    // Same position-precise comment rule as the text-node pass. The pattern
-    // requires `="…"`, so this cannot match `aria-label={i18n.t("…")}` anyway.
-    const lineStart = content.lastIndexOf("\n", m.index) + 1;
-    const before = content.slice(lineStart, m.index);
-    if (before.lastIndexOf("//") > before.lastIndexOf("*")) continue;
+    // Same reasoning as the text-node pass: comments are pre-blanked, and this
+    // pattern requires `="…"`, so it cannot match `aria-label={i18n.t("…")}`.
     findings.push({ file: rel, line: lineAt(m.index), text, kind: m[1] });
   }
 }

@@ -93,6 +93,46 @@ defence in depth rather than a gap: the behaviour is pinned, and it would take c
 guards at once to break it. The test names and comments describe the behaviour and explicitly do
 not claim to cover the `_watching` flag, because they do not.
 
+## What the fifth review round found in the fourth round's fixes
+
+Round 4's fixes to the _tests_ were real and mutation-verified. Its two fixes to _claims_ were
+both false, and the first reproduced the exact shape round 4 existed to remove:
+
+- `e2e-suite.spec.md` said "14 now" and then "What the 15 fall into" four lines later. The section
+  whose stated purpose is that a stale count is unacceptable had two counts. The numbers are now
+  stated once, and the three-way split is accurate — including the fact that the **largest** group
+  (7 of 14) is post-keypress settles before a one-shot read, which a poll would handle better.
+  Those are named as the first place to look next rather than defended.
+- The "position-precise" suppression was a reword. `https://` contains `//`, so
+  `<a href="https://x.io">Delete all snippets</a>` still lost its finding — and the comment named
+  the URL case as the bug being fixed. Replaced with real comment-blanking (see above). Deleting
+  the `*` guard also introduced a _new_ false positive: a JSX comment block being reported as
+  user-visible text. Blanking fixes that too, so the limitation list documents only false
+  negatives plus the one truncation case.
+
+Two more fully decorative tests, both mutation-proven, both in files this work had edited:
+
+- **`popup.spec.ts` "consumes context menu draft"** read `body` text and checked it was truthy.
+  It passed with draft consumption removed outright (`if (typeof draft === "string" && draft)` →
+  `if (false)`). It now polls the Plate contenteditable for the draft and asserts the draft is
+  consumed from storage.
+- **`options.spec.ts` "displays storage statistics"** did the same. It passed with the whole
+  statistics panel replaced by an early `return null`. The figures now have stable testids
+  (`stat-sync-kb`, `stat-local-kb`) and the test asserts their format.
+
+Also: the export test wrapped `saveAs` in `.catch(() => {})` and then guarded the content check
+with `existsSync`, so a failed download produced a green run; its `Array.isArray(parsed) || typeof
+parsed === "object"` is true for _any_ `JSON.parse` result and asserted nothing. It now asserts the
+seeded shortcuts are in the file. The feedback test wrapped three field fills in unasserted
+`isVisible()` guards, so the form could be submitted empty. `image-gif.spec.ts` kept an
+`expect(typeof response).toBe("object")` — the same unfailable pattern deleted from
+`messaging.spec.ts` — next to a real assertion, so it was redundant.
+
+Three hand-rolled `indexedDB.open("clipio-backup", N)` blocks existed across the suite, at three
+different hardcoded versions (1, 1 and 2), none of which is the real `IDB_CONFIG.VERSION`. A
+helper opening v1 against a v4 database throws `VersionError`, which reads as a product bug. All
+three now go through `e2e/helpers/storage.ts`, which imports `IDB_CONFIG`.
+
 ## What the fourth review round found in the third round's fixes
 
 The previous commit set out to delete false claims and introduced one: the sleep section of
@@ -108,18 +148,25 @@ very files it edited:
 - **`popup.spec.ts` quota banner** wrote ~91 KB into `storage.sync` and asserted only that `body`
   was visible, with a comment conceding the banner "may or may not appear". The banner needs
   `mode === "local" && localReason === "quota"`, so those keys are now seeded and the banner
-  asserted. Forcing `quotaWarning` to `false` fails both.
+  asserted. Forcing `quotaWarning` to `false` fails it. A sibling test for the third banner,
+  `sync-paused`, had no coverage at all and now has one.
 - **`messaging.spec.ts`** asserted `expect(typeof received).toBe("boolean")` where `received` is
   typed `Promise<boolean>` — unfailable, and passing even when the listener never matched and the
   promise resolved `false` on timeout. It now asserts `true`; changing the sent payload so the
   listener cannot match fails it.
 - **`check-hardcoded-text.mjs`** replaced the `line.includes("*")` escape hatch that had been
-  deleted as a finding with an `line.includes("//")` one, plus a co-line `t(` heuristic. Both are
-  position-insensitive and dropped real findings. Both are now position-precise: a match is skipped
-  only when it is _itself_ inside a line comment. The `t(` heuristic is gone — a JSX text node
-  cannot be an `i18n.t` call, since the character class excludes braces, so it only ever hid real
-  strings. The limitation list is now seven items and says what the script cannot see, including the
-  single-word and lowercase-initial shapes that are deliberate false negatives.
+  deleted as a finding with an `line.includes("//")` one, plus a co-line `t(` heuristic. Both were
+  position-insensitive and dropped real findings. Fixing them with
+  `before.lastIndexOf("//") > before.lastIndexOf("*")` was a reword, not a fix: `https://`
+  contains `//`, so `<a href="https://x.io">Delete all snippets</a>` still lost its finding — while
+  the comment named the URL case as the motivating bug. The script now **blanks comments** before
+  scanning, preserving offsets so line numbers stay exact, with string-literal state tracked so a
+  `//` or `/*` inside a quoted string is left alone. The `t(` heuristic is gone: a JSX text node
+  cannot be an `i18n.t` call, since the character class excludes braces, so it could only ever hide
+  real strings. The limitation list is **eight** items, including the single-word and
+  lowercase-initial shapes (deliberate false negatives) and the one case blanking cannot fix — a
+  `//` inside _JSX text_ truncates the reported string at that point, which loses no finding but
+  reports the text imprecisely.
 
 Also fixed: two sleep comments argued "a poll would not help because the read is one-shot", which
 is not a reason — `expect.poll(() => input.inputValue())` works. The real justification for those

@@ -167,7 +167,10 @@ test.describe("Content Script Expansion", () => {
     await testPage.keyboard.type("/hello", { delay: 30 });
     // Press Tab immediately — no need to wait for debounce
     await testPage.keyboard.press("Tab");
-    // Give just a brief moment for async expansion
+    // Wait for the async expansion, then read once. Not a negative assertion,
+    // so `expect.poll` on the same read would be the stronger form; kept short
+    // because the Tab path expands synchronously on the key event (see the note
+    // above), so this only covers the promise settling.
     await testPage.waitForTimeout(200);
 
     const value = await input.inputValue();
