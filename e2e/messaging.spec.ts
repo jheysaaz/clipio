@@ -75,10 +75,12 @@ test.describe("Cross-Context Communication", () => {
       ext.runtime.sendMessage({ __e2eTest: true });
     });
 
+    // The listener must actually see the message. The previous assertion was
+    // `expect(typeof received).toBe("boolean")`, which is unfailable — `received`
+    // is typed `Promise<boolean>`, so it is always a boolean, including when the
+    // listener never matched and the promise resolved to `false` on timeout.
     const received = await messageReceivedPromise;
-    // Message may or may not be received depending on timing —
-    // the important thing is the listener setup didn't throw
-    expect(typeof received).toBe("boolean");
+    expect(received).toBe(true);
 
     await page.close();
   });

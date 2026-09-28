@@ -93,9 +93,15 @@ test.describe("Contenteditable insertion flow", () => {
     await testPage.keyboard.type("/", { delay: 30 });
     await expect(preview).toBeVisible();
 
-    // Let the Enter handler commit the insertion before the one-shot read
-    // below. A poll on `field.innerText()` would be the stronger form; this is
-    // kept short because the insertion is synchronous once the key event lands.
+    // Wait for the Enter handler to commit the insertion before the one-shot
+    // read below.
+    //
+    // A previous version of this comment said the sleep is short "because the
+    // insertion is synchronous once the key event lands" — which, if true, makes
+    // the sleep self-defeating, since a synchronous insertion would already be
+    // visible. The reason to keep it is that these reads are one-shot
+    // `innerText()` calls after a keypress, and the handler is a React effect
+    // rather than a direct DOM mutation.
     await testPage.keyboard.press("Enter");
     await testPage.waitForTimeout(350);
 
@@ -169,9 +175,15 @@ test.describe("Contenteditable insertion flow", () => {
     await testPage.keyboard.type("h", { delay: 30 });
     await expect(preview).toBeVisible();
 
-    // Let the Enter handler commit the insertion before the one-shot read
-    // below. A poll on `field.innerText()` would be the stronger form; this is
-    // kept short because the insertion is synchronous once the key event lands.
+    // Wait for the Enter handler to commit the insertion before the one-shot
+    // read below.
+    //
+    // A previous version of this comment said the sleep is short "because the
+    // insertion is synchronous once the key event lands" — which, if true, makes
+    // the sleep self-defeating, since a synchronous insertion would already be
+    // visible. The reason to keep it is that these reads are one-shot
+    // `innerText()` calls after a keypress, and the handler is a React effect
+    // rather than a direct DOM mutation.
     await testPage.keyboard.press("Enter");
     await testPage.waitForTimeout(350);
 
@@ -215,9 +227,15 @@ test.describe("Contenteditable insertion flow", () => {
     await expect(preview).toBeVisible();
 
     // Select the (only) snippet.
-    // Let the Enter handler commit the insertion before the one-shot read
-    // below. A poll on `field.innerText()` would be the stronger form; this is
-    // kept short because the insertion is synchronous once the key event lands.
+    // Wait for the Enter handler to commit the insertion before the one-shot
+    // read below.
+    //
+    // A previous version of this comment said the sleep is short "because the
+    // insertion is synchronous once the key event lands" — which, if true, makes
+    // the sleep self-defeating, since a synchronous insertion would already be
+    // visible. The reason to keep it is that these reads are one-shot
+    // `innerText()` calls after a keypress, and the handler is a React effect
+    // rather than a direct DOM mutation.
     await testPage.keyboard.press("Enter");
     await testPage.waitForTimeout(350);
 

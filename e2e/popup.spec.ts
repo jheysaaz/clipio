@@ -15,6 +15,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "./fixtures.js";
 import { helloSnippet, makeSnippet, makeSnippets } from "./helpers/snippets.js";
+import { writeBackupSnippets } from "./helpers/storage.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -172,7 +173,17 @@ test.describe("Popup (Dashboard)", () => {
   test("shows sync-wipe recovery banner when syncDataLost is true", async ({
     popupPage,
   }) => {
-    // Set the syncDataLost flag
+    // The banner is driven by `tryRecoverFromBackup()`, which reads the
+    // `clipio-backup` IndexedDB store and shows nothing when it is empty — so the
+    // backup has to be seeded. Writing `storage.sync` alone will not raise it.
+    await writeBackupSnippets(
+      popupPage,
+      makeSnippets(2, (i) => ({
+        label: `Recovered ${i + 1}`,
+        shortcut: `/r${i + 1}`,
+      }))
+    );
+
     await popupPage.evaluate(async () => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.local.set({ syncDataLost: true });
@@ -180,25 +191,17 @@ test.describe("Popup (Dashboard)", () => {
     await popupPage.reload();
     await waitForPopupReady(popupPage);
 
-    // Check for any warning/alert banner in the page
-    const pageText = await popupPage.textContent("body");
-    // The page should have loaded without crashing
-    expect(pageText).toBeTruthy();
+    // The previous version accepted "an alert exists OR the page mentions
+    // 'sync'/'lost'/'warning'", which is true on any page that mentions sync at
+    // all — forcing `showRecoveryBanner` to false still passed it.
+    const banner = popupPage.getByTestId("warning-uninstall");
+    await expect(banner).toBeVisible({ timeout: 10_000 });
+    await expect(banner).toContainText(/2/);
 
-    // Look for a warning/alert element
-    const alertEl = popupPage
-      .locator(
-        '[role="alert"], .warning, [data-testid*="warning"], [data-testid*="banner"]'
-      )
-      .first();
-    const hasAlert = await alertEl.isVisible().catch(() => false);
-    // Either the banner is visible or the page contains warning-related text
-    const hasWarningText =
-      pageText?.toLowerCase().includes("lost") ||
-      pageText?.toLowerCase().includes("sync") ||
-      pageText?.toLowerCase().includes("warning") ||
-      pageText?.toLowerCase().includes("recover");
-    expect(hasAlert || hasWarningText).toBe(true);
+    // The dismiss control is on the banner, and the testid is derived from it.
+    await expect(
+      popupPage.getByTestId("warning-uninstall-dismiss")
+    ).toBeVisible();
   });
 
   test("consumes context menu draft on popup open", async ({ popupPage }) => {
@@ -225,8 +228,9 @@ test.describe("Popup (Dashboard)", () => {
     await page.setViewportSize({ width: 680, height: 460 });
     await page.goto(`chrome-extension://${extensionId}/popup.html`);
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(300);
 
+    // No sleep: `page.viewportSize()` reads the emulated viewport, which is set
+    // by `setViewportSize` above and needs no render settle.
     const viewport = page.viewportSize();
     expect(viewport?.width).toBe(680);
     expect(viewport?.height).toBe(460);
@@ -314,36 +318,56 @@ test.describe("Popup (Dashboard)", () => {
     });
   });
 
-  test("shows quota warning banner near storage limit", async ({
+  test("shows quota warning banner when sync has fallen back on quota", async ({
     popupPage,
   }) => {
-    // Fill sync storage near quota threshold by setting many snippets
+    // The banner is driven by `getStorageStatus().quotaExceeded`, which is
+    // `mode === "local" && localReason === "quota"` — so those are the two keys
+    // to seed. The previous version wrote ~91 KB straight into `storage.sync`
+    // and then asserted only that `body` was visible, with a comment conceding
+    // the banner "may or may not appear"; forcing `quotaWarning` to false still
+    // passed it.
+    await seedAndReload(popupPage, [makeSnippet({ label: "One" })]);
+
     await popupPage.evaluate(async () => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      // Create snippets that total close to 90KB (the WARN_AT threshold)
-      const filler = "x".repeat(7_000); // ~7KB each, under 8KB per-item limit
-      const entries: Record<string, unknown> = {};
-      for (let i = 0; i < 13; i++) {
-        entries[`snip:quota-${i}`] = {
-          id: `quota-${i}`,
-          label: `Quota Snippet ${i}`,
-          shortcut: `/q${i}`,
-          content: filler,
-          tags: [],
-          usageCount: 0,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-      }
-      await ext.storage.sync.set(entries);
+      await ext.storage.local.set({
+        storageMode: "local",
+        storageModeReason: "quota",
+      });
     });
-
     await popupPage.reload();
     await waitForPopupReady(popupPage);
 
-    const body = popupPage.locator("body");
-    await expect(body).toBeVisible();
-    // The page should load — quota warning may or may not appear depending on actual usage
+    const banner = popupPage.getByTestId("warning-quota");
+    await expect(banner).toBeVisible({ timeout: 10_000 });
+
+    // The banner's action opens the options page, which is what the warning is for.
+    await expect(
+      banner.getByRole("button").filter({ hasNotText: /^$/ }).first()
+    ).toBeVisible();
+  });
+
+  test("shows sync-paused banner when storage was switched to local manually", async ({
+    popupPage,
+  }) => {
+    // The third dashboard banner. It renders when `mode === "local"` and
+    // `localReason === "manual"`, which is the pair of keys to seed.
+    await seedAndReload(popupPage, [makeSnippet({ label: "One" })]);
+
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.local.set({
+        storageMode: "local",
+        storageModeReason: "manual",
+      });
+    });
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+
+    await expect(popupPage.getByTestId("warning-sync-paused")).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
   test("import button navigates to options page", async ({

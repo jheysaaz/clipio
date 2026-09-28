@@ -87,11 +87,17 @@ describe("normalizeStoredSnippet", () => {
     const input = {
       ...makeSnippet({ id: "keep", tags: ["a"], usageCount: 3 }),
       contentFormat: "html",
-      body: "<b>hi</b>",
+      // `content`, not `body`: that is the field the migration reads. An
+      // earlier version of this test set `body`, which nothing looks at, so the
+      // legacy branch never actually converted anything.
+      content: "<b>hi</b>",
     } as unknown as Snippet;
     const out = normalizeStoredSnippet(input);
     expect(out.id).toBe("keep");
     expect(out.tags).toEqual(["a"]);
     expect(out.usageCount).toBe(3);
+    // And the body really was converted, which is what makes this more than a
+    // field-preservation check.
+    expect(out.content).toBe("**hi**");
   });
 });

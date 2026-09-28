@@ -31,6 +31,17 @@
  *   4. `.ts` files. Only files ending in `.tsx` under `src` are walked. A helper
  *      in `src/lib` that returns a translated-or-not string for a component to
  *      render is not seen.
+ *   5. A **single word**: `<h3>Loading</h3>`. Two or more words are required, so
+ *      a one-word heading is invisible. Single words are the most ambiguous
+ *      shape — "OK", "New", "Save" — and flagging every button label would bury
+ *      the real findings.
+ *   6. **Lowercase-initial** prose: `<p>this is lowercase prose</p>`. Requires a
+ *      capital, because a lowercase run between tags is usually a fragment
+ *      beside an interpolation, CSS or an entity. This is a deliberate
+ *      false-negative trade, not an oversight.
+ *   7. Text that shares a source line with a JSX expression container, e.g.
+ *      `<p>{i18n.t("a")} Hardcoded tail</p>`. The braces exclude the whole
+ *      expression, so the literal tail inside it is not seen either.
  *
  * The first version of this check was narrower still — it required a capital
  * initial and letters-and-spaces only, so "Top 5 Usage", "No usage data yet."
@@ -151,13 +162,22 @@ for (const file of walk(SRC)) {
     // Punctuation only ever trails real prose; strip it before the allowlist
     // lookup so "KB." matches the allowlisted "KB".
     if (ALLOWLIST.includes(text.replace(/[.,:;!?)]+$/, ""))) continue;
-    const line = lineFor(m.index);
-    // A `//` line comment is not user-visible. Braces are already excluded by
-    // the character class, so a trailing {/* … */} cannot suppress a match —
-    // which is exactly what a `line.includes("*")` test used to do, silently.
-    if (line.includes("//")) continue;
-    // Already localised on this very line.
-    if (/i18n\.t\(|\bt\(|getMessage\(/.test(line)) continue;
+    // Skip a match that is *itself* inside a `//` line comment — a commented-out
+    // JSX line is not user-visible.
+    //
+    // This is position-precise on purpose. The previous two versions used
+    // `line.includes("*")` and then `line.includes("//")`, which dropped the
+    // whole finding whenever the *source line* happened to contain those
+    // characters — so a hardcoded string sharing a line with a URL or an
+    // arithmetic operator vanished silently. Position, not co-line presence.
+    const lineStart = content.lastIndexOf("\n", m.index) + 1;
+    const before = content.slice(lineStart, m.index);
+    if (before.lastIndexOf("//") > before.lastIndexOf("*")) continue;
+
+    // No `i18n.t` co-line check here. A JSX text node cannot be an i18n call —
+    // the character class excludes braces, so `{i18n.t("…")}` never matches in
+    // the first place. Skipping on co-line presence only hid real strings such
+    // as `<p onClick={() => t("k")}>Delete all snippets</p>`.
     findings.push({ file: rel, line: lineAt(m.index), text, kind: "text" });
   }
 
@@ -166,8 +186,11 @@ for (const file of walk(SRC)) {
     // m[1] is the attribute name, m[2] its value — the value is the text.
     const text = m[2].trim();
     if (ALLOWLIST.includes(text)) continue;
-    const line = lineFor(m.index);
-    if (/i18n\.t\(|\bt\(|getMessage\(/.test(line)) continue;
+    // Same position-precise comment rule as the text-node pass. The pattern
+    // requires `="…"`, so this cannot match `aria-label={i18n.t("…")}` anyway.
+    const lineStart = content.lastIndexOf("\n", m.index) + 1;
+    const before = content.slice(lineStart, m.index);
+    if (before.lastIndexOf("//") > before.lastIndexOf("*")) continue;
     findings.push({ file: rel, line: lineAt(m.index), text, kind: m[1] });
   }
 }

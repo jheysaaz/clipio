@@ -52,19 +52,22 @@ instead of decorating the CI pipeline.
 
 ## On `waitForTimeout`
 
-The suite used 64 fixed sleeps. **42 remain, and that is deliberate.**
+**Counts, verified with `rg -c`:** 64 fixed sleeps before this work, **14 now.** Every one of
+the 14 carries a comment above it saying what it is waiting for. (A previous version of this
+section said "42 remain" three lines above the line stating 15 — the count went stale inside the
+paragraph that corrected it.)
 
-A sleep is only acceptable when asserting a **negative** — "this must never happen". A retrying
-assertion cannot prove a negative: it stops as soon as the value matches, and if it never matches
-it waits out the timeout and then fails, which is indistinguishable from "not yet". To prove
-absence you must wait out the debounce and read once. Every remaining sleep carries a comment
-above it saying why it cannot be a poll.
+What the 15 fall into:
 
-**Counts, verified with `rg -c`:** 64 fixed sleeps before this work, **15 now**. A later review
-round removed most of the remainder, so an earlier draft of this file claiming "every remaining
-sleep says so in a comment" was false at the time it was written — 18 had no comment. All 15 are
-now either a load/render settle with a one-shot read behind it, or a debounce outlive in front of a
-negative assertion, and each says which.
+- most outlive a debounce in front of a **negative** assertion — "nothing must ever appear
+  here". These genuinely cannot be polls: a retrying assertion stops the instant its predicate
+  holds, and if it never holds it waits out the timeout and fails, which is indistinguishable
+  from "not yet". The only way to prove absence is to outlast the debounce and read once.
+- the rest are a render/load settle in front of a one-shot read.
+
+The counts above come from `rg -c`; the earlier claim that "18 had no comment" did not, and
+reproduces as 13 or 31 depending on how far back you look. It is replaced here rather than
+hedged.
 
 Everything else was replaced, in descending order of value:
 

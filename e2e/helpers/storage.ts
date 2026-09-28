@@ -160,3 +160,42 @@ export async function readIndexedDbSnippets(page: Page): Promise<Snippet[]> {
     });
   });
 }
+
+/**
+ * Write snippets straight into the `clipio-backup` IndexedDB store.
+ *
+ * The recovery banner is driven by `tryRecoverFromBackup()`, which reads the
+ * IndexedDB shadow and shows nothing when it is empty — so seeding `storage.sync`
+ * alone is not enough to exercise it.
+ */
+export async function writeBackupSnippets(
+  page: Page,
+  snippets: Snippet[]
+): Promise<void> {
+  await page.evaluate(async (snips) => {
+    await new Promise<void>((resolve, reject) => {
+      const openReq = indexedDB.open("clipio-backup", 1);
+      openReq.onupgradeneeded = (e) => {
+        const db = (e.target as IDBOpenDBRequest).result;
+        if (!db.objectStoreNames.contains("snippets")) {
+          db.createObjectStore("snippets", { keyPath: "id" });
+        }
+      };
+      openReq.onsuccess = () => {
+        const db = openReq.result;
+        const tx = db.transaction("snippets", "readwrite");
+        const store = tx.objectStore("snippets");
+        for (const s of snips) store.put(s);
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(tx.error);
+        };
+      };
+      openReq.onerror = () => reject(openReq.error);
+    });
+  }, snippets);
+}

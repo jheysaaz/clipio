@@ -185,9 +185,14 @@ test.describe("Content Script Expansion", () => {
     await input.click();
     await testPage.keyboard.type("/hello", { delay: 30 });
     await testPage.keyboard.press("Space");
-    // Settle so the expansion handler has run before the one-shot read below. A
-    // poll would not help here: the read is a single `inputValue()`, and it is
-    // the resulting *value* being asserted, not merely its presence.
+    // Wait for the expansion to land before the one-shot read below.
+    //
+    // An earlier version of this comment claimed a poll "would not help here"
+    // because the read is a single `inputValue()`. That is not a reason —
+    // `expect.poll(() => input.inputValue())` works fine. What actually
+    // justifies the sleep is that the assertion is a *negative*: `not.toContain`
+    // cannot be proven by a retrying check, because one that never matches just
+    // waits out its timeout and fails, which looks the same as "not yet".
     await testPage.waitForTimeout(200);
 
     const value = await input.inputValue();

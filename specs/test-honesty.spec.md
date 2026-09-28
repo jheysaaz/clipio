@@ -2,7 +2,8 @@
 
 ## Problem
 
-The suite reports 1373 passing tests. A meaningful number of them cannot fail: they assert on
+The suite reported 1373 passing tests when this audit began (1425 now, after real tests were
+added). A meaningful number of them cannot fail: they assert on
 values the test itself constructed, re-implement the logic they claim to check, or are skipped
 entirely behind a conditional. That is worse than having no test, because it inflates the count
 and creates a false impression of coverage — and every one of them was found by reading, not by
@@ -91,6 +92,40 @@ So no single-line mutation is caught, and this is recorded rather than papered o
 defence in depth rather than a gap: the behaviour is pinned, and it would take changing both
 guards at once to break it. The test names and comments describe the behaviour and explicitly do
 not claim to cover the `_watching` flag, because they do not.
+
+## What the fourth review round found in the third round's fixes
+
+The previous commit set out to delete false claims and introduced one: the sleep section of
+`e2e-suite.spec.md` said "42 remain" three lines above the line saying 15. A commit whose stated
+purpose is removing overclaims cannot ship one. Four more decorative assertions were found in the
+very files it edited:
+
+- **`popup.spec.ts` recovery banner** accepted "an alert exists OR the page mentions
+  `sync`/`lost`/`warning`". Any page mentioning sync satisfies that. Forcing
+  `showRecoveryBanner` to `false` still passed. It now seeds the `clipio-backup` IndexedDB store —
+  the banner is driven by `tryRecoverFromBackup()`, which shows nothing when the backup is empty,
+  so seeding `storage.sync` alone never raised it — and asserts the banner and its dismiss control.
+- **`popup.spec.ts` quota banner** wrote ~91 KB into `storage.sync` and asserted only that `body`
+  was visible, with a comment conceding the banner "may or may not appear". The banner needs
+  `mode === "local" && localReason === "quota"`, so those keys are now seeded and the banner
+  asserted. Forcing `quotaWarning` to `false` fails both.
+- **`messaging.spec.ts`** asserted `expect(typeof received).toBe("boolean")` where `received` is
+  typed `Promise<boolean>` — unfailable, and passing even when the listener never matched and the
+  promise resolved `false` on timeout. It now asserts `true`; changing the sent payload so the
+  listener cannot match fails it.
+- **`check-hardcoded-text.mjs`** replaced the `line.includes("*")` escape hatch that had been
+  deleted as a finding with an `line.includes("//")` one, plus a co-line `t(` heuristic. Both are
+  position-insensitive and dropped real findings. Both are now position-precise: a match is skipped
+  only when it is _itself_ inside a line comment. The `t(` heuristic is gone — a JSX text node
+  cannot be an `i18n.t` call, since the character class excludes braces, so it only ever hid real
+  strings. The limitation list is now seven items and says what the script cannot see, including the
+  single-word and lowercase-initial shapes that are deliberate false negatives.
+
+Also fixed: two sleep comments argued "a poll would not help because the read is one-shot", which
+is not a reason — `expect.poll(() => input.inputValue())` works. The real justification for those
+sleeps is the negative assertion, and the comments now say so. `normalize.test.ts` set `body` where
+the migration reads `content`, so the legacy branch converted nothing; it now sets `content` and
+asserts the converted result.
 
 ## What strengthening the vacuous e2e assertions exposed
 
