@@ -549,6 +549,105 @@ function deserializeNodes(element: Node): Descendant[] {
       }
 
       // Handle block elements
+      //
+      // These are the constructs the TextBlaze and PowerText importers rely on,
+      // and they previously had no case here, so `deserializeNodes` walked into
+      // them and returned only their text. `<ul><li>a</li><li>b</li></ul>`
+      // therefore became "ab" — the two items merged into one word with no
+      // separator, which is silent data corruption on the import path.
+      //
+      // Producing the same element types the markdown grammar parses is what
+      // makes `htmlToMarkdown` (which is just
+      // `serializeToMarkdown(deserializeFromHtml(…))`) block-aware for free.
+      //
+      // spec: specs/markdown-block-grammar.spec.md
+      const headingMatch = tagName.match(/^h([1-6])$/);
+      if (headingMatch) {
+        const children = deserializeNodes(el);
+        nodes.push({
+          type: `h${headingMatch[1]}`,
+          children: children.length > 0 ? children : [{ text: "" }],
+        } as TElement);
+        return;
+      }
+
+      if (tagName === "hr") {
+        nodes.push({ type: "hr", children: [{ text: "" }] } as TElement);
+        return;
+      }
+
+      if (tagName === "blockquote") {
+        nodes.push({
+          type: "blockquote",
+          children:
+            deserializeNodes(el).length > 0
+              ? deserializeNodes(el)
+              : ([{ text: "" }] as Descendant[]),
+        } as TElement);
+        return;
+      }
+
+      if (tagName === "ul" || tagName === "ol") {
+        const items = Array.from(el.children)
+          .filter((child) => child.tagName.toLowerCase() === "li")
+          .map((child) => {
+            const liChildren = deserializeNodes(child);
+            return {
+              type: "li",
+              children:
+                liChildren.length > 0
+                  ? liChildren
+                  : ([{ text: "" }] as Descendant[]),
+            } as TElement;
+          });
+        nodes.push({
+          type: tagName,
+          children:
+            items.length > 0
+              ? items
+              : ([{ text: "" }] as unknown as TElement[]),
+        } as unknown as TElement);
+        return;
+      }
+
+      if (tagName === "table") {
+        nodes.push(deserializeTable(el));
+        return;
+      }
+
+      if (tagName === "img") {
+        // A remote image cannot be stored: Clipio's media store holds uploaded
+        // blobs, not URLs. Dropping the tag entirely — which is what happened
+        // before — loses the alt text and the URL with no trace. Keeping the
+        // markdown as literal text preserves both and stays visible.
+        //
+        // It does not survive as an *image*: `parseMarkdownInline` has no
+        // `![alt](src)` rule, so on the next parse this comes back as text
+        // followed by a link. Documented in the spec rather than papered over.
+        const src = el.getAttribute("src") ?? "";
+        const alt = el.getAttribute("alt") ?? "";
+        if (src) {
+          nodes.push({ text: `![${alt}](${src})` });
+        } else if (alt) {
+          nodes.push({ text: alt });
+        }
+        return;
+      }
+
+      if (tagName === "pre") {
+        // The interior of a code block must survive verbatim — it is never
+        // reinterpreted as markdown.
+        const code = el.querySelector("code");
+        const language =
+          code?.className.match(/(?:language|lang)-([\w+-]+)/)?.[1] ?? "";
+        nodes.push({
+          type: "code",
+          language: language || undefined,
+          children: [{ text: (code ?? el).textContent ?? "" }],
+        } as unknown as TElement);
+        return;
+      }
+
       if (tagName === "p" || tagName === "div") {
         const children = deserializeNodes(el);
         nodes.push({
@@ -640,3 +739,56 @@ export {
   escapeHtml,
   sanitizeUrl,
 } from "@/lib/markdown";
+
+/**
+ * Build a `table` element from a DOM `<table>`.
+ *
+ * Row and cell roles are inferred from the tag where possible, because pasted
+ * HTML frequently omits `<thead>`/`<tbody>` entirely. Column count is padded to
+ * the widest row so a short row cannot silently drop cells.
+ */
+function deserializeTable(table: Element): TElement {
+  const rows = Array.from(table.querySelectorAll("tr"));
+  const parsed = rows.map((row) =>
+    Array.from(row.children)
+      .filter((c) => ["td", "th"].includes(c.tagName.toLowerCase()))
+      .map((cell) => {
+        const align = /text-(left|center|right)/.exec(
+          cell.getAttribute("style") ?? ""
+        )?.[1];
+        return {
+          type: cell.tagName.toLowerCase() === "th" ? "th" : "td",
+          ...(align ? { align } : {}),
+          children: [{ text: cell.textContent ?? "" }],
+        } as unknown as TElement;
+      })
+  );
+
+  const width = parsed.reduce((max, cells) => Math.max(max, cells.length), 0);
+  const head =
+    parsed.findIndex((cells) => cells.some((c) => c.type === "th")) === 0 &&
+    parsed.length > 0
+      ? parsed[0]
+      : null;
+
+  const headRow = (cells: TElement[]): TElement =>
+    ({
+      type: "tr",
+      children: Array.from(
+        { length: width },
+        (_, i) => cells[i] ?? { type: "td", children: [{ text: "" }] }
+      ),
+    }) as unknown as TElement;
+
+  const bodyRows = (head ? parsed.slice(1) : parsed).map(headRow);
+
+  return {
+    type: "table",
+    children: [
+      ...(head
+        ? [{ type: "thead", children: [headRow(head)] } as unknown as TElement]
+        : []),
+      { type: "tbody", children: bodyRows } as unknown as TElement,
+    ],
+  } as unknown as TElement;
+}

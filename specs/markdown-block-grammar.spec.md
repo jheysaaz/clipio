@@ -109,9 +109,41 @@ Two claims in the original audit were checked and did **not** reproduce: `&amp;`
 (it decodes correctly to `&`), and the markdown path round-trips `**\`x\`**`, `~~**x**~~`,
 `<https://x.com>` and backslash escapes unchanged. Those bugs were described against the HTML path.
 
-So: the markdown path is now lossless for the constructs above; the HTML path is not, and a
-snippet pasted as rich text still loses its list and table structure. That is the next piece of
-work, not something this change claims to have done.
+### Both HTML paths, as of this commit
+
+`htmlToMarkdown` (`serialization.ts`) is `serializeToMarkdown(deserializeFromHtml(html))`. Once the
+HTML deserialiser was taught to emit the same block element types the markdown grammar already
+parses, this path became block-aware for free — and it is the path the **TextBlaze and PowerText
+importers** both use, so the `"ab"` list corruption is fixed on the import path. Verified by seven
+mutations, one per construct.
+
+| Input HTML                      | before        | after                                      |
+| ------------------------------- | ------------- | ------------------------------------------ |
+| `<ul><li>a</li><li>b</li></ul>` | `"ab"`        | `- a\n- b`                                 |
+| `<ol><li>a</li><li>b</li></ol>` | `"ab"`        | `1. a\n2. b`                               |
+| `<h2>T</h2>`                    | `"T"`         | `## T`                                     |
+| `<hr>`                          | `""`          | `---`                                      |
+| `<table>` two cells             | `"ab"`        | a GFM table with pipes and a delimiter row |
+| `<pre><code>**x**</code></pre>` | `` `**x**` `` | a fenced block, interior verbatim          |
+| `<img src alt>`                 | `""`          | the markdown kept as literal text          |
+
+The last row is a deliberate partial fix. A remote image URL cannot be stored — the media store
+holds uploaded blobs, not URLs — so the `![alt](src)` text is preserved and stays visible instead
+of vanishing. It does **not** come back as an image element, because `parseMarkdownInline` has no
+`![alt](src)` rule. Adding one is a separate change.
+
+### Still lossy: `htmlToMarkdownPortable`
+
+`src/lib/html-to-markdown.ts` is the DOM-free converter, used only by the one-time
+`contentFormat` migration in `src/lib/content-format-migration.ts`. It handles lists (they come out
+as `- a\n\nb`), but **not tables**: a two-cell row becomes `"a b 1 2"`.
+
+This is lossy rather than corrupting — an earlier fix made cells space-separated specifically so
+values would not run together — so no data is destroyed, but the table structure is gone. Fixing it
+means buffering rows and cells in a single-pass scanner with roughly ten `out +=` sites, including
+mark delimiters that must land inside the active cell. That is a real refactor of a function whose
+current shape is the result of ReDoS hardening, and it was not attempted here rather than attempted
+badly. It is the next piece of work.
 
 ## Non-Goals
 
