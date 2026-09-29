@@ -135,18 +135,19 @@ holds uploaded blobs, not URLs — so the `![alt](src)` text is preserved and st
 of vanishing. It does **not** come back as an image element, because `parseMarkdownInline` has no
 `![alt](src)` rule. Adding one is a separate change.
 
-### Still lossy: `htmlToMarkdownPortable`
+### `htmlToMarkdownPortable` — now handled
 
-`src/lib/html-to-markdown.ts` is the DOM-free converter, used only by the one-time
-`contentFormat` migration in `src/lib/content-format-migration.ts`. It handles lists (they come out
-as `- a\n\nb`), but **not tables**: a two-cell row becomes `"a b 1 2"`.
+`src/lib/html-to-markdown.ts` is the DOM-free converter, used by the one-time
+`contentFormat` migration in `src/lib/content-format-migration.ts`. It already handled lists; it
+**also** flattened tables, turning a two-cell row into `"a b 1 2"`. An earlier version of this file
+left that as "the next piece of work" on the grounds that fixing it meant buffering cells inside a
+single-pass scanner whose shape is the result of ReDoS hardening.
 
-This is lossy rather than corrupting — an earlier fix made cells space-separated specifically so
-values would not run together — so no data is destroyed, but the table structure is gone. Fixing it
-means buffering rows and cells in a single-pass scanner with roughly ten `out +=` sites, including
-mark delimiters that must land inside the active cell. That is a real refactor of a function whose
-current shape is the result of ReDoS hardening, and it was not attempted here rather than attempted
-badly. It is the next piece of work.
+That was true of the obvious fix and false of the one actually used. A table's own source range is
+now handed to a small bounded routine (`convertTableRange`) which scans only that substring and
+only the tags a table needs; the finished GFM block is appended to the output in one piece. The
+extra scan is bounded by the size of that one table, and none of the text-scanning or mark-handling
+code is touched. Nine tests, three mutations verified.
 
 ## Non-Goals
 

@@ -216,6 +216,92 @@ interface OpenMark {
  * A `<script>` or `<style>` body is dropped rather than emitted as text, for the
  * same reason — emitting it would put code where the user wrote none.
  */
+
+/**
+ * Convert one `<table>…</table>` range to a GFM table.
+ *
+ * Scans only the given substring and only the tags a table needs. Nested tables
+ * are not supported: their text is folded into the enclosing cell rather than
+ * emitting a second table, which is the same "no structural invention" rule the
+ * rest of this converter follows.
+ *
+ * @returns the markdown block and the offset just past `</table>` (or the end
+ *   of the input if the table was never closed).
+ */
+function convertTableRange(
+  html: string,
+  start: number
+): { markdown: string; end: number } {
+  const end = html.indexOf("</table>", start);
+  const source = end === -1 ? html.slice(start) : html.slice(start, end);
+  const resumeAt = end === -1 ? html.length : end + "</table>".length;
+
+  const rows: string[][] = [];
+  let row: string[] | null = null;
+  /** `undefined` means "not currently inside a cell"; `""` is an empty cell. */
+  let cell: string | undefined;
+
+  let i = 0;
+  while (i < source.length) {
+    const lt = source.indexOf("<", i);
+    if (lt === -1) {
+      // Trailing text belongs to the cell that is still open. It used to be
+      // accumulated into `cell` and then dropped on the `break`, which is both a
+      // silent data loss and a dead assignment the linter correctly flagged.
+      if (cell !== undefined && row !== null) {
+        row.push((cell + source.slice(i)).replace(/\s+/g, " ").trim());
+      }
+      break;
+    }
+    if (cell !== undefined) cell += source.slice(i, lt);
+
+    const tagEnd = source.indexOf(">", lt);
+    if (tagEnd === -1) break;
+    const raw = source.slice(lt + 1, tagEnd);
+    const name = (raw.startsWith("/") ? raw.slice(1) : raw)
+      .split(/[\s/>]/)[0]
+      .toLowerCase();
+
+    if (name === "tr" && !raw.startsWith("/")) {
+      row = [];
+    } else if ((name === "td" || name === "th") && !raw.startsWith("/")) {
+      cell = "";
+    } else if ((name === "td" || name === "th") && raw.startsWith("/")) {
+      if (row !== null) row.push((cell ?? "").replace(/\s+/g, " ").trim());
+      cell = undefined;
+    } else if (name === "tr" && raw.startsWith("/")) {
+      if (row !== null) rows.push(row);
+      row = null;
+    }
+
+    i = tagEnd + 1;
+  }
+  // An unterminated final row still counts.
+  if (row !== null && row.length > 0) rows.push(row);
+
+  if (rows.length === 0 || rows[0].length === 0) {
+    return { markdown: "", end: resumeAt };
+  }
+
+  const columns = rows.reduce((max, r) => Math.max(max, r.length), 0);
+  const line = (cells: string[]) => {
+    const padded = [...cells];
+    while (padded.length < columns) padded.push("");
+    return `| ${padded.map((c) => c.replace(/\|/g, "\\|")).join(" | ")} |`;
+  };
+
+  const body = rows.map(line);
+  // The delimiter row is what stops two cells becoming one string on re-parse.
+  return {
+    markdown: [
+      body[0],
+      `| ${Array.from({ length: columns }, () => "---").join(" | ")} |`,
+      ...body.slice(1),
+    ].join("\n"),
+    end: resumeAt,
+  };
+}
+
 export function htmlToMarkdownPortable(html: string): string {
   if (!html || html.trim() === "") return "";
 
@@ -308,6 +394,30 @@ export function htmlToMarkdownPortable(html: string): string {
 
     if (tag === "script" || tag === "style") {
       if (!closing && !selfClosing) skipTag = tag;
+      continue;
+    }
+
+    // A table is converted as one unit.
+    //
+    // It used to fall through to the generic text path, which emitted each cell
+    // separated by a space — so a two-cell row became `"a b 1 2"` and the table
+    // structure was gone. Buffering cells inside the main scanner would have
+    // meant routing every `out +=`, including the mark delimiters that must
+    // land *inside* the active cell, through new state in a function whose
+    // current shape is the result of ReDoS hardening.
+    //
+    // Instead the table's own source range is handed to a small bounded
+    // routine, and the finished GFM block is appended to `out` in one piece.
+    // The extra scan is bounded by the size of that table and touches none of
+    // the text-scanning code.
+    if (tag === "table" && !closing) {
+      const converted = convertTableRange(html, lt);
+      out += converted.markdown;
+      i = converted.end;
+      continue;
+    }
+    if (tag === "table" && closing) {
+      // Already consumed by the branch above; a stray `</table>` is inert.
       continue;
     }
 

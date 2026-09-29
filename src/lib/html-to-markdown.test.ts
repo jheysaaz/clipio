@@ -10,6 +10,7 @@
 
 import { describe, it, expect } from "vitest";
 import { htmlToMarkdownPortable, decodeEntities } from "./html-to-markdown";
+import { deserializeContent } from "@/components/editor/serialization";
 
 describe("decodeEntities", () => {
   it("decodes a named entity", () => {
@@ -385,5 +386,80 @@ describe("decodeEntities — invalid code points", () => {
 
   it("keeps a valid astral code point", () => {
     expect(decodeEntities("&#x1F600;")).toBe("\u{1F600}");
+  });
+});
+
+describe("htmlToMarkdownPortable — tables", () => {
+  // These used to fall through to the generic text path, which emitted each
+  // cell separated by a space, so a two-cell row became "a b 1 2" and the table
+  // structure was gone. spec: specs/markdown-block-grammar.spec.md
+  it("converts a table with a header row", () => {
+    expect(
+      htmlToMarkdownPortable(
+        "<table><tr><th>a</th><th>b</th></tr><tr><td>1</td><td>2</td></tr></table>"
+      )
+    ).toBe("| a | b |\n| --- | --- |\n| 1 | 2 |");
+  });
+
+  it("emits a delimiter row even when the HTML has no header", () => {
+    // GFM requires a header row. Without the delimiter row the result
+    // re-parses as a paragraph and the table is lost on the next save.
+    expect(
+      htmlToMarkdownPortable("<table><tr><td>a</td><td>b</td></tr></table>")
+    ).toBe("| a | b |\n| --- | --- |");
+  });
+
+  it("pads a short row to the table width", () => {
+    const md = htmlToMarkdownPortable(
+      "<table><tr><td>a</td><td>b</td></tr><tr><td>1</td></tr></table>"
+    );
+    const body = md.split("\n")[2];
+    // Column count is the number of cell separators plus one, not the number of
+    // non-empty cells — a padded cell is blank by definition, so filtering
+    // empties would count one column.
+    expect(body).toBe("| 1 |  |");
+  });
+
+  it("keeps the table out of the surrounding text", () => {
+    const md = htmlToMarkdownPortable(
+      "<p>before</p><table><tr><td>x</td></tr></table><p>after</p>"
+    );
+    expect(md).toContain("before");
+    expect(md).toContain("after");
+    expect(md).toContain("| x |");
+  });
+
+  it("escapes a pipe inside a cell", () => {
+    const md = htmlToMarkdownPortable(
+      "<table><tr><td>a|b</td><td>c</td></tr></table>"
+    );
+    // The escape is what stops the cell splitting in two on the next parse.
+    expect(md).toContain("a\\|b");
+  });
+
+  it("produces nothing for a table with no rows", () => {
+    expect(htmlToMarkdownPortable("<table></table>")).toBe("");
+  });
+
+  it("converts an unterminated table up to the end of the input", () => {
+    expect(htmlToMarkdownPortable("<table><tr><td>q</td></tr>")).toBe(
+      "| q |\n| --- |"
+    );
+  });
+
+  it("round-trips through the markdown parser as a table", () => {
+    const md = htmlToMarkdownPortable(
+      "<table><tr><th>a</th><th>b</th></tr><tr><td>1</td><td>2</td></tr></table>"
+    );
+    const types = deserializeContent(md).map(
+      (n) => (n as { type?: string }).type
+    );
+    expect(types).toEqual(["table"]);
+  });
+
+  it("does not regress lists", () => {
+    expect(htmlToMarkdownPortable("<ul><li>a</li><li>b</li></ul>")).toBe(
+      "- a\n\n- b"
+    );
   });
 });
