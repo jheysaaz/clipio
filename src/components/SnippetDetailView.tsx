@@ -226,6 +226,7 @@ export default function SnippetDetailView({
           onClick={handleSave}
           disabled={(!hasChanges && !isSaved) || isSaving}
           className="h-8 text-xs"
+          data-testid="snippet-save"
         >
           {isSaved ? (
             <>

@@ -367,7 +367,11 @@ export default function Dashboard() {
         // the options page.
         setQuotaWarning(true);
         setCreateError(quotaMessage(err));
-        setIsCreating(false);
+        // The create view is deliberately left OPEN. Closing it here unmounted
+        // `NewSnippetView`, which is the component that renders `createError` —
+        // so the explanation was set and then immediately made invisible, and
+        // the user saw their snippet silently not save. Keeping the form open
+        // also lets them shorten the snippet and retry without starting over.
       } else {
         captureError(err, { action: "saveSnippet" });
         setCreateError(i18n.t("dashboard.errors.failedToCreate"));

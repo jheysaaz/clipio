@@ -15,7 +15,11 @@
 import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "./fixtures.js";
 import { helloSnippet, makeSnippet, makeSnippets } from "./helpers/snippets.js";
-import { writeBackupSnippets } from "./helpers/storage.js";
+import {
+  getLocalItem,
+  readSyncSnippets,
+  writeBackupSnippets,
+} from "./helpers/storage.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -486,5 +490,130 @@ test.describe("Popup (Dashboard)", () => {
       ["critical", "serious"].includes(v.impact ?? "")
     );
     expect(critical).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Save-path outcomes changed by Waves 9 and 10. Neither had e2e coverage, so
+// both regressions below were invisible to the e2e suite.
+// ---------------------------------------------------------------------------
+
+test.describe("Popup (Dashboard) — oversized snippet is refused, not silently diverted", () => {
+  // spec: specs/storage-quota-preflight.spec.md
+  test("refuses a snippet over the per-item sync limit and keeps sync mode", async ({
+    popupPage,
+  }) => {
+    await seedAndReload(popupPage, [helloSnippet()]);
+
+    const before = await readSyncSnippets(popupPage);
+    const beforeMode = await getLocalItem(popupPage, "storageMode");
+
+    // Over `SYNC_QUOTA.BYTES_PER_ITEM` (8,192). Paste it into the editor.
+    const editor = popupPage.locator('[contenteditable="true"]').first();
+    await popupPage.getByTestId("add-snippet").click();
+    await expect(editor).toBeVisible({ timeout: 5_000 });
+    await editor.click();
+    await popupPage.keyboard.insertText("x".repeat(9_000));
+
+    await popupPage.getByTestId("snippet-label-input").fill("Too Big");
+    await popupPage.getByTestId("snippet-shortcut-input").fill("/toobig");
+
+    const save = popupPage.getByTestId("snippet-create-save");
+    await expect(save).toBeEnabled();
+    await save.click();
+
+    // The write must be refused, and the user must be told why.
+    await expect(popupPage.getByText(/8\.0 KB|8 KB|per snippet/i)).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // The decisive assertion: nothing was written and the install did NOT
+    // silently switch to local mode. Before Wave 9 this switched permanently.
+    const after = await readSyncSnippets(popupPage);
+    expect(after.map((s) => s.shortcut)).toEqual(before.map((s) => s.shortcut));
+    expect(await getLocalItem(popupPage, "storageMode")).toBe(beforeMode);
+  });
+});
+
+test.describe("Popup (Dashboard) — block structure survives a save", () => {
+  // spec: specs/markdown-block-grammar.spec.md
+  test("keeps a heading, a list and a table through an open/save cycle", async ({
+    popupPage,
+  }) => {
+    // Seed a snippet whose body is a real multi-block document. Before Wave 10
+    // the list and the table cells were merged into single strings on save.
+    const body = [
+      "## Heading",
+      "",
+      "- alpha",
+      "- beta",
+      "",
+      "| a | b |",
+      "| --- | --- |",
+      "| 1 | 2 |",
+    ].join("\n");
+
+    await seedAndReload(popupPage, [
+      makeSnippet({
+        id: "blocks",
+        label: "Blocks",
+        shortcut: "/blocks",
+        content: body,
+      }),
+    ]);
+
+    // Open it.
+    await popupPage
+      .getByTestId("snippet-list-item")
+      .filter({ hasText: "Blocks" })
+      .click();
+    const editor = popupPage.locator('[contenteditable="true"]').first();
+    await expect(editor).toBeVisible({ timeout: 10_000 });
+
+    // The editor must have parsed the blocks rather than one blob of text.
+    // Without this the later assertions could pass on a page that never
+    // round-tripped anything.
+    await expect(editor.locator("h2")).toHaveCount(1, { timeout: 10_000 });
+    await expect(editor.locator("ul li")).toHaveCount(2, { timeout: 10_000 });
+    await expect(editor.locator("table")).toHaveCount(1, { timeout: 10_000 });
+
+    // Make a change so Save is enabled — the button is disabled when nothing
+    // differs, and a no-op save would not exercise the serialiser at all.
+    // Typed into the heading specifically. Clicking the editor container, or
+    // pressing End/Ctrl+Home, lands the caret in whichever block happens to be
+    // under the pointer — which was a table cell, so the edit went into `a`
+    // instead of the heading.
+    await editor.locator("h2").click();
+    await popupPage.keyboard.press("Home");
+    await popupPage.keyboard.insertText("edited. ");
+
+    const save = popupPage.getByTestId("snippet-save");
+    await expect(save).toBeEnabled();
+    await save.click();
+
+    // Poll: the save handler writes asynchronously.
+    await expect
+      .poll(
+        async () => {
+          const all = await readSyncSnippets(popupPage);
+          return all.find((s) => s.id === "blocks")?.content ?? "";
+        },
+        { timeout: 10_000, message: "the edited snippet was never persisted" }
+      )
+      .toContain("edited. ");
+
+    const saved = (await readSyncSnippets(popupPage)).find(
+      (s) => s.id === "blocks"
+    );
+
+    // Every block marker must still be there. The heading text was edited
+    // above, so the assertion is on the marker plus the surviving word, not on
+    // the literal original line.
+    expect(saved?.content).toMatch(/^## .*Heading$/m);
+    expect(saved?.content).toContain("- alpha");
+    expect(saved?.content).toContain("- beta");
+    // The table keeps its pipes: the two cells must not have become "12".
+    expect(saved?.content).toContain("| a | b |");
+    expect(saved?.content).toContain("| 1 | 2 |");
   });
 });

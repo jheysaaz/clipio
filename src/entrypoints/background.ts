@@ -18,6 +18,7 @@ import {
 import { initSentry, captureError, captureMessage } from "@/lib/sentry";
 import { registerSentryRelayListener } from "@/lib/sentry-relay";
 import { i18n } from "#i18n";
+import { buildUninstallUrl } from "@/lib/uninstall-url";
 import {
   MEDIA_GET_DATA_URL,
   type MediaGetDataUrlRequest,
@@ -361,15 +362,13 @@ export default defineBackground(() => {
           typeof browser.i18n?.getUILanguage === "function"
             ? browser.i18n.getUILanguage()
             : "en";
-        const locale = (
-          ONBOARDING_SUPPORTED_LOCALES as readonly string[]
-        ).includes(rawLocale)
-          ? rawLocale
-          : "en";
         void (async () => {
           try {
+            // `buildUninstallUrl` derives the supported locale itself. A local
+            // copy of that logic lived here and drifted the moment the helper
+            // was extracted.
             await browser.runtime.setUninstallURL(
-              `${websiteUrl}/${locale}/uninstall`
+              buildUninstallUrl(websiteUrl, rawLocale)
             );
           } catch (err) {
             captureError(err, { action: "setUninstallUrl" });

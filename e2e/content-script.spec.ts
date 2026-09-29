@@ -167,15 +167,19 @@ test.describe("Content Script Expansion", () => {
     await testPage.keyboard.type("/hello", { delay: 30 });
     // Press Tab immediately — no need to wait for debounce
     await testPage.keyboard.press("Tab");
-    // Wait for the async expansion, then read once. Not a negative assertion,
-    // so `expect.poll` on the same read would be the stronger form; kept short
-    // because the Tab path expands synchronously on the key event (see the note
-    // above), so this only covers the promise settling.
-    await testPage.waitForTimeout(200);
+    // A fixed sleep here was pure guesswork: the read is one-shot, so a slow
+    // machine saw the pre-insert value. Polling the value itself makes the
+    // wait end the moment the insertion lands.
+    // The `not.toContain` half is a negative assertion about a value, but the
+    // positive half pins the wait, so polling the value is what makes the
+    // timing deterministic. The negative then reads the settled value.
+    await expect
+      .poll(() => input.inputValue(), {
+        message: "Tab did not expand the snippet",
+      })
+      .toContain("Hello, World!");
 
-    const value = await input.inputValue();
-    expect(value).toContain("Hello, World!");
-    expect(value).not.toContain("/hello");
+    expect(await input.inputValue()).not.toContain("/hello");
   });
 
   test("expands on Space key immediately", async ({
@@ -635,14 +639,17 @@ test.describe("Snippet Preview Feature", () => {
     await expect(previewContainer).toBeVisible();
 
     // Select snippet with Enter
-    // Let the Enter handler insert the snippet before the one-shot text read
-    // below.
     await testPage.keyboard.press("Enter");
-    await testPage.waitForTimeout(200);
 
     // Textarea should contain expanded content
-    const value = await textarea.inputValue();
-    expect(value).toContain("Hello, World!");
+    // A fixed sleep here was pure guesswork: the read is one-shot, so a slow
+    // machine saw the pre-insert value. Polling the value itself makes the
+    // wait end the moment the insertion lands.
+    await expect
+      .poll(() => textarea.inputValue(), {
+        message: "Enter did not insert the snippet",
+      })
+      .toContain("Hello, World!");
   });
 
   test("works in contenteditable elements", async ({
@@ -663,14 +670,17 @@ test.describe("Snippet Preview Feature", () => {
     await expect(previewContainer).toBeVisible();
 
     // Select snippet with Enter
-    // Let the Enter handler insert the snippet before the one-shot text read
-    // below.
     await testPage.keyboard.press("Enter");
-    await testPage.waitForTimeout(200);
 
     // Contenteditable should contain expanded content
-    const text = await contenteditable.textContent();
-    expect(text).toContain("Hello, World!");
+    // A fixed sleep here was pure guesswork: the read is one-shot, so a slow
+    // machine saw the pre-insert value. Polling the value itself makes the
+    // wait end the moment the insertion lands.
+    await expect
+      .poll(() => contenteditable.textContent(), {
+        message: "Enter did not insert the snippet",
+      })
+      .toContain("Hello, World!");
   });
 
   test("preserves line breaks when inserting multiline snippet via preview in contenteditable", async ({
@@ -691,15 +701,18 @@ test.describe("Snippet Preview Feature", () => {
     await expect(previewContainer).toBeVisible();
 
     // Select the snippet with Enter
-    // Let the Enter handler insert the snippet before the one-shot text read
-    // below.
     await testPage.keyboard.press("Enter");
-    await testPage.waitForTimeout(200);
 
     // All three lines must be preserved (regression: line breaks were lost
     // because the old preview path assigned plain text via textContent).
-    const innerText = await contenteditable.innerText();
-    expect(innerText.trim()).toBe("Line 1\nLine 2\nLine 3");
+    // A fixed sleep here was pure guesswork: the read is one-shot, so a slow
+    // machine saw the pre-insert value. Polling the value itself makes the
+    // wait end the moment the insertion lands.
+    await expect
+      .poll(async () => (await contenteditable.innerText()).trim(), {
+        message: "the inserted snippet never appeared",
+      })
+      .toBe("Line 1\nLine 2\nLine 3");
     // Source HTML keeps the <br> separators
     const brCount = await contenteditable.locator("br").count();
     expect(brCount).toBeGreaterThanOrEqual(2);

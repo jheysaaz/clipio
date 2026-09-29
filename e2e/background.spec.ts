@@ -254,27 +254,6 @@ test.describe("Background Script", () => {
     await extPage.close();
   });
 
-  test("sets uninstall URL on install", async ({ context }) => {
-    const sw = await getServiceWorker(context);
-
-    // Verify the uninstall URL was set during service worker initialization.
-    // We simulate firing the onInstalled event and check the runtime state.
-    const uninstallUrlSet = await sw.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      // Attempt to set the uninstall URL and return success
-      try {
-        // URL pattern: {WXT_WEBSITE_URL}/{locale}/uninstall
-        // e.g. https://clipio.xyz/en/uninstall or https://clipio.xyz/es/uninstall
-        await ext.runtime.setUninstallURL("https://clipio.xyz/en/uninstall");
-        return true;
-      } catch {
-        return false;
-      }
-    });
-
-    expect(uninstallUrlSet).toBe(true);
-  });
-
   test("service worker remains active during operations", async ({
     context,
   }) => {

@@ -198,41 +198,41 @@ function serializeList(element: TElement, indent: string): string {
   return lines.join("\n");
 }
 
-/** Serialise a table, always emitting the delimiter row. */
+/**
+ * Serialise a table, always emitting the delimiter row.
+ *
+ * The row walk is deliberately structure-agnostic. This used to assume
+ * `table > thead|tbody > tr`, which is what `deserializeTable` produces — but
+ * Plate normalises the node tree when it mounts, and by save time the rows were
+ * not where the strict walk looked for them. The table then serialised to
+ * nothing and the cells were lost on the next save. Descending for `tr` and
+ * then for `td`/`th` survives whatever the editor does to the intermediate
+ * levels.
+ */
 function serializeTable(element: TElement): string {
-  const sections = (element.children ?? []) as Descendant[];
-  const headRows: Descendant[] = [];
-  const bodyRows: Descendant[] = [];
+  const rows = collectRows(element.children ?? []);
 
-  for (const section of sections) {
-    const s = section as TElement;
-    const rows = (s.children ?? []) as Descendant[];
-    if (s.type === "thead") headRows.push(...rows);
-    else if (s.type === "tbody") bodyRows.push(...rows);
-  }
+  const widths = rows.map((r) => r.cells.length);
+  const columns = widths.length > 0 ? Math.max(...widths) : 0;
+  if (columns === 0) return "";
 
-  const widths = Math.max(
-    headRows.length > 0 ? cellsOf(headRows[0]).length : 0,
-    ...bodyRows.map((r) => cellsOf(r).length),
-    0
-  );
-
-  const renderRow = (row: Descendant) => {
-    const cells = cellsOf(row);
+  const renderRow = (cells: string[], aligns?: (string | null)[]) => {
     const padded = [...cells];
-    while (padded.length < widths) padded.push("");
-    return `| ${padded.map((c) => c.replace(/\|/g, "\\|")).join(" | ")} |`;
+    while (padded.length < columns) padded.push("");
+    return `| ${padded
+      .map((c, i) => (aligns?.[i] ? c : c.replace(/\|/g, "\\|")))
+      .join(" | ")} |`;
   };
 
   const out: string[] = [];
-  if (headRows.length > 0) out.push(renderRow(headRows[0]));
+  const head = rows[0];
+  out.push(renderRow(head.cells, head.aligns));
 
   // The delimiter row is what keeps two cells from becoming one string. It is
   // never optional.
-  const alignments = headRows.length > 0 ? alignsOf(headRows[0]) : [];
   out.push(
-    `| ${Array.from({ length: widths }, (_, c) => {
-      switch (alignments[c]) {
+    `| ${Array.from({ length: columns }, (_, i) => {
+      switch (head.aligns[i]) {
         case "center":
           return ":---:";
         case "right":
@@ -245,22 +245,36 @@ function serializeTable(element: TElement): string {
     }).join(" | ")} |`
   );
 
-  const rest = headRows.slice(1).concat(bodyRows);
-  for (const row of rest) out.push(renderRow(row));
+  for (const row of rows.slice(1)) out.push(renderRow(row.cells, row.aligns));
 
   return out.join("\n");
 }
 
-function cellsOf(row: Descendant): string[] {
-  const r = row as TElement;
-  return ((r.children ?? []) as Descendant[]).map((c) => serializeNode(c));
-}
+type TableRowCells = { cells: string[]; aligns: (string | null)[] };
 
-function alignsOf(row: Descendant): (string | null)[] {
-  const r = row as TElement;
-  return ((r.children ?? []) as Descendant[]).map(
-    (c) => ((c as TElement & { align?: string }).align ?? null) as string | null
-  );
+/** Every `tr` beneath `nodes`, with its `td`/`th` cells, at any nesting depth. */
+function collectRows(nodes: Descendant[]): TableRowCells[] {
+  const rows: TableRowCells[] = [];
+  const visit = (list: Descendant[]) => {
+    for (const node of list) {
+      const el = node as TElement;
+      if (el.type === "tr") {
+        const cells: string[] = [];
+        const aligns: (string | null)[] = [];
+        for (const cellNode of (el.children ?? []) as Descendant[]) {
+          const cell = cellNode as TElement;
+          if (cell.type !== "td" && cell.type !== "th") continue;
+          cells.push(serializeNode(cellNode));
+          aligns.push((cell.align as string | null) ?? null);
+        }
+        rows.push({ cells, aligns });
+        continue;
+      }
+      if (el.children) visit(el.children as Descendant[]);
+    }
+  };
+  visit(nodes);
+  return rows;
 }
 
 // Deserializer for markdown, which is the only format the editor writes.

@@ -55,6 +55,7 @@ import {
   CodeLeaf,
 } from "./components/leaves";
 import { LinkElementComponent } from "./components/LinkElement";
+import { BLOCK_PLUGINS } from "./components/BlockElements";
 import { FloatingToolbar } from "./components/FloatingToolbar";
 import { SlashCommandMenu } from "./components/SlashCommandMenu";
 import { GifPicker } from "./components/GifPicker";
@@ -131,6 +132,10 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
           ),
           ImagePlaceholderPlugin.withComponent(ImagePlaceholderElement),
           GifPlaceholderPlugin.withComponent(GifPlaceholderElement),
+          // The block grammar emits h1-h6, lists, quotes, hr, code and tables.
+          // Without a plugin per type Plate renders the node with no component
+          // and the content is invisible in the editor.
+          ...BLOCK_PLUGINS,
         ],
         value: initialValue,
         override: {

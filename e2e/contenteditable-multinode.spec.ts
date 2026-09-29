@@ -100,16 +100,22 @@ test.describe("Contenteditable insertion flow", () => {
     // insertion is synchronous once the key event lands" — which, if true, makes
     // the sleep self-defeating, since a synchronous insertion would already be
     // visible. The reason to keep it is that these reads are one-shot
-    // `innerText()` calls after a keypress, and the handler is a React effect
-    // rather than a direct DOM mutation.
     await testPage.keyboard.press("Enter");
-    await testPage.waitForTimeout(350);
 
     // The snippet was inserted and "World" survived after it.
+    // A fixed sleep here was pure guesswork. The read after this is one-shot
+    // and the handler is a React effect, so a slow machine saw the
+    // pre-insert value. Polling the text makes the wait end when the insertion
+    // lands; the caret assertions that follow then read the settled value.
+    await expect
+      .poll(async () => (await field.innerText()).trim(), {
+        message: "the snippet was never inserted",
+      })
+      .toContain("World");
+
     const innerText = (await field.innerText()).trim();
     expect(innerText).toContain("Line 1");
     expect(innerText).toContain("Line 3");
-    expect(innerText).toContain("World");
 
     // Caret must be at the END of the inserted snippet: before the "World"
     // text that followed the trigger, i.e. its offset must equal the index of
@@ -137,25 +143,37 @@ test.describe("Contenteditable insertion flow", () => {
     ).toBe(worldIndex);
 
     // Confetti must actually paint pixels on its canvas.
-    const confettiPainted = await testPage.evaluate(() => {
-      const canvas = document.querySelector(
-        "canvas[style*='314159']"
-      ) as HTMLCanvasElement | null;
-      if (!canvas) return -1;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return -2;
-      const { width, height } = canvas;
-      const image = ctx.getImageData(0, 0, width, height).data;
-      let painted = 0;
-      for (let i = 3; i < image.length; i += 4) {
-        if (image[i] > 0) painted++;
-      }
-      return painted;
-    });
-    expect(
-      confettiPainted,
-      "confetti canvas should contain painted pixels after insertion"
-    ).toBeGreaterThan(0);
+    //
+    // Polled, not read once. This used to be covered by the same fixed sleep
+    // that waited for the snippet insertion, so the canvas was sampled at
+    // whatever moment the sleep happened to land on — the assertion only passed
+    // because 350 ms was usually long enough. The two waits are independent
+    // conditions and each needs its own.
+    await expect
+      .poll(
+        () =>
+          testPage.evaluate(() => {
+            const canvas = document.querySelector(
+              "canvas[style*='314159']"
+            ) as HTMLCanvasElement | null;
+            if (!canvas) return -1;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return -2;
+            const { width, height } = canvas;
+            const image = ctx.getImageData(0, 0, width, height).data;
+            let painted = 0;
+            for (let i = 3; i < image.length; i += 4) {
+              if (image[i] > 0) painted++;
+            }
+            return painted;
+          }),
+        {
+          timeout: 10_000,
+          message:
+            "confetti canvas should contain painted pixels after insertion",
+        }
+      )
+      .toBeGreaterThan(0);
   });
 
   test("inserting at the end of existing text leaves caret at the very end", async ({
@@ -182,16 +200,22 @@ test.describe("Contenteditable insertion flow", () => {
     // insertion is synchronous once the key event lands" — which, if true, makes
     // the sleep self-defeating, since a synchronous insertion would already be
     // visible. The reason to keep it is that these reads are one-shot
-    // `innerText()` calls after a keypress, and the handler is a React effect
-    // rather than a direct DOM mutation.
     await testPage.keyboard.press("Enter");
-    await testPage.waitForTimeout(350);
 
     // The snippet was inserted after "Hello" and the caret is at the very end
     // of the field (no trailing content remains).
+    // A fixed sleep here was pure guesswork. The read after this is one-shot
+    // and the handler is a React effect, so a slow machine saw the
+    // pre-insert value. Polling the text makes the wait end when the insertion
+    // lands; the caret assertions that follow then read the settled value.
+    await expect
+      .poll(async () => (await field.innerText()).trim(), {
+        message: "the snippet was never inserted",
+      })
+      .toContain("Hello, World!");
+
     const text = (await field.innerText()).trim();
     expect(text).toContain("Hello");
-    expect(text).toContain("Hello, World!");
 
     const caretOffset = await field.evaluate((el) => {
       const sel = window.getSelection();
@@ -234,15 +258,21 @@ test.describe("Contenteditable insertion flow", () => {
     // insertion is synchronous once the key event lands" — which, if true, makes
     // the sleep self-defeating, since a synchronous insertion would already be
     // visible. The reason to keep it is that these reads are one-shot
-    // `innerText()` calls after a keypress, and the handler is a React effect
-    // rather than a direct DOM mutation.
     await testPage.keyboard.press("Enter");
-    await testPage.waitForTimeout(350);
 
     // The snippet was inserted right after the existing text.
+    // A fixed sleep here was pure guesswork. The read after this is one-shot
+    // and the handler is a React effect, so a slow machine saw the
+    // pre-insert value. Polling the text makes the wait end when the insertion
+    // lands; the caret assertions that follow then read the settled value.
+    await expect
+      .poll(async () => (await field.innerText()).trim(), {
+        message: "the snippet was never inserted",
+      })
+      .toContain("Hello, World!");
+
     const text = (await field.innerText()).trim();
     expect(text).toContain("hello");
-    expect(text).toContain("Hello, World!");
 
     // Caret at the very end of the field.
     const caretOffset = await field.evaluate((el) => {
