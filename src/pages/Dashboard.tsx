@@ -60,6 +60,48 @@ import { openReleasePage } from "@/lib/update-checker";
 
 const CONTEXT_MENU_DRAFT_SESSION_KEY = "__clipioContextMenuDraft__";
 
+/**
+ * Turn a `StorageQuotaError` into something the user can act on.
+ *
+ * `checkQuota` says which limit broke and by how much, so the message can name
+ * it instead of saying "quota exceeded". Falls back to the generic copy when
+ * the error came from the browser rather than the preflight, which is the one
+ * case where we have no breakdown — and the case we want to hear about, so it is
+ * also reported.
+ */
+/** Bytes as KB, for the quota message. The limits are small enough that one
+ *  decimal is enough to be useful and never enough to be misleading. */
+function formatBytes(bytes: number): string {
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+function quotaMessage(error: StorageQuotaError): string {
+  const reasons = error.reasons;
+  if (!reasons || reasons.length === 0) {
+    captureError(error, { action: "quotaError.noReasons" });
+    return i18n.t("dashboard.errors.quotaExceeded");
+  }
+  const parts = reasons.map((reason) => {
+    if (reason.kind === "per-item") {
+      return i18n.t("dashboard.errors.quotaPerItem", [
+        formatBytes(reason.actual),
+        formatBytes(reason.limit),
+      ]);
+    }
+    if (reason.kind === "count") {
+      return i18n.t("dashboard.errors.quotaCount", [
+        String(reason.actual),
+        String(reason.limit),
+      ]);
+    }
+    return i18n.t("dashboard.errors.quotaTotal", [
+      formatBytes(reason.actual),
+      formatBytes(reason.limit),
+    ]);
+  });
+  return parts.join(" ");
+}
+
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -314,21 +356,18 @@ export default function Dashboard() {
       toast.success(i18n.t("dashboard.toast.snippetSaved"));
     } catch (err) {
       if (err instanceof StorageQuotaError) {
+        // Show the banner, and explain rather than silently retrying.
+        //
+        // This used to retry the save "after manager has switched to local
+        // mode". The manager no longer switches: Wave 9 replaced the silent
+        // fallback with a refusal (specs/storage-quota-preflight.spec.md), so
+        // the retry ran the identical, stateless preflight and could not
+        // succeed. The snippet is now simply not saved, which is a real
+        // behaviour change — the user is told and can switch storage mode from
+        // the options page.
         setQuotaWarning(true);
-        // Retry after manager has switched to local mode
-        try {
-          const newSnippet = createSnippet(draftSnippet);
-          await saveSnippet(newSnippet);
-          setSnippets((prev) => [...prev, newSnippet]);
-          setSelectedSnippet(newSnippet);
-          setIsCreating(false);
-          setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
-          toast.success(i18n.t("dashboard.toast.snippetSaved"));
-        } catch (retryErr) {
-          console.error("[Clipio] Retry after quota error failed:", retryErr);
-          captureError(retryErr, { action: "saveSnippetRetry" });
-          setCreateError(i18n.t("dashboard.errors.failedToCreate"));
-        }
+        setCreateError(quotaMessage(err));
+        setIsCreating(false);
       } else {
         captureError(err, { action: "saveSnippet" });
         setCreateError(i18n.t("dashboard.errors.failedToCreate"));

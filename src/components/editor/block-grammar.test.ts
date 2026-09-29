@@ -218,14 +218,35 @@ describe("markdown block grammar — tables", () => {
   it("pads a delimiter row that is shorter than the header", () => {
     const ragged = ["| a | b |", "| --- |", "| 1 | 2 |"].join("\n");
     expect(blockTypes(ragged)).toEqual(["table"]);
+
+    // The body row must keep both cells, which is the point of padding to the
+    // header's width rather than the delimiter's.
+    const out = roundTrip(ragged);
+    expect(out).toContain("1");
+    expect(out).toContain("2");
   });
 
-  it("does not split a cell on an escaped pipe", () => {
-    const nodes = deserializeContent(
-      ["| a | b |", "| --- | --- |", "| x \\| y | 2 |"].join("\n")
-    );
+  it("does not split a cell on an escaped pipe, and does not drop later cells", () => {
+    // The real bug this covers: `splitRow` unescapes `\|` before the caller
+    // counts cells, so a header containing one was measured as narrower and
+    // every body cell past the header width was silently deleted.
+    const md = ["| a \\| b |", "| --- | --- |", "| 1 | 2 |"].join("\n");
+    const nodes = deserializeContent(md);
     const json = JSON.stringify(nodes);
-    expect(json).toContain("x");
+
+    // Both body cells must be present. "2" disappearing is the failure.
+    expect(json).toContain("1");
+    expect(json).toContain("2");
+
+    const roundTripped = roundTrip(md);
+    expect(roundTripped).toContain("2");
+  });
+
+  it("does not truncate a body row that is wider than the header", () => {
+    const md = ["| a |", "| --- |", "| 1 | 2 | 3 |"].join("\n");
+    const roundTripped = roundTrip(md);
+    expect(roundTripped).toContain("2");
+    expect(roundTripped).toContain("3");
   });
 });
 

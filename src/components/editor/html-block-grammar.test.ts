@@ -13,7 +13,11 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { htmlToMarkdown, deserializeHtmlToNodes } from "./serialization";
+import {
+  htmlToMarkdown,
+  deserializeContent,
+  deserializeHtmlToNodes,
+} from "./serialization";
 
 describe("htmlToMarkdown — block structure", () => {
   it("keeps list items apart", () => {
@@ -86,5 +90,54 @@ describe("htmlToMarkdown — structure survives a re-parse", () => {
     const json = JSON.stringify(nodes);
     // "ab" would mean the items merged.
     expect(json).not.toContain('"ab"');
+  });
+});
+
+describe("htmlToMarkdown — malformed tables", () => {
+  it("does not duplicate a nested table's contents", () => {
+    // `querySelectorAll("tr")` is a descendant query, so the inner row was
+    // counted twice and the word appeared in the output twice.
+    const md = htmlToMarkdown(
+      "<table><tr><td><table><tr><td>inner</td></tr></table></td></tr></table>"
+    );
+    expect(md.match(/inner/g)).toHaveLength(1);
+  });
+
+  it("synthesises a header for a table whose first row is all <td>", () => {
+    // The common pasted-HTML case. Without a header, the delimiter row landed
+    // where the header should be and the result re-parsed as a paragraph, so
+    // the table was lost on the very next save.
+    const md = htmlToMarkdown("<table><tr><td>a</td><td>b</td></tr></table>");
+    // Re-parse the *markdown*, not an HTML wrapper: wrapping it in <pre> would
+    // produce a code block and prove nothing about the table.
+    const types = deserializeContent(md).map(
+      (n) => (n as { type?: string }).type
+    );
+    expect(types).toEqual(["table"]);
+    expect(md).toContain("a");
+    expect(md).toContain("b");
+  });
+
+  it("falls back to a paragraph for a table with no cells", () => {
+    // `|  |` is not GFM and does not re-parse as a table.
+    const md = htmlToMarkdown("<table><tr></tr></table>");
+    expect(md).not.toContain("|");
+  });
+
+  it("keeps every cell of a row wider than the header", () => {
+    const md = htmlToMarkdown(
+      "<table><tr><th>a</th></tr><tr><td>1</td><td>2</td><td>3</td></tr></table>"
+    );
+    for (const cell of ["1", "2", "3"]) expect(md).toContain(cell);
+  });
+});
+
+describe("htmlToMarkdown — images", () => {
+  it("keeps the alt text alone when there is no src", () => {
+    expect(htmlToMarkdown('<img alt="just words">')).toBe("just words");
+  });
+
+  it("drops an image with neither src nor alt", () => {
+    expect(htmlToMarkdown("<img>")).toBe("");
   });
 });

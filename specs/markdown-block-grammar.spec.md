@@ -1,7 +1,7 @@
 # Spec: markdown block grammar (Wave 10)
 
 spec: src/components/editor/serialization.ts
-status: implemented (markdown path); HTML converter still lossy — see Non-Goals
+status: implemented
 
 ## Problem
 
@@ -86,8 +86,11 @@ trailing whitespace, and `deserialize(serialize(nodes))` must preserve the block
 - **Indentation of 4+ spaces** is a code block in CommonMark. Treated as a paragraph here, because
   snippet content is frequently indented by accident and silently becoming a code block would be
   worse. Documented as a deliberate divergence.
-- **Very deeply nested lists** must not blow the stack; nesting is capped and the excess is
-  flattened to the cap rather than recursing further.
+- **Very deeply nested lists** are capped at `MAX_LIST_DEPTH` (8); the excess markers stay as
+  literal text in the parent item rather than being dropped. This is a hard cap, not a
+  preference: without it, ~2,000 levels exhausted the V8 heap outright — a _fatal_ OOM that kills
+  the worker rather than throwing something catchable. Reachable from a ~10 KB import body, since
+  each level costs only a couple of characters.
 
 ## What this does NOT fix: the HTML converter
 

@@ -292,15 +292,34 @@ describe("checkQuota", () => {
 
   // --- non-snippet keys -------------------------------------------------
 
-  it("excludes the journal and corrupt keys from the item count", () => {
-    // Exactly MAX_ITEMS tiny snippets: the count is at the limit and the byte
-    // total is nowhere near it, so only the count rule is under test here.
-    const incoming = Array.from({ length: SYNC_QUOTA.MAX_ITEMS }, (_, i) =>
+  it("accepts exactly MAX_ITEMS snippets, one over is rejected", () => {
+    const at = Array.from({ length: SYNC_QUOTA.MAX_ITEMS }, (_, i) =>
       makeSnippet({ id: `s${i}`, content: "" })
     );
-    const result = checkQuota([], incoming);
-    expect(result.reasons).toEqual([]);
+    expect(checkQuota([], at).ok).toBe(true);
+    expect(checkQuota([], [...at, makeSnippet({ id: "extra" })]).ok).toBe(
+      false
+    );
+  });
+
+  // What this function CANNOT do, stated as a test so the gap is visible rather
+  // than implied. See the spec: the projection is given snippets, so keys the
+  // same code path writes outside that set — the `_pendingWrite` journal (up to
+  // JOURNAL_MAX_BYTES) and any `corrupt:` quarantine records — are invisible to
+  // it while still counting against the browser's real limits. So a write can
+  // pass the preflight and still be refused by the browser, which is what
+  // `storage.quotaPreflightMiss` reports.
+  it("cannot see the journal key, which the real limit does count", () => {
+    const JOURNAL_MAX_BYTES = 8_192;
+    const set = setOfTotalBytes(SYNC_QUOTA.TOTAL_BYTES - JOURNAL_MAX_BYTES + 1);
+    const result = checkQuota([], set);
+
+    // The preflight says this fits…
     expect(result.ok).toBe(true);
+    // …while the journal the write actually performs would not.
+    expect(result.projectedBytes + JOURNAL_MAX_BYTES).toBeGreaterThan(
+      SYNC_QUOTA.TOTAL_BYTES
+    );
   });
 
   it("reports the count breach when the byte total is fine", () => {

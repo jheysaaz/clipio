@@ -748,8 +748,26 @@ export {
  * the widest row so a short row cannot silently drop cells.
  */
 function deserializeTable(table: Element): TElement {
-  const rows = Array.from(table.querySelectorAll("tr"));
-  const parsed = rows.map((row) =>
+  // Direct children only. `querySelectorAll("tr")` is a *descendant* query, so a
+  // table nested inside a cell contributed its row twice and the cell text was
+  // duplicated in the output.
+  const rows = Array.from(table.children)
+    .filter(
+      (child) =>
+        child.tagName.toLowerCase() === "tbody" ||
+        child.tagName.toLowerCase() === "thead" ||
+        child.tagName.toLowerCase() === "tfoot"
+    )
+    .flatMap((section) =>
+      Array.from(section.children).filter(
+        (row) => row.tagName.toLowerCase() === "tr"
+      )
+    );
+  const directRows = Array.from(table.children).filter(
+    (row) => row.tagName.toLowerCase() === "tr"
+  );
+  const allRows = directRows.length > 0 ? directRows : rows;
+  const parsed = allRows.map((row) =>
     Array.from(row.children)
       .filter((c) => ["td", "th"].includes(c.tagName.toLowerCase()))
       .map((cell) => {
@@ -765,11 +783,27 @@ function deserializeTable(table: Element): TElement {
   );
 
   const width = parsed.reduce((max, cells) => Math.max(max, cells.length), 0);
-  const head =
-    parsed.findIndex((cells) => cells.some((c) => c.type === "th")) === 0 &&
-    parsed.length > 0
-      ? parsed[0]
-      : null;
+
+  // A table with no cells at all is not a table. Emitting `|  |` produces GFM
+  // that does not re-parse as one, so fall back to a plain paragraph.
+  if (width === 0) {
+    return {
+      type: "p",
+      children: [{ text: (table.textContent ?? "").trim() }],
+    } as unknown as TElement;
+  }
+
+  // A table whose first row is all `<td>` — the common pasted-HTML case — has no
+  // header. GFM requires a header row, and emitting the delimiter row where the
+  // header should be produces markdown that re-parses as a *paragraph*, losing
+  // the table on the very next save. So the header is synthesised as empty.
+  const hasHeader = parsed.length > 0 && parsed[0].some((c) => c.type === "th");
+  const headerCells = hasHeader
+    ? parsed[0]
+    : Array.from({ length: width }, () => ({
+        type: "th",
+        children: [{ text: "" }],
+      }));
 
   const headRow = (cells: TElement[]): TElement =>
     ({
@@ -780,15 +814,17 @@ function deserializeTable(table: Element): TElement {
       ),
     }) as unknown as TElement;
 
-  const bodyRows = (head ? parsed.slice(1) : parsed).map(headRow);
-
   return {
     type: "table",
     children: [
-      ...(head
-        ? [{ type: "thead", children: [headRow(head)] } as unknown as TElement]
-        : []),
-      { type: "tbody", children: bodyRows } as unknown as TElement,
+      {
+        type: "thead",
+        children: [headRow(headerCells)],
+      } as unknown as TElement,
+      {
+        type: "tbody",
+        children: (hasHeader ? parsed.slice(1) : parsed).map(headRow),
+      } as unknown as TElement,
     ],
   } as unknown as TElement;
 }

@@ -16,7 +16,19 @@
 
 import type { TElement } from "platejs";
 
-/** Longest list nesting we will recurse into. Deeper input is flattened here. */
+/**
+ * Longest list nesting we will recurse into.
+ *
+ * This is a hard cap, not a preference. Nested lists recurse through
+ * `parseBlocks` → `readList` → `listItem` → `parseBlocks`, and a crafted
+ * document with a few thousand levels exhausted the V8 heap outright — a
+ * *fatal* OOM that kills the worker rather than throwing something catchable.
+ * Reachable from a ~10 KB import body, since each level costs only a couple of
+ * characters, and `IMPORT_LIMITS.maxContentLength` allows 32,000.
+ *
+ * Input deeper than this is not nested further: the excess markers are kept as
+ * literal text in the parent item, so nothing is silently dropped.
+ */
 export const MAX_LIST_DEPTH = 8;
 
 // ---------------------------------------------------------------------------
@@ -85,7 +97,8 @@ function splitRow(line: string): string[] {
  */
 export function parseBlocks(
   markdown: string,
-  parseInline: (text: string) => unknown[]
+  parseInline: (text: string) => unknown[],
+  depth = 0
 ): TElement[] {
   const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
   const out: TElement[] = [];
@@ -145,7 +158,7 @@ export function parseBlocks(
       }
       out.push({
         type: "blockquote",
-        children: parseBlocks(collected.join("\n"), parseInline),
+        children: parseBlocks(collected.join("\n"), parseInline, depth + 1),
       } as unknown as TElement);
       continue;
     }
@@ -162,8 +175,11 @@ export function parseBlocks(
       continue;
     }
 
-    if (RE_BULLET.test(line) || RE_ORDERED.test(line)) {
-      const consumed = readList(lines, i, parseInline);
+    // At the cap, a list marker is not a list: it stays literal text in the
+    // enclosing item. Recursing further is what exhausted the heap.
+    const canNest = depth < MAX_LIST_DEPTH;
+    if (canNest && (RE_BULLET.test(line) || RE_ORDERED.test(line))) {
+      const consumed = readList(lines, i, parseInline, depth);
       out.push(consumed.element);
       i = consumed.next;
       continue;
@@ -271,8 +287,7 @@ function readTable(
   parseInline: (text: string) => unknown[]
 ): { element: TElement; next: number } {
   const headerCells = splitRow(lines[start]);
-  const alignCells = splitRow(lines[start + 1]);
-  const alignments = alignCells.map((cell) => {
+  const alignments = splitRow(lines[start + 1]).map((cell) => {
     const left = cell.startsWith(":");
     const right = cell.endsWith(":");
     if (left && right) return "center";
@@ -281,42 +296,57 @@ function readTable(
     return null;
   });
 
-  const rows: TElement[] = [];
+  // Collect the body rows first so the table's true width is known before
+  // anything is built. An earlier version sized every row from the header
+  // alone, which silently deleted body cells in two cases: a header containing
+  // an escaped pipe (measured narrower once `\|` was unescaped) and a body row
+  // genuinely wider than the header.
+  const bodyRows: string[][] = [];
   let i = start + 2;
   while (i < lines.length && lines[i].trim() !== "" && lines[i].includes("|")) {
-    // Pad rather than drop: a short row must not lose cells relative to the
-    // header, which is how a table silently loses data.
-    const cells = splitRow(lines[i]);
-    while (cells.length < headerCells.length) cells.push("");
-    rows.push({
-      type: "tr",
-      children: headerCells.map((_, c) => cell(cells[c] ?? "")),
-    } as unknown as TElement);
+    bodyRows.push(splitRow(lines[i]));
     i++;
   }
+
+  const width = Math.max(
+    headerCells.length,
+    ...bodyRows.map((r) => r.length),
+    0
+  );
+
+  const makeRow = (
+    cells: string[],
+    tag: "th" | "td",
+    aligns?: (string | null)[]
+  ): TElement =>
+    ({
+      type: "tr",
+      // Pad to the table width rather than mapping over the header, so a wider
+      // body row keeps all of its cells and a narrower one keeps its shape.
+      children: Array.from({ length: width }, (_, c) =>
+        cell(cells[c] ?? "", tag, aligns?.[c])
+      ),
+    }) as unknown as TElement;
 
   return {
     element: {
       type: "table",
       children: [
+        { type: "thead", children: [makeRow(headerCells, "th", alignments)] },
         {
-          type: "thead",
-          children: [
-            {
-              type: "tr",
-              children: headerCells.map((text, c) =>
-                cell(text, "th", alignments[c])
-              ),
-            },
-          ],
+          type: "tbody",
+          children: bodyRows.map((r) => makeRow(r, "td")),
         },
-        { type: "tbody", children: rows },
       ],
     } as unknown as TElement,
     next: i,
   };
 
-  function cell(text: string, tag = "td", align?: string | null): TElement {
+  function cell(
+    text: string,
+    tag: "td" | "th",
+    align?: string | null
+  ): TElement {
     const children = parseInline(text);
     return {
       type: tag,
@@ -338,7 +368,8 @@ interface ListRead {
 function readList(
   lines: string[],
   start: number,
-  parseInline: (text: string) => unknown[]
+  parseInline: (text: string) => unknown[],
+  depth: number
 ): ListRead {
   const ordered =
     !RE_BULLET.test(lines[start]) && RE_ORDERED.test(lines[start]);
@@ -399,7 +430,7 @@ function readList(
   const element: TElement = {
     type: ordered ? "ol" : "ul",
     ...(ordered && startNumber !== 1 ? { start: startNumber } : {}),
-    children: items.map((item) => listItem(item.lines, parseInline)),
+    children: items.map((item) => listItem(item.lines, parseInline, depth)),
   } as unknown as TElement;
 
   return { element, next: i };
@@ -407,8 +438,9 @@ function readList(
 
 function listItem(
   lines: string[],
-  parseInline: (text: string) => unknown[]
+  parseInline: (text: string) => unknown[],
+  depth: number
 ): TElement {
-  const children = parseBlocks(lines.join("\n"), parseInline);
+  const children = parseBlocks(lines.join("\n"), parseInline, depth + 1);
   return { type: "li", children } as unknown as TElement;
 }

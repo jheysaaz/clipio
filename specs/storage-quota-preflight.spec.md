@@ -50,7 +50,10 @@ So the preflight is a **guard, not an authority**:
 
 - It measures with `TextEncoder` (real UTF-8 byte length) plus the key's own byte length, which is
   the closest documented basis.
-- It rounds **up** to the next 64 bytes per item, so it errs toward warning early rather than late.
+- It applies **no fudge factor**. An earlier version of this spec proposed rounding each item up
+  to the next 64 bytes "to err toward warning early"; that was wrong, because it rejected a
+  snippet of exactly `BYTES_PER_ITEM`, and a false refusal sitting on the documented limit is the
+  worst possible place to be conservative. The rounding was removed from both this spec and the code.
 - The browser's own `QUOTA_BYTES` error remains the source of truth. If the preflight passes and the
   browser still fails, the write is refused and the miss is reported to Sentry as
   `storage.quotaPreflightMiss`, because an inaccurate projection is a bug and silence is the only
@@ -72,15 +75,24 @@ So the preflight is a **guard, not an authority**:
       re-saving unchanged snippets must not report a quota problem that no write would cause.
 - [x] Removing snippets frees space: projected usage below current usage is not an error.
 - [x] Non-ASCII is measured in UTF-8 bytes, not JS string length. `"é"` is 2 bytes, `"😀"` is 4.
-- [x] Only `snip:`-prefixed snippets are counted, so the journal key (`_pendingWrite`) and
-      `corrupt:` keys are not counted. They are not passed in at all: callers supply the snippet
-      list, so non-snippet keys cannot reach the projection.
+- [ ] **Known gap, not solved:** the projection is given a list of snippets, so it cannot see the
+      other keys the same code path writes — the `_pendingWrite` journal (up to
+      `JOURNAL_MAX_BYTES` = 8,192 bytes) and any `corrupt:` quarantine records. Those _do_ count
+      against the browser's real limits. A write can therefore pass the preflight and still be
+      refused by the browser; that is what `storage.quotaPreflightMiss` reports, and there is a test
+      pinning the gap (`quota-preflight.test.ts`, "cannot see the journal key"). Closing it means
+      reading the real key set and accounting for non-snippet keys.
 - [x] Exactly at a limit is allowed; one byte over is not.
 - [x] An empty result set (everything removed) always fits.
 - [x] `StorageManager` does **not** switch mode and does **not** write to local when the preflight
       fails.
 - [x] The error thrown by the manager is a `StorageQuotaError` and carries the reasons, so existing
       callers that already catch it keep working unchanged.
+
+## Known gaps
+
+- The journal and quarantine keys above.
+- Chrome's accounting is estimated, not exact. A write may be refused that would have fit.
 
 ## Edge Cases
 

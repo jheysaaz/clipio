@@ -87,12 +87,22 @@ export class StorageManager {
         ? await this.local.getSnippets()
         : await this.sync.getSnippets();
 
-    // Write to the target backend
-    if (mode === "local") {
-      await this.local.saveSnippets(snippets);
-    } else {
-      await this.sync.saveSnippets(snippets);
-    }
+    // Write to the target backend. The sync branch goes through the same quota
+    // preflight as every other sync write: migrating local → sync with an
+    // oversized snippet has exactly the same ceiling as saving one, and this
+    // path used to hit the raw browser error with no `reasons` and no
+    // `quotaPreflightMiss` report.
+    await this.withQuotaPreflight(
+      mode,
+      async () => ({
+        existing: await this.sync.getSnippets(),
+        incoming: snippets,
+      }),
+      () =>
+        mode === "local"
+          ? this.local.saveSnippets(snippets)
+          : this.sync.saveSnippets(snippets)
+    );
 
     await this.setMode(mode);
     // Record reason so the UI can distinguish a manual switch from a quota overflow

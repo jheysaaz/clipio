@@ -72,6 +72,11 @@ dashboard:
     failedToLoad: Failed to load snippets.
     failedToCreate: Failed to create snippet. Please try again.
     failedToRestore: Failed to restore snippets.
+    # Quota explanations. $1 is the projected/actual size, $2 the limit.
+    quotaExceeded: Sync storage is full, so this snippet was not saved.
+    quotaPerItem: This snippet is $1 and sync allows $2 per snippet.
+    quotaTotal: Your snippets total $1 and sync allows $2.
+    quotaCount: You have $1 snippets and sync allows $2.
 
 newSnippet:
   cancel: Cancel

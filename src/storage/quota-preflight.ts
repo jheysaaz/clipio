@@ -90,7 +90,6 @@ export function checkQuota(
   const reasons: QuotaBreach[] = [];
 
   const existingById = new Map(existing.map((s) => [s.id, s]));
-  const incomingIds = new Set(incoming.map((s) => s.id));
 
   let currentBytes = 0;
   for (const snippet of existing) {
@@ -136,11 +135,6 @@ export function checkQuota(
       actual: incoming.length,
     });
   }
-
-  // `incomingIds` is only meaningful for future call sites that need the
-  // removal set; asserting it here keeps the projection honest about counting
-  // removals as zero rather than as a negative.
-  void incomingIds;
 
   return { ok: reasons.length === 0, currentBytes, projectedBytes, reasons };
 }
