@@ -11,16 +11,12 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Heart, X } from "lucide-react";
+import { Heart, X } from "lucide-react";
 
 import { Alert, AlertDescription, AlertAction } from "@/components/ui/alert";
 import { Icon } from "@/components/ui/icon";
 import { i18n } from "#i18n";
-import {
-  dismissedUninstallWarningItem,
-  reviewPromptStateItem,
-  lastSentryErrorAtItem,
-} from "@/storage/items";
+import { reviewPromptStateItem, lastSentryErrorAtItem } from "@/storage/items";
 import {
   SECTIONS,
   searchSettings,
@@ -54,7 +50,6 @@ function sectionFromHash(hash: string): SectionId {
 export default function OptionsPage() {
   const [section, setSection] = useState<SectionId>(DEFAULT_SECTION);
   const [query, setQuery] = useState("");
-  const [showUninstallWarning, setShowUninstallWarning] = useState(false);
   const [showReviewBanner, setShowReviewBanner] = useState(false);
 
   // Read synchronously so the first paint already has the persisted width;
@@ -99,15 +94,6 @@ export default function OptionsPage() {
   const searching = query.trim().length > 0;
 
   useEffect(() => {
-    dismissedUninstallWarningItem
-      .getValue()
-      .then((dismissed: boolean) => {
-        if (!dismissed) setShowUninstallWarning(true);
-      })
-      .catch(console.warn);
-  }, []);
-
-  useEffect(() => {
     Promise.all([
       reviewPromptStateItem.getValue(),
       lastSentryErrorAtItem.getValue(),
@@ -147,29 +133,6 @@ export default function OptionsPage() {
 
       <main className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-2xl px-8 py-8">
-          {showUninstallWarning && (
-            <Alert className="mb-6 border-amber-200 bg-amber-50 text-amber-800 [&>svg]:text-amber-500 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:[&>svg]:text-amber-400">
-              <Icon icon={AlertTriangle} size="lg" />
-              <AlertDescription className="text-amber-800 dark:text-amber-300">
-                {i18n.t("options.warnings.uninstall.body")}
-              </AlertDescription>
-              <AlertAction>
-                <button
-                  onClick={() => {
-                    setShowUninstallWarning(false);
-                    dismissedUninstallWarningItem
-                      .setValue(true)
-                      .catch(console.warn);
-                  }}
-                  className="opacity-50 transition-opacity hover:opacity-100"
-                  aria-label={i18n.t("common.dismiss")}
-                  data-testid="warning-uninstall-dismiss"
-                >
-                  <Icon icon={X} stroke="emphasis" />
-                </button>
-              </AlertAction>
-            </Alert>
-          )}
           {showReviewBanner && (
             <Alert className="mb-6 border-blue-200 bg-blue-50 text-blue-800 [&>svg]:text-blue-500 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300 dark:[&>svg]:text-blue-400">
               <Icon icon={Heart} size="lg" />

@@ -276,11 +276,32 @@ test.describe("Options Page", () => {
     await expect(review).toBeVisible({ timeout: 5_000 });
 
     // Both open a new tab rather than navigating the options page away.
-    const newTab = optionsPage.context().waitForEvent("page", {
-      timeout: 5_000,
-    });
+    //
+    // Not `waitForEvent("page")`: that resolves on the *first* new tab, and on a
+    // fresh profile the background worker opens its own clipio.xyz onboarding
+    // tab at roughly the same moment. Whichever wins the race used to decide
+    // whether this test passed. Snapshot the pages instead and look for the one
+    // that actually went to the sponsors URL.
+    const context = optionsPage.context();
+    const before = new Set(context.pages());
+
     await donate.click();
-    expect((await newTab).url()).toContain("github.com/sponsors");
+
+    await expect
+      .poll(
+        async () => {
+          const opened = context.pages().filter((p) => !before.has(p));
+          for (const page of opened) {
+            if (page.url().includes("github.com/sponsors")) return true;
+          }
+          return false;
+        },
+        {
+          message: "donate never opened a sponsors tab",
+          timeout: 8_000,
+        }
+      )
+      .toBe(true);
   });
 
   test("Images section does not repeat its own heading", async ({
@@ -610,9 +631,11 @@ test.describe("Options Page", () => {
     // Navigate to appearance via stable testid
     await optionsPage.getByTestId("options-nav-appearance").click();
 
-    // The three-button picker is now a select row.
-    const select = optionsPage.getByTestId("setting-theme-select");
-    await expect(select).toBeVisible({ timeout: 5_000 });
+    // Three icons in a segmented radiogroup, not a dropdown.
+    const group = optionsPage.getByTestId("setting-theme-segment");
+    await expect(group).toBeVisible({ timeout: 5_000 });
+    await expect(group).toHaveAttribute("role", "radiogroup");
+    await expect(group.getByRole("radio")).toHaveCount(3);
 
     // Poll the persisted value: the change handler writes asynchronously, so a
     // one-shot read can land before the write and report the old theme.
@@ -623,8 +646,9 @@ test.describe("Options Page", () => {
         return result.themeMode;
       });
 
-    await select.click();
-    await optionsPage.getByRole("option", { name: "Dark" }).click();
+    // Each option is identified by its accessible name, so the test does not
+    // depend on which icon is drawn or in what order.
+    await group.getByRole("radio", { name: "Dark" }).click();
     await expect
       .poll(readTheme, { message: "theme never persisted as dark" })
       .toBe("dark");
@@ -633,19 +657,304 @@ test.describe("Options Page", () => {
     // the `dark` class on <html>, and writing the item alone left the page
     // visually unchanged.
     await expect(optionsPage.locator("html")).toHaveClass(/\bdark\b/);
+    await expect(group.getByRole("radio", { name: "Dark" })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
 
-    await select.click();
-    await optionsPage.getByRole("option", { name: "Light" }).click();
+    await group.getByRole("radio", { name: "Light" }).click();
     await expect
       .poll(readTheme, { message: "theme never persisted as light" })
       .toBe("light");
     await expect(optionsPage.locator("html")).not.toHaveClass(/\bdark\b/);
 
-    await select.click();
-    await optionsPage.getByRole("option", { name: "System" }).click();
+    await group.getByRole("radio", { name: "System" }).click();
     await expect
       .poll(readTheme, { message: "theme never persisted as system" })
       .toBe("system");
+    await expect(optionsPage.locator("html")).not.toHaveClass(/\bdark\b/);
+
+    // Exactly one option is ever checked — a segmented control that can show two
+    // selected at once is not a radio group.
+    await expect(group.getByRole("radio", { name: "System" })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+    await expect(group.getByRole("radio", { name: "Dark" })).toHaveAttribute(
+      "aria-checked",
+      "false"
+    );
+  });
+
+  // spec: specs/ui-font.spec.md
+  test("applies the interface font everywhere and leaves monospace alone", async ({
+    optionsPage,
+    extensionId,
+    storageHelper,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+    await optionsPage.getByTestId("options-nav-appearance").click();
+
+    const select = optionsPage.getByTestId("setting-font-family-select");
+    await expect(select).toBeVisible({ timeout: 5_000 });
+
+    // Exactly the three options the feature promises, and no more.
+    await select.click();
+    await expect(optionsPage.getByRole("option")).toHaveCount(3);
+    for (const label of ["Inter", "System", "OpenDyslexic"]) {
+      await expect(
+        optionsPage.getByRole("option", { name: label, exact: true })
+      ).toBeVisible();
+    }
+    // Close the listbox again, or the open popup keeps intercepting the next
+    // click on the trigger.
+    await optionsPage.keyboard.press("Escape");
+
+    // spec: specs/ui-font.spec.md — each option's label is drawn in that
+    // option's own face, so the menu previews the fonts rather than listing
+    // names. Asserted on the real computed style, because an inline
+    // `font-family` that never resolves (a family no @font-face declares) would
+    // still read back as itself.
+    const optionFace = (name: string) =>
+      optionsPage.evaluate((label) => {
+        const items = [...document.querySelectorAll('[role="option"]')];
+        const match = items.find((el) => el.textContent?.trim() === label) as
+          HTMLElement | undefined;
+        if (!match) return null;
+        const inner = match.querySelector("span") ?? match;
+        return getComputedStyle(inner)
+          .fontFamily.split(",")[0]
+          .trim()
+          .replace(/^["']|["']$/g, "");
+      }, name);
+
+    const faces = await optionsPage.evaluate(() => {
+      const probe = document.createElement("span");
+      document.body.appendChild(probe);
+      const results: Record<string, boolean> = {};
+      for (const family of ["InterVariable", "OpenDyslexic", "system-ui"]) {
+        probe.style.fontFamily = `"${family}"`;
+        results[family] = document.fonts.check(`12px "${family}"`);
+      }
+      probe.remove();
+      return results;
+    });
+    expect(faces.InterVariable).toBe(true);
+    expect(faces.OpenDyslexic).toBe(true);
+
+    await optionsPage.getByTestId("setting-font-family-select").click();
+    await expect(
+      optionsPage.getByRole("option", { name: "Inter" })
+    ).toBeVisible();
+    await expect
+      .poll(() => optionFace("Inter"), { message: "Inter option not shown" })
+      .toBe("InterVariable");
+    await expect
+      .poll(() => optionFace("OpenDyslexic"), {
+        message: "OpenDyslexic option not shown in its own face",
+      })
+      .toBe("OpenDyslexic");
+    // "system" resolves to whatever the machine has, so only the leading family
+    // name is stable across platforms.
+    await expect
+      .poll(() => optionFace("System"), { message: "System option not shown" })
+      .toBe("system-ui");
+    await optionsPage.keyboard.press("Escape");
+
+    const readFont = () =>
+      optionsPage.evaluate(async () => {
+        const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+        const result = await ext.storage.local.get("uiFont");
+        return result.uiFont;
+      });
+
+    /**
+     * The first family in the resolved stack, read off three surfaces that
+     * would each have to be wired up separately: the sidebar chrome, a setting
+     * row, and a <code> element. Asserting one is not enough — the base reset
+     * in app.css is what paints everything, and getting only that right while
+     * leaving a hardcoded family in the sidebar would pass a single-element
+     * assertion.
+     */
+    const firstFamilyOf = (selector: string) =>
+      optionsPage.evaluate((sel) => {
+        const el = document.querySelector(sel);
+        if (!el) return null;
+        const declared = getComputedStyle(el).fontFamily;
+        return declared
+          .split(",")[0]
+          .trim()
+          .replace(/^["']|["']$/g, "");
+      }, selector);
+
+    const expectEverywhere = async (expected: string) => {
+      for (const sel of ["nav", "#root", "[data-testid='setting-theme']"]) {
+        expect(await firstFamilyOf(sel), `${sel} font`).toBe(expected);
+      }
+    };
+
+    // ── OpenDyslexic ──────────────────────────────────────────────────────
+    await select.click();
+    await optionsPage.getByRole("option", { name: "OpenDyslexic" }).click();
+    await expect
+      .poll(readFont, { message: "uiFont never persisted as dyslexic" })
+      .toBe("dyslexic");
+    await expect
+      .poll(() => firstFamilyOf("nav"), {
+        message: "sidebar never repainted",
+      })
+      .toBe("OpenDyslexic");
+    await expectEverywhere("OpenDyslexic");
+
+    // The face has to have actually loaded, not merely been requested —
+    // otherwise the assertion above would pass with the system fallback showing
+    // through, which is the failure this feature exists to prevent.
+    const dyslexicLoaded = await optionsPage.evaluate(async () => {
+      await document.fonts.ready;
+      return document.fonts.check('400 12px "OpenDyslexic"');
+    });
+    expect(dyslexicLoaded).toBe(true);
+
+    // ── System ────────────────────────────────────────────────────────────
+    await select.click();
+    await optionsPage.getByRole("option", { name: "System" }).click();
+    await expect
+      .poll(readFont, { message: "uiFont never persisted as system" })
+      .toBe("system");
+    await expectEverywhere("system-ui");
+
+    // ── Inter (the default, and what a fresh profile gets) ─────────────────
+    await select.click();
+    await optionsPage.getByRole("option", { name: "Inter" }).click();
+    await expect
+      .poll(readFont, { message: "uiFont never persisted as inter" })
+      .toBe("inter");
+    await expectEverywhere("InterVariable");
+
+    // The popup is a separate document with its own root; it must follow too.
+    const popupPage = await optionsPage.context().newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect
+      .poll(
+        () =>
+          popupPage.evaluate(() =>
+            document.documentElement.getAttribute("data-ui-font")
+          ),
+        { message: "popup never picked up the font" }
+      )
+      .toBe("inter");
+    const popupFamily = await popupPage.evaluate(() => {
+      const el = document.querySelector("#root");
+      if (!el) return null;
+      return getComputedStyle(el)
+        .fontFamily.split(",")[0]
+        .trim()
+        .replace(/^["']|["']$/g, "");
+    });
+    expect(popupFamily).toBe("InterVariable");
+    await popupPage.close();
+  });
+
+  // spec: specs/ui-font.spec.md — monospace surfaces must not follow the
+  // interface font, or the debug log loses the column alignment that makes it
+  // scannable.
+  test("keeps monospace surfaces on JetBrains Mono under every font", async ({
+    optionsPage,
+    storageHelper,
+  }) => {
+    await storageHelper.setLocal("debugMode", true);
+    await waitForOptionsReady(optionsPage);
+    await optionsPage.getByTestId("options-nav-diagnostics").click();
+
+    const debugLog = optionsPage.getByTestId("debug-log");
+    await expect(debugLog).toBeVisible({ timeout: 5_000 });
+
+    const logFamily = () =>
+      optionsPage.evaluate(() => {
+        const el = document.querySelector("[data-testid='debug-log']");
+        if (!el) return null;
+        return getComputedStyle(el)
+          .fontFamily.split(",")[0]
+          .trim()
+          .replace(/^["']|["']$/g, "");
+      });
+
+    for (const font of ["dyslexic", "system", "inter"]) {
+      await storageHelper.setLocal("uiFont", font);
+      await expect
+        .poll(logFamily, {
+          message: `debug log font changed under ${font}`,
+        })
+        .toBe("JetBrainsMono");
+    }
+  });
+
+  // spec: specs/ui-font.spec.md — an unrecognised stored value must degrade to
+  // the default instead of leaving the select blank and the page unstyled.
+  test("falls back to Inter when the stored font is not a known option", async ({
+    optionsPage,
+    storageHelper,
+  }) => {
+    const readStored = () =>
+      optionsPage.evaluate(async () => {
+        const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+        const r = await ext.storage.local.get("uiFont");
+        return r.uiFont;
+      });
+
+    const appliedFont = () =>
+      optionsPage.evaluate(() => {
+        const attr = document.documentElement.getAttribute("data-ui-font");
+        const el = document.querySelector("nav");
+        const family = el
+          ? getComputedStyle(el)
+              .fontFamily.split(",")[0]
+              .trim()
+              .replace(/^["']|["']$/g, "")
+          : null;
+        return { attr, family };
+      });
+
+    // Prove the harness can tell the three apart *before* testing the fallback:
+    // a real stored value has to be applied on a fresh load, otherwise the
+    // fallback assertion below would pass for the wrong reason — the attribute
+    // is "inter" on a clean profile too.
+    await storageHelper.setLocal("uiFont", "dyslexic");
+    await optionsPage.reload();
+    await optionsPage.getByTestId("options-nav-appearance").click();
+    await expect
+      .poll(appliedFont, {
+        message: "a valid stored font was not applied on load",
+      })
+      .toEqual({ attr: "dyslexic", family: "OpenDyslexic" });
+
+    // Now the corrupt value. The reload matters: the optionsPage fixture has
+    // already navigated by the time setLocal runs, so without it FontProvider
+    // would have read the previous value on mount and never seen this one.
+    await storageHelper.setLocal("uiFont", "comic-sans");
+    await optionsPage.reload();
+    await optionsPage.getByTestId("options-nav-appearance").click();
+
+    await expect
+      .poll(appliedFont, { message: "the corrupt value was not normalised" })
+      .toEqual({ attr: "inter", family: "InterVariable" });
+
+    // The control must still show a selection — a blank trigger is the visible
+    // symptom of an unrecognised value.
+    await expect(optionsPage.getByTestId("setting-font-family")).toContainText(
+      "Inter"
+    );
+
+    // The poll above is the non-vacuity proof: a page that had never seen
+    // "comic-sans" would still be showing "dyslexic" from the previous step, so
+    // reaching "inter" here means the corrupt value really was read and
+    // normalised.
+    //
+    // FontProvider then writes the normalisation back, so the next load does not
+    // have to re-derive the same fallback.
+    await expect
+      .poll(readStored, { message: "the corrupt value was never healed" })
+      .toBe("inter");
   });
 
   test("toggles confetti setting", async ({ optionsPage }) => {

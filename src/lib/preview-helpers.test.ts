@@ -534,6 +534,32 @@ describe("detectPreviewTrigger", () => {
     expect(result).toBeNull(); // No word boundary before "/"
   });
 
+  // spec: specs/shortcut-boundary.spec.md — the caret in a pre-filled
+  // contenteditable sits at the end of existing prose, so the prefix is
+  // preceded by punctuation rather than whitespace. The palette must open
+  // there or insertion is unreachable in exactly the fields that hold
+  // existing content.
+  it.each([".", ",", ";", "!", "?", ")", "…", '"'])(
+    "triggers after sentence punctuation %j",
+    (punct) => {
+      const text = `end of sentence${punct}/wor`;
+      const result = detectPreviewTrigger(text, text.length, settings);
+      expect(result).not.toBeNull();
+      expect(result!.query).toBe("wor");
+    }
+  );
+
+  // spec: specs/shortcut-boundary.spec.md — widening the boundary must not
+  // pop the palette open while a URL or path is being typed.
+  it.each([
+    "https://example.com",
+    "mailto:someone@example.com",
+    "src/index",
+    "report-final",
+  ])("does not trigger inside %j", (text) => {
+    expect(detectPreviewTrigger(text, text.length, settings)).toBeNull();
+  });
+
   it("matches prefix after space (word boundary)", () => {
     const result = detectPreviewTrigger("Hello /wor", 10, settings);
     expect(result).not.toBeNull();

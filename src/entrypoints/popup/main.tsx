@@ -4,6 +4,7 @@ import { ErrorBoundary } from "@sentry/react";
 import "~/app.css";
 import Dashboard from "@/pages/Dashboard";
 import { ThemeProvider } from "@/hooks/ThemeContext";
+import { FontProvider } from "@/hooks/FontContext";
 import { initSentry, captureError } from "@/lib/sentry";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -31,6 +32,7 @@ function App() {
       fallback={<ErrorFallback />}
       onError={(error) => captureError(error, { action: "ReactErrorBoundary" })}
     >
+      <FontProvider />
       <ThemeProvider>
         <Dashboard />
         <Toaster />

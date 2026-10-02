@@ -10,10 +10,8 @@ import {
   X,
   Plus,
   SquareSlash,
-  AlertTriangle,
 } from "lucide-react";
 import { Icon } from "@/components/ui/icon";
-import { Alert, AlertDescription, AlertAction } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RichTextEditor, type RichTextEditorRef } from "@/components/editor";
@@ -37,8 +35,6 @@ interface SnippetDetailViewProps {
   onUpdate: (updatedSnippet: Snippet) => void;
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
-  uninstallWarning?: boolean;
-  onDismissUninstallWarning?: () => void;
   onHasChanges?: (hasChanges: boolean) => void;
 }
 
@@ -48,8 +44,6 @@ export default function SnippetDetailView({
   onUpdate,
   sidebarOpen = true,
   onToggleSidebar,
-  uninstallWarning,
-  onDismissUninstallWarning,
   onHasChanges,
 }: SnippetDetailViewProps) {
   const [editedContent, setEditedContent] = useState(snippet.content);
@@ -263,26 +257,13 @@ export default function SnippetDetailView({
         />
       </div>
 
-      {/* Uninstall warning — between editor and tags */}
-      {uninstallWarning && (
-        <div className="px-3 pb-3">
-          <Alert className="border-amber-200 bg-amber-50 text-amber-800 [&>svg]:text-amber-500 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:[&>svg]:text-amber-400">
-            <Icon icon={AlertTriangle} size="lg" />
-            <AlertDescription className="text-amber-800 dark:text-amber-300">
-              {i18n.t("dashboard.warnings.uninstall.body")}
-            </AlertDescription>
-            <AlertAction>
-              <button
-                onClick={onDismissUninstallWarning}
-                className="opacity-50 hover:opacity-100 transition-opacity"
-                aria-label={i18n.t("common.dismiss")}
-              >
-                <Icon icon={X} stroke="emphasis" />
-              </button>
-            </AlertAction>
-          </Alert>
-        </div>
-      )}
+      {/* The uninstall warning used to render here, between the editor and the
+          tags. It repeated on every surface — the detail pane, the snippet
+          list footer, and the options page — and it persisted across sessions
+          until dismissed, which made a one-time caution feel like a permanent
+          alarm. Chrome already asks the user to confirm removal, and the
+          export action lives in Library. Removed deliberately; the dismissal
+          flag is kept so an existing value stays harmless. */}
 
       {/* Footer */}
       {/* Tags Section */}

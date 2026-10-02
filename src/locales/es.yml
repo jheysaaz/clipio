@@ -46,8 +46,6 @@ dashboard:
   detailPlaceholder: Selecciona un fragmento para ver los detalles
   snippetListLabel: Fragmentos
   warnings:
-    uninstall:
-      body: Desinstalar eliminará todos los fragmentos. Haz una copia desde Preferencias primero.
     quotaFull:
       body: Almacenamiento de sincronización lleno — los fragmentos se guardan solo localmente.
       action: Exportar copia de seguridad →
@@ -190,6 +188,9 @@ options:
     theme:
       title: Tema
       desc: Sigue el ajuste del sistema, o fija Clipio en claro u oscuro.
+    fontFamily:
+      title: Fuente de la interfaz
+      desc: La tipografía que usa Clipio en todas partes. El texto monoespaciado, como el registro de depuración, siempre lo es.
     confetti:
       title: Confeti al insertar
       desc: Lanza una explosión de confeti cada vez que se inserta un fragmento.
@@ -229,6 +230,10 @@ options:
     light: Claro
     dark: Oscuro
     system: Sistema
+  font:
+    inter: Inter
+    system: Sistema
+    dyslexic: OpenDyslexic
   overview:
     snippets: Fragmentos
     syncStorage: Almacenamiento de sincronización
@@ -284,9 +289,6 @@ options:
         n: "✓ $1 fragmentos importados correctamente."
     modal:
       title: Importar Fragmentos
-  warnings:
-    uninstall:
-      body: Desinstalar Clipio eliminará permanentemente todos tus fragmentos. Exporta una copia de seguridad antes de desinstalar.
   errors:
     failedExport: Error al exportar los fragmentos.
   images:

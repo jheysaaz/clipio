@@ -9,6 +9,7 @@
  */
 
 import { markdownToPlainText } from "@/lib/markdown";
+import { isShortcutBoundary } from "@/lib/content-helpers";
 import type { ContentSnippet } from "@/lib/content-helpers";
 
 // Re-export ContentSnippet for testing
@@ -449,11 +450,13 @@ export function detectPreviewTrigger(
     return null; // No prefix found
   }
 
-  // Check word boundary before prefix (unless at start)
+  // Check the boundary before the prefix (unless at start). Shares
+  // isShortcutBoundary with findSnippetMatch so expansion and preview can never
+  // disagree about where a trigger may begin.
+  // spec: specs/shortcut-boundary.spec.md
   if (lastPrefixIndex > 0) {
-    const charBeforePrefix = text[lastPrefixIndex - 1];
-    if (!/[\s\n]/.test(charBeforePrefix)) {
-      return null; // No word boundary
+    if (!isShortcutBoundary(text[lastPrefixIndex - 1])) {
+      return null;
     }
   }
 

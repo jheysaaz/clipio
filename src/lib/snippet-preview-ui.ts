@@ -9,7 +9,71 @@
 
 import type { PreviewPosition, FilteredSnippet } from "./preview-helpers";
 import { createPreviewTooltip } from "./preview-helpers";
+import {
+  UI_FONT_STACKS,
+  DEFAULT_UI_FONT,
+  normalizeUiFont,
+  type UiFont,
+} from "@/lib/ui-font";
 import interVariableUrl from "@/assets/fonts/InterVariable.woff2?url";
+import openDyslexicRegularUrl from "@/assets/fonts/OpenDyslexic-Regular.woff2?url";
+import openDyslexicBoldUrl from "@/assets/fonts/OpenDyslexic-Bold.woff2?url";
+
+/**
+ * @font-face blocks for the palette, one family per option.
+ *
+ * The palette lives inside a closed shadow root in an arbitrary web page, so it
+ * cannot see the extension's stylesheet — it has to declare the faces itself,
+ * from web-accessible chrome-extension:// URLs. Declared per option and injected
+ * lazily so that picking OpenDyslexic does not also fetch 350 KB of Inter.
+ *
+ * spec: specs/ui-font.spec.md
+ */
+const FONT_FACES: Record<UiFont, string> = {
+  inter: `
+      @font-face {
+        font-family: "ClipioInter";
+        src: url("${interVariableUrl}") format("woff2");
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: swap;
+      }`,
+  system: "",
+  dyslexic: `
+      @font-face {
+        font-family: "ClipioDyslexic";
+        src: url("${openDyslexicRegularUrl}") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "ClipioDyslexic";
+        src: url("${openDyslexicBoldUrl}") format("woff2");
+        font-weight: 700;
+        font-style: normal;
+        font-display: swap;
+      }`,
+};
+
+/**
+ * The stack written into the palette's inline styles.
+ *
+ * The extension's family names are rewritten to the aliases declared above:
+ * inside a page, `OpenDyslexic` could be shadowed by the host page's own
+ * @font-face of the same name, and `InterVariable` is an internal name the page
+ * has never heard of. The system tail is inherited from UI_FONT_STACKS so a
+ * glyph the bundled face lacks falls through instead of rendering as tofu.
+ *
+ * spec: specs/ui-font.spec.md
+ */
+function paletteStack(font: UiFont): string {
+  // Global, not first-match: a stack that ever listed a family twice must not
+  // end up half-aliased.
+  return UI_FONT_STACKS[font]
+    .replace(/InterVariable/g, '"ClipioInter"')
+    .replace(/OpenDyslexic/g, '"ClipioDyslexic"');
+}
 
 export class SnippetPreviewUI {
   private shadowHost: HTMLElement | null = null;
@@ -24,6 +88,7 @@ export class SnippetPreviewUI {
   private visible = false;
   private onSelect?: (snippet: FilteredSnippet) => void;
   private onCancel?: () => void;
+  private font: UiFont = DEFAULT_UI_FONT;
   private palette = {
     surface: "#ffffff",
     surfaceMuted: "#fafafa",
@@ -52,8 +117,10 @@ export class SnippetPreviewUI {
     return runtime?.getURL ? runtime.getURL(path) : path;
   }
 
-  init(): void {
+  init(font: UiFont = DEFAULT_UI_FONT): void {
     if (this.shadowHost) return; // Already initialized
+
+    this.font = normalizeUiFont(font);
 
     // Create shadow host element
     this.shadowHost = document.createElement("div");
@@ -107,14 +174,16 @@ export class SnippetPreviewUI {
         };
 
     const style = document.createElement("style");
+    // The interface font, if it needs a face declared here at all. The system
+    // option declares nothing: those families already exist on the machine.
+    //
+    // Only the chosen family's faces are injected, and under an alias
+    // (ClipioInter / ClipioDyslexic) rather than "Inter" / "OpenDyslexic".
+    // @font-face is document-scoped even from inside a shadow root, so declaring
+    // the bare name would register our face in the *host page's* namespace and
+    // could hijack that page's own "Inter" — or be hijacked by it.
     style.textContent = `
-      @font-face {
-        font-family: "Inter";
-        src: url("${interVariableUrl}") format("woff2");
-        font-weight: 100 900;
-        font-style: normal;
-        font-display: swap;
-      }
+      ${FONT_FACES[this.font]}
       @media (prefers-contrast: high) {
         .clipio-preview-item.selected {
           outline: 2px solid Highlight !important;
@@ -139,7 +208,7 @@ export class SnippetPreviewUI {
       max-width: 320px;
       min-width: 230px;
       max-height: 220px;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: ${paletteStack(this.font)};
       font-size: 12px;
       line-height: 1.3;
       overflow: hidden;
@@ -221,8 +290,8 @@ export class SnippetPreviewUI {
       border-radius: 6px;
       font-size: 11px;
       line-height: 1.4;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       max-width: 300px;
+      font-family: ${paletteStack(this.font)};
       white-space: pre-wrap;
       word-wrap: break-word;
       z-index: 2147483648;

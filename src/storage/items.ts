@@ -49,11 +49,6 @@ export const storageModeReasonItem = storage.defineItem<"quota" | "manual">(
 // UI flags
 // ---------------------------------------------------------------------------
 
-/** True once the user has seen (or dismissed) the uninstall data-loss warning. */
-export const dismissedUninstallWarningItem = storage.defineItem<boolean>(
-  "local:dismissedUninstallWarning",
-  { defaultValue: false }
-);
 
 /** Set to true by the background when a sync sign-out wipe is detected. */
 export const syncDataLostItem = storage.defineItem<boolean>(
@@ -83,6 +78,29 @@ export const legacyThemeItem = storage.defineItem<string | null>(
   "local:theme",
   { defaultValue: null }
 );
+
+// ---------------------------------------------------------------------------
+// Interface font
+// ---------------------------------------------------------------------------
+
+export type { UiFont };
+import type { UiFont } from "@/lib/ui-font";
+import { DEFAULT_UI_FONT } from "@/lib/ui-font";
+
+/**
+ * User-selected interface font, applied to every Clipio surface (options page,
+ * popup and the in-page preview palette). Monospace surfaces — the debug log,
+ * `code`/`pre` — stay on JetBrains Mono and are deliberately not affected.
+ *
+ * The stored value is normalised on read by `normalizeUiFont`, because storage
+ * can be restored from a backup or written by another extension context and is
+ * not guaranteed to hold one of our options.
+ *
+ * spec: specs/ui-font.spec.md
+ */
+export const uiFontItem = storage.defineItem<UiFont>("local:uiFont", {
+  defaultValue: DEFAULT_UI_FONT,
+});
 
 // ---------------------------------------------------------------------------
 // Usage tracking

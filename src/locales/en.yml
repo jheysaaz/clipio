@@ -48,8 +48,6 @@ dashboard:
   detailPlaceholder: Select a snippet to view details
   snippetListLabel: Snippets
   warnings:
-    uninstall:
-      body: Uninstalling will delete all snippets. Back up from Preferences first.
     quotaFull:
       body: Sync storage full — snippets saved locally only.
       action: Export backup →
@@ -197,6 +195,9 @@ options:
     theme:
       title: Theme
       desc: Follow the system setting, or pin Clipio to light or dark.
+    fontFamily:
+      title: Interface font
+      desc: The typeface Clipio uses everywhere. Monospace text, like the debug log, always stays monospaced.
     confetti:
       title: Confetti on insert
       desc: Fire a confetti burst each time a snippet is inserted.
@@ -236,6 +237,10 @@ options:
     light: Light
     dark: Dark
     system: System
+  font:
+    inter: Inter
+    system: System
+    dyslexic: OpenDyslexic
   overview:
     snippets: Snippets
     syncStorage: Sync storage
@@ -291,9 +296,6 @@ options:
       supported: "Supported:"
     modal:
       title: Import Snippets
-  warnings:
-    uninstall:
-      body: Uninstalling Clipio will permanently delete all your snippets. Export a backup before uninstalling.
   errors:
     failedExport: Failed to export snippets.
   images:

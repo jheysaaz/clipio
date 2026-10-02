@@ -68,8 +68,35 @@ export interface ProcessedContent {
 // Shortcut index
 // ---------------------------------------------------------------------------
 
-/** Word-boundary pattern: a character is a boundary if it is whitespace or newline. */
+/** Whitespace/newline: the original word boundary, and still the common case. */
 const WORD_BOUNDARY_RE = /[\s\n]/;
+
+/**
+ * Sentence punctuation and bracket/quote delimiters, which also count as a
+ * boundary.
+ *
+ * A pre-filled field (e.g. a contenteditable holding `<p>…context.</p>`) puts the
+ * caret at the end of existing prose, so a shortcut typed there is preceded by a
+ * full stop rather than a space. Requiring whitespace alone meant neither the
+ * preview palette nor auto-expansion ever opened in exactly the field where the
+ * user is editing an existing document — see specs/shortcut-boundary.spec.md.
+ *
+ * Deliberately a whitelist, not "anything non-alphanumeric": `:` `/` `\` `-` `_`
+ * are what URLs (`https://`, `mailto:`), paths (`src/index`) and file names
+ * (`report-final`) are built from, so all of them still suppress the trigger.
+ */
+const SENTENCE_PUNCTUATION_RE = /[.,;!?…()[\]{}"'‘’“”«»]/;
+
+/**
+ * Whether `char` may immediately precede a shortcut / preview trigger prefix.
+ *
+ * Shared by `findSnippetMatch` (expansion) and `detectPreviewTrigger` (preview)
+ * so the two paths can never disagree about where a trigger is allowed to start.
+ */
+export function isShortcutBoundary(char: string | undefined): boolean {
+  if (char === undefined) return false; // start of text is handled by the caller
+  return WORD_BOUNDARY_RE.test(char) || SENTENCE_PUNCTUATION_RE.test(char);
+}
 
 /**
  * Build an optimized lookup index from a snippets array.
@@ -110,10 +137,7 @@ export function findSnippetMatch(
     const candidate = text.substring(startPos, cursorPosition);
     const snippet = index.map.get(candidate);
 
-    if (
-      snippet &&
-      (startPos === 0 || WORD_BOUNDARY_RE.test(text[startPos - 1]))
-    ) {
+    if (snippet && (startPos === 0 || isShortcutBoundary(text[startPos - 1]))) {
       return { snippet, startPos, endPos: cursorPosition };
     }
   }

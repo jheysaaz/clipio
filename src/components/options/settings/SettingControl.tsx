@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { Icon } from "@/components/ui/icon";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ type Status = "idle" | "saving" | "saved" | "error";
 const IMMEDIATE_CONTROLS = new Set<SettingEntry["control"]>([
   "switch",
   "select",
+  "icon-segment",
 ]);
 
 /**
@@ -206,6 +208,47 @@ function Control({
         />
       );
 
+    case "icon-segment": {
+      const options = entry.options ?? [];
+      const current = typeof value === "string" ? value : "";
+      return (
+        <div
+          role="radiogroup"
+          aria-label={i18n.t(entry.titleKey)}
+          data-testid={`${entry.testId}-segment`}
+          className="inline-flex h-8 items-center gap-0.5 rounded-lg bg-muted p-0.5"
+        >
+          {options.map((opt) => {
+            const selected = opt.value === current;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={i18n.t(opt.labelKey)}
+                title={i18n.t(opt.labelKey)}
+                data-testid={`${entry.testId}-${opt.value}`}
+                disabled={!loaded}
+                onClick={() => onChange(opt.value)}
+                className={
+                  selected
+                    ? "flex size-7 items-center justify-center rounded-md bg-background text-foreground shadow-sm"
+                    : "flex size-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+                }
+              >
+                {opt.icon ? (
+                  <Icon icon={opt.icon} size="md" />
+                ) : (
+                  i18n.t(opt.labelKey)
+                )}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
     case "select": {
       const options = entry.options ?? [];
       // Base UI's SelectValue resolves the displayed label from `items`; without
@@ -229,11 +272,22 @@ function Control({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {options.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {i18n.t(opt.labelKey)}
-              </SelectItem>
-            ))}
+            {options.map((opt) => {
+              // A font picker previews each face by rendering its own label in
+              // it. `optionFonts` is data, so this control does not need to
+              // know that a font is what it is being handed.
+              const previewFont = entry.optionFonts?.[opt.value];
+              const label = i18n.t(opt.labelKey);
+              return (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {previewFont ? (
+                    <span style={{ fontFamily: previewFont }}>{label}</span>
+                  ) : (
+                    label
+                  )}
+                </SelectItem>
+              );
+            })}
           </SelectContent>
         </Select>
       );

@@ -24,8 +24,11 @@ import {
   giphyApiKeyItem,
   storageModeItem,
   themeModeItem,
+  uiFontItem,
   type ThemeMode,
 } from "@/storage/items";
+import { UI_FONT_OPTIONS, UI_FONT_STACKS, type UiFont } from "@/lib/ui-font";
+import { MonitorIcon, MoonIcon, SunIcon, type LucideIcon } from "lucide-react";
 import { forceSetStorageMode } from "@/storage";
 import type { StorageMode } from "@/storage";
 import { TIMING } from "@/config/constants";
@@ -35,7 +38,13 @@ import { TIMING } from "@/config/constants";
 // ---------------------------------------------------------------------------
 
 export type SettingControl =
-  "switch" | "select" | "shortcut" | "slider" | "text" | "site-list";
+  | "switch"
+  | "select"
+  | "icon-segment"
+  | "shortcut"
+  | "slider"
+  | "text"
+  | "site-list";
 
 export type SectionId =
   | "library"
@@ -62,6 +71,7 @@ export type SettingTitleKey =
   | "options.setting.typingTimeout.title"
   | "options.setting.blockedSites.title"
   | "options.setting.theme.title"
+  | "options.setting.fontFamily.title"
   | "options.setting.confetti.title"
   | "options.setting.storageMode.title"
   | "options.setting.debugMode.title"
@@ -74,6 +84,7 @@ export type SettingDescKey =
   | "options.setting.typingTimeout.desc"
   | "options.setting.blockedSites.desc"
   | "options.setting.theme.desc"
+  | "options.setting.fontFamily.desc"
   | "options.setting.confetti.desc"
   | "options.setting.storageMode.desc"
   | "options.setting.debugMode.desc"
@@ -95,6 +106,9 @@ export type OptionLabelKey =
   | "options.theme.light"
   | "options.theme.dark"
   | "options.theme.system"
+  | "options.font.inter"
+  | "options.font.system"
+  | "options.font.dyslexic"
   | "options.storage.backend.sync"
   | "options.storage.backend.local";
 
@@ -144,7 +158,24 @@ export interface SettingEntry {
    */
   keywords?: readonly string[];
   /** Values offered by a `select` control. */
-  options?: readonly { value: string; labelKey: OptionLabelKey }[];
+  options?: readonly {
+    value: string;
+    labelKey: OptionLabelKey;
+    /**
+     * Icon shown by an `icon-segment` control. A lucide component reference,
+     * not a name string: the registry carries data, and resolving a name to a
+     * component here would make this module depend on the icon set.
+     */
+    icon?: LucideIcon;
+  }[];
+  /**
+   * Per-option CSS `font-family`, keyed by option value, applied to that
+   * option's label so a font picker previews each face in itself.
+   *
+   * Data rather than a boolean flag so the renderer stays generic: it does not
+   * know what a font is, it only knows "this option has a family to render in".
+   */
+  optionFonts?: Readonly<Record<string, string>>;
   /** Allowed range and step for a `slider` control. */
   range?: { min: number; max: number; step: number };
   /** Factory text for a `text` control. */
@@ -341,18 +372,56 @@ export const SETTINGS: readonly SettingEntry[] = [
     section: "appearance",
     titleKey: "options.setting.theme.title",
     descKey: "options.setting.theme.desc",
-    control: "select",
+    control: "icon-segment",
     keywords: ["dark", "light", "system", "colour", "color", "mode"],
+    // Three well-known states with universally understood glyphs, so the icons
+    // carry the meaning and the row needs no per-option label.
+    // System first, matching the default value, so the checked option starts on
+    // the left where the eye lands.
     options: [
-      { value: "light", labelKey: "options.theme.light" },
-      { value: "dark", labelKey: "options.theme.dark" },
-      { value: "system", labelKey: "options.theme.system" },
+      { value: "system", labelKey: "options.theme.system", icon: MonitorIcon },
+      { value: "light", labelKey: "options.theme.light", icon: SunIcon },
+      { value: "dark", labelKey: "options.theme.dark", icon: MoonIcon },
     ],
     useValue: () => themeModeItem.getValue(),
     setValue: (v: ThemeMode) => themeModeItem.setValue(v),
     reset: () => themeModeItem.setValue("system"),
     defaultValue: "system",
     testId: "setting-theme",
+  },
+  {
+    id: "font-family",
+    section: "appearance",
+    titleKey: "options.setting.fontFamily.title",
+    descKey: "options.setting.fontFamily.desc",
+    control: "select",
+    keywords: [
+      "font",
+      "typeface",
+      "typography",
+      "dyslexia",
+      "dyslexic",
+      "inter",
+      "system",
+      "letter",
+    ],
+    // Derived from UI_FONT_OPTIONS rather than written out, so adding an option
+    // in lib/ui-font.ts cannot leave the panel showing a stale list.
+    options: UI_FONT_OPTIONS.map((font) => ({
+      value: font,
+      labelKey: `options.font.${font}` as OptionLabelKey,
+    })),
+    // Each option's label is drawn in that option's own face, so the menu is a
+    // preview rather than a list of names. `system-ui` genuinely resolves per
+    // machine, which is the point of offering it.
+    optionFonts: Object.fromEntries(
+      UI_FONT_OPTIONS.map((font) => [font, UI_FONT_STACKS[font]])
+    ),
+    useValue: () => uiFontItem.getValue(),
+    setValue: (v: UiFont) => uiFontItem.setValue(v),
+    reset: () => uiFontItem.setValue("inter"),
+    defaultValue: "inter",
+    testId: "setting-font-family",
   },
   {
     id: "confetti",

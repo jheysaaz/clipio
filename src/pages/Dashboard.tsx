@@ -17,15 +17,12 @@ import {
   Settings,
   Clipboard,
   ArrowDownUp,
-  AlertTriangle,
-  X,
 } from "lucide-react";
 import { Icon } from "@/components/ui/icon";
 import SnippetListItem from "@/components/SnippetListItem";
 import ConfirmDialog from "@/components/ConfirmDialog";
 const SnippetDetailView = lazy(() => import("~/components/SnippetDetailView"));
 const NewSnippetView = lazy(() => import("~/components/NewSnippetView"));
-import { Alert, AlertDescription, AlertAction } from "@/components/ui/alert";
 import { InlineError } from "@/components/ui/inline-error";
 import { toast } from "sonner";
 
@@ -48,7 +45,6 @@ import {
 } from "@/storage";
 import { WarningBanner } from "@/components/ui/warning-banner";
 import {
-  dismissedUninstallWarningItem,
   syncDataLostItem,
   contextMenuDraftItem,
   latestVersionItem,
@@ -119,7 +115,7 @@ export default function Dashboard() {
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const [quotaWarning, setQuotaWarning] = useState(false);
   const [syncPausedWarning, setSyncPausedWarning] = useState(false);
-  const [showUninstallWarning, setShowUninstallWarning] = useState(false);
+
   const [recoverySnippets, setRecoverySnippets] = useState<Snippet[]>([]);
   const [showRecoveryBanner, setShowRecoveryBanner] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -135,11 +131,6 @@ export default function Dashboard() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const detailHasChanges = useRef(false);
   const [pendingSnippet, setPendingSnippet] = useState<Snippet | null>(null);
-
-  const handleDismissUninstallWarning = useCallback(() => {
-    setShowUninstallWarning(false);
-    dismissedUninstallWarningItem.setValue(true).catch(console.warn);
-  }, []);
 
   // -------------------------------------------------------------------------
   // Sidebar resize
@@ -282,11 +273,6 @@ export default function Dashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const dismissed = await dismissedUninstallWarningItem.getValue();
-        if (!dismissed) {
-          setShowUninstallWarning(true);
-        }
-
         const dataLost = await syncDataLostItem.getValue();
         if (dataLost) {
           const backup = await tryRecoverFromBackup();
@@ -805,8 +791,6 @@ export default function Dashboard() {
                 onUpdate={handleUpdateSnippet}
                 sidebarOpen={sidebarOpen}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-                uninstallWarning={showUninstallWarning}
-                onDismissUninstallWarning={handleDismissUninstallWarning}
                 onHasChanges={(v) => {
                   detailHasChanges.current = v;
                 }}
@@ -887,25 +871,6 @@ export default function Dashboard() {
                   */}
                 </div>
               </div>
-              {showUninstallWarning && (
-                <div className="p-3 border-t shrink-0">
-                  <Alert className="border-amber-200 bg-amber-50 text-amber-800 [&>svg]:text-amber-500 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:[&>svg]:text-amber-400">
-                    <Icon icon={AlertTriangle} size="lg" />
-                    <AlertDescription className="text-amber-800 dark:text-amber-300">
-                      {i18n.t("dashboard.warnings.uninstall.body")}
-                    </AlertDescription>
-                    <AlertAction>
-                      <button
-                        onClick={handleDismissUninstallWarning}
-                        className="opacity-50 hover:opacity-100 transition-opacity"
-                        aria-label={i18n.t("common.dismiss")}
-                      >
-                        <Icon icon={X} stroke="emphasis" />
-                      </button>
-                    </AlertAction>
-                  </Alert>
-                </div>
-              )}
             </>
           ) : (
             <>
@@ -938,25 +903,6 @@ export default function Dashboard() {
                   {i18n.t("dashboard.detailPlaceholder")}
                 </p>
               </div>
-              {showUninstallWarning && (
-                <div className="p-3 border-t shrink-0">
-                  <Alert className="border-amber-200 bg-amber-50 text-amber-800 [&>svg]:text-amber-500 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:[&>svg]:text-amber-400">
-                    <Icon icon={AlertTriangle} size="lg" />
-                    <AlertDescription className="text-amber-800 dark:text-amber-300">
-                      {i18n.t("dashboard.warnings.uninstall.body")}
-                    </AlertDescription>
-                    <AlertAction>
-                      <button
-                        onClick={handleDismissUninstallWarning}
-                        className="opacity-50 hover:opacity-100 transition-opacity"
-                        aria-label={i18n.t("common.dismiss")}
-                      >
-                        <Icon icon={X} stroke="emphasis" />
-                      </button>
-                    </AlertAction>
-                  </Alert>
-                </div>
-              )}
             </>
           )}
         </div>

@@ -29,7 +29,7 @@ row primitive, and real keyboard-shortcut recording.
 6. **The preview shortcut setting is decorative (bug).**
    `content.ts:1256-1268` reads only `ctrl`/`shift`/`alt` substrings out of the
    stored string and hardcodes `keyMatch = event.key === " " ||
-   event.code === "Space"`. A shortcut of `Cmd+K` **never fires**, while the UI
+event.code === "Space"`. A shortcut of `Cmd+K` **never fires**, while the UI
    hint advertises `"Use format: Ctrl+Shift+Space, Cmd+K, etc."`.
 7. **No search.** Ten preferences and six management surfaces, no findability.
 8. **No deep links.** `activeSection` is React state only; `#feedback` renders the
@@ -65,7 +65,7 @@ BEHAVIOUR
     Expansion     typing timeout, preview, prefix, shortcut
     Blocked sites per-site disable
 APPEARANCE
-    Appearance    theme, confetti
+    Appearance    theme, interface font, confetti
 SYSTEM
     Storage       backend, quota meters, danger zone
     Diagnostics   health check, debug switch, Giphy key, log
@@ -74,7 +74,7 @@ SYSTEM
 
 Within a section, `SectionContent` renders above the registry rows and
 `SectionFooter` below them. The debug log is a footer because it must appear
-*after* the switch that enables it — an empty log box above its own toggle asks
+_after_ the switch that enables it — an empty log box above its own toggle asks
 the user to interpret a panel they have not switched on yet.
 
 ## Storage display
@@ -134,13 +134,13 @@ Every setting renders through one `SettingRow` primitive:
 
 `src/lib/shortcuts.ts` owns the whole grammar:
 
-| Function | Purpose |
-| --- | --- |
-| `parseShortcut(s): ParsedShortcut \| null` | Tokenize `Mod+Shift+Space`. Returns `null` on garbage. |
-| `formatShortcut(p, platform)` | Render `⌘⇧Space` on macOS, `Ctrl+Shift+Space` elsewhere. |
-| `shortcutSegments(p, platform)` | Split a chord into per-part segments for display. |
-| `matchesShortcut(p, event)` | Compare a parsed chord to a `KeyboardEvent`. |
-| `isValidShortcut(p)` | Reject bare unmodified letters; require a non-modifier key. |
+| Function                                   | Purpose                                                     |
+| ------------------------------------------ | ----------------------------------------------------------- |
+| `parseShortcut(s): ParsedShortcut \| null` | Tokenize `Mod+Shift+Space`. Returns `null` on garbage.      |
+| `formatShortcut(p, platform)`              | Render `⌘⇧Space` on macOS, `Ctrl+Shift+Space` elsewhere.    |
+| `shortcutSegments(p, platform)`            | Split a chord into per-part segments for display.           |
+| `matchesShortcut(p, event)`                | Compare a parsed chord to a `KeyboardEvent`.                |
+| `isValidShortcut(p)`                       | Reject bare unmodified letters; require a non-modifier key. |
 
 - `Mod` means ⌘ on macOS, Ctrl elsewhere.
 - Stored form is platform-neutral (`Mod+Shift+Space`) so a sync payload is
@@ -171,9 +171,9 @@ screen reader the wrong thing about the control.
 Two `chrome.commands` entries, chosen because they are unambiguous and do not
 need the focused element:
 
-| Command | Manifest key |
-| --- | --- |
-| Open the popup | `_execute_action` |
+| Command                    | Manifest key         |
+| -------------------------- | -------------------- |
+| Open the popup             | `_execute_action`    |
 | Toggle Clipio on this site | `clipio-toggle-site` |
 
 Content-script chords (trigger preview, insert) deliberately stay in the
@@ -224,7 +224,7 @@ fails, the UI is simply wrong.
       markup remains in `src/components/options/`.
 - [x] Snippet count, sync KB, local KB and storage mode each render **once**.
 - [ ] Clear IDB, Reset all settings and storage switch each open a dialog.
-      *(deferred to the danger-zone phase)*
+      _(deferred to the danger-zone phase)_
 - [x] No hardcoded English remains in `src/components/options/` (enforced by the
       existing unused-key check plus `pnpm check:locales`).
 - [x] No critical/serious axe violation in **any** section, not just the default
@@ -267,6 +267,6 @@ fails, the UI is simply wrong.
 
 ## Change History
 
-| Date       | Change                       | Author |
-| ---------- | ---------------------------- | ------ |
-| 2026-10-01 | Initial spec (options redesign) | —  |
+| Date       | Change                          | Author |
+| ---------- | ------------------------------- | ------ |
+| 2026-10-01 | Initial spec (options redesign) | —      |

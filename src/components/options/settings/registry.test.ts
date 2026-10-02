@@ -71,6 +71,47 @@ describe("registry shape", () => {
     expect(missing.map((s) => s.id)).toEqual([]);
   });
 
+  // spec: specs/ui-font.spec.md — an icon-segment with no options renders an
+  // empty radiogroup, and one without icons renders three unlabelled buttons
+  // that only their text can distinguish.
+  it("gives every icon-segment both options and an icon per option", () => {
+    const segments = SETTINGS.filter((s) => s.control === "icon-segment");
+    expect(segments.length).toBeGreaterThan(0);
+
+    for (const entry of segments) {
+      expect(
+        entry.options?.length,
+        `${entry.id} has no options`
+      ).toBeGreaterThan(0);
+      const withoutIcon = (entry.options ?? []).filter((o) => !o.icon);
+      expect(
+        withoutIcon.map((o) => o.value),
+        `${entry.id} has options with no icon`
+      ).toEqual([]);
+    }
+  });
+
+  // spec: specs/ui-font.spec.md — optionFonts is what makes a font picker show
+  // each face in itself. An entry that declares it must cover every option, or
+  // one row would preview in its own face and the rest in the default.
+  it("gives every option a preview face where optionFonts is declared", () => {
+    const withFonts = SETTINGS.filter((s) => s.optionFonts !== undefined);
+    expect(withFonts.length).toBeGreaterThan(0);
+
+    for (const entry of withFonts) {
+      const keys = Object.keys(entry.optionFonts ?? {});
+      const values = (entry.options ?? []).map((o) => o.value);
+      expect(keys.sort(), `${entry.id} preview coverage`).toEqual(
+        [...values].sort()
+      );
+      // A preview family that is empty would silently fall back and render every
+      // label identically.
+      for (const [value, family] of Object.entries(entry.optionFonts ?? {})) {
+        expect(family.trim(), `${entry.id}.${value} is blank`).not.toBe("");
+      }
+    }
+  });
+
   it("provides a range only where the control is a slider", () => {
     const stray = SETTINGS.filter(
       (s) => s.control !== "slider" && s.range !== undefined
@@ -114,7 +155,11 @@ describe("lookups", () => {
 
   it("returns only the settings belonging to a section", () => {
     const appearance = settingsForSection("appearance");
-    expect(appearance.map((s) => s.id).sort()).toEqual(["confetti", "theme"]);
+    expect(appearance.map((s) => s.id).sort()).toEqual([
+      "confetti",
+      "font-family",
+      "theme",
+    ]);
   });
 });
 

@@ -45,6 +45,51 @@
   src: url("../fonts/JetBrainsMono-Bold.woff2") format("woff2");
 }
 
+/*
+ * OpenDyslexic — the optional dyslexia-friendly interface font.
+ *
+ * Only referenced when the user picks it (app.css swaps --font-ui). Bundling it
+ * does not download it: a `font-display: swap` face is fetched lazily, on first
+ * use, so a user on Inter never pays for these ~350 KB.
+ *
+ * Latin subset from @fontsource/opendyslexic (the 2019 OFL release). The
+ * upstream CSS declares the bold face at `font-weight: 700` even though its
+ * OS/2 table says 800; we match upstream because the browser matches on the CSS
+ * declaration, not the OS/2 value.
+ *
+ * Only 400 and 700 ship. A request for 500/600 is synthesised by interpolating
+ * between them. That is the deliberate trade: the two extra weights would cost
+ * another ~230 KB for a weight the UI uses in exactly one place (semibold
+ * labels), and OpenDyslexic's spacing is tuned so its own two weights read
+ * correctly side by side.
+ *
+ * OpenDyslexic is licensed under the SIL Open Font License; the licence ships
+ * alongside the binaries in ../fonts/OpenDyslexic-OFL.txt.
+ */
+@font-face {
+  font-family: OpenDyslexic;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/OpenDyslexic-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: OpenDyslexic;
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/OpenDyslexic-Italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: OpenDyslexic;
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/OpenDyslexic-Bold.woff2") format("woff2");
+}
+
 :root {
   font-feature-settings:
     "liga" 1,

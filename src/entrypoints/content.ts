@@ -12,7 +12,9 @@ import {
   snippetPreviewEnabledItem,
   snippetPreviewPrefixItem,
   snippetPreviewShortcutItem,
+  uiFontItem,
 } from "@/storage/items";
+import { DEFAULT_UI_FONT, type UiFont } from "@/lib/ui-font";
 import { debugLog as _debugLog } from "@/lib/debug";
 
 /**
@@ -579,6 +581,19 @@ export default defineContentScript({
       incrementTotalInsertions().catch(() => {});
     }
 
+    /**
+     * `input[type=password]` is never a snippet target.
+     *
+     * Expanding here would drop plaintext snippet content into a credential
+     * field, and — worse for the user — open the preview palette *inside* it,
+     * painting snippet labels and content next to a password. The manual QA
+     * harness (`e2e/helpers/manual-qa.html`) asserts this as its negative case.
+     * spec: specs/shortcut-boundary.spec.md
+     */
+    function isPasswordInput(target: EventTarget | null): boolean {
+      return target instanceof HTMLInputElement && target.type === "password";
+    }
+
     // ── Event handlers ───────────────────────────────────────────────
     // Document-level listeners (capture) so we see all input/keydown/focusout.
     function handleInput(event: Event) {
@@ -596,6 +611,7 @@ export default defineContentScript({
         )
       )
         return;
+      if (isPasswordInput(target)) return;
 
       if (!target.value) {
         if (typingTimer) clearTimeout(typingTimer);
@@ -736,6 +752,7 @@ export default defineContentScript({
       const isContentEditable = target.isContentEditable;
 
       if (!isInputOrTextarea && !isContentEditable) return;
+      if (isPasswordInput(target)) return;
       if (event.key !== " " && event.key !== "Tab") return;
 
       if (typingTimer) clearTimeout(typingTimer);
@@ -868,7 +885,22 @@ export default defineContentScript({
       // whole session, which is the opposite of what "hide on this site"
       // promises. spec: specs/blocked-sites.spec.md
       if (previewSettings.enabled && !isBlocked) {
-        snippetPreviewUI.init();
+        // The palette is injected into the page, where the extension's stylesheet
+        // does not apply, so it has to be told which interface font to use. Read
+        // it before init() because the @font-face for that family has to be in
+        // the shadow root's <style> the moment it is built.
+        // spec: specs/ui-font.spec.md
+        // Awaited, not floated: initialize() is already async, and the
+        // readiness marker below must not be published before the shadow root
+        // exists — show() bails silently if the container is missing, so a fast
+        // typist would see no palette at all.
+        let uiFont: UiFont = DEFAULT_UI_FONT;
+        try {
+          uiFont = await uiFontItem.getValue();
+        } catch (error) {
+          captureError(error, { action: "previewInitFont" });
+        }
+        snippetPreviewUI.init(uiFont);
         snippetPreviewUI.setEventHandlers(
           handlePreviewSnippetSelection,
           hidePreview
@@ -1034,6 +1066,7 @@ export default defineContentScript({
       startPos: number,
       endPos: number
     ) {
+      if (isPasswordInput(element)) return; // defence in depth
       const snippet = filteredSnippet.snippet;
       const beforeText = element.value.substring(0, startPos);
       const afterText = element.value.substring(endPos);
@@ -1232,6 +1265,7 @@ export default defineContentScript({
         (event) => {
           if (!isUserGesture(event)) return;
           const target = event.target as HTMLElement;
+          if (isPasswordInput(event.target)) return;
           if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
             handleInput(event);
           } else if (target.isContentEditable) {
@@ -1274,9 +1308,10 @@ export default defineContentScript({
             if (isShortcutMatch) {
               const target = event.target as HTMLElement;
               if (
-                target.tagName === "INPUT" ||
-                target.tagName === "TEXTAREA" ||
-                target.isContentEditable
+                (target.tagName === "INPUT" ||
+                  target.tagName === "TEXTAREA" ||
+                  target.isContentEditable) &&
+                !isPasswordInput(event.target)
               ) {
                 event.preventDefault();
                 const text =
@@ -1316,6 +1351,7 @@ export default defineContentScript({
           }
 
           const target = event.target as HTMLElement;
+          if (isPasswordInput(event.target)) return;
           if (
             target.tagName === "INPUT" ||
             target.tagName === "TEXTAREA" ||

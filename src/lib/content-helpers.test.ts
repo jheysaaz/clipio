@@ -10,6 +10,7 @@ import {
   formatDate,
   processSnippetContent,
   escapeHtmlAttr,
+  isShortcutBoundary,
   type ContentSnippet,
 } from "./content-helpers";
 
@@ -123,6 +124,43 @@ describe("findSnippetMatch", () => {
   it("does not match when shortcut is inside a word", () => {
     const result = findSnippetMatch("ohhi", 4, index);
     expect(result).toBeNull();
+  });
+
+  // spec: specs/shortcut-boundary.spec.md — a shortcut typed at the end of
+  // pre-filled prose is preceded by a full stop, not a space. That is the
+  // caret position every rich editor puts you in when you edit existing
+  // content, so it must still expand.
+  it.each([".", ",", ";", "!", "?", ")", "]", "…", '"', "'"])(
+    "matches after sentence punctuation %j",
+    (punct) => {
+      const text = `end of sentence${punct}hi`;
+      const result = findSnippetMatch(text, text.length, index);
+      expect(result).not.toBeNull();
+      expect(result!.startPos).toBe(text.length - 2);
+    }
+  );
+
+  // spec: specs/shortcut-boundary.spec.md — the boundary widening must not
+  // reopen the cases the original rule existed for. Every one of these is a
+  // character that occurs inside a URL, a path or a file name.
+  it.each([
+    ["https://x/hi", 13],
+    ["mailto:a/hi", 10],
+    ["src/index/hi", 12],
+    ["report-final/hi", 15],
+    ["a/hi", 4],
+  ])("still does NOT match in %j", (text, cursor) => {
+    expect(findSnippetMatch(text as string, cursor as number, index)).toBeNull();
+  });
+
+  // spec: specs/shortcut-boundary.spec.md
+  it("treats an undefined preceding character as a non-boundary", () => {
+    // Only reachable via an out-of-range index; guards the exported predicate's
+    // contract rather than the caller.
+    expect(isShortcutBoundary(undefined)).toBe(false);
+    expect(isShortcutBoundary(" ")).toBe(true);
+    expect(isShortcutBoundary(".")).toBe(true);
+    expect(isShortcutBoundary("/")).toBe(false);
   });
 
   // spec: skips shortcuts longer than cursorPosition

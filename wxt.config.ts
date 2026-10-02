@@ -67,7 +67,14 @@ export default defineConfig({
     // (Found by the e2e preview-header test — see specs/e2e-suite.spec.md.)
     web_accessible_resources: [
       {
-        resources: ["icon/16.png", "assets/InterVariable*.woff2"],
+        resources: [
+          "icon/16.png",
+          "assets/InterVariable*.woff2",
+          // Only fetched when the user picks OpenDyslexic, but without this
+          // entry the face fails to load in the page world and the palette
+          // silently falls back to the system stack.
+          "assets/OpenDyslexic*.woff2",
+        ],
         matches: ["http://*/*", "https://*/*"],
       },
     ],
