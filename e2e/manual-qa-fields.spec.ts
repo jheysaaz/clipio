@@ -175,7 +175,8 @@ test.describe("Manual QA harness — snippet expansion", () => {
         page.locator(PREVIEW),
         `${testId} must never show the snippet preview`
       ).toBeHidden();
-      await expect(field).toHaveValue(before);
+      // The typed characters stay verbatim: no expansion consumed them.
+      await expect(field).toHaveValue("/hello");
       expect(before).not.toContain("Hello, World!");
     });
   }

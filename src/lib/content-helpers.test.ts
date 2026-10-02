@@ -144,13 +144,13 @@ describe("findSnippetMatch", () => {
   // reopen the cases the original rule existed for. Every one of these is a
   // character that occurs inside a URL, a path or a file name.
   it.each([
-    ["https://x/hi", 13],
-    ["mailto:a/hi", 10],
-    ["src/index/hi", 12],
-    ["report-final/hi", 15],
-    ["a/hi", 4],
-  ])("still does NOT match in %j", (text, cursor) => {
-    expect(findSnippetMatch(text as string, cursor as number, index)).toBeNull();
+    "https://x/hi",
+    "mailto:a/hi",
+    "src/index/hi",
+    "report-final/hi",
+    "a/hi",
+  ])("still does NOT match in %j", (text) => {
+    expect(findSnippetMatch(text as string, text.length, index)).toBeNull();
   });
 
   // spec: specs/shortcut-boundary.spec.md
