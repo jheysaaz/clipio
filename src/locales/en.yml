@@ -132,84 +132,116 @@ options:
   # Options page — component copy that was previously hardcoded English.
   # spec: specs/i18n.spec.md
   copy:
-    previewHeading: Snippet Preview
-    previewDescription: Show a preview menu when typing to quickly find and select snippets
-    previewEnable: Enable Preview
-    previewEnableHint: Show snippet preview menu while typing
-    previewOn: Enabled
-    previewOff: Disabled
-    previewTriggerPrefix: Trigger Prefix
-    previewTriggerHint: Character that triggers the preview menu. Leave empty to always show preview.
-    previewShortcutHintFormat: "Use format: Ctrl+Shift+Space, Cmd+K, etc."
-    previewShortcut: Manual Trigger Shortcut
-    previewShortcutHint: Keyboard shortcut to manually show all snippets
-    typingTimeout: Typing Timeout
-    typingTimeoutReset: Reset to default
-    totalSnippets: Total snippets
-    syncStorage: Sync Storage
-    localStorage: Local Storage
-    storageMode: Storage Mode
     extensionVersion: Extension Version
     extensionVersionHint: Current installed version and available updates.
     topUsageHeading: Top 5 Usage
-    topUsageHint: The five most-used snippets by insertion count.
     topUsageEmpty: No usage data yet.
-    typingTimeoutHint: "How long Clipio waits after you stop typing before attempting to expand a snippet. Lower = faster but may expand mid-word. Default: 300 ms."
     viewRelease: View release
     upToDate: Up to date
-    simulateNotification: Simulate notification
-    resetToPending: Reset to pending
-    triggerContentScriptTest: Trigger test in content script
   # Accessible names for controls that carry no visible text. Read by screen
   # readers, so a Spanish user should hear Spanish. spec: specs/i18n.spec.md
   # Development-only controls. They render only when MODE !== "production", but
   # they are still user-visible to a developer running a Spanish build, so they
   # are translated like everything else.
-  dev:
-    testReviewPrompt: "Development – Test Review Prompt"
-    testReviewPromptHint: Simulate the full review prompt flow — fires the real browser notification and transitions state to "shown". Only visible in development.
-    testSentry: "Development – Test Sentry"
-    testSentryHint: Send test events to Sentry to verify capture in each context. Only visible in development.
-    sendTestExceptionOptions: Send test exception (options)
-    sendTestMessageOptions: Send test message (options)
   a11y:
     optionsNav: Options navigation
-    previewToggle: Enable Preview
+    optionsSidebar: Options sidebar
+    sidebarResizer: Resize sidebar
     feedbackButton: Feedback
-    typingTimeout: Typing Timeout
   nav:
     appearance: Appearance
     images: Images
-    dashboard: Dashboard
-    snippets: Snippets
-    advanced: Advanced
+    library: Library
+    expansion: Expansion
+    blockedSites: Blocked sites
+    storage: Storage
+    diagnostics: Diagnostics
+    about: About
+  groups:
+    library: Library
+    behaviour: Behaviour
+    appearance: Appearance
+    system: System
+  search:
+    placeholder: Search settings…
+    label: Search settings
+    noResults: No settings match that search.
+    resultsTitle: "$1 matching settings"
+  slider:
+    milliseconds: "$1 ms"
+  row:
+    resetToDefault: Reset to default
+    saveFailed: Could not save
+    managedInSection: Managed in its section
+  shortcut:
+    recorder: Record a keyboard shortcut
+    pressKeys: Press keys…
+    unset: Not set
+    needsModifier: "Needs a modifier: try Ctrl or ⌘."
+  setting:
+    previewEnabled:
+      title: Snippet preview
+      desc: Show a filterable menu of matching snippets as you type.
+    previewPrefix:
+      title: Trigger prefix
+      desc: The character that opens the preview menu. Leave empty to always show it.
+    previewShortcut:
+      title: Preview shortcut
+      desc: Open the full snippet list from the keyboard, without the prefix.
+    typingTimeout:
+      title: Typing timeout
+      desc: How long Clipio waits after you stop typing before expanding. Lower is faster but can fire mid-word.
+    blockedSites:
+      title: Blocked sites
+      desc: Snippet expansion is disabled on these sites. Add them from the page context menu.
+    theme:
+      title: Theme
+      desc: Follow the system setting, or pin Clipio to light or dark.
+    confetti:
+      title: Confetti on insert
+      desc: Fire a confetti burst each time a snippet is inserted.
+    storageMode:
+      title: Where snippets are stored
+      desc: Sync keeps snippets on every device through your browser account. Local is this device only, with a much higher limit.
+    debugMode:
+      title: Debug logging
+      desc: Record extension activity to an inspectable log.
+    giphyKey:
+      title: Giphy API key
+      desc: Your own key, if you hit the bundled key's rate limit.
+  storage:
+    backend:
+      sync: Sync
+      local: Local
+    syncingAcross:
+      1: "1 snippet, synced across your devices"
+      n: "$1 snippets, synced across your devices"
+    onlyHere:
+      1: "1 snippet, on this device only"
+      n: "$1 snippets, on this device only"
+    syncingHint: Your snippets follow you to every device signed in to this browser.
+    reasonQuota: Sync stopped because your snippets outgrew the sync limit.
+    reasonManual: You turned sync off.
+    nearQuota: "Only $1 left in sync storage — trim your snippets or switch to local storage."
+    roomLeft: "$1 free"
+  about:
+    version: "Version $1"
+    updateAvailable: "New version available: $1"
+    leaveReview: Leave a review
+  library:
+    exported: Snippets exported
+    exportedWithMedia: Snippets + images exported
+    uses: "$1 uses"
   theme:
     light: Light
     dark: Dark
     system: System
-  appearance:
-    description: Customize the look and feel of Clipio.
-    themeTitle: Theme
-    themeDescription: Choose between light, dark, or follow your system preference.
-    confettiTitle: Confetti on insert
-    confettiDescription: Show a confetti burst each time a snippet is inserted.
-    confettiPreviewHint: Click the button to see confetti in action.
-    confettiDisabledHint: Confetti is disabled. Toggle it on to re-enable.
-    confettiPreviewButton: Preview
   overview:
-    title: Overview
-    description: A snapshot of your Clipio library and storage usage.
     snippets: Snippets
-    snippetsMax: "of $1 max"
     syncStorage: Sync storage
-    syncTooltip: "Synced across all your devices via your browser account. Total limit: 100 KB across all snippets. Each individual snippet is capped at 8 KB."
     localStorage: Local storage estimate
-    localTooltip: "Estimated size of your snippets on this device. Local storage has a much higher limit (~5 MB) and is used as fallback when sync quota is exceeded."
-    quotaExceeded: Sync quota exceeded — snippets are stored locally only.
   generalSection:
     blockedSites:
-      title: Blocked Sites
-      description: Clipio snippet expansion is disabled on these sites. Right-click on any page → Clipio → Hide on this site to add from the browser.
       addPlaceholder: "e.g. example.com or *.slack.com"
       addButton: Add site
       empty: No sites blocked yet.
@@ -218,7 +250,6 @@ options:
       added: Site added
       errorDuplicate: This site is already blocked.
       errorInvalid: Enter a valid hostname (e.g. example.com or *.slack.com).
-      wildcardTip: "Use *.example.com to block all subdomains of a site (e.g. *.slack.com blocks app.slack.com, team.slack.com, etc.)."
   feedback:
     title: Feedback
     description: Help us improve Clipio by sharing your thoughts, suggestions, or bug reports. Your feedback is valuable!
@@ -246,8 +277,6 @@ options:
     reviewBannerAction: Rate on the Store
     reviewBannerDismiss: Dismiss
   importExport:
-    title: Import & Export
-    description: Import snippets from Clipio or another tools exports, or download a backup of your current library.
     exportCard:
       title: Export snippets
       description: Download your snippet library as a JSON file. Compatible with Clipio on any device.
@@ -268,7 +297,6 @@ options:
   errors:
     failedExport: Failed to export snippets.
   images:
-    title: Images
     description: Manage all images stored in your snippets.
     empty: No images stored yet. Images are added when you insert them into a snippet.
     loading: Loading images...
@@ -289,22 +317,7 @@ options:
     altText:
       label: Description
       placeholder: Add a description (used as alt text)
-  previewSettings:
-    enabled: Preview enabled
-    disabled: Preview disabled
-    prefixUpdated: Trigger prefix updated
-    shortcutUpdated: Keyboard shortcut updated
   developers:
-    title: Developers
-    description: Advanced settings for power users and developers.
-    experimentalWarning: This section is intended for experimental users only. Settings here are unstable and changes could break your setup or cause data loss.
-    giphyApiKey:
-      title: Giphy API Key
-      description: Override the default Giphy API key with your own. Leave empty to use the bundled key.
-      placeholder: Enter your Giphy API key
-      reset: Reset to default
-      saved: API key saved
-      resetSuccess: API key reset
     contentScriptHealth:
       title: Content Script Health
       description: Ping the active tab's content script to verify it is running.
@@ -314,33 +327,13 @@ options:
       errorNoTab: No active tab found
       errorNoContentScript: No content script found in this tab
       errorGeneric: Ping failed
-    storageMode:
-      title: Storage Mode & Quota
-      description: Current storage backend and estimated sync quota usage.
-      mode: "Active backend: $1"
-      syncUsed: "Sync used: $1 / $2 bytes"
-      switchToSync: Switch to sync
-      switchToLocal: Switch to local
-      switching: Switching...
-      switched: Switched!
-      confirmSwitchToSync: Confirm switch to sync
-      confirmSwitchToLocal: Confirm switch to local
-      switchError: Failed to switch storage backend. Please try again.
     debugMode:
-      title: Debug Mode
-      description: Logs extension activity to the console and this panel. May impact performance. For troubleshooting only.
-      toggle: Enable debug logging
+      logHeading: Recorded activity
       clearLog: Clear log
       copyLog: Copy log
       copiedLog: Copied!
       copyFailed: Failed to copy debug log
       emptyLog: No log entries yet.
-    clearIdb:
-      title: Clear IDB Backup
-      description: Wipe the IndexedDB snippets backup store. Use this to reset the local backup after a clean reinstall.
-      button: Clear backup
-      confirm: Confirm clear
-      cleared: Cleared
 
 importWizard:
   steps:

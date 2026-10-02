@@ -35,11 +35,21 @@ viewport-aware positioning, and building the tooltip's plain-text label.
 - Returns the trigger token ending at the caret when the prefix and keyboard-shortcut settings
   are satisfied, or `null`.
 
-## `calculatePreviewPosition(anchorRect, tooltipSize, viewport): PreviewPosition`
+## `calculatePreviewPosition(targetElement, cursorPos?): PreviewPosition`
 
 **Behavior:**
 
-- Places the tooltip within the viewport, flipping or clamping so it is never rendered off-screen.
+- Anchors to the caret: the caret is measured with the mirror-element technique for
+  `<input>`/`<textarea>`, and read from the live Selection for `contenteditable`.
+- Places the palette within the viewport, flipping or clamping so it is never rendered
+  off-screen.
+- With no `cursorPos`, or for an element that is neither a field nor contenteditable, falls
+  back to the element's own bounds / `{ x: 10, y: 10, maxHeight: 300 }`.
+
+> **Corrected 2026-10-02.** This signature was previously documented as
+> `calculatePreviewPosition(anchorRect, tooltipSize, viewport)` — no such function exists.
+> Full behaviour, including the caret-measurement details, is in
+> `specs/preview-anchor.spec.md`.
 
 ## `createPreviewTooltip(content): string`
 
@@ -75,4 +85,5 @@ viewport-aware positioning, and building the tooltip's plain-text label.
 | Date       | Change                                                                                | Author |
 | ---------- | ------------------------------------------------------------------------------------- | ------ |
 | 2026-09-27 | Removed the phantom `computePreviewPrivacy`; documented the four functions that exist | —      |
+| 2026-10-02 | Corrected the `calculatePreviewPosition` signature; details moved to `preview-anchor.spec.md` | — |
 | 2026-03-11 | Initial spec                                                                          | —      |

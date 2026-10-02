@@ -222,7 +222,10 @@ function mergeRanges(
 
 /**
  * Calculates optimal position for the preview popup relative to cursor or target element.
- * spec: snippet-preview.spec.md#calculatePreviewPosition
+ *
+ * `cursorPos` is the caret offset for input/textarea. Without it there is nothing to
+ * measure, and the palette falls back to the element's own bounds — which is why every
+ * caller must pass it. spec: specs/preview-anchor.spec.md
  */
 export function calculatePreviewPosition(
   targetElement: HTMLElement,
@@ -302,16 +305,20 @@ export function calculatePreviewPosition(
 
 /**
  * Gets cursor coordinates in input/textarea using mirror element technique.
+ *
+ * A hidden div reproduces the control's content box and the same text up to the
+ * caret; the position of a marker span appended after that text is the caret's
+ * position within the control.
+ *
+ * spec: specs/preview-anchor.spec.md#getCursorCoordsInInput
  */
 function getCursorCoordsInInput(
   element: HTMLInputElement | HTMLTextAreaElement,
   cursorPos: number
 ): { x: number; y: number } {
-  // Get element position
   const elementRect = element.getBoundingClientRect();
+  const value = element.value ?? "";
 
-  // For simple calculation in tests, return position based on cursor
-  // In real implementation, this would use mirror element technique
   if (typeof document === "undefined" || !document.body) {
     return {
       x: elementRect.left + cursorPos * 8, // Approximate character width
@@ -323,38 +330,66 @@ function getCursorCoordsInInput(
   const mirror = document.createElement("div");
   const style = window.getComputedStyle(element);
 
-  // Copy relevant styles
-  mirror.style.position = "absolute";
-  mirror.style.visibility = "hidden";
-  mirror.style.whiteSpace = "pre-wrap";
-  mirror.style.wordWrap = "break-word";
-  mirror.style.fontSize = style.fontSize;
-  mirror.style.fontFamily = style.fontFamily;
-  mirror.style.fontWeight = style.fontWeight;
-  mirror.style.lineHeight = style.lineHeight;
-  mirror.style.padding = style.padding;
-  mirror.style.border = style.border;
-  mirror.style.width = style.width;
+  // Copy relevant styles. Every property here changes glyph advance or line
+  // breaking, so any omission shows up as a caret that drifts off to the right
+  // or wraps on a different column than the real control.
+  const css = mirror.style;
+  css.position = "absolute";
+  css.visibility = "hidden";
+  // Laid out at the viewport origin: only the caret-minus-mirror delta is used,
+  // so the mirror's own location is irrelevant.
+  css.top = "0";
+  css.left = "0";
+  css.whiteSpace = "pre-wrap";
+  css.wordWrap = "break-word";
+  css.overflowWrap = "break-word";
+  css.boxSizing = "border-box";
+  css.fontFamily = style.fontFamily;
+  css.fontSize = style.fontSize;
+  css.fontStyle = style.fontStyle;
+  css.fontWeight = style.fontWeight;
+  css.fontVariant = style.fontVariant;
+  css.lineHeight = style.lineHeight;
+  css.letterSpacing = style.letterSpacing;
+  css.textIndent = style.textIndent;
+  css.textTransform = style.textTransform;
+  css.tabSize = style.tabSize;
+  css.padding = style.padding;
+  css.border = style.border;
+  // offsetWidth is the control's *border-box* width. Paired with
+  // `boxSizing: border-box` and the border/padding copied above, the mirror's
+  // content box comes out exactly as wide as the control's, so text wraps on
+  // the same columns. The alternatives are both wrong: the computed `width` is a
+  // content-box value and would double-count padding and border (mirror wider
+  // than the field), and `clientWidth` excludes the border, which with the
+  // border copied back would leave the mirror 2 × border too narrow.
+  css.width = `${element.offsetWidth}px`;
 
+  mirror.textContent = value.substring(0, cursorPos);
   document.body.appendChild(mirror);
 
   try {
-    // Set text up to cursor position
-    const textBeforeCursor = element.value.substring(0, cursorPos);
-    mirror.textContent = textBeforeCursor;
-
-    // Add cursor marker
+    // Add cursor marker. Zero-width: a visible glyph sitting exactly at the wrap
+    // column would itself wrap to the next line and report the caret a whole
+    // line too low.
     const cursorSpan = document.createElement("span");
-    cursorSpan.textContent = "|";
+    cursorSpan.textContent = "\u200b";
     mirror.appendChild(cursorSpan);
 
-    // Get element position
     const cursorRect = cursorSpan.getBoundingClientRect();
     const mirrorRect = mirror.getBoundingClientRect();
 
+    // The mirror laid out the *whole* value, so the caret's offset inside it has
+    // to be corrected by how far the control is scrolled.
     return {
-      x: elementRect.left + (cursorRect.left - mirrorRect.left),
-      y: elementRect.top + (cursorRect.bottom - mirrorRect.top),
+      x:
+        elementRect.left +
+        (cursorRect.left - mirrorRect.left) -
+        (element.scrollLeft || 0),
+      y:
+        elementRect.top +
+        (cursorRect.bottom - mirrorRect.top) -
+        (element.scrollTop || 0),
     };
   } finally {
     document.body.removeChild(mirror);

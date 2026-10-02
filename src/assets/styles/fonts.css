@@ -14,6 +14,37 @@
   src: url("../fonts/InterVariable-Italic.woff2") format("woff2");
 }
 
+/*
+ * JetBrains Mono for the debug log and other monospace surfaces.
+ *
+ * `--font-mono` previously named "Fira Code", which no @font-face here declares
+ * and which was not bundled — so every monospace surface silently fell back to
+ * the generic system monospace. Bundling the two weights the UI actually uses
+ * (regular body text, bold for emphasis) makes the declaration honest.
+ *
+ * JetBrains Mono is licensed under the SIL Open Font License; the licence and
+ * author list ship alongside the binaries in ../fonts/.
+ *
+ * `font-variant-ligatures: none` below: the debug log prints things like `->`,
+ * `!=` and `/*` where a programming ligature would fuse two characters and
+ * mislead about what was actually logged.
+ */
+@font-face {
+  font-family: JetBrainsMono;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/JetBrainsMono-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: JetBrainsMono;
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/JetBrainsMono-Bold.woff2") format("woff2");
+}
+
 :root {
   font-feature-settings:
     "liga" 1,
@@ -21,7 +52,13 @@
 }
 
 /*
- * Inter is loaded for heading/brand use (`--font-heading`).
- * Dense UI surfaces use the system font stack for better
- * readability on Windows at small sizes.
+ * InterVariable is now the page font (`--font-sans` / `--font-heading`).
+ *
+ * It was already downloaded here but never applied: both the Tailwind font
+ * utility and the base `*` rule named system-ui, and `--font-heading` asked for
+ * "Inter" — a family no @font-face in this file declares. So the file was
+ * fetched on every page load and discarded.
+ *
+ * `font-feature-settings` above enables standard ligatures and contextual
+ * alternates, which is where Inter earns its weight at UI sizes.
  */

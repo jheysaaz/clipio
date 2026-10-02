@@ -128,81 +128,113 @@ confirmDialog:
 options:
   # Página de opciones — texto que antes estaba en inglés fijo.
   copy:
-    previewHeading: Vista previa de fragmentos
-    previewDescription: Muestra un menú de vista previa al escribir para encontrar y seleccionar fragmentos rápidamente
-    previewEnable: Activar vista previa
-    previewEnableHint: Muestra el menú de vista previa mientras escribes
-    previewOn: Activado
-    previewOff: Desactivado
-    previewTriggerPrefix: Prefijo de activación
-    previewTriggerHint: Carácter que abre el menú de vista previa. Déjalo vacío para mostrarla siempre.
-    previewShortcutHintFormat: "Formato: Ctrl+Shift+Space, Cmd+K, etc."
-    previewShortcut: Atajo manual
-    previewShortcutHint: Atajo de teclado para mostrar todos los fragmentos manualmente
-    typingTimeout: Tiempo de espera
-    typingTimeoutReset: Restablecer al valor predeterminado
-    totalSnippets: Total de fragmentos
-    syncStorage: Almacenamiento en la nube
-    localStorage: Almacenamiento local
-    storageMode: Modo de almacenamiento
     extensionVersion: Versión de la extensión
     extensionVersionHint: Versión instalada actualmente y actualizaciones disponibles.
     topUsageHeading: Los 5 más usados
-    topUsageHint: Los cinco fragmentos más usados por número de inserciones.
     topUsageEmpty: Todavía no hay datos de uso.
-    typingTimeoutHint: "Cuánto espera Clipio tras dejar de escribir antes de intentar expandir un fragmento. Un valor menor es más rápido, pero puede expandir a mitad de palabra. Predeterminado: 300 ms."
     viewRelease: Ver la publicación
     upToDate: Actualizado
-    simulateNotification: Simular notificación
-    resetToPending: Restablecer a pendiente
-    triggerContentScriptTest: Probar en el script de contenido
   # Nombres accesibles de controles sin texto visible. Los lee un lector de
   # pantalla, así que un usuario en español debe oír español.
-  dev:
-    testReviewPrompt: "Desarrollo – Probar la solicitud de valoración"
-    testReviewPromptHint: 'Simula el flujo completo de la solicitud de valoración: dispara la notificación real del navegador y cambia el estado a "shown". Solo visible en desarrollo.'
-    testSentry: "Desarrollo – Probar Sentry"
-    testSentryHint: Envía eventos de prueba a Sentry para verificar la captura en cada contexto. Solo visible en desarrollo.
-    sendTestExceptionOptions: Enviar excepción de prueba (opciones)
-    sendTestMessageOptions: Enviar mensaje de prueba (opciones)
   a11y:
     optionsNav: Navegación de opciones
-    previewToggle: Activar vista previa
+    optionsSidebar: Barra lateral de opciones
+    sidebarResizer: Redimensionar la barra lateral
     feedbackButton: Comentarios
-    typingTimeout: Retardo antes de expandir
   nav:
     appearance: Apariencia
     images: Imágenes
-    dashboard: Panel
-    snippets: Fragmentos
-    advanced: Avanzado
+    library: Biblioteca
+    expansion: Expansión
+    blockedSites: Sitios bloqueados
+    storage: Almacenamiento
+    diagnostics: Diagnóstico
+    about: Acerca de
+  groups:
+    library: Biblioteca
+    behaviour: Comportamiento
+    appearance: Apariencia
+    system: Sistema
+  search:
+    placeholder: Buscar ajustes…
+    label: Buscar ajustes
+    noResults: Ningún ajuste coincide con esa búsqueda.
+    resultsTitle: "$1 ajustes coincidentes"
+  slider:
+    milliseconds: "$1 ms"
+  row:
+    resetToDefault: Restablecer al valor predeterminado
+    saveFailed: No se pudo guardar
+    managedInSection: Se gestiona en su sección
+  shortcut:
+    recorder: Grabar un atajo de teclado
+    pressKeys: Pulsa las teclas…
+    unset: Sin asignar
+    needsModifier: "Necesita un modificador: prueba con Ctrl o ⌘."
+  setting:
+    previewEnabled:
+      title: Vista previa de fragmentos
+      desc: Muestra un menú con los fragmentos coincidentes mientras escribes.
+    previewPrefix:
+      title: Prefijo de activación
+      desc: El carácter que abre el menú de vista previa. Déjalo vacío para mostrarlo siempre.
+    previewShortcut:
+      title: Atajo de vista previa
+      desc: Abre la lista completa de fragmentos con el teclado, sin el prefijo.
+    typingTimeout:
+      title: Tiempo de espera
+      desc: Cuánto espera Clipio tras dejar de escribir antes de expandir. Un valor menor es más rápido, pero puede activarse a mitad de palabra.
+    blockedSites:
+      title: Sitios bloqueados
+      desc: La expansión de fragmentos está desactivada en estos sitios. Añádelos desde el menú contextual de la página.
+    theme:
+      title: Tema
+      desc: Sigue el ajuste del sistema, o fija Clipio en claro u oscuro.
+    confetti:
+      title: Confeti al insertar
+      desc: Lanza una explosión de confeti cada vez que se inserta un fragmento.
+    storageMode:
+      title: Dónde se guardan los fragmentos
+      desc: La sincronización mantiene los fragmentos en todos tus dispositivos mediante tu cuenta del navegador. Local es solo en este dispositivo, con un límite mucho mayor.
+    debugMode:
+      title: Registro de depuración
+      desc: Registra la actividad de la extensión en un registro inspeccionable.
+    giphyKey:
+      title: Clave de API de Giphy
+      desc: Tu propia clave, si alcanzas el límite de la clave incluida.
+  storage:
+    backend:
+      sync: Sincronización
+      local: Local
+    syncingAcross:
+      1: "1 fragmento, sincronizado en tus dispositivos"
+      n: "$1 fragmentos, sincronizados en tus dispositivos"
+    onlyHere:
+      1: "1 fragmento, solo en este dispositivo"
+      n: "$1 fragmentos, solo en este dispositivo"
+    syncingHint: Tus fragmentos te acompañan a todos los dispositivos que inicien sesión en este navegador.
+    reasonQuota: La sincronización se detuvo porque tus fragmentos superaron el límite de sincronización.
+    reasonManual: Desactivaste la sincronización.
+    nearQuota: "Solo quedan $1 en el almacenamiento de sincronización: recorta tus fragmentos o cambia al almacenamiento local."
+    roomLeft: "$1 libres"
+  about:
+    version: "Versión $1"
+    updateAvailable: "Nueva versión disponible: $1"
+    leaveReview: Dejar una reseña
+  library:
+    exported: Fragmentos exportados
+    exportedWithMedia: Fragmentos e imágenes exportados
+    uses: "$1 usos"
   theme:
     light: Claro
     dark: Oscuro
     system: Sistema
-  appearance:
-    description: Personaliza el aspecto y la apariencia de Clipio.
-    themeTitle: Tema
-    themeDescription: Elige entre claro, oscuro o sigue las preferencias de tu sistema.
-    confettiTitle: Confeti al insertar
-    confettiDescription: Muestra una explosión de confeti cada vez que se inserta un fragmento.
-    confettiPreviewHint: Haz clic en el botón para ver el confeti en acción.
-    confettiDisabledHint: El confeti está desactivado. Actívalo de nuevo con el interruptor.
-    confettiPreviewButton: Vista previa
   overview:
-    title: Resumen
-    description: Un vistazo de tu biblioteca de Clipio y el uso de almacenamiento.
     snippets: Fragmentos
-    snippetsMax: "de $1 máx."
     syncStorage: Almacenamiento de sincronización
-    syncTooltip: "Sincronizado en todos tus dispositivos mediante tu cuenta del navegador. Límite total: 100 KB entre todos los fragmentos. Cada fragmento individual tiene un límite de 8 KB."
     localStorage: Estimación de almacenamiento local
-    localTooltip: "Tamaño estimado de tus fragmentos en este dispositivo. El almacenamiento local tiene un límite mucho mayor (~5 MB) y se usa como alternativa cuando se supera la cuota de sincronización."
-    quotaExceeded: Cuota de sincronización superada — los fragmentos se almacenan solo localmente.
   generalSection:
     blockedSites:
-      title: Sitios bloqueados
-      description: La expansión de fragmentos de Clipio está desactivada en estos sitios. Haz clic derecho en cualquier página → Clipio → Ocultar en este sitio para añadir desde el navegador.
       addPlaceholder: "Ej: ejemplo.com o *.slack.com"
       addButton: Añadir sitio
       empty: Aún no hay sitios bloqueados.
@@ -211,7 +243,6 @@ options:
       added: Sitio añadido
       errorDuplicate: Este sitio ya está bloqueado.
       errorInvalid: Introduce un dominio válido (ej. ejemplo.com o *.slack.com).
-      wildcardTip: "Usa *.ejemplo.com para bloquear todos los subdominios de un sitio (p. ej. *.slack.com bloquea app.slack.com, team.slack.com, etc.)."
   feedback:
     title: Comentarios
     description: ¡Ayúdanos a mejorar Clipio compartiendo tus opiniones, sugerencias o reportes de errores! ¡Tus comentarios son valiosos!
@@ -239,8 +270,6 @@ options:
     reviewBannerAction: Valorar en la tienda
     reviewBannerDismiss: Descartar
   importExport:
-    title: Importar y Exportar
-    description: Importa fragmentos desde exportaciones de Clipio u otras herramientas, o descarga una copia de seguridad de tu biblioteca actual.
     exportCard:
       title: Exportar fragmentos
       description: Descarga tu biblioteca de fragmentos como un archivo JSON. Compatible con Clipio en cualquier dispositivo.
@@ -249,10 +278,10 @@ options:
       title: Importar fragmentos
       description: Importa desde un archivo de exportación de Clipio u otras herramientas. Los conflictos y marcadores no compatibles se resuelven paso a paso.
       button: Importar
+      supported: "Lee"
       successMessage:
         1: "✓ 1 fragmento importado correctamente."
         n: "✓ $1 fragmentos importados correctamente."
-      supported: "Compatible:"
     modal:
       title: Importar Fragmentos
   warnings:
@@ -261,7 +290,6 @@ options:
   errors:
     failedExport: Error al exportar los fragmentos.
   images:
-    title: Imágenes
     description: Administra todas las imágenes almacenadas en tus fragmentos.
     empty: Aún no hay imágenes almacenadas. Las imágenes se añaden cuando las insertas en un fragmento.
     loading: Cargando imágenes...
@@ -282,22 +310,7 @@ options:
     altText:
       label: Descripción
       placeholder: Añade una descripción (se usa como texto alternativo)
-  previewSettings:
-    enabled: Vista previa activada
-    disabled: Vista previa desactivada
-    prefixUpdated: Prefijo de activación actualizado
-    shortcutUpdated: Atajo de teclado actualizado
   developers:
-    title: Desarrolladores
-    description: Configuraciones avanzadas para usuarios avanzados y desarrolladores.
-    experimentalWarning: Esta sección está destinada únicamente a usuarios experimentales. Los ajustes aquí son inestables y los cambios podrían romper tu configuración o causar pérdida de datos.
-    giphyApiKey:
-      title: Clave API de Giphy
-      description: Reemplaza la clave API de Giphy predeterminada con la tuya. Deja vacío para usar la clave incluida.
-      placeholder: Introduce tu clave API de Giphy
-      reset: Restablecer valor predeterminado
-      saved: Clave API guardada
-      resetSuccess: Clave API restablecida
     contentScriptHealth:
       title: Estado del script de contenido
       description: Hacer ping al script de contenido de la pestaña activa para verificar que está en ejecución.
@@ -307,33 +320,13 @@ options:
       errorNoTab: No se encontró pestaña activa
       errorNoContentScript: No se encontró script de contenido en esta pestaña
       errorGeneric: Ping fallido
-    storageMode:
-      title: Modo de almacenamiento y cuota
-      description: Backend de almacenamiento actual y uso estimado de cuota de sincronización.
-      mode: "Backend activo: $1"
-      syncUsed: "Sincronización usada: $1 / $2 bytes"
-      switchToSync: Cambiar a sincronización
-      switchToLocal: Cambiar a local
-      switching: Cambiando...
-      switched: "¡Cambiado!"
-      confirmSwitchToSync: Confirmar cambio a sincronización
-      confirmSwitchToLocal: Confirmar cambio a local
-      switchError: Error al cambiar el backend de almacenamiento. Por favor, inténtalo de nuevo.
     debugMode:
-      title: Modo depuración
-      description: Registra la actividad de la extensión en la consola y este panel. Puede afectar el rendimiento. Solo para diagnóstico.
-      toggle: Activar registro de depuración
+      logHeading: Actividad registrada
       clearLog: Borrar registro
       copyLog: Copiar registro
       copiedLog: "¡Copiado!"
       copyFailed: Error al copiar el registro de depuración
       emptyLog: Aún no hay entradas en el registro.
-    clearIdb:
-      title: Limpiar copia de seguridad IDB
-      description: Eliminar el almacén de copia de seguridad de fragmentos de IndexedDB. Úsalo para restablecer la copia de seguridad local tras una reinstalación limpia.
-      button: Limpiar copia de seguridad
-      confirm: Confirmar limpieza
-      cleared: Limpiado
 
 importWizard:
   steps:

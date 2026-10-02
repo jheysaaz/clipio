@@ -338,7 +338,9 @@ test.describe("Image / GIF feature tests", () => {
     });
     await seedSnippets(context, extensionId, [snippet]);
 
-    // Open the options page and navigate to Images by clicking the nav item.
+    // Open the options page and navigate to Images, its own section in the options
+    // redesign (it was folded into Library, then split back out — the media list
+    // has its own storage meter and per-row actions).
     //
     // This used to load `options.html#images` and assume the hash routed there.
     // It does not: the page came up on the Dashboard, so the only "image" on
@@ -353,6 +355,11 @@ test.describe("Image / GIF feature tests", () => {
       "aria-current",
       "page"
     );
+    // The media list itself must render, or the assertions below would read an
+    // empty page.
+    await expect(optionsPage.getByTestId(`image-row-${mediaId}`)).toBeVisible({
+      timeout: 10_000,
+    });
 
     // Assert on THIS image's row, by its stable testid.
     //

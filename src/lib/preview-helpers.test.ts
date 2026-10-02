@@ -1,9 +1,11 @@
 /**
  * Tests for src/lib/preview-helpers.ts
  * spec: specs/snippet-preview.spec.md
+ * spec: specs/preview-anchor.spec.md
+ * spec: specs/preview-helpers.spec.md
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   fuzzyMatchSnippets,
   calculatePreviewPosition,
@@ -62,6 +64,110 @@ const mockElement = {
   selectionStart: 0,
   isContentEditable: false,
 } as unknown as HTMLInputElement;
+
+// ---------------------------------------------------------------------------
+// Caret-measurement stubs
+// ---------------------------------------------------------------------------
+
+type Rect = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+const rect = (left: number, top: number, width: number, height: number): DOMRect =>
+  ({
+    left,
+    top,
+    width,
+    height,
+    right: left + width,
+    bottom: top + height,
+    x: left,
+    y: top,
+    toJSON: () => ({}),
+  }) as DOMRect;
+
+/**
+ * The caret is measured by laying the text up to the cursor in a hidden mirror
+ * and reading a marker span inside it. happy-dom performs no layout, so the
+ * three rects involved are stubbed here:
+ *
+ *   - the control keeps `control`;
+ *   - the mirror is laid out at the viewport origin (0,0);
+ *   - the marker span sits `caret.x` / `caret.y` px inside that mirror.
+ *
+ * That makes the helper's output fully determined without a layout engine, while
+ * still running the real measurement code — no branch is skipped.
+ *
+ * The mirror element is captured in `captured.mirror` so a test can assert on
+ * the styles it was given. happy-dom's `getComputedStyle` returns empty strings
+ * for everything, so `stubControlStyle` is what makes those assertions
+ * meaningful: without it the mirror would be built from "" and any assertion
+ * about it would pass no matter what the code copied.
+ */
+type Captured = {
+  mirror: HTMLElement | null;
+  markerText: string | null;
+};
+
+let captured: Captured = { mirror: null, markerText: null };
+
+let disposeRects: () => void = () => {};
+
+const stubRects = (
+  control: Rect,
+  caret: { x: number; y: number; height: number }
+) => {
+  captured = { mirror: null, markerText: null };
+  const spy = vi
+    .spyOn(Element.prototype, "getBoundingClientRect")
+    .mockImplementation(function (this: Element) {
+      if (
+        this instanceof HTMLInputElement ||
+        this instanceof HTMLTextAreaElement
+      ) {
+        return rect(control.left, control.top, control.width, control.height);
+      }
+      if (this.tagName === "SPAN") {
+        captured.markerText = this.textContent;
+        return rect(caret.x, caret.y, 0, caret.height);
+      }
+      captured.mirror = this as HTMLElement; // the mirror div
+      return rect(0, 0, 0, 0); // laid out at the origin
+    });
+  return () => spy.mockRestore();
+};
+
+/**
+ * happy-dom reports every computed style as "", so the mirror would be built
+ * from empty strings and assertions about it would be decorative. Returning a
+ * distinctive set of real values makes "did the code copy this?" observable.
+ */
+const CONTROL_STYLE = {
+  fontFamily: "Inter",
+  fontSize: "13px",
+  fontStyle: "normal",
+  fontWeight: "400",
+  fontVariant: "normal",
+  lineHeight: "20px",
+  letterSpacing: "0.5px",
+  textIndent: "0px",
+  textTransform: "none",
+  tabSize: "4",
+  padding: "6px",
+  border: "1px solid rgb(0, 0, 0)",
+} as unknown as CSSStyleDeclaration;
+
+let disposeStyle: () => void = () => {};
+
+const stubControlStyle = () => {
+  const spy = vi
+    .spyOn(window, "getComputedStyle")
+    .mockReturnValue(CONTROL_STYLE);
+  return () => spy.mockRestore();
+};
 
 // ---------------------------------------------------------------------------
 // fuzzyMatchSnippets tests
@@ -161,67 +267,203 @@ describe("calculatePreviewPosition", () => {
     (mockElement.getBoundingClientRect as any).mockClear();
   });
 
-  // spec: positions below cursor when space available (minimum 200px)
-  it("positions preview below cursor when space available", () => {
-    // In test environment, use a mock that avoids DOM issues
-    const inputElement = {
-      getBoundingClientRect: () => ({
-        left: 100,
-        top: 200,
-        bottom: 220,
-        right: 300,
-        width: 200,
-        height: 20,
-      }),
-      value: "test value here",
-      selectionStart: 5,
-    };
+  afterEach(() => {
+    disposeRects();
+    disposeStyle();
+    // Safety net: this block spies on Element.prototype, which every other
+    // suite in the shared happy-dom environment also lays out. If a future test
+    // stubs twice without disposing, this still un-installs the spy.
+    vi.restoreAllMocks();
+    disposeRects = () => {};
+    disposeStyle = () => {};
+    document.body.innerHTML = "";
+  });
 
-    // Add the instanceof check manually since we can't mock it properly in tests
-    Object.defineProperty(inputElement, Symbol.toStringTag, {
-      value: "HTMLInputElement",
-    });
-    Object.setPrototypeOf(inputElement, HTMLInputElement.prototype);
+  // spec: a real input with a caret offset is anchored to the caret, not to
+  // the element's bottom edge.
+  it("anchors to the caret rather than the element bottom for a real input", () => {
+    const input = document.createElement("input");
+    input.value = "/hel";
+    document.body.appendChild(input);
 
-    const result = calculatePreviewPosition(
-      inputElement as unknown as HTMLElement,
-      5
-    );
+    const elRect = rect(100, 200, 400, 260);
+    // A one-line marker: its bottom sits on the caret's baseline.
+    const caret = { x: 18, y: 9, height: 14 };
+    disposeRects = stubRects(elRect, caret);
 
-    // The test environment returns fallback position, let's adjust expectation
-    // In a real browser, this would work correctly
-    expect(result).toEqual({ x: 10, y: 10, maxHeight: 300 });
+    const result = calculatePreviewPosition(input, 4);
+
+    // caret top-left = element top-left + (caret − mirror) inside the mirror.
+    expect(result.x).toBe(elRect.left + caret.x);
+    expect(result.y).toBe(elRect.top + caret.y + caret.height + 5);
+
+    // The regression this pins: the palette must not be pinned to the field's
+    // bottom edge, which is what a lost cursorPos produced.
+    expect(result.y).toBeLessThan(elRect.bottom);
+  });
+
+  // spec: a scrolled textarea reports the caret at its *visible* line.
+  it("offsets the caret by scrollTop and scrollLeft of a scrolled field", () => {
+    const textarea = document.createElement("textarea");
+    textarea.value = "first line\n/second line\nthird";
+    textarea.scrollTop = 40;
+    textarea.scrollLeft = 7;
+    document.body.appendChild(textarea);
+
+    const elRect = rect(100, 200, 400, 260);
+    disposeRects = stubRects(elRect, { x: 30, y: 20, height: 14 });
+
+    const result = calculatePreviewPosition(textarea, 19);
+
+    expect(result.x).toBe(elRect.left + 30 - 7);
+    expect(result.y).toBe(elRect.top + 20 + 14 - 40 + 5);
+  });
+
+  // spec: preview-anchor — the mirror reproduces the control's metrics, so a
+  // caret measured in the mirror lands in the same place as in the real field.
+  it("reproduces the control's text metrics and box on the mirror", () => {
+    const textarea = document.createElement("textarea");
+    textarea.value = "/hel";
+    document.body.appendChild(textarea);
+    Object.defineProperty(textarea, "offsetWidth", { value: 321 });
+
+    const elRect = rect(100, 200, 400, 260);
+    disposeRects = stubRects(elRect, { x: 24, y: 16, height: 14 });
+    disposeStyle = stubControlStyle();
+
+    calculatePreviewPosition(textarea, 4);
+
+    const mirror = captured.mirror;
+    expect(mirror).not.toBeNull();
+    const css = mirror!.style;
+
+    // Metrics that change glyph advance or line breaking. A missing one makes
+    // the mirror wrap on different columns than the control.
+    for (const prop of [
+      "fontFamily",
+      "fontSize",
+      "fontStyle",
+      "fontWeight",
+      "fontVariant",
+      "lineHeight",
+      "letterSpacing",
+      "textIndent",
+      "textTransform",
+      "tabSize",
+      "padding",
+      "border",
+    ] as const) {
+      expect(`${prop}=${css[prop]}`).toBe(`${prop}=${CONTROL_STYLE[prop]}`);
+    }
+
+    // border-box + the control's border-box width makes the mirror's *content*
+    // box the same width as the control's, so wrapping columns line up.
+    expect(css.boxSizing).toBe("border-box");
+    expect(css.width).toBe("321px");
+
+    // The mirror's own setup. `white-space: pre-wrap` is what makes the mirror
+    // wrap exactly like a textarea; `pre` would never wrap and report a caret
+    // on the first line for text that is on its third.
+    expect(css.whiteSpace).toBe("pre-wrap");
+    expect(css.wordWrap).toBe("break-word");
+    expect(css.overflowWrap).toBe("break-word");
+
+    // Hidden and out of flow, pinned to the viewport origin so it never depends
+    // on — or perturbs — the page's own layout.
+    expect(css.position).toBe("absolute");
+    expect(css.visibility).toBe("hidden");
+    expect(css.top).toBe("0px");
+    expect(css.left).toBe("0px");
+  });
+
+  // spec: preview-anchor — the mirror holds only the text up to the caret, and
+  // the caret itself is marked by a zero-width character. A visible "|" glyph
+  // has a non-zero advance and would wrap at the wrap column, reporting the
+  // caret a whole line too low; laying out the whole value would make the
+  // measurement depend on text the user has not typed yet.
+  it("lays out only the text up to the caret, marked zero-width", () => {
+    const textarea = document.createElement("textarea");
+    textarea.value = "/hel and more text that is past the caret";
+    document.body.appendChild(textarea);
+
+    const elRect = rect(100, 200, 400, 260);
+    disposeRects = stubRects(elRect, { x: 24, y: 16, height: 14 });
+    disposeStyle = stubControlStyle();
+
+    calculatePreviewPosition(textarea, 4);
+
+    expect(captured.mirror?.textContent).toBe("/hel\u200b");
+    expect(captured.markerText).toBe("\u200b");
+  });
+
+  // spec: element-bounds fallback still applies when no caret offset is given.
+  it("falls back to element bounds when cursorPos is omitted", () => {
+    const input = document.createElement("input");
+    input.value = "/hel";
+    document.body.appendChild(input);
+
+    const elRect = rect(100, 200, 400, 260);
+    disposeRects = stubRects(elRect, { x: 18, y: 9, height: 14 });
+
+    const result = calculatePreviewPosition(input);
+
+    expect(result.x).toBe(elRect.left);
+    expect(result.y).toBe(elRect.bottom + 5);
   });
 
   // spec: positions above cursor when insufficient space below
+  //
+  // Uses a real <textarea> on purpose. The previous version of this test passed
+  // a plain object literal, which is neither an input nor contenteditable, so
+  // calculatePreviewPosition returned its safe fallback and the mocked rect was
+  // never read — the "flip above" branch was never executed.
   it("positions preview above cursor when insufficient space below", () => {
-    (mockElement.getBoundingClientRect as any).mockReturnValue({
-      left: 100,
-      top: 700,
-      bottom: 720,
-      right: 300,
-      width: 200,
-      height: 20,
-    });
+    const textarea = document.createElement("textarea");
+    textarea.value = "/hel";
+    document.body.appendChild(textarea);
 
-    const result = calculatePreviewPosition(mockElement as HTMLElement, 5);
-    expect(result.y).toBeLessThan(700); // Above element
+    // Caret at y=660 in an 800px viewport: 140px below, 660px above.
+    disposeRects = stubRects(rect(100, 620, 400, 120), {
+      x: 18,
+      y: 40,
+      height: 14,
+    });
+    disposeStyle = stubControlStyle();
+
+    const result = calculatePreviewPosition(textarea, 4);
+
+    const caretY = 620 + 40 + 14; // 674
+    // Flipped: sits above the caret, sized to the space above it.
+    expect(result.maxHeight).toBe(caretY - 25);
+    expect(result.y).toBe(caretY - (caretY - 25) - 5);
+    expect(result.y).toBeLessThan(caretY);
   });
 
   // spec: clamps horizontal position to viewport bounds (with 10px margin)
   it("clamps horizontal position to viewport bounds", () => {
-    (mockElement.getBoundingClientRect as any).mockReturnValue({
-      left: 1150, // Near right edge
-      top: 200,
-      bottom: 220,
-      right: 1170,
-      width: 20,
-      height: 20,
-    });
+    const textarea = document.createElement("textarea");
+    textarea.value = "/hel";
+    document.body.appendChild(textarea);
 
-    const result = calculatePreviewPosition(mockElement as HTMLElement, 5);
-    expect(result.x).toBeLessThan(1150); // Should be clamped left
-    expect(result.x).toBeGreaterThanOrEqual(10); // Respects left margin
+    disposeStyle = stubControlStyle();
+
+    // Near the right edge in a 1200px viewport: clamped to viewport − 320 − 10.
+    disposeRects = stubRects(rect(100, 200, 400, 260), {
+      x: 1150,
+      y: 9,
+      height: 14,
+    });
+    expect(calculatePreviewPosition(textarea, 4).x).toBe(890);
+
+    // Left of the viewport: clamped to the 10px margin, not a negative offset.
+    // caret.x is relative to the field, so −200 puts the caret 100px off-screen.
+    disposeRects();
+    disposeRects = stubRects(rect(100, 200, 400, 260), {
+      x: -200,
+      y: 9,
+      height: 14,
+    });
+    expect(calculatePreviewPosition(textarea, 4).x).toBe(10);
   });
 
   // spec: returns safe fallback for invalid elements

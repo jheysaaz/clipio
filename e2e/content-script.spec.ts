@@ -471,6 +471,43 @@ test.describe("Snippet Preview Feature", () => {
     // Here we assert only what the host mirrors: open, with 2 rows.
   });
 
+  // spec: specs/preview-anchor.spec.md — the palette anchors to the caret, not
+  // to the field's bottom edge. Regression: showPreview() dropped cursorPos, so
+  // calculatePreviewPosition fell back to { x: rect.left, y: rect.bottom } and
+  // the palette rendered under the whole field.
+  test("anchors the palette to the caret, not to the field bottom", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    const textarea = testPage.locator('[data-testid="textarea-field"]');
+    // A tall field makes the difference unambiguous: the caret is on line 1,
+    // the fallback anchor is ~10 rows further down.
+    await textarea.evaluate((el: HTMLTextAreaElement) => {
+      el.rows = 10;
+    });
+    await textarea.click();
+    await testPage.keyboard.type("/", { delay: 30 });
+
+    const host = testPage.locator("#clipio-snippet-preview-host");
+    await expect(host).toHaveAttribute("data-preview-visible", "true", {
+      timeout: 5_000,
+    });
+
+    const palette = await host.boundingBox();
+    const field = await textarea.boundingBox();
+    expect(palette).not.toBeNull();
+    expect(field).not.toBeNull();
+
+    // Just below the caret on the first line.
+    expect(palette!.y).toBeGreaterThan(field!.y);
+    expect(palette!.y).toBeLessThan(field!.y + 60);
+
+    // And nowhere near the bottom edge the fallback used.
+    expect(palette!.y).toBeLessThan(field!.y + field!.height - 60);
+  });
+
   test("filters snippets by query when typing after prefix", async ({
     testPage,
     storageHelper,

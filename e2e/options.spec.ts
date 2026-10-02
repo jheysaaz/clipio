@@ -58,7 +58,9 @@ async function seedSnippets(
 // ---------------------------------------------------------------------------
 
 test.describe("Options Page", () => {
-  test("loads with sidebar navigation sections", async ({ optionsPage }) => {
+  test("loads with grouped sidebar navigation sections", async ({
+    optionsPage,
+  }) => {
     await waitForOptionsReady(optionsPage);
 
     // The sidebar renders a navigation landmark with section buttons.
@@ -68,16 +70,229 @@ test.describe("Options Page", () => {
     // it only resolves while the browser is running English.
     const nav = optionsPage.getByTestId("options-nav");
     await expect(nav).toBeVisible();
-    expect(await nav.getByRole("button").count()).toBeGreaterThanOrEqual(1);
+
+    // All seven sections of the redesigned taxonomy are reachable.
+    for (const id of [
+      "library",
+      "expansion",
+      "blocked-sites",
+      "appearance",
+      "storage",
+      "diagnostics",
+      "about",
+    ]) {
+      await expect(optionsPage.getByTestId(`options-nav-${id}`)).toBeVisible();
+    }
 
     // Behavior: selecting a section marks it current (aria-current="page")
     // and clears the previously active section.
-    const dashboardNav = optionsPage.getByTestId("options-nav-dashboard");
-    const snippetsNav = optionsPage.getByTestId("options-nav-snippets");
-    await expect(dashboardNav).toHaveAttribute("aria-current", "page");
-    await snippetsNav.click();
-    await expect(snippetsNav).toHaveAttribute("aria-current", "page");
-    await expect(dashboardNav).not.toHaveAttribute("aria-current", "page");
+    const libraryNav = optionsPage.getByTestId("options-nav-library");
+    const expansionNav = optionsPage.getByTestId("options-nav-expansion");
+    await expect(libraryNav).toHaveAttribute("aria-current", "page");
+    await expansionNav.click();
+    await expect(expansionNav).toHaveAttribute("aria-current", "page");
+    await expect(libraryNav).not.toHaveAttribute("aria-current", "page");
+  });
+
+  test("a hash deep link opens its section on a cold load", async ({
+    context,
+    extensionId,
+  }) => {
+    // The previous page ignored the hash entirely and always booted to the
+    // dashboard, so `#appearance` silently showed the wrong section.
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html#appearance`);
+    await page.waitForSelector('[data-testid="options-search"]', {
+      timeout: 15_000,
+    });
+
+    await expect(page.getByTestId("options-nav-appearance")).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    // The Appearance section's own rows must be what rendered, proving the
+    // hash selected the section rather than just highlighting the nav item.
+    await expect(page.getByTestId("setting-theme")).toBeVisible();
+
+    await page.close();
+  });
+
+  test("search filters settings and toggles one in place", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+
+    // Typing filters the registry and renders each match as a live row, so a
+    // preference can be changed without navigating to its section.
+    await optionsPage.getByTestId("options-search").fill("confetti");
+    const row = optionsPage.getByTestId("confetti-toggle");
+    await expect(row).toBeVisible({ timeout: 5_000 });
+
+    const toggle = optionsPage.getByTestId("confetti-toggle-switch");
+    const initial = (await toggle.getAttribute("aria-checked")) === "true";
+    await toggle.click();
+
+    await expect
+      .poll(() => toggle.getAttribute("aria-checked"), {
+        message: "search-result switch never flipped",
+      })
+      .toBe(String(!initial));
+
+    await expect
+      .poll(
+        () =>
+          optionsPage.evaluate(async () => {
+            const ext =
+              (globalThis as any).chrome ?? (globalThis as any).browser;
+            const r = await ext.storage.local.get("confettiEnabled");
+            return String(r.confettiEnabled);
+          }),
+        { message: "confettiEnabled never matched the search-result switch" }
+      )
+      .toBe(String(!initial));
+  });
+
+  test("search reports no matches rather than listing everything", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+    await optionsPage
+      .getByTestId("options-search")
+      .fill("zzzzqqq-no-such-setting");
+    // Negative: an unmatched query must show the empty state, not fall back to
+    // the full registry.
+    await expect(optionsPage.getByTestId("options-search-empty-page")).toBeVisible(
+      { timeout: 5_000 }
+    );
+    await expect(optionsPage.getByTestId("confetti-toggle")).toHaveCount(0);
+  });
+
+  test("records a keyboard shortcut from a real chord", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+    await optionsPage.getByTestId("options-nav-expansion").click();
+
+    const recorder = optionsPage.getByTestId(
+      "setting-preview-shortcut-recorder"
+    );
+    await expect(recorder).toBeVisible({ timeout: 5_000 });
+
+    // A bare letter with no modifier is refused, with feedback.
+    await recorder.click();
+    await optionsPage.keyboard.press("k");
+    await expect(
+      optionsPage.getByTestId("setting-preview-shortcut-recorder-error")
+    ).toBeVisible();
+
+    // A real chord is captured and persisted.
+    await optionsPage.keyboard.press("Meta+Shift+K");
+    await expect
+      .poll(
+        () =>
+          optionsPage.evaluate(async () => {
+            const ext =
+              (globalThis as any).chrome ?? (globalThis as any).browser;
+            const r = await ext.storage.local.get("snippetPreviewShortcut");
+            return r.snippetPreviewShortcut as string;
+          }),
+        { message: "the captured chord was never persisted" }
+      )
+      .toBe("Mod+Shift+K");
+  });
+
+  test("the sidebar is resizable and persists its width", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+
+    const sidebar = optionsPage.getByRole("complementary");
+    const resizer = optionsPage.getByTestId("sidebar-resizer");
+    await expect(resizer).toBeVisible();
+
+    // Announced as a separator with a range, so the width is not pointer-only.
+    await expect(resizer).toHaveAttribute("aria-valuenow", /\d+/);
+
+    const initialWidth = (await sidebar.boundingBox())!.width;
+
+    // The handle straddles the rail's right edge. Drag it right by 120px.
+    const box = (await resizer.boundingBox())!;
+    const startX = box.x + box.width / 2;
+    await optionsPage.mouse.move(startX, box.y + box.height / 2);
+    await optionsPage.mouse.down();
+    await optionsPage.mouse.move(startX + 120, box.y + box.height / 2, {
+      steps: 10,
+    });
+    await optionsPage.mouse.up();
+
+    await expect
+      .poll(async () => (await sidebar.boundingBox())!.width, {
+        message: "sidebar width never changed after the drag",
+      })
+      .toBeGreaterThan(initialWidth);
+
+    const afterDrag = (await sidebar.boundingBox())!.width;
+
+    // Arrow keys resize too, so the width is not pointer-only.
+    await resizer.focus();
+    await resizer.press("ArrowLeft");
+    await expect
+      .poll(async () => (await sidebar.boundingBox())!.width, {
+        message: "ArrowLeft did not narrow the sidebar",
+      })
+      .toBeLessThan(afterDrag);
+
+    const afterArrow = (await sidebar.boundingBox())!.width;
+
+    // It survives a reload.
+    await optionsPage.reload();
+    await waitForOptionsReady(optionsPage);
+    await expect
+      .poll(
+        async () => {
+          const b = await optionsPage
+            .getByRole("complementary")
+            .boundingBox();
+          return Math.abs(b!.width - afterArrow) < 2;
+        },
+        { message: "sidebar width did not survive a reload" }
+      )
+      .toBe(true);
+  });
+
+  test("About offers donate and a Chromium-only store review", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+    await optionsPage.getByTestId("options-nav-about").click();
+
+    // Donate is available everywhere.
+    const donate = optionsPage.getByTestId("about-donate");
+    await expect(donate).toBeVisible({ timeout: 5_000 });
+
+    // The store review points at the Chrome Web Store, which does not exist on
+    // Firefox. The suite runs on Chromium, so it must be present here.
+    const review = optionsPage.getByTestId("about-review");
+    await expect(review).toBeVisible({ timeout: 5_000 });
+
+    // Both open a new tab rather than navigating the options page away.
+    const newTab = optionsPage.context().waitForEvent("page", {
+      timeout: 5_000,
+    });
+    await donate.click();
+    expect((await newTab).url()).toContain("github.com/sponsors");
+  });
+
+  test("Images section does not repeat its own heading", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+    await optionsPage.getByTestId("options-nav-images").click();
+
+    // The page renders the section title from the registry; the media list must
+    // not add a second "Images" heading directly beneath it.
+    const headings = optionsPage.getByRole("heading", { name: "Images" });
+    await expect(headings).toHaveCount(1, { timeout: 5_000 });
   });
 
   test("displays storage statistics", async ({ optionsPage }) => {
@@ -90,23 +305,25 @@ test.describe("Options Page", () => {
     await optionsPage.reload();
     await waitForOptionsReady(optionsPage);
 
-    // Assert the rendered figures. The previous version read `body` text and
-    // checked it was truthy, which passed with the whole statistics panel
-    // replaced by an early `return null`.
+    // Library stats (snippet count, top usage) live in Library; the quota
+    // meters live in Storage. Assert the rendered figures — the previous
+    // version read `body` text and checked it was truthy, which passed with
+    // the whole panel replaced by an early `return null`.
+    await expect(optionsPage.getByTestId("card-top-usage")).toBeVisible();
+
+    await optionsPage.getByTestId("options-nav-storage").click();
     const syncStat = optionsPage.getByTestId("stat-sync-kb");
-    await expect(syncStat).toBeVisible();
-    // `<used> / <quota> KB` — the em-dash is the loading placeholder.
-    await expect(syncStat).toHaveText(/^\d+(\.\d)? \/ \d+ KB$/);
+    await expect(syncStat).toBeVisible({ timeout: 5_000 });
+    // `<used> / <quota>` in KB or MB. Format-agnostic on purpose: the panel
+    // drops a trailing `.0`, so `100 KB` and `0.5 KB` are both valid.
+    await expect(syncStat).toHaveText(
+      /^\d+(\.\d)? (KB|MB) \/ \d+(\.\d)? (KB|MB)$/
+    );
 
     const localStat = optionsPage.getByTestId("stat-local-kb");
     await expect(localStat).toBeVisible();
-    // `~<estimate> KB`
-    await expect(localStat).toHaveText(/^~\d+(\.\d)? KB$/);
-
-    // Five seeded snippets must show in the top-usage card's own count, so the
-    // numbers are not just formatted correctly but sourced from real data.
-    const topUsage = optionsPage.getByTestId("card-top-usage");
-    await expect(topUsage).toBeVisible();
+    // `<estimate>` in KB or MB, optionally tilde-prefixed (an estimate).
+    await expect(localStat).toHaveText(/^~?\d+(\.\d)? (KB|MB)$/);
   });
 
   test("exports snippets to JSON file", async ({ optionsPage }) => {
@@ -120,7 +337,7 @@ test.describe("Options Page", () => {
     await waitForOptionsReady(optionsPage);
 
     // Import/export lives in the Snippets section — navigate via stable testid
-    await optionsPage.getByTestId("options-nav-snippets").click();
+    await optionsPage.getByTestId("options-nav-library").click();
     const exportButton = optionsPage.getByTestId("export-json");
     await expect(exportButton).toBeVisible({ timeout: 5_000 });
 
@@ -172,7 +389,7 @@ test.describe("Options Page", () => {
     const jsonContent = JSON.stringify(importData);
 
     // Open the import wizard from the Snippets section via stable testid
-    await optionsPage.getByTestId("options-nav-snippets").click();
+    await optionsPage.getByTestId("options-nav-library").click();
     const importOpen = optionsPage.getByTestId("import-open");
     await expect(importOpen).toBeVisible({ timeout: 5_000 });
     await importOpen.click();
@@ -276,7 +493,7 @@ test.describe("Options Page", () => {
     });
 
     // Open the import wizard from the Snippets section via stable testid
-    await optionsPage.getByTestId("options-nav-snippets").click();
+    await optionsPage.getByTestId("options-nav-library").click();
     const importOpen = optionsPage.getByTestId("import-open");
     await expect(importOpen).toBeVisible({ timeout: 5_000 });
     await importOpen.click();
@@ -339,7 +556,7 @@ test.describe("Options Page", () => {
     });
 
     // Open the import wizard from the Snippets section via stable testid
-    await optionsPage.getByTestId("options-nav-snippets").click();
+    await optionsPage.getByTestId("options-nav-library").click();
     const importOpen = optionsPage.getByTestId("import-open");
     await expect(importOpen).toBeVisible({ timeout: 5_000 });
     await importOpen.click();
@@ -393,12 +610,11 @@ test.describe("Options Page", () => {
     // Navigate to appearance via stable testid
     await optionsPage.getByTestId("options-nav-appearance").click();
 
-    // Find theme toggle buttons by stable testid
-    const darkButton = optionsPage.getByTestId("theme-dark");
-    await expect(darkButton).toBeVisible({ timeout: 5_000 });
-    await darkButton.click();
+    // The three-button picker is now a select row.
+    const select = optionsPage.getByTestId("setting-theme-select");
+    await expect(select).toBeVisible({ timeout: 5_000 });
 
-    // Poll the persisted value: the click handler writes asynchronously, so a
+    // Poll the persisted value: the change handler writes asynchronously, so a
     // one-shot read can land before the write and report the old theme.
     const readTheme = () =>
       optionsPage.evaluate(async () => {
@@ -406,19 +622,30 @@ test.describe("Options Page", () => {
         const result = await ext.storage.local.get("themeMode");
         return result.themeMode;
       });
+
+    await select.click();
+    await optionsPage.getByRole("option", { name: "Dark" }).click();
     await expect
       .poll(readTheme, { message: "theme never persisted as dark" })
       .toBe("dark");
 
-    const lightButton = optionsPage.getByTestId("theme-light");
-    await expect(lightButton).toBeVisible();
-    await lightButton.click();
+    // The change must reach the document, not just storage: ThemeContext owns
+    // the `dark` class on <html>, and writing the item alone left the page
+    // visually unchanged.
+    await expect(optionsPage.locator("html")).toHaveClass(/\bdark\b/);
+
+    await select.click();
+    await optionsPage.getByRole("option", { name: "Light" }).click();
     await expect
       .poll(readTheme, { message: "theme never persisted as light" })
       .toBe("light");
+    await expect(optionsPage.locator("html")).not.toHaveClass(/\bdark\b/);
 
-    const body = optionsPage.locator("body");
-    await expect(body).toBeVisible();
+    await select.click();
+    await optionsPage.getByRole("option", { name: "System" }).click();
+    await expect
+      .poll(readTheme, { message: "theme never persisted as system" })
+      .toBe("system");
   });
 
   test("toggles confetti setting", async ({ optionsPage }) => {
@@ -427,20 +654,21 @@ test.describe("Options Page", () => {
     // Navigate to appearance via stable testid
     await optionsPage.getByTestId("options-nav-appearance").click();
 
-    const confettiToggle = optionsPage.getByTestId("confetti-toggle");
+    const confettiToggle = optionsPage.getByTestId("confetti-toggle-switch");
     await expect(confettiToggle).toBeVisible({ timeout: 5_000 });
 
-    const initialAria = await confettiToggle.getAttribute("aria-checked");
+    const initialChecked =
+      (await confettiToggle.getAttribute("aria-checked")) === "true";
     await confettiToggle.click();
 
-    // Behavior: switch role flips aria-checked
+    // Behavior: the switch's checked state flips.
     await expect
       .poll(() => confettiToggle.getAttribute("aria-checked"), {
-        message: "aria-checked never flipped",
+        message: "switch state never flipped",
       })
-      .not.toBe(initialAria);
+      .toBe(String(!initialChecked));
 
-    const newAria = await confettiToggle.getAttribute("aria-checked");
+    const newChecked = await confettiToggle.getAttribute("aria-checked");
 
     // The persisted value must track the control, not merely be a boolean.
     await expect
@@ -454,7 +682,7 @@ test.describe("Options Page", () => {
           }),
         { message: "confettiEnabled never matched the toggle" }
       )
-      .toBe(newAria);
+      .toBe(newChecked);
   });
 
   test("hash-based navigation to feedback section", async ({
@@ -465,16 +693,15 @@ test.describe("Options Page", () => {
     await page.goto(`chrome-extension://${extensionId}/options.html#feedback`);
     await page.waitForLoadState("domcontentloaded");
 
-    // Assert the section actually rendered. The previous version slept 500 ms
-    // and then checked `body` was visible and non-empty, which is true for an
-    // options page that fell back to any other section — or none.
-    // The sidebar's NAV_ITEMS are dashboard/snippets/appearance/images/advanced
-    // — there is no `feedback` entry, so `options-nav-feedback` does not exist.
-    // Feedback is reached from the header button, and the deep link still has to
-    // land on a rendered options shell rather than a blank page.
-    await expect(page.getByTestId("options-nav-dashboard")).toBeVisible({
+    // `feedback` is not a section id, so the shell must fall back to the default
+    // section rather than rendering nothing. Assert the nav and the feedback
+    // affordance are both present — the previous version slept 500 ms and then
+    // checked `body` was visible, which is true for any shell that rendered.
+    await expect(page.getByTestId("options-nav-library")).toBeVisible({
       timeout: 10_000,
     });
+    // Feedback moved into the About section after the redesign.
+    await page.getByTestId("options-nav-about").click();
     await expect(page.getByRole("button", { name: "Feedback" })).toBeVisible({
       timeout: 10_000,
     });
@@ -494,7 +721,8 @@ test.describe("Options Page", () => {
       route.fulfill({ status: 200, body: "{}" });
     });
 
-    // Feedback opens from the header button (aria-label="Feedback")
+    // Feedback opens from the About section (aria-label="Feedback")
+    await optionsPage.getByTestId("options-nav-about").click();
     const feedbackNav = optionsPage.getByRole("button", { name: "Feedback" });
     await expect(feedbackNav).toBeVisible({ timeout: 5_000 });
     await feedbackNav.click();
@@ -541,47 +769,46 @@ test.describe("Options Page", () => {
 // Developers Section
 // ---------------------------------------------------------------------------
 
-test.describe("Developers Section", () => {
-  async function navigateToDevelopers(page: import("@playwright/test").Page) {
+test.describe("Diagnostics Section", () => {
+  async function navigateToDiagnostics(page: import("@playwright/test").Page) {
     await waitForOptionsReady(page);
-    // Sidebar item id is "advanced"; the section it opens is titled
-    // "Developers". Selector is keyed to behavior (testid), not copy.
-    await page.getByTestId("options-nav-advanced").click();
+    // Selector is keyed to behavior (testid), not copy. The section is
+    // "diagnostics" in the redesigned taxonomy — previously "advanced".
+    await page.getByTestId("options-nav-diagnostics").click();
     // Fail loudly if the section never renders — never silently no-op.
     await expect(page.getByTestId("card-content-script-health")).toBeVisible({
       timeout: 5_000,
     });
   }
 
-  test("renders all five developer cards (Dashboard + Developers section)", async ({
+  test("renders the health panel, debug toggle and storage panels", async ({
     optionsPage,
   }) => {
     await waitForOptionsReady(optionsPage);
 
-    // Extension Version and Top 5 Usage render on the Dashboard overview
-    // (relocated out of the Developers section — see specs/e2e-suite.spec.md).
-    await expect(
-      optionsPage.getByTestId("card-extension-version")
-    ).toBeVisible();
+    // Version info and top usage live in Library and About after the redesign.
     await expect(optionsPage.getByTestId("card-top-usage")).toBeVisible();
 
-    // Content Script Health, Storage Mode & Quota and Clear IDB Backup
-    // render in the Developers section.
-    await navigateToDevelopers(optionsPage);
+    await navigateToDiagnostics(optionsPage);
     await expect(
       optionsPage.getByTestId("card-content-script-health")
     ).toBeVisible();
+    // The debug toggle is a registry row here, and the Giphy key is a text row.
+    await expect(optionsPage.getByTestId("setting-debug-mode")).toBeVisible();
+    await expect(optionsPage.getByTestId("setting-giphy-key")).toBeVisible();
+
+    // Storage is its own section and owns the quota meters.
+    await optionsPage.getByTestId("options-nav-storage").click();
+    await expect(optionsPage.getByTestId("panel-storage")).toBeVisible();
     await expect(optionsPage.getByTestId("card-storage-mode")).toBeVisible();
-    await expect(optionsPage.getByTestId("card-clear-idb")).toBeVisible();
   });
 
-  test("shows current version in version card", async ({ optionsPage }) => {
+  test("shows current version in the About section", async ({ optionsPage }) => {
     await waitForOptionsReady(optionsPage);
 
-    // The version card lives on the Dashboard (default section) and must
-    // display the real manifest version.
+    await optionsPage.getByTestId("options-nav-about").click();
     const card = optionsPage.getByTestId("card-extension-version");
-    await expect(card).toBeVisible();
+    await expect(card).toBeVisible({ timeout: 5_000 });
     const manifestVersion = await optionsPage.evaluate(() => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       return ext.runtime.getManifest().version as string;
@@ -595,8 +822,9 @@ test.describe("Developers Section", () => {
     await waitForOptionsReady(optionsPage);
     // Fresh context — no latestVersion seeded. The card must show its
     // up-to-date state and must not offer the update action.
+    await optionsPage.getByTestId("options-nav-about").click();
     const card = optionsPage.getByTestId("card-extension-version");
-    await expect(card).toBeVisible();
+    await expect(card).toBeVisible({ timeout: 5_000 });
     await expect(card.getByTestId("version-up-to-date")).toBeVisible();
     await expect(card.getByTestId("version-update-available")).toHaveCount(0);
   });
@@ -699,7 +927,7 @@ test.describe("Developers Section", () => {
   test("ping button sends message and shows result", async ({
     optionsPage,
   }) => {
-    await navigateToDevelopers(optionsPage);
+    await navigateToDiagnostics(optionsPage);
 
     const pingButton = optionsPage
       .getByTestId("card-content-script-health")
@@ -717,12 +945,12 @@ test.describe("Developers Section", () => {
     );
   });
 
-  test("storage mode card reflects the active backend after a mode switch", async ({
+  test("storage backend select persists a real mode switch", async ({
     optionsPage,
   }) => {
-    await navigateToDevelopers(optionsPage);
+    await waitForOptionsReady(optionsPage);
+    await optionsPage.getByTestId("options-nav-storage").click();
 
-    const backendEl = optionsPage.getByTestId("storage-active-backend");
     const readStoredMode = () =>
       optionsPage.evaluate(async () => {
         const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
@@ -730,33 +958,41 @@ test.describe("Developers Section", () => {
         return (result.storageMode as "sync" | "local") ?? "sync";
       });
 
-    // The card must display the backend that storage reports as active.
+    const select = optionsPage.getByTestId("card-storage-mode-select");
+    await expect(select).toBeVisible({ timeout: 5_000 });
+
+    // Drive a real switch both directions and assert storage follows. The
+    // select is the control now; the old two-button + inline-confirm pair is
+    // replaced by a dialog in the danger zone (Phase 4).
     const initial = await readStoredMode();
-    await expect(backendEl).toContainText(initial);
-
-    // Drive a real switch and assert the card follows the new backend.
     const target = initial === "sync" ? "local" : "sync";
-    await optionsPage.getByTestId(`storage-switch-${target}`).click();
-    await optionsPage.getByTestId("storage-switch-confirm").click();
-    await expect(backendEl).toContainText(target);
-    expect(await readStoredMode()).toBe(target);
 
-    // Restore the original mode — verifies the card tracks both directions.
-    await optionsPage.getByTestId(`storage-switch-${initial}`).click();
-    await optionsPage.getByTestId("storage-switch-confirm").click();
-    await expect(backendEl).toContainText(initial);
-    expect(await readStoredMode()).toBe(initial);
+    await select.click();
+    await optionsPage.getByRole("option", { name: new RegExp(target, "i") }).click();
+    await expect
+      .poll(readStoredMode, { message: "storageMode never persisted" })
+      .toBe(target);
+
+    // Restore, proving the row tracks both directions.
+    await select.click();
+    await optionsPage
+      .getByRole("option", { name: new RegExp(initial, "i") })
+      .click();
+    await expect
+      .poll(readStoredMode, { message: "storageMode never restored" })
+      .toBe(initial);
   });
 
   test("top-5 usage card shows empty state when no usage data exists", async ({
     optionsPage,
   }) => {
     await waitForOptionsReady(optionsPage);
-    // Top 5 Usage lives on the Dashboard (default section); fresh context
-    // has no usage counts, so the empty state must be shown.
+    // Top 5 Usage lives in Library; a fresh context has no usage counts, so the
+    // empty state must be shown.
+    await optionsPage.getByTestId("options-nav-library").click();
     const card = optionsPage.getByTestId("card-top-usage");
-    await expect(card).toBeVisible();
-    await expect(card.getByTestId("top-usage-empty")).toBeVisible();
+    await expect(card).toBeVisible({ timeout: 5_000 });
+    await expect(optionsPage.getByTestId("top-usage-empty")).toBeVisible();
   });
 
   test("top-5 usage card shows snippet labels when usage data exists", async ({
@@ -791,41 +1027,20 @@ test.describe("Developers Section", () => {
     await expect(card.getByTestId("top-usage-empty")).toHaveCount(0);
   });
 
-  test("clear IDB backup requires two-step confirmation", async ({
-    optionsPage,
-  }) => {
-    await navigateToDevelopers(optionsPage);
-
-    const card = optionsPage.getByTestId("card-clear-idb");
-    const clearButton = optionsPage.getByTestId("clear-idb-clear");
-    await expect(clearButton).toBeVisible();
-
-    // First click: reveals the confirm step.
-    await clearButton.click();
-    const confirmButton = optionsPage.getByTestId("clear-idb-confirm");
-    await expect(confirmButton).toBeVisible();
-
-    // Second click: performs the wipe and resets the card to its idle state.
-    await confirmButton.click();
-    await expect(clearButton).toBeVisible({ timeout: 5_000 });
-    await expect(confirmButton).toHaveCount(0);
-    await expect(card).toBeVisible();
-  });
-
   // ── Typing Timeout slider ──────────────────────────────────────────────
 
   test("typing timeout slider renders with default value", async ({
     optionsPage,
   }) => {
     await waitForOptionsReady(optionsPage);
-    // The Typing Timeout card lives in the Snippets section.
-    await optionsPage.getByTestId("options-nav-snippets").click();
-    const card = optionsPage.getByTestId("card-typing-timeout");
-    await expect(card).toBeVisible({ timeout: 5_000 });
+    // The Typing Timeout row lives in the Expansion section.
+    await optionsPage.getByTestId("options-nav-expansion").click();
+    const row = optionsPage.getByTestId("card-typing-timeout");
+    await expect(row).toBeVisible({ timeout: 5_000 });
 
-    // Slider is identified by its accessible role/name, scoped to the card.
+    // Slider is identified by its accessible role/name, scoped to the row.
     // Fresh profile → default TIMING.TYPING_TIMEOUT (300 ms).
-    const slider = card.getByRole("slider", { name: "Typing Timeout" });
+    const slider = row.getByRole("slider", { name: "Typing Timeout" });
     await expect(slider).toBeVisible();
     await expect(slider).toHaveValue("300");
   });
@@ -834,11 +1049,11 @@ test.describe("Developers Section", () => {
     optionsPage,
   }) => {
     await waitForOptionsReady(optionsPage);
-    await optionsPage.getByTestId("options-nav-snippets").click();
-    const card = optionsPage.getByTestId("card-typing-timeout");
-    await expect(card).toBeVisible({ timeout: 5_000 });
+    await optionsPage.getByTestId("options-nav-expansion").click();
+    const row = optionsPage.getByTestId("card-typing-timeout");
+    await expect(row).toBeVisible({ timeout: 5_000 });
 
-    const slider = card.getByRole("slider", { name: "Typing Timeout" });
+    const slider = row.getByRole("slider", { name: "Typing Timeout" });
     await expect(slider).toHaveValue("300");
 
     // Drive the slider with real arrow-key input (step=50): 300 → 600.
@@ -847,10 +1062,9 @@ test.describe("Developers Section", () => {
     }
     await expect(slider).toHaveValue("600");
 
-    // The slider is debounced, so poll the stored value rather than sleeping
-    // past the debounce plus a guessed buffer. Asserting the exact value, not
-    // merely "not the old one": an earlier version of this poll used
-    // `not.toBe(300)`, which a missing key satisfies trivially.
+    // Poll the stored value rather than sleeping past the write. Asserting the
+    // exact value, not merely "not the old one": an earlier version of this
+    // poll used `not.toBe(300)`, which a missing key satisfies trivially.
     // (WXT stores "local:typingTimeout" as the bare key "typingTimeout".)
     await expect
       .poll(
@@ -872,27 +1086,25 @@ test.describe("Developers Section", () => {
     optionsPage,
   }) => {
     await waitForOptionsReady(optionsPage);
-    await navigateToDevelopers(optionsPage);
+    await navigateToDiagnostics(optionsPage);
 
-    // The sr-only checkbox is hidden behind a decorative overlay div.
-    // Click the parent <label> which properly toggles the checkbox.
-    const toggle = optionsPage.locator(
-      'input[type="checkbox"][aria-label="Enable debug logging"]'
-    );
-    const toggleLabel = toggle.locator("xpath=ancestor::label");
+    // Every boolean now renders through the shared Switch primitive, so the
+    // old sr-only-checkbox-behind-a-div markup is gone.
+    const toggle = optionsPage.getByTestId("setting-debug-mode-switch");
     // Asserted, not guarded. `if (!visible) return;` skipped the entire body of
     // the test, so a missing toggle produced a green run.
-    await expect(toggleLabel).toBeVisible();
+    await expect(toggle).toBeVisible({ timeout: 5_000 });
 
-    const initialChecked = await toggle.isChecked();
-    await toggleLabel.click();
+    const initialChecked =
+      (await toggle.getAttribute("aria-checked")) === "true";
+    await toggle.click();
 
-    // The checkbox state should have flipped
+    // Behavior: the switch's checked state flips.
     await expect
-      .poll(() => toggle.isChecked(), {
-        message: "checkbox state never flipped",
+      .poll(() => toggle.getAttribute("aria-checked"), {
+        message: "switch state never flipped",
       })
-      .toBe(!initialChecked);
+      .toBe(String(!initialChecked));
 
     // Storage should reflect the new value
     const stored = await optionsPage.evaluate(async () => {
@@ -903,45 +1115,29 @@ test.describe("Developers Section", () => {
     expect(stored).toBe(!initialChecked);
   });
 
-  // ── Force storage switch ───────────────────────────────────────────────
+  // ── Storage backend control ────────────────────────────────────────────
 
-  test("storage mode switch buttons appear in Developers section", async ({
+  test("storage backend select offers exactly the two backends", async ({
     optionsPage,
   }) => {
-    await navigateToDevelopers(optionsPage);
+    await waitForOptionsReady(optionsPage);
+    await optionsPage.getByTestId("options-nav-storage").click();
 
-    // The Storage Mode card must offer exactly one switch target — the
-    // backend that is NOT currently active.
-    await expect(optionsPage.getByTestId("card-storage-mode")).toBeVisible();
-    const switchLocalBtn = optionsPage.getByTestId("storage-switch-local");
-    const switchSyncBtn = optionsPage.getByTestId("storage-switch-sync");
-    const visibleSwitches = [
-      await switchLocalBtn.isVisible(),
-      await switchSyncBtn.isVisible(),
-    ];
-    expect(visibleSwitches.filter(Boolean)).toHaveLength(1);
-  });
+    const select = optionsPage.getByTestId("card-storage-mode-select");
+    await expect(select).toBeVisible({ timeout: 5_000 });
 
-  test("cancel on clear IDB backup hides confirm step", async ({
-    optionsPage,
-  }) => {
-    await navigateToDevelopers(optionsPage);
+    await select.click();
+    // Exactly two backends are offered, and the currently-active one is the
+    // one the trigger displays.
+    const options_ = optionsPage.getByRole("option");
+    await expect(options_).toHaveCount(2);
 
-    const card = optionsPage.getByTestId("card-clear-idb");
-    const clearButton = optionsPage.getByTestId("clear-idb-clear");
-    await expect(clearButton).toBeVisible();
-    await clearButton.click();
-
-    const confirmButton = optionsPage.getByTestId("clear-idb-confirm");
-    await expect(confirmButton).toBeVisible();
-
-    const cancelButton = card.getByRole("button", { name: "Cancel" });
-    await expect(cancelButton).toBeVisible();
-    await cancelButton.click();
-
-    // Card returns to its idle state: clear button back, confirm step gone.
-    await expect(clearButton).toBeVisible();
-    await expect(confirmButton).toHaveCount(0);
+    const storedMode = await optionsPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      const r = await ext.storage.local.get("storageMode");
+      return (r.storageMode as "sync" | "local") ?? "sync";
+    });
+    await expect(select).toContainText(new RegExp(storedMode, "i"));
   });
 });
 
@@ -1255,20 +1451,89 @@ test.describe("Review Prompt Banner", () => {
   }) => {
     // spec: specs/e2e-suite.spec.md
     // @axe-core/playwright v4 exposes the AxeBuilder class — the old
-    // injectAxe/checkA11y free functions do not exist. Scan the hydrated
-    // page; fail on critical/serious violations without suppression, and
-    // attach the full axe output to the report either way.
+    // injectAxe/checkA11y free functions do not exist.
+    //
+    // Scans EVERY section, not just the default one. A single scan missed a
+    // 4.39:1 keycap on the Expansion section's shortcut recorder that the
+    // library page never rendered.
+    await optionsPage.setViewportSize({ width: 1280, height: 820 });
+
+    const sections = [
+      "library",
+      "images",
+      "expansion",
+      "blocked-sites",
+      "appearance",
+      "storage",
+      "diagnostics",
+      "about",
+    ];
+
+    const base = optionsPage.url().split("#")[0];
+    const findings: Record<string, string[]> = {};
+
+    for (const section of sections) {
+      await optionsPage.goto(`${base}#${section}`);
+      await optionsPage.waitForSelector('[data-testid="options-search"]', {
+        timeout: 15_000,
+      });
+      // Let each section's async panels settle so controls are present to scan.
+      await optionsPage.waitForTimeout(600);
+
+      const results = await new AxeBuilder({ page: optionsPage })
+        .include("body")
+        .analyze();
+      await test.info().attach(`axe-${section}`, {
+        body: JSON.stringify(results, null, 2),
+        contentType: "application/json",
+      });
+
+      const serious = results.violations.filter(
+        (v) => v.impact === "critical" || v.impact === "serious"
+      );
+      if (serious.length > 0) {
+        findings[section] = serious.map(
+          (v) =>
+            `${v.id} (${v.impact}) x${v.nodes.length} — ${v.nodes[0]?.target?.join(" ")}`
+        );
+      }
+    }
+
+    expect(findings).toEqual({});
+  });
+
+  test("search results are reachable from the keyboard", async ({
+    optionsPage,
+  }) => {
     await waitForOptionsReady(optionsPage);
-    const results = await new AxeBuilder({ page: optionsPage })
-      .include("body")
-      .analyze();
-    await test.info().attach("axe-results", {
-      body: JSON.stringify(results, null, 2),
-      contentType: "application/json",
+
+    // Typing filters, then ArrowDown must move focus into the results so the
+    // flow needs no pointer.
+    await optionsPage.getByTestId("options-search").fill("confetti");
+    await expect(optionsPage.getByTestId("confetti-toggle")).toBeVisible({
+      timeout: 5_000,
     });
-    const critical = results.violations.filter((v) =>
-      ["critical", "serious"].includes(v.impact ?? "")
+
+    await optionsPage.getByTestId("options-search").press("ArrowDown");
+    await expect(optionsPage.getByTestId("option-setting-confetti")).toBeFocused();
+  });
+
+  test("the search field and sidebar labels are announced", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+
+    // The rail is an `aside` and the list inside it is a `nav`; both need
+    // labels or a screen reader announces two unlabelled landmarks.
+    const sidebar = optionsPage.getByRole("complementary");
+    await expect(sidebar).toBeVisible();
+    await expect(
+      optionsPage.getByRole("navigation", { name: /options navigation/i })
+    ).toBeVisible();
+
+    // The search field's placeholder is not its accessible name.
+    await expect(optionsPage.getByRole("searchbox")).toHaveAccessibleName(
+      /search settings/i
     );
-    expect(critical).toEqual([]);
   });
 });

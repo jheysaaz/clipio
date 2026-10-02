@@ -15,12 +15,29 @@ function Switch({
   checked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
 }) {
+  /*
+   * The on/off appearance is derived from the `checked` prop in JS rather than
+   * from a `data-[checked]:` CSS variant.
+   *
+   * Base UI emits a bare `data-checked` attribute, so the Radic-style
+   * `data-[state=checked]:` this component originally used never matched at
+   * all — the switch was permanently drawn in its "off" colours while
+   * `aria-checked` said otherwise. Correcting that to `data-[checked]:` still
+   * did not paint: the generated rule
+   * (`.data-\[checked\]\:bg-primary[data-checked]`) matched the live element
+   * yet the computed background stayed `var(--input)`.
+   *
+   * Deriving the classes from the prop removes the dependency on variant
+   * generation entirely, and is verifiable in a unit test without a browser.
+   */
   return (
     <SwitchPrimitive.Root
       data-slot="switch"
       className={cn(
-        "group relative inline-flex shrink-0 items-center h-5 w-9 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-        "bg-input data-[state=checked]:bg-foreground",
+        "group relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        "disabled:cursor-not-allowed disabled:opacity-50",
+        checked ? "bg-primary" : "bg-input",
         className
       )}
       checked={checked}
@@ -32,8 +49,8 @@ function Switch({
         data-slot="switch-thumb"
         className={cn(
           "pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg",
-          "translate-x-0 data-[state=checked]:translate-x-4",
-          "transition-transform duration-200"
+          "transition-transform duration-200",
+          checked ? "translate-x-4" : "translate-x-0"
         )}
       />
     </SwitchPrimitive.Root>

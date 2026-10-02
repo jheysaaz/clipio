@@ -182,16 +182,16 @@ export function ImagesSection() {
     : null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
+      {/*
+        No heading here. The page already renders the section title from the
+        registry, so this component's own <h2>Images</h2> put the same word on
+        screen twice — once as the page heading, once directly beneath it.
+      */}
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground mb-1">
-            {i18n.t("options.images.title")}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {i18n.t("options.images.description")}
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          {i18n.t("options.images.description")}
+        </p>
         {!loading && items.length > 0 && (
           <div className="flex shrink-0 items-center gap-0.5 rounded-lg border bg-muted/50 p-0.5">
             <button

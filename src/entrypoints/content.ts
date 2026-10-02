@@ -886,7 +886,7 @@ export default defineContentScript({
     function showPreview(
       element: HTMLElement,
       filteredSnippets: FilteredSnippet[],
-      _query: string
+      cursorPos: number
     ): void {
       debugLog("preview:show", {
         snippetCount: filteredSnippets.length,
@@ -896,7 +896,11 @@ export default defineContentScript({
         return;
       }
 
-      const position = calculatePreviewPosition(element);
+      // cursorPos must be forwarded: without it calculatePreviewPosition has no
+      // caret to measure and falls back to the element's bottom-right corner, so
+      // the palette rendered under the whole field instead of at the caret.
+      // spec: specs/preview-anchor.spec.md
+      const position = calculatePreviewPosition(element, cursorPos);
       snippetPreviewUI.show(position, filteredSnippets);
     }
 
@@ -968,7 +972,7 @@ export default defineContentScript({
 
       // Store current state for snippet insertion
       lastTriggerState = { text, cursorPos, element };
-      showPreview(element, filteredSnippets, query);
+      showPreview(element, filteredSnippets, cursorPos);
     }
 
     function handlePreviewSnippetSelection(selectedSnippet: FilteredSnippet) {
@@ -1302,7 +1306,7 @@ export default defineContentScript({
                     element: target,
                     manual: true,
                   };
-                  showPreview(target, allSnippets, "");
+                  showPreview(target, allSnippets, cursorPos);
                 } else {
                   hidePreview();
                 }

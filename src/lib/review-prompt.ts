@@ -129,6 +129,21 @@ export async function snoozeReviewPrompt(hours: number): Promise<void> {
  *
  * spec: review-prompt.spec.md#store-url-resolution
  */
+/**
+ * Whether this is a Chromium-based browser.
+ *
+ * Chrome and Edge both expose a Chrome Web Store listing; Firefox does not, so
+ * the "leave a review" action is hidden there rather than sending the user to a
+ * store page that does not exist.
+ *
+ * Exported separately from `getStoreReviewUrl`, which still needs a Firefox
+ * branch for the AMO listing used by the review prompt.
+ */
+export function isChromiumBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return !/Firefox|FxiOS|EdgiOS/i.test(navigator.userAgent);
+}
+
 export function getStoreReviewUrl(): string {
   try {
     if (

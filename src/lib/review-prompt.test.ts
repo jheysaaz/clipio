@@ -9,6 +9,7 @@ import {
   setReviewPromptState,
   snoozeReviewPrompt,
   getStoreReviewUrl,
+  isChromiumBrowser,
 } from "./review-prompt";
 
 // ---------------------------------------------------------------------------
@@ -403,6 +404,58 @@ describe("snoozeReviewPrompt", () => {
 });
 
 // ---------------------------------------------------------------------------
+// isChromiumBrowser
+// spec: specs/options-redesign.spec.md — gates the About "leave a review"
+// action, which points at the Chrome Web Store and does not exist on Firefox.
+// ---------------------------------------------------------------------------
+
+describe("isChromiumBrowser", () => {
+  const originalUserAgent = navigator.userAgent;
+
+  afterEach(() => {
+    Object.defineProperty(navigator, "userAgent", {
+      value: originalUserAgent,
+      configurable: true,
+    });
+  });
+
+  const setUserAgent = (value: string) =>
+    Object.defineProperty(navigator, "userAgent", {
+      value,
+      configurable: true,
+    });
+
+  it("is true on desktop Chrome", () => {
+    setUserAgent(
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+    );
+    expect(isChromiumBrowser()).toBe(true);
+  });
+
+  it("is true on Edge", () => {
+    setUserAgent(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
+    );
+    expect(isChromiumBrowser()).toBe(true);
+  });
+
+  // Negative: Firefox installs from AMO, so the store listing is the wrong
+  // destination. The action is hidden rather than shown and broken.
+  it("is false on Firefox", () => {
+    setUserAgent(
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:120.0) Gecko/20100101 Firefox/120.0"
+    );
+    expect(isChromiumBrowser()).toBe(false);
+  });
+
+  it("is false on Firefox for iOS, whose UA also contains Safari", () => {
+    setUserAgent(
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 FxiOS/120.0 Mobile/15E148 Safari/605.1.15"
+    );
+    expect(isChromiumBrowser()).toBe(false);
+  });
+});
+
 // getStoreReviewUrl
 // spec: review-prompt.spec.md#store-url-resolution
 // ---------------------------------------------------------------------------
