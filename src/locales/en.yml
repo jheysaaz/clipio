@@ -37,8 +37,6 @@ dashboard:
   draftShortcut: /...
   addSnippet: Add Snippet
   settingsAndExport: Settings & Import/Export
-  createSnippetButton: Create snippet
-  openSettings: Open settings
   emptyState:
     heading: No snippets yet
     body: Create your first snippet to start saving and reusing text quickly.

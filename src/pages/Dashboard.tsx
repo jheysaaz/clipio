@@ -649,8 +649,22 @@ export default function Dashboard() {
               ) : filteredSnippets.length === 0 ? (
                 <div
                   data-testid="empty-state"
-                  className="flex flex-col items-center justify-center py-6 gap-3 px-3"
+                  className="flex flex-col items-center justify-center py-6 gap-1 px-3"
                 >
+                  {/*
+                    Message only, no buttons.
+
+                    This pane used to offer "Create snippet" and "Import" while
+                    the footer directly below offered "Add Snippet" and a
+                    settings icon that reaches the same import screen, all at
+                    once, beside a second full copy of the hero in the detail
+                    pane. Four controls for two actions.
+
+                    The actions now live in exactly one place — the detail pane's
+                    empty state, which is also what stays visible when the
+                    sidebar is collapsed. The footer is untouched: it is the
+                    persistent control bar, not part of the empty state.
+                  */}
                   <p className="text-xs text-muted-foreground text-center">
                     {searchQuery
                       ? i18n.t("dashboard.noSnippetsFound")
@@ -660,32 +674,6 @@ export default function Dashboard() {
                     <p className="text-xs text-muted-foreground text-center">
                       {i18n.t("dashboard.tryDifferentSearch")}
                     </p>
-                  ) : snippets.length === 0 ? (
-                    <div className="flex flex-col gap-2 w-full max-w-44">
-                      <Button
-                        size="sm"
-                        className="w-full h-7 text-xs gap-1.5"
-                        onClick={handleAddSnippet}
-                      >
-                        <Icon icon={Plus} size="sm" />
-                        {i18n.t("dashboard.createSnippetButton")}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full h-7 text-xs gap-1.5"
-                        onClick={() =>
-                          browser.tabs.create({
-                            url:
-                              browser.runtime.getURL("/options.html") +
-                              "#import-export",
-                          })
-                        }
-                      >
-                        <Icon icon={ArrowDownUp} size="sm" />
-                        {i18n.t("dashboard.importButton")}
-                      </Button>
-                    </div>
                   ) : null}
                 </div>
               ) : (
@@ -758,6 +746,7 @@ export default function Dashboard() {
               {i18n.t("dashboard.addSnippet")}
             </Button>
             <Button
+              data-testid="settings-button"
               variant="outline"
               size="icon"
               onClick={() => browser.runtime.openOptionsPage()}
@@ -866,13 +855,15 @@ export default function Dashboard() {
                 </p>
                 <div className="flex flex-col gap-2 w-full max-w-44">
                   <Button
+                    data-testid="empty-create"
                     onClick={handleAddSnippet}
                     className="h-8 text-xs w-full"
                   >
-                    <Icon icon={Plus} className="mr-1.5" />
+                    <Icon icon={Plus} size="sm" className="mr-1.5" />
                     {i18n.t("dashboard.emptyState.action")}
                   </Button>
                   <Button
+                    data-testid="empty-import"
                     variant="outline"
                     size="sm"
                     className="w-full h-7 text-xs gap-1.5"
@@ -887,14 +878,13 @@ export default function Dashboard() {
                     <Icon icon={ArrowDownUp} size="sm" />
                     {i18n.t("dashboard.importButton")}
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full h-7 text-xs text-muted-foreground"
-                    onClick={() => browser.runtime.openOptionsPage()}
-                  >
-                    {i18n.t("dashboard.openSettings")}
-                  </Button>
+                  {/*
+                    No "Open settings" button here. The sidebar footer already
+                    carries a settings icon labelled "Settings & Import/Export",
+                    one click away and present in every state, so a third route
+                    to the same page was pure duplication — and it forced an e2e
+                    test to disambiguate by exact accessible name.
+                  */}
                 </div>
               </div>
               {showUninstallWarning && (

@@ -408,12 +408,11 @@ test.describe("Popup (Dashboard)", () => {
   }) => {
     await waitForPopupReady(popupPage);
 
-    // Click the settings button (exact accessible name — avoids matching
-    // empty-state "Import snippets" or "Open settings")
-    const settingsBtn = popupPage.getByRole("button", {
-      name: "Settings & Import/Export",
-      exact: true,
-    });
+    // The settings control. The `exact: true` workaround is no longer needed:
+    // the empty state used to offer a second, near-identical "Import snippets"
+    // button and an "Open settings" button, so this locator had to be pinned
+    // to an exact accessible name to avoid matching them.
+    const settingsBtn = popupPage.getByTestId("settings-button");
     await expect(settingsBtn).toBeVisible({ timeout: 5_000 });
     const newPage = await Promise.all([
       context.waitForEvent("page", { timeout: 5_000 }).catch(() => null),
@@ -615,5 +614,60 @@ test.describe("Popup (Dashboard) — block structure survives a save", () => {
     // The table keeps its pipes: the two cells must not have become "12".
     expect(saved?.content).toContain("| a | b |");
     expect(saved?.content).toContain("| 1 | 2 |");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Empty state: one place for the actions, not three.
+// ---------------------------------------------------------------------------
+
+test.describe("Popup (Dashboard) — empty state", () => {
+  test("offers create and import exactly once each, and no duplicate settings route", async ({
+    popupPage,
+  }) => {
+    await waitForPopupReady(popupPage);
+
+    // The detail pane is the single home for the empty-state actions. It is
+    // also the only pane still visible when the sidebar is collapsed.
+    await expect(popupPage.getByTestId("empty-create")).toHaveCount(1);
+    await expect(popupPage.getByTestId("empty-import")).toHaveCount(1);
+
+    // The sidebar footer carries the persistent controls. "Add Snippet" is a
+    // different control from the empty-state CTA and stays.
+    await expect(popupPage.getByTestId("add-snippet")).toHaveCount(1);
+    await expect(popupPage.getByTestId("settings-button")).toHaveCount(1);
+
+    // The list pane used to repeat the create and import buttons, putting four
+    // controls for two actions on screen at once.
+    const listPane = popupPage.getByTestId("empty-state");
+    await expect(listPane).toBeVisible();
+    await expect(listPane.getByRole("button")).toHaveCount(0);
+  });
+
+  test("no button anywhere duplicates the import route", async ({
+    popupPage,
+  }) => {
+    await waitForPopupReady(popupPage);
+    // "Import snippets" appeared twice — in the list pane and in the detail
+    // hero. It should now be a single control.
+    await expect(
+      popupPage.getByRole("button", { name: /import snippets/i })
+    ).toHaveCount(1);
+  });
+
+  test("settings is reachable from exactly one control, whatever it is labelled", async ({
+    popupPage,
+  }) => {
+    await waitForPopupReady(popupPage);
+
+    // Label-agnostic on purpose. An earlier version of this test matched the
+    // literal text "Open settings" and therefore passed even after a second
+    // settings route was reintroduced under a different label — which is the
+    // exact regression it was written to catch.
+    const settingsControls = popupPage.getByRole("button", {
+      name: /settings|import\s*\/\s*export|preferences/i,
+    });
+    await expect(settingsControls).toHaveCount(1);
+    await expect(popupPage.getByTestId("settings-button")).toBeVisible();
   });
 });
