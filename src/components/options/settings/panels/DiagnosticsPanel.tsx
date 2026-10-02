@@ -52,7 +52,9 @@ export function DiagnosticsPanel() {
       }
     } catch {
       setPinging(false);
-      toast.error(i18n.t("options.developers.contentScriptHealth.errorGeneric"));
+      toast.error(
+        i18n.t("options.developers.contentScriptHealth.errorGeneric")
+      );
     }
   };
 

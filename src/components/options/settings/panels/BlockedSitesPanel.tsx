@@ -32,7 +32,8 @@ export function isValidHostname(hostname: string): boolean {
     );
   }
   return (
-    /^[a-z0-9]([a-z0-9\-.]*[a-z0-9])?$/i.test(hostname) && hostname.includes(".")
+    /^[a-z0-9]([a-z0-9\-.]*[a-z0-9])?$/i.test(hostname) &&
+    hostname.includes(".")
   );
 }
 

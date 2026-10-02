@@ -46,7 +46,9 @@ const DEFAULT_SECTION: SectionId = "library";
 /** Read the section from `#hash`, ignoring anything that is not a known id. */
 function sectionFromHash(hash: string): SectionId {
   const id = hash.replace(/^#\/?/, "");
-  return SECTIONS.some((s) => s.id === id) ? (id as SectionId) : DEFAULT_SECTION;
+  return SECTIONS.some((s) => s.id === id)
+    ? (id as SectionId)
+    : DEFAULT_SECTION;
 }
 
 export default function OptionsPage() {

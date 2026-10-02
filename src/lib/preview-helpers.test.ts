@@ -76,7 +76,12 @@ type Rect = {
   height: number;
 };
 
-const rect = (left: number, top: number, width: number, height: number): DOMRect =>
+const rect = (
+  left: number,
+  top: number,
+  width: number,
+  height: number
+): DOMRect =>
   ({
     left,
     top,

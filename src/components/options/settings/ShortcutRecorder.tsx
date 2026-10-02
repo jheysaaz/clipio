@@ -12,12 +12,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Command,
-  Keyboard,
-  Option,
-  ArrowUp,
-} from "lucide-react";
+import { Command, Keyboard, Option, ArrowUp } from "lucide-react";
 
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
@@ -57,9 +52,7 @@ const MODIFIER_ICONS = {
  * modifiers, where the glyph is genuinely pictorial and platform-standard.
  */
 
-type ArmState =
-  | { armed: false }
-  | { armed: true; error: string | null };
+type ArmState = { armed: false } | { armed: true; error: string | null };
 
 export function ShortcutRecorder({
   value,
@@ -150,7 +143,9 @@ export function ShortcutRecorder({
         data-armed={state.armed ? "true" : "false"}
         disabled={disabled}
         onClick={() =>
-          setState(state.armed ? { armed: false } : { armed: true, error: null })
+          setState(
+            state.armed ? { armed: false } : { armed: true, error: null }
+          )
         }
         onBlur={() => {
           // Blurring away mid-recording abandons the chord rather than
@@ -174,7 +169,10 @@ export function ShortcutRecorder({
             {i18n.t("options.shortcut.pressKeys")}
           </span>
         ) : parsed ? (
-          <span className="flex items-center gap-1" data-testid={testId ? `${testId}-chord` : undefined}>
+          <span
+            className="flex items-center gap-1"
+            data-testid={testId ? `${testId}-chord` : undefined}
+          >
             {shortcutSegments(parsed).map((segment, i) => {
               const Glyph =
                 segment.kind === "key"
@@ -187,9 +185,9 @@ export function ShortcutRecorder({
                   key={`${segment.kind}-${i}`}
                   data-segment={segment.kind}
                   // `text-foreground/75`, not `text-muted-foreground`: muted on `bg-muted`
-                // at 10px measures 4.39:1, under the 4.5:1 WCAG AA floor.
-                // Caught by the per-section axe scan.
-                className="flex h-5 min-w-5 items-center justify-center gap-0.5 rounded border border-border bg-muted px-1.5 text-foreground/75"
+                  // at 10px measures 4.39:1, under the 4.5:1 WCAG AA floor.
+                  // Caught by the per-section axe scan.
+                  className="flex h-5 min-w-5 items-center justify-center gap-0.5 rounded border border-border bg-muted px-1.5 text-foreground/75"
                 >
                   {Glyph ? (
                     <Icon icon={Glyph} className="size-3" />

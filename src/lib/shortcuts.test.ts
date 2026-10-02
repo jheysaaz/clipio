@@ -25,7 +25,9 @@ const chord = (partial: Partial<ParsedShortcut> = {}): ParsedShortcut => ({
   ...partial,
 });
 
-const event = (partial: Partial<ShortcutEventLike> = {}): ShortcutEventLike => ({
+const event = (
+  partial: Partial<ShortcutEventLike> = {}
+): ShortcutEventLike => ({
   ctrlKey: false,
   metaKey: false,
   shiftKey: false,
@@ -111,9 +113,9 @@ describe("formatShortcut", () => {
   });
 
   it("spells the chord out elsewhere", () => {
-    expect(
-      formatShortcut(chord({ shift: true, key: "Space" }), "other")
-    ).toBe("Ctrl+Shift+Space");
+    expect(formatShortcut(chord({ shift: true, key: "Space" }), "other")).toBe(
+      "Ctrl+Shift+Space"
+    );
   });
 
   it("renders Alt in the conventional position", () => {
@@ -138,7 +140,10 @@ describe("matchesShortcut", () => {
   it("matches the full chord", () => {
     const parsed = parseShortcut("Mod+Shift+Space");
     expect(
-      matchesShortcut(parsed!, event({ ctrlKey: true, shiftKey: true, key: " " }))
+      matchesShortcut(
+        parsed!,
+        event({ ctrlKey: true, shiftKey: true, key: " " })
+      )
     ).toBe(true);
   });
 
@@ -146,25 +151,28 @@ describe("matchesShortcut", () => {
   // hardcoded to Space, so a Cmd+K binding never fired.
   it("matches a chord whose trigger is not Space", () => {
     const parsed = parseShortcut("Mod+K");
-    expect(
-      matchesShortcut(parsed!, event({ metaKey: true, key: "k" }))
-    ).toBe(true);
+    expect(matchesShortcut(parsed!, event({ metaKey: true, key: "k" }))).toBe(
+      true
+    );
   });
 
   it("accepts either Ctrl or Command for the primary modifier", () => {
     const parsed = parseShortcut("Mod+Space");
-    expect(
-      matchesShortcut(parsed!, event({ ctrlKey: true, key: " " }))
-    ).toBe(true);
-    expect(
-      matchesShortcut(parsed!, event({ metaKey: true, key: " " }))
-    ).toBe(true);
+    expect(matchesShortcut(parsed!, event({ ctrlKey: true, key: " " }))).toBe(
+      true
+    );
+    expect(matchesShortcut(parsed!, event({ metaKey: true, key: " " }))).toBe(
+      true
+    );
   });
 
   it("matches Space via the code when the layout reports a literal space", () => {
     const parsed = parseShortcut("Mod+Space");
     expect(
-      matchesShortcut(parsed!, event({ metaKey: true, key: " ", code: "Space" }))
+      matchesShortcut(
+        parsed!,
+        event({ metaKey: true, key: " ", code: "Space" })
+      )
     ).toBe(true);
   });
 
@@ -179,9 +187,9 @@ describe("matchesShortcut", () => {
   // Negative cases.
   it("rejects the right trigger with the wrong modifier", () => {
     const parsed = parseShortcut("Mod+Shift+Space");
-    expect(
-      matchesShortcut(parsed!, event({ ctrlKey: true, key: " " }))
-    ).toBe(false);
+    expect(matchesShortcut(parsed!, event({ ctrlKey: true, key: " " }))).toBe(
+      false
+    );
   });
 
   it("rejects an unmodified keypress", () => {
@@ -191,9 +199,9 @@ describe("matchesShortcut", () => {
 
   it("rejects a different trigger key", () => {
     const parsed = parseShortcut("Mod+K");
-    expect(
-      matchesShortcut(parsed!, event({ metaKey: true, key: "J" }))
-    ).toBe(false);
+    expect(matchesShortcut(parsed!, event({ metaKey: true, key: "J" }))).toBe(
+      false
+    );
   });
 
   it("rejects an extra modifier the chord does not declare", () => {
@@ -271,7 +279,9 @@ describe("currentPlatform", () => {
 
 describe("shortcutSegments", () => {
   it("splits a chord into one segment per part, in reading order", () => {
-    expect(shortcutSegments(parseShortcut("Mod+Shift+Space")!, "other")).toEqual([
+    expect(
+      shortcutSegments(parseShortcut("Mod+Shift+Space")!, "other")
+    ).toEqual([
       { kind: "mod", label: "control" },
       { kind: "shift", label: "shift" },
       { kind: "key", label: "Space" },
@@ -294,12 +304,7 @@ describe("shortcutSegments", () => {
 
   it("orders modifiers before the trigger key", () => {
     const segments = shortcutSegments(parseShortcut("Mod+Alt+Shift+K")!, "mac");
-    expect(segments.map((s) => s.kind)).toEqual([
-      "mod",
-      "alt",
-      "shift",
-      "key",
-    ]);
+    expect(segments.map((s) => s.kind)).toEqual(["mod", "alt", "shift", "key"]);
     expect(segments[segments.length - 1].label).toBe("K");
   });
 
@@ -326,7 +331,9 @@ describe("shortcutFromEvent", () => {
   });
 
   it("rejects a lone modifier press", () => {
-    expect(shortcutFromEvent(event({ ctrlKey: true, key: "Control" }))).toBeNull();
+    expect(
+      shortcutFromEvent(event({ ctrlKey: true, key: "Control" }))
+    ).toBeNull();
   });
 
   it("rejects Escape, which is the recorder's cancel key", () => {

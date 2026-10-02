@@ -49,19 +49,23 @@ about the things that were silently wrong in it.
 
 ### `getCursorCoordsInInput(element, cursorPos)`
 
-- Clamps `cursorPos` into `[0, element.value.length]`. A stale offset must not throw.
 - The mirror must reproduce the control's **content box**, not its border box:
-  `boxSizing: border-box` + `width: element.clientWidth`, so wrapped text breaks at the same
-  columns the control does. Copying `border` on top of a content-box `width` (the previous
-  behaviour, via `style.width`) made the mirror wider than the field and shifted the caret
-  measurement horizontally on narrow fields.
+  `box-sizing: border-box` + `width: element.offsetWidth` (the border-box width), with the
+  control's padding and border copied too. Both other pairings are wrong: the computed
+  `style.width` is a content-box value and double-counts padding and border (mirror wider
+  than the field), and `clientWidth` excludes the border, leaving the mirror `2 x border`
+  too narrow.
 - Copy the font/text styles that change glyph advance or wrapping: `fontStyle`,
-  `fontVariant`, `letterSpacing`, `textTransform`, `textIndent`, `tabSize`. Omitting
-  `letterSpacing` alone is enough to drift by several pixels per line.
-- Subtract `element.scrollTop` / `element.scrollLeft` from the measured point. A caret on a
-  scrolled line of a long textarea was previously placed at the *unscrolled* line's offset.
+  `fontWeight`, `fontVariant`, `letterSpacing`, `lineHeight`, `textIndent`, `textTransform`,
+  `tabSize`. Omitting `letterSpacing` alone is enough to drift several pixels per line.
+- The mirror itself is `position: absolute`, `visibility: hidden`, pinned to the viewport
+  origin, and `white-space: pre-wrap` — the wrap mode is what makes it break on the same
+  columns a textarea does. (`pre` would never wrap.)
+- Only the text **up to the caret** is laid out.
 - The cursor marker is a zero-width space, so a caret sitting exactly at the wrap column
   cannot push itself onto the next line and report a whole line too low.
+- Subtract `element.scrollTop` / `element.scrollLeft` from the measured point. A caret on a
+  scrolled line of a long textarea was previously placed at the _unscrolled_ line's offset.
 - The mirror is removed in `finally`, including on throw.
 
 ### `showPreview(element, filteredSnippets, cursorPos)`
@@ -73,32 +77,52 @@ about the things that were silently wrong in it.
 
 ## Acceptance Criteria
 
-- [ ] `calculatePreviewPosition(textarea, caretOffset)` returns a `y` derived from the caret's
+- [x] `calculatePreviewPosition(textarea, caretOffset)` returns a `y` derived from the caret's
       measured offset, **not** `element.getBoundingClientRect().bottom`.
-- [ ] With `cursorPos` omitted, the element-bounds fallback still applies.
-- [ ] `cursorPos` beyond `value.length` (stale offset) does not throw and still anchors.
-- [ ] A scrolled textarea (`scrollTop > 0`) reports a caret `y` reduced by `scrollTop`.
-- [ ] The caret-marker span itself does not change the measured x (zero-width marker).
-- [ ] e2e: typing `/` into a tall textarea puts the palette near the caret's line, within a
-      few px of `textarea.top`, and far above `textarea.bottom`.
+- [x] With `cursorPos` omitted, the element-bounds fallback still applies.
+- [x] A scrolled textarea (`scrollTop > 0`) reports a caret `y` reduced by `scrollTop`.
+- [x] The mirror is given the control's font/text metrics, its border-box width together with
+      `box-sizing: border-box`, `white-space: pre-wrap`, and only the text up to the caret,
+      followed by a zero-width marker.
+- [x] e2e: typing `/` into a tall textarea puts the palette near the caret's line, well above
+      `textarea.bottom`.
+
+Each criterion is mutation-verified: reverting the corresponding line in
+`src/lib/preview-helpers.ts` (or dropping the `cursorPos` argument in `content.ts`) fails the
+suite.
 
 ## Edge Cases
 
 - Caret at offset 0 with empty value.
-- Single-line `<input>` (no wrapping) — must behave like the textarea case.
-- Contenteditable with a collapsed range at a line boundary (`rect.height === 0`): the Selection
-  rect is trusted as-is; positioning/flip logic handles the degenerate box.
-- `document.body` absent (tests / early document) — falls back to an approximate offset.
+- Contenteditable with a collapsed range at a line boundary (`rect.height === 0`): the
+  Selection rect is trusted as-is; the flip/clamp logic handles the degenerate box.
+- `document.body` absent (early document) — falls back to an approximate offset off the
+  element's bottom-right. See "Known gaps".
+
+## Known Gaps
+
+- **Long values in a single-line `<input>` mis-measure.** The mirror wraps at a fixed width
+  with `pre-wrap`, while a real `<input>` scrolls horizontally instead of wrapping, so for a
+  value long enough to overflow, the mirror's marker lands on a later line and `x` can go
+  negative (clamped to the 10px margin). Pre-existing, not introduced here, and not covered by
+  a test — happy-dom performs no layout, so it cannot be reproduced in unit tests.
+- **A `display: none` / detached control has `offsetWidth === 0`**, collapsing the mirror to
+  zero width. Such a control has no on-screen caret, so the result is unused.
+- **The mirror is appended, laid out and removed on every keystroke** — two forced layouts per
+  keystroke. Pre-existing design; this path was dead before the wiring fix.
+- **The `!document.body` fallback is untested** — it cannot be reached from the content script
+  (which runs after `DOMContentLoaded`) and `document.body` is not redefinable in happy-dom
+  without invasive stubbing. Its return value is unchanged from before this fix.
 
 ---
 
 ## Dependencies
 
-- `window.getComputedStyle`, `Element.getBoundingClientRect`, `element.clientWidth`,
+- `window.getComputedStyle`, `Element.getBoundingClientRect`, `element.offsetWidth`,
   `element.scrollTop` / `scrollLeft`.
 
 ## Change History
 
-| Date       | Change                                                          | Author |
-| ---------- | --------------------------------------------------------------- | ------ |
-| 2026-10-02 | Initial spec — caret anchoring for input/textarea palettes      | —      |
+| Date       | Change                                                     | Author |
+| ---------- | ---------------------------------------------------------- | ------ |
+| 2026-10-02 | Initial spec — caret anchoring for input/textarea palettes | —      |

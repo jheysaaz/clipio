@@ -9,15 +9,9 @@ import { ExternalLink, Heart, MessageSquareText, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import {
-  latestVersionItem,
-  dismissedUpdateVersionItem,
-} from "@/storage/items";
+import { latestVersionItem, dismissedUpdateVersionItem } from "@/storage/items";
 import { openReleasePage } from "@/lib/update-checker";
-import {
-  getStoreReviewUrl,
-  isChromiumBrowser,
-} from "@/lib/review-prompt";
+import { getStoreReviewUrl, isChromiumBrowser } from "@/lib/review-prompt";
 import { FeedbackModal } from "@/components/options/FeedbackModal";
 import { i18n } from "#i18n";
 
@@ -26,12 +20,13 @@ const DONATION_URL = "https://github.com/sponsors/jheysaaz";
 
 export function AboutPanel() {
   const [chromium] = useState(isChromiumBrowser);
-  const [currentVersion] = useState(() =>
-    browser.runtime.getManifest().version
+  const [currentVersion] = useState(
+    () => browser.runtime.getManifest().version
   );
-  const [latest, setLatest] = useState<{ version: string; htmlUrl: string } | null>(
-    null
-  );
+  const [latest, setLatest] = useState<{
+    version: string;
+    htmlUrl: string;
+  } | null>(null);
   const [dismissed, setDismissed] = useState("");
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
@@ -46,8 +41,7 @@ export function AboutPanel() {
       .catch(console.warn);
   }, []);
 
-  const updateAvailable =
-    latest !== null && latest.version !== dismissed;
+  const updateAvailable = latest !== null && latest.version !== dismissed;
 
   return (
     <div className="mb-6 space-y-5" data-testid="panel-about">
@@ -129,9 +123,7 @@ export function AboutPanel() {
             className="h-8"
             data-testid="about-donate"
             title={i18n.t("options.feedback.donationTitle")}
-            onClick={() =>
-              browser.tabs.create({ url: DONATION_URL })
-            }
+            onClick={() => browser.tabs.create({ url: DONATION_URL })}
           >
             <Icon icon={Heart} className="mr-1.5" />
             {i18n.t("options.feedback.donationAction")}

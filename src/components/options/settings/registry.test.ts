@@ -109,9 +109,7 @@ describe("lookups", () => {
   });
 
   it("finds a section by id", () => {
-    expect(getSection("appearance")?.labelKey).toBe(
-      "options.nav.appearance"
-    );
+    expect(getSection("appearance")?.labelKey).toBe("options.nav.appearance");
   });
 
   it("returns only the settings belonging to a section", () => {
@@ -165,7 +163,9 @@ describe("normalizeQuery", () => {
       id: "synthetic",
       keywords: ["temática"],
     };
-    expect(byId(searchSettings("tematica", [synthetic]))).toEqual(["synthetic"]);
+    expect(byId(searchSettings("tematica", [synthetic]))).toEqual([
+      "synthetic",
+    ]);
     expect(byId(searchSettings("TEMÁTICA", [synthetic]))).toEqual([
       "synthetic",
     ]);

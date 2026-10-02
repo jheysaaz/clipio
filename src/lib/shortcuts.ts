@@ -121,7 +121,9 @@ function isMac(): Platform {
     navigator.userAgent,
   ];
 
-  return candidates.some((v) => typeof v === "string" && /mac|iphone|ipad|ipod/i.test(v))
+  return candidates.some(
+    (v) => typeof v === "string" && /mac|iphone|ipad|ipod/i.test(v)
+  )
     ? "mac"
     : "other";
 }
@@ -285,7 +287,8 @@ function keyMatches(trigger: string, event: ShortcutEventLike): boolean {
   if (trigger === "Space") {
     return event.key === " " || event.code === "Space";
   }
-  if (event.key && event.key.toUpperCase() === trigger.toUpperCase()) return true;
+  if (event.key && event.key.toUpperCase() === trigger.toUpperCase())
+    return true;
   if (event.code) {
     // `KeyK` → `K` for letters; `F2`, `Home`, `ArrowUp` pass through as-is.
     if (event.code === trigger) return true;

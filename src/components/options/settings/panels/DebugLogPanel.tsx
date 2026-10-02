@@ -14,7 +14,11 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { debugLogItem, debugModeItem, type DebugLogEntry } from "@/storage/items";
+import {
+  debugLogItem,
+  debugModeItem,
+  type DebugLogEntry,
+} from "@/storage/items";
 import { captureError } from "@/lib/sentry";
 import { cn } from "@/lib/utils";
 import { i18n } from "#i18n";

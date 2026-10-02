@@ -101,7 +101,9 @@ test.describe("Options Page", () => {
     // The previous page ignored the hash entirely and always booted to the
     // dashboard, so `#appearance` silently showed the wrong section.
     const page = await context.newPage();
-    await page.goto(`chrome-extension://${extensionId}/options.html#appearance`);
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html#appearance`
+    );
     await page.waitForSelector('[data-testid="options-search"]', {
       timeout: 15_000,
     });
@@ -161,9 +163,9 @@ test.describe("Options Page", () => {
       .fill("zzzzqqq-no-such-setting");
     // Negative: an unmatched query must show the empty state, not fall back to
     // the full registry.
-    await expect(optionsPage.getByTestId("options-search-empty-page")).toBeVisible(
-      { timeout: 5_000 }
-    );
+    await expect(
+      optionsPage.getByTestId("options-search-empty-page")
+    ).toBeVisible({ timeout: 5_000 });
     await expect(optionsPage.getByTestId("confetti-toggle")).toHaveCount(0);
   });
 
@@ -250,9 +252,7 @@ test.describe("Options Page", () => {
     await expect
       .poll(
         async () => {
-          const b = await optionsPage
-            .getByRole("complementary")
-            .boundingBox();
+          const b = await optionsPage.getByRole("complementary").boundingBox();
           return Math.abs(b!.width - afterArrow) < 2;
         },
         { message: "sidebar width did not survive a reload" }
@@ -803,7 +803,9 @@ test.describe("Diagnostics Section", () => {
     await expect(optionsPage.getByTestId("card-storage-mode")).toBeVisible();
   });
 
-  test("shows current version in the About section", async ({ optionsPage }) => {
+  test("shows current version in the About section", async ({
+    optionsPage,
+  }) => {
     await waitForOptionsReady(optionsPage);
 
     await optionsPage.getByTestId("options-nav-about").click();
@@ -968,7 +970,9 @@ test.describe("Diagnostics Section", () => {
     const target = initial === "sync" ? "local" : "sync";
 
     await select.click();
-    await optionsPage.getByRole("option", { name: new RegExp(target, "i") }).click();
+    await optionsPage
+      .getByRole("option", { name: new RegExp(target, "i") })
+      .click();
     await expect
       .poll(readStoredMode, { message: "storageMode never persisted" })
       .toBe(target);
@@ -1515,7 +1519,9 @@ test.describe("Review Prompt Banner", () => {
     });
 
     await optionsPage.getByTestId("options-search").press("ArrowDown");
-    await expect(optionsPage.getByTestId("option-setting-confetti")).toBeFocused();
+    await expect(
+      optionsPage.getByTestId("option-setting-confetti")
+    ).toBeFocused();
   });
 
   test("the search field and sidebar labels are announced", async ({

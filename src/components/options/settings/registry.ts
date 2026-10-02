@@ -35,12 +35,7 @@ import { TIMING } from "@/config/constants";
 // ---------------------------------------------------------------------------
 
 export type SettingControl =
-  | "switch"
-  | "select"
-  | "shortcut"
-  | "slider"
-  | "text"
-  | "site-list";
+  "switch" | "select" | "shortcut" | "slider" | "text" | "site-list";
 
 export type SectionId =
   | "library"
@@ -205,14 +200,62 @@ export interface SectionMeta {
 // ---------------------------------------------------------------------------
 
 export const SECTIONS: readonly SectionMeta[] = [
-  { id: "library", labelKey: "options.nav.library", groupKey: "options.groups.library", icon: "library", kind: "content" },
-  { id: "images", labelKey: "options.nav.images", groupKey: "options.groups.library", icon: "images", kind: "content" },
-  { id: "expansion", labelKey: "options.nav.expansion", groupKey: "options.groups.behaviour", icon: "zap", kind: "settings" },
-  { id: "blocked-sites", labelKey: "options.nav.blockedSites", groupKey: "options.groups.behaviour", icon: "globe", kind: "settings" },
-  { id: "appearance", labelKey: "options.nav.appearance", groupKey: "options.groups.appearance", icon: "palette", kind: "settings" },
-  { id: "storage", labelKey: "options.nav.storage", groupKey: "options.groups.system", icon: "cloud", kind: "settings" },
-  { id: "diagnostics", labelKey: "options.nav.diagnostics", groupKey: "options.groups.system", icon: "code", kind: "settings" },
-  { id: "about", labelKey: "options.nav.about", groupKey: "options.groups.system", icon: "info", kind: "content" },
+  {
+    id: "library",
+    labelKey: "options.nav.library",
+    groupKey: "options.groups.library",
+    icon: "library",
+    kind: "content",
+  },
+  {
+    id: "images",
+    labelKey: "options.nav.images",
+    groupKey: "options.groups.library",
+    icon: "images",
+    kind: "content",
+  },
+  {
+    id: "expansion",
+    labelKey: "options.nav.expansion",
+    groupKey: "options.groups.behaviour",
+    icon: "zap",
+    kind: "settings",
+  },
+  {
+    id: "blocked-sites",
+    labelKey: "options.nav.blockedSites",
+    groupKey: "options.groups.behaviour",
+    icon: "globe",
+    kind: "settings",
+  },
+  {
+    id: "appearance",
+    labelKey: "options.nav.appearance",
+    groupKey: "options.groups.appearance",
+    icon: "palette",
+    kind: "settings",
+  },
+  {
+    id: "storage",
+    labelKey: "options.nav.storage",
+    groupKey: "options.groups.system",
+    icon: "cloud",
+    kind: "settings",
+  },
+  {
+    id: "diagnostics",
+    labelKey: "options.nav.diagnostics",
+    groupKey: "options.groups.system",
+    icon: "code",
+    kind: "settings",
+  },
+  {
+    id: "about",
+    labelKey: "options.nav.about",
+    groupKey: "options.groups.system",
+    icon: "info",
+    kind: "content",
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -332,7 +375,15 @@ export const SETTINGS: readonly SettingEntry[] = [
     titleKey: "options.setting.storageMode.title",
     descKey: "options.setting.storageMode.desc",
     control: "select",
-    keywords: ["sync", "local", "backend", "devices", "quota", "backup", "cloud"],
+    keywords: [
+      "sync",
+      "local",
+      "backend",
+      "devices",
+      "quota",
+      "backup",
+      "cloud",
+    ],
     options: [
       { value: "sync", labelKey: "options.storage.backend.sync" },
       { value: "local", labelKey: "options.storage.backend.local" },
@@ -405,11 +456,7 @@ export function rowsForSection(section: SectionId): SettingEntry[] {
  * gets no results from an English or accented locale.
  */
 export function normalizeQuery(query: string): string {
-  return query
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
+  return query.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
 /**

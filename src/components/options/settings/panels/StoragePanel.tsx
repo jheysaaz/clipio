@@ -77,7 +77,10 @@ export function StoragePanel() {
       <div className="flex items-start gap-3 rounded-lg border border-border/70 bg-muted/30 p-4">
         <Icon
           icon={ModeIcon}
-          className={cn("mt-0.5 size-4 shrink-0", onSync ? "text-primary" : "text-amber-600 dark:text-amber-400")}
+          className={cn(
+            "mt-0.5 size-4 shrink-0",
+            onSync ? "text-primary" : "text-amber-600 dark:text-amber-400"
+          )}
         />
         <div className="min-w-0 space-y-1">
           <p className="text-sm font-medium text-foreground">
