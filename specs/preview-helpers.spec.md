@@ -34,6 +34,13 @@ viewport-aware positioning, and building the tooltip's plain-text label.
 
 - Returns the trigger token ending at the caret when the prefix and keyboard-shortcut settings
   are satisfied, or `null`.
+- Uses the same `isShortcutBoundary` predicate as `findSnippetMatch`, so both paths share one
+  definition of the boundary. (They test *different* characters — expansion the char before the
+  shortcut, the preview the char before the trigger prefix — so a shortcut that does not begin
+  with the prefix can still be accepted by one path and declined by the other.)
+- The prefix must be preceded by whitespace or sentence punctuation — which is what makes it
+  reachable at the end of existing prose in a pre-filled field — and must not be preceded by a
+  character that occurs inside a URL, path or file name. See `specs/shortcut-boundary.spec.md`.
 
 ## `calculatePreviewPosition(targetElement, cursorPos?): PreviewPosition`
 

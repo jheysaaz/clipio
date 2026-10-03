@@ -87,7 +87,7 @@ index.lengths; // → [3, 2]  (sorted descending)
 ### `findSnippetMatch(text: string, cursorPosition: number, index: ShortcutIndex): SnippetMatch | null`
 
 **Description:** Checks whether the text immediately before the cursor ends with
-a known shortcut that is preceded by a word boundary (or start of text).
+a known shortcut that is preceded by a shortcut boundary (or start of text).
 
 **Behavior:**
 
@@ -96,17 +96,27 @@ a known shortcut that is preceded by a word boundary (or start of text).
 - MUST skip shortcuts longer than `cursorPosition`.
 - MUST extract the candidate string as `text.substring(cursorPosition - len, cursorPosition)`.
 - MUST return `null` if the candidate is not in `index.map`.
-- MUST return `null` if `startPos > 0` and the character at `startPos - 1` is not a word boundary (space or newline).
+- MUST return `null` if `startPos > 0` and `isShortcutBoundary(text[startPos - 1])` is `false`.
 - MUST return `{ snippet, startPos, endPos: cursorPosition }` when a match is found.
 - MUST return the first (longest) matching shortcut when multiple shortcuts could match.
 
-**Word boundary definition:** A character is a word boundary if it matches `/[\s\n]/`.
+**Boundary definition:** `isShortcutBoundary` — whitespace/newline, or sentence
+punctuation and bracket/quote delimiters. See `specs/shortcut-boundary.spec.md`.
+
+> **Revised 2026-10-02.** This section previously required whitespace only
+> (`/[\s\n]/`). That made the shortcut unreachable in every *pre-filled* field,
+> because the caret there follows existing prose and the trigger is preceded by
+> a full stop rather than a space — see `specs/shortcut-boundary.spec.md`. The
+> rule now also accepts sentence punctuation, and still rejects the characters
+> that make up URLs, paths and file names.
 
 **Edge Cases:**
 
 - `cursorPosition === 0` → `null` (no text before cursor).
-- Shortcut at the very start of text (no preceding character) → MUST match (word boundary not required at position 0).
-- Shortcut that is a suffix of another word (e.g. `"hi"` in `"ohhi"`) → MUST NOT match (no word boundary before `"hi"`).
+- Shortcut at the very start of text (no preceding character) → MUST match (boundary not required at position 0).
+- Shortcut that is a suffix of another word (e.g. `"hi"` in `"ohhi"`) → MUST NOT match (`h` is not a boundary).
+- Shortcut typed at the end of a sentence (e.g. `"…shortcut./hi"`) → MUST match.
+- Shortcut typed inside a URL, path or file name (e.g. `"https://x/hi"`, `"src/index/hi"`) → MUST NOT match.
 
 **Examples:**
 
@@ -121,8 +131,11 @@ findSnippetMatch("hi", 2, index);
 findSnippetMatch("say hi", 6, index);
 // → { snippet: ..., startPos: 4, endPos: 6 }
 
+findSnippetMatch("say.hi", 6, index);
+// → { snippet: ..., startPos: 4, endPos: 6 }  (`.` is a boundary)
+
 findSnippetMatch("ohhi", 4, index);
-// → null  (no word boundary before "hi")
+// → null  (`h` is not a boundary before "hi")
 
 findSnippetMatch("", 0, index);
 // → null
