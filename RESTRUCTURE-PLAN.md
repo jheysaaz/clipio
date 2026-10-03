@@ -13,20 +13,20 @@
 
 | # | Ask | Status | Notes |
 |---|-----|--------|-------|
-| 1 | Drop what I said was droppable | `[ ]` | Stryker, flake gate, review-prep, reviewer agent, specs/changes |
+| 1 | Drop what I said was droppable | `[x]` | Done in `da99e91`. Stryker, flake gate, review machinery, 2 spec files |
 | 2 | Rethink E2E — reserve for critical/high-priority only | `[ ]` | Currently 147 tests / 7 min. Biggest single win available. |
 | 3 | Simplify tests + one flat 80% coverage for all code | `[ ]` | Kill the per-module + per-directory threshold ladder |
 | 4 | Slim AGENTS.md to essentials | `[ ]` | 502 lines is far too long |
 | 5 | Rethink specs structure; research SDD + TDD | `[ ]` | Needs research before I touch anything |
 | 6 | Update all dependencies to latest, incl. majors | `[ ]` | Must not break the build; verify at each step |
-| 7 | Drop unnecessary scripts | `[ ]` | 11 scripts, most added by me |
+| 7 | Drop unnecessary scripts | `[~]` | 9 remain (4 were yours). Still to review the 3 checks |
 | 8 | Restructure code tree, keep WXT guidelines | `[ ]` | WXT layout is a hard constraint |
 | 9 | Remove root files not needed for a solo project | `[ ]` | |
 | 10 | Do we need that many tsconfigs? | `[ ]` | I added 1; there were 3 |
-| 11 | Don't ship opencode / local settings | `[ ]` | `.opencode/`, `.env`, local files |
-| 12 | Remove TEST_AUDIT.md | `[ ]` | From a previous prompt |
+| 11 | Don't ship opencode / local settings | `[x]` | `.opencode/agent/` gone; your `plans/` kept untouched |
+| 12 | Remove TEST_AUDIT.md | `[x]` | Done |
 | 13 | Remove unneeded comments; hunt dead code deeply | `[ ]` | Full-tree audit |
-| 14 | Live progress feedback | `[~]` | This file |
+| 14 | Live progress feedback | `[x]` | This file, updated per step |
 | 15 | Track the whole plan here | `[x]` | Done |
 | 16 | Have fun / ask anything | `[ ]` | Questions at the bottom |
 
@@ -112,9 +112,54 @@ feature".
 
 ---
 
+---
+
+## Research finding on specs (item 5) — this changed my mind
+
+I had assumed the problem was "too many specs, organise them better." The
+research says the problem is **the category of document**. Summary:
+
+**Kent Beck, `Canon TDD`** — the first step of TDD is a *Test List*: "list all the
+expected variants in the new behavior... This is analysis, but **behavioral
+analysis**." He names the mistake of turning every item into a test up front.
+
+**Dan North (BDD)** — the acceptance criteria *are* the specification. There is no
+second document. He also says explicitly: for a team of only programmers, skip
+BDD, the ceremony is for *communicating* to others.
+
+**The tests are the module documentation.** What a spec file says about
+`markdownToHtml` is already said, more precisely, by `markdown.test.ts`.
+
+**The measured cost.** Eberhardt ran spec-kit on a real app: 2,577 lines of
+markdown, 3.5 hours of review, versus 8 minutes and 15 minutes for his normal
+approach. His verdict: "**I'm a lot more productive without SDD, around ten times
+faster.**"
+
+**Why change-history tables are the wrong tool.** Nygard (who invented ADRs):
+"Large documents are never kept up to date." 46 of your 47 specs carry one. `git
+log` already knows that.
+
+### Proposed replacement: 47 files -> 4
+
+| File | Holds | Why |
+|---|---|---|
+| `PRODUCT.md` | What Clipio is for, user jobs, non-goals, decisions with reasons | The *why*. Code cannot hold this. |
+| `ARCHITECTURE.md` | Entrypoints, storage layers, key choices | The *how*. Currently scattered. |
+| `decisions/` | ~5 ADRs, only for decisions that reversed | e.g. why `retries: 0`, why Plate.js |
+| `specs/open.md` | Known gaps and risks. "A state, not a log" | What is wrong right now |
+
+Everything else is deleted, because the tests already say it.
+
+**This is the one change I will not make without your explicit yes.** It deletes
+5,739 lines of your writing. See Q5.
+
+---
+
 ## Log
 
 Entries appended as work happens, so context is never lost.
 
 - **Start:** repo on `6b10f91`, working tree clean apart from your untracked
   `specs/changes/dependency-major-upgrades.md`, which I am leaving alone.
+- **`da99e91`:** removed Stryker, flake gate, review machinery, TEST_AUDIT.md and
+  2 spec files. `pnpm verify` 9/9 green, compile clean, 1712 tests pass.
