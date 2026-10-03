@@ -42,6 +42,18 @@ import { load } from "js-yaml";
 
 type LocaleTree = { [key: string]: string | LocaleTree };
 
+/**
+ * A substitution value.
+ *
+ * `string | number`, matching `@wxt-dev/i18n`'s own `Substitution`. The stub
+ * previously typed this as `string | string[]`, which was narrower than the
+ * real API: the codebase passes a count as a bare number in dozens of places
+ * (`i18n.t("importWizard.upload.foundSnippets", parsedSnippets.length)`), so
+ * any test that copied a real call site would have failed to typecheck against
+ * a stub that was supposed to stand in for it.
+ */
+type Substitution = string | number;
+
 const enYaml = load(
   readFileSync(resolve(__dirname, "../../src/locales/en.yml"), "utf-8")
 ) as LocaleTree;
@@ -92,7 +104,7 @@ function lookup(key: string): string | string[] | undefined {
  */
 function selectPlural(
   forms: string[],
-  substitutions?: string | string[]
+  substitutions?: Substitution | Substitution[]
 ): string {
   const raw = Array.isArray(substitutions) ? substitutions[0] : substitutions;
   const count = Number(raw);
@@ -114,9 +126,9 @@ function selectPlural(
  */
 function substitute(
   template: string,
-  substitutions?: string | string[]
+  substitutions?: Substitution | Substitution[]
 ): string {
-  const values = Array.isArray(substitutions)
+  const values: Substitution[] = Array.isArray(substitutions)
     ? substitutions
     : substitutions === undefined
       ? []
@@ -126,7 +138,9 @@ function substitute(
     const value = values[Number(index) - 1];
     // An unmatched placeholder is left verbatim, matching Chrome's behaviour,
     // so a missing substitution is visible in the rendered output.
-    return value === undefined ? match : value;
+    // String() because a number substitution must become text — Chrome
+    // substitutes strings, and React cannot render a bare number here.
+    return value === undefined ? match : String(value);
   });
 }
 
@@ -136,7 +150,7 @@ export const i18n = {
    * which makes a locale regression legible in a test failure instead of
    * rendering as an empty string.
    */
-  t(key: string, substitutions?: string | string[]): string {
+  t(key: string, substitutions?: Substitution | Substitution[]): string {
     const template = lookup(key);
     if (template === undefined) return key;
     if (Array.isArray(template)) {
@@ -149,7 +163,10 @@ export const i18n = {
     return "en-US";
   },
 
-  getMessage(key: string, substitutions?: string | string[]): string {
+  getMessage(
+    key: string,
+    substitutions?: Substitution | Substitution[]
+  ): string {
     return i18n.t(key, substitutions);
   },
 };

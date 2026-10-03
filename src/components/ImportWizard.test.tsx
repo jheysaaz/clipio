@@ -12,7 +12,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ImportWizard from "./ImportWizard";
 
@@ -53,6 +53,38 @@ function validSnippet(over: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * A TextBlaze export, which is what makes the placeholder step reachable.
+ *
+ * Step 2 only appears for a FOREIGN format: ClipioParser sets
+ * `unsupportedPlaceholders: []` unconditionally, because a Clipio export is
+ * already in Clipio's own syntax. So a Clipio payload that happens to contain
+ * `{token}` sails straight past step 2 — which is why testing the placeholder
+ * flow needs this shape instead.
+ */
+function textBlazeFile(snippets: unknown[], name = "textblaze.json") {
+  return new File(
+    [
+      JSON.stringify({
+        version: 8,
+        folders: [{ name: "Work", snippets }],
+      }),
+    ],
+    name,
+    { type: "application/json" }
+  );
+}
+
+function textBlazeSnippet(over: Record<string, unknown> = {}) {
+  return {
+    name: "Signature",
+    shortcut: "sig",
+    type: "text",
+    text: "Best, {firstName}",
+    ...over,
+  };
+}
+
 async function renderWizard() {
   const result = render(
     <ImportWizard onClose={onClose} onImportComplete={onImportComplete} />
@@ -63,12 +95,28 @@ async function renderWizard() {
   return result;
 }
 
-/** Upload a file into the wizard's hidden file input. */
-async function upload(file: File) {
+/**
+ * Hand a file to the wizard's hidden file input.
+ *
+ * `fireEvent.change` with an explicit `files` list rather than
+ * `userEvent.upload`. user-event drives a full pointer-event sequence, and
+ * against happy-dom that reaches React 19's dev-mode guarded-callback replay,
+ * which reports a RangeError through `reportGlobalError` — whose stack then
+ * overflows again inside Vite's source-map decoder. The result was a
+ * "Maximum call stack size exceeded" logged once per upload while every test
+ * still passed, so the noise was pure downside.
+ *
+ * The trade-off: user-event honours the input's `accept` attribute and refuses
+ * a mismatched file, fireEvent does not. `accept` filtering is browser chrome
+ * rather than app logic, so the "refuses a file type" test asserts the
+ * attribute itself.
+ */
+function upload(file: File) {
   const input = document.querySelector(
     'input[type="file"]'
   ) as HTMLInputElement;
-  await userEvent.upload(input, file);
+  Object.defineProperty(input, "files", { value: [file], configurable: true });
+  fireEvent.change(input);
 }
 
 function nextButton() {
@@ -102,6 +150,7 @@ describe("ImportWizard", () => {
 
   it("stays on step 1 when no file is chosen", async () => {
     const user = userEvent.setup();
+
     await renderWizard();
 
     await user.click(screen.getByRole("button", { name: /cancel/i }));
@@ -111,7 +160,7 @@ describe("ImportWizard", () => {
 
   it("detects the format and enables Next for a Clipio export", async () => {
     await renderWizard();
-    await upload(exportFile([validSnippet()]));
+    upload(exportFile([validSnippet()]));
 
     expect(await screen.findByText("export.json")).toBeInTheDocument();
     await waitFor(() => expect(nextButton()).toBeEnabled());
@@ -121,8 +170,10 @@ describe("ImportWizard", () => {
   });
 
   it("shows a parse error for malformed JSON and stays put", async () => {
+    const user = userEvent.setup();
+
     await renderWizard();
-    await upload(new File(["{ not json"], "broken.json"));
+    upload(new File(["{ not json"], "broken.json"));
 
     expect(
       await screen.findByText(
@@ -136,28 +187,51 @@ describe("ImportWizard", () => {
     await renderWizard();
     // A valid Clipio envelope with no snippets cannot advance: there is
     // nothing to import, and saying otherwise would produce a 0-count import.
-    await upload(exportFile([]));
+    upload(exportFile([]));
 
     await waitFor(() => expect(nextButton()).toBeDisabled());
   });
 
-  it("treats a file whose name is not json as unparseable rather than crashing", async () => {
+  it("restricts the picker to the formats the wizard can read", async () => {
     await renderWizard();
-    await upload(new File(["hello"], "notes.txt"));
 
-    // Either the format is unknown or the read failed; both must be reported,
-    // neither may throw out of the onChange handler.
+    // The browser enforces this from the accept attribute, so the attribute is
+    // the thing worth pinning — it is the only place the allowed set is
+    // declared. A .txt never reaches processFile through the real UI.
+    const input = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    expect(input.accept).toBe(".json,.zip,.clipio.zip");
+
+    // And with nothing chosen, the wizard cannot advance.
     expect(
-      await screen.findByText(/unknown|invalid|could not read/i)
+      screen.getByText("Drop a JSON or ZIP file here")
     ).toBeInTheDocument();
+    expect(nextButton()).toBeDisabled();
+  });
+
+  it("reports unrecognised JSON rather than importing nothing silently", async () => {
+    await renderWizard();
+    // Valid JSON, but not a shape any parser claims. A bare scalar is the
+    // reliable case: detectFormat rejects anything that is not an object or an
+    // array before it ever looks at the contents.
+    upload(new File(["42"], "unknown.json", { type: "application/json" }));
+
+    // detectFormat returns null, so the wizard must say the format is unknown
+    // and let the user pick — not advance with zero snippets.
+    expect(
+      await screen.findByText("Unknown — please select below")
+    ).toBeInTheDocument();
+    expect(nextButton()).toBeDisabled();
   });
 
   // --- the happy path --------------------------------------------------
 
   it("imports snippets and reports the count back", async () => {
     const user = userEvent.setup();
+
     await renderWizard();
-    await upload(
+    upload(
       exportFile([
         validSnippet(),
         validSnippet({
@@ -169,11 +243,10 @@ describe("ImportWizard", () => {
     );
     await waitFor(() => expect(nextButton()).toBeEnabled());
 
+    // No unsupported placeholders and no conflicts, so advanceFromStep1 jumps
+    // straight to the confirm step — steps 2 and 3 have nothing to resolve.
     await user.click(nextButton());
-    // No unsupported placeholders, no conflicts, so steps 2 and 3 are skipped
-    // in favour of the confirm step.
-    await user.click(nextButton());
-    expect(await screen.findByText("Ready to import?")).toBeInTheDocument();
+    expect(await screen.findByText("Snippets to import")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /import 2/i }));
 
@@ -188,19 +261,17 @@ describe("ImportWizard", () => {
 
   it("shows a completion state once the import finishes", async () => {
     const user = userEvent.setup();
+
     await renderWizard();
-    await upload(exportFile([validSnippet()]));
+    upload(exportFile([validSnippet()]));
     await waitFor(() => expect(nextButton()).toBeEnabled());
 
-    await user.click(nextButton());
     await user.click(nextButton());
     await user.click(await screen.findByRole("button", { name: /import 1/i }));
 
     // importDone replaces the whole step, so the footer must be gone —
     // otherwise a second click would import the same file twice.
-    expect(
-      await screen.findByText(/done|complete|success/i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Import complete")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /import/i })
     ).not.toBeInTheDocument();
@@ -208,11 +279,11 @@ describe("ImportWizard", () => {
 
   it("closes from the completion state", async () => {
     const user = userEvent.setup();
+
     await renderWizard();
-    await upload(exportFile([validSnippet()]));
+    upload(exportFile([validSnippet()]));
     await waitFor(() => expect(nextButton()).toBeEnabled());
 
-    await user.click(nextButton());
     await user.click(nextButton());
     await user.click(await screen.findByRole("button", { name: /import 1/i }));
 
@@ -226,14 +297,14 @@ describe("ImportWizard", () => {
 
   it("surfaces a failed save instead of reporting success", async () => {
     const user = userEvent.setup();
+
     bulkSaveSnippets.mockRejectedValue(
       new Error("QUOTA_BYTES_PER_ITEM exceeded")
     );
     await renderWizard();
-    await upload(exportFile([validSnippet()]));
+    upload(exportFile([validSnippet()]));
     await waitFor(() => expect(nextButton()).toBeEnabled());
 
-    await user.click(nextButton());
     await user.click(nextButton());
     await user.click(await screen.findByRole("button", { name: /import 1/i }));
 
@@ -247,12 +318,12 @@ describe("ImportWizard", () => {
 
   it("allows retrying after a failed save", async () => {
     const user = userEvent.setup();
+
     bulkSaveSnippets.mockRejectedValueOnce(new Error("network down"));
     await renderWizard();
-    await upload(exportFile([validSnippet()]));
+    upload(exportFile([validSnippet()]));
     await waitFor(() => expect(nextButton()).toBeEnabled());
 
-    await user.click(nextButton());
     await user.click(nextButton());
     await user.click(await screen.findByRole("button", { name: /import 1/i }));
     await screen.findByText(/network down/);
@@ -270,7 +341,7 @@ describe("ImportWizard", () => {
   it("keeps working when the stored snippets cannot be read", async () => {
     getSnippets.mockRejectedValue(new Error("storage offline"));
     await renderWizard();
-    await upload(exportFile([validSnippet()]));
+    upload(exportFile([validSnippet()]));
 
     // The mount read failing must not break the wizard — worst case the
     // conflict step under-reports, which is safer than refusing to import.
@@ -281,26 +352,30 @@ describe("ImportWizard", () => {
 
   it("walks back through the steps without losing the parsed file", async () => {
     const user = userEvent.setup();
+
     await renderWizard();
-    await upload(exportFile([validSnippet({ content: "Hi {token}" })]));
+    upload(textBlazeFile([textBlazeSnippet()]));
     await waitFor(() => expect(nextButton()).toBeEnabled());
 
     await user.click(nextButton());
     expect(
-      await screen.findByText(/placeholders that Clipio doesn't support/i)
+      await screen.findByText(
+        "The following snippets contain placeholders that Clipio doesn't support. Choose what to do with them."
+      )
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /back/i }));
     // Going back must not clear the parsed snippets, or the user would have to
     // re-pick the file to change their mind.
-    expect(await screen.findByText("export.json")).toBeInTheDocument();
+    expect(await screen.findByText("textblaze.json")).toBeInTheDocument();
     await waitFor(() => expect(nextButton()).toBeEnabled());
   });
 
   it("reports the steps it is on", async () => {
     const user = userEvent.setup();
+
     await renderWizard();
-    await upload(exportFile([validSnippet({ content: "Hi {token}" })]));
+    upload(textBlazeFile([textBlazeSnippet()]));
     await waitFor(() => expect(nextButton()).toBeEnabled());
 
     // Step labels are how a user knows where they are in a four-step dialog.
