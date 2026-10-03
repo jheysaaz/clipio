@@ -76,6 +76,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
       onChange,
       placeholder = "Start typing...",
       className,
+      ariaLabel,
       onCopyError,
     },
     ref
@@ -708,6 +709,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
         <Plate editor={editor} onChange={handleChange}>
           <div className="relative flex-1 min-h-0">
             <PlateContent
+              aria-label={ariaLabel}
               placeholder={placeholder}
               className={cn(
                 "h-full overflow-auto outline-none text-sm leading-relaxed",

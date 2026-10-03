@@ -186,7 +186,10 @@ export default function NewSnippetView({
 
         {/* Content Field */}
         <div className="space-y-1.5 flex-1">
-          <Label htmlFor="content" className="text-xs font-medium">
+          {/* No htmlFor: the editor is a contenteditable div, not a form
+              control with an id, so the label would point at nothing. The
+              accessible name comes from ariaLabel on the editor itself. */}
+          <Label className="text-xs font-medium">
             {i18n.t("newSnippet.content")}
           </Label>
           <div className="min-h-50 border border-border rounded-md p-2">
@@ -196,6 +199,7 @@ export default function NewSnippetView({
                 onDraftChange({ ...draftSnippet, content: value })
               }
               placeholder={i18n.t("newSnippet.contentPlaceholder")}
+              ariaLabel={i18n.t("newSnippet.content")}
               className="text-sm"
             />
           </div>

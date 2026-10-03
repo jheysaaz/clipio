@@ -30,6 +30,14 @@ export interface RichTextEditorProps {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  /**
+   * Accessible name for the editing surface.
+   *
+   * The editor renders a `contenteditable` div, not an `<input>`, so a visible
+   * `<Label htmlFor="…">` cannot name it — there is no element with that id for
+   * the label to point at, and the editor is announced as an unnamed text box.
+   */
+  ariaLabel?: string;
   /** Called when a cmd+c copy initiated from within the editor fails. */
   onCopyError?: (err: unknown) => void;
 }
