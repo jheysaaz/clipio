@@ -25,6 +25,13 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", ".wxt/wxt.d.ts", "tests"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": [
+    "src",
+    "tests",
+    "e2e",
+    ".wxt/wxt.d.ts",
+    "wxt.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts"
+  ]
 }

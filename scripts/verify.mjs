@@ -18,8 +18,8 @@
  * THE TWO TIERS
  *
  *   pnpm verify        fast gate — runs on every save/commit (~35s)
- *     format, lint, types (src + e2e), unit tests with coverage, and the
- *     integrity gate that makes the coverage number trustworthy
+ *     format, lint, types, unit tests with coverage, and the integrity gate
+ *     that makes the coverage number trustworthy
  *
  *   pnpm verify:full   fast gate + build + e2e (~4min)
  *     what CI and a release tag run
@@ -70,11 +70,13 @@ const FAST_STEPS = [
   { name: "format", cmd: ["pnpm", "run", "format:check"] },
   { name: "lint", cmd: ["pnpm", "run", "lint"] },
   {
-    name: "types (src + e2e)",
+    name: "types",
     cmd: ["pnpm", "run", "compile"],
-    // Explains why this is one step and not two: the e2e suite used to be
-    // excluded from type-checking entirely.
-    note: "tsconfig.e2e.json is no longer orphaned",
+    // One step, one tsconfig. src, tests, e2e and the three config files are
+    // all in the same program, so there is no second config that can be
+    // orphaned the way tsconfig.e2e.json once was — and wxt.config.ts and
+    // vitest.config.ts are checked, which they previously were not.
+    note: "one project; nothing can fall out of it",
   },
   { name: "unit + coverage", cmd: ["pnpm", "run", "test:coverage"] },
   {

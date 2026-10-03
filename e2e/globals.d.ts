@@ -1,8 +1,13 @@
 /**
  * Ambient types for the e2e suite.
  *
- * WHY THIS FILE EXISTS
+ * WHY THE `chrome` GLOBAL NEEDS DECLARING
  *
+ * This file exists for the reason below, not for the tsconfig history — the
+ * e2e suite is type-checked by the single root `tsconfig.json` now, after
+ * `tsconfig.e2e.json` and `tsconfig.node.json` were removed.
+ *
+ * The history is kept because it is the reason that consolidation happened.
  * `tsconfig.e2e.json` existed but was referenced by nothing — not by
  * `package.json`, not by CI, not by any doc. It named `e2e/**\/*.ts`, so the
  * Playwright suite that gates every release was never type-checked at all. It
