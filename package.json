@@ -33,9 +33,6 @@
     "verify": "node scripts/verify.mjs",
     "verify:full": "node scripts/verify.mjs --full",
     "test:e2e": "playwright test",
-    "test:flake": "node scripts/flake-gate.mjs",
-    "test:mutate": "stryker run",
-    "review:prep": "node scripts/review-prep.mjs",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug"
@@ -68,8 +65,6 @@
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.1",
     "@sentry/vite-plugin": "^5.3.0",
-    "@stryker-mutator/core": "^10.0.0",
-    "@stryker-mutator/vitest-runner": "^10.0.0",
     "@tailwindcss/vite": "^4.3.2",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^25.4.0",

@@ -35,8 +35,7 @@
  *   1  a step failed — the failing step's own output is already on screen
  *
  * `--full` is the only flag; an unknown flag is ignored rather than rejected, so
- * there is no third exit code. (`flake-gate.mjs` does validate its flags and
- * does exit 2 — the two are separate scripts.)
+ * there is no third exit code.
  */
 
 import { spawn } from "child_process";
