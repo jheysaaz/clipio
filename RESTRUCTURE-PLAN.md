@@ -127,6 +127,36 @@ yes before deleting 5,739 lines of your writing.
 
 **Question:** go ahead with the 4-file structure?
 
+### BUG FOUND — the review prompt can only ever fire once
+
+Found while classifying the review-banner E2E tests. **This is pre-existing and I
+have not touched it.** Reporting rather than silently fixing, because fixing it
+changes user-visible behaviour and that is your call.
+
+The chain, verified end to end:
+
+1. `background.ts:51` creates the alarm **periodically**.
+2. On each tick it calls `shouldShowReviewPrompt()`.
+3. `review-prompt.ts:53` — **condition 1 is `state !== "pending" → return false`.**
+4. On success it writes `setReviewPromptState("shown")`.
+5. **Nothing anywhere sets the state back to `"pending"`.** The lifecycle is
+   one-way: `pending → shown → dismissed | rated`.
+
+So from the first tick onward, condition 1 fails forever. The periodic alarm can
+only ever fire **once per install**. Every tick after that is a no-op that still
+reads storage.
+
+Either the alarm should be one-shot, or condition 1 should not gate the
+re-notification — a user who ignored the first notification gets no second chance
+regardless of how much they go on to use the extension, which reads as the
+opposite of the intent behind "20 insertions".
+
+**Options:**
+- **(a)** Make the alarm one-shot and create a fresh one after dismissal. Matches
+  the current one-way state machine.
+- **(b)** Drop the `pending` requirement, re-allow showing after a cooldown.
+- **(c)** It is intentional, and I add a comment saying so.
+
 ### Q6 — Store credentials
 
 You said these will be configured in another day. Noted — not my problem to solve,
