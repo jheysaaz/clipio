@@ -69,6 +69,18 @@ Thresholds are a **ratchet**: they fail on regression. Raising one is deliberate
 adjusting one to make a red build pass is not. Excluding a file needs a written
 reason in `vitest.config.ts`.
 
+**Never lower a threshold, for any reason.** Not to make a build pass, not
+because a refactor "temporarily" reduced coverage, not to silence a flaky test.
+A lower number is invisible in review and permanent in effect: the next person
+reads the gate as evidence and has no way to know it used to be higher. If
+coverage genuinely cannot be restored, the fix is a test or a deletion — not a
+smaller number. A deleted file lowers the denominator honestly; a lowered
+threshold just stops measuring.
+
+The floor is flat 80% on all four metrics. Do not let branches or functions sit
+below it — the repo briefly ran 73/76 there while claiming an 80% floor, which
+is the same dishonesty as reporting green over a smaller file set.
+
 ## Git
 
 Conventional commits, one logical change per commit. PR, not a direct push to

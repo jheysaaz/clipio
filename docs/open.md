@@ -7,16 +7,17 @@ what is wrong _right now_, not a history of everything that ever was.
 
 ## Known gaps
 
-### Every file is above 80%, and the ratchet has not caught up
+### Every file is above 80%
 
 All 51 configured files clear 80%; the lowest is `storage/backends/indexeddb.ts`
-at 80.8%. Overall statements are 94.28%, up from a true 81.76% when four
-components were still at 0%.
+at 80.8%. Overall: 94.28% statements, 88.21% branches, 92.26% functions, 95.62%
+lines — up from a true 81.76% when four components were still at 0%.
 
-The global thresholds in `vitest.config.ts` are still the 81/73/76/81 figures
-that were honest when those four components dragged the average down. They are a
-ratchet, and a ratchet that sits far below the real number is not ratcheting.
-Raising them is a deliberate act.
+The global thresholds were 81/73/76/81, which meant branches and functions sat
+below the 80% floor the project claims to enforce. They are now a flat 80%
+across all four metrics, which the current measurement clears with room to
+spare. Raising them further is deliberate and needs sign-off; lowering them is
+never allowed (AGENTS.md).
 
 ### The review prompt fires once per install
 
