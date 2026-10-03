@@ -46,14 +46,63 @@ const enYaml = load(
   readFileSync(resolve(__dirname, "../../src/locales/en.yml"), "utf-8")
 ) as LocaleTree;
 
-/** Resolve a dotted key path (`"common.save"`) against the locale tree. */
-function lookup(key: string): string | undefined {
+/**
+ * Resolve a dotted key path (`"common.save"`) against the locale tree.
+ *
+ * A node is either a plain string, or a plural group written in en.yml as
+ * `{ 1: ..., n: ... }`. WXT flattens the latter into a single Chrome message
+ * with `|`-separated plural forms — `1: "Found 1 snippet"`, `n: "Found $1
+ * snippets"` becomes `"Found 1 snippet | Found $1 snippets"` in the built
+ * `_locales` file — and Chrome picks the form from the count.
+ *
+ * Plural nodes are returned as the ordered list of forms rather than being
+ * discarded. Treating them as unresolvable made nine keys
+ * (`importWizard.upload.foundSnippets`, `importWizard.footer.importCount`, and
+ * seven others) echo their own dotted key into every test that touched them, so
+ * a test asserting on pluralized copy was asserting on the key, not the words a
+ * user reads.
+ */
+function lookup(key: string): string | string[] | undefined {
   let node: string | LocaleTree | undefined = enYaml;
   for (const segment of key.split(".")) {
     if (node === undefined || typeof node === "string") return undefined;
     node = node[segment];
   }
-  return typeof node === "string" ? node : undefined;
+  if (typeof node === "string") return node;
+  if (node && typeof node === "object") {
+    // A plural group: every value a string, keyed by plural category.
+    const forms = Object.values(node);
+    if (forms.length > 0 && forms.every((f) => typeof f === "string")) {
+      // `1` first, then the rest in declaration order, so index 0 is the
+      // singular form regardless of how the YAML happens to be ordered.
+      const singular = node["1"];
+      const rest = forms.filter((f) => f !== singular);
+      return typeof singular === "string" ? [singular, ...rest] : forms;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Choose the plural form for a count, using the English CLDR rule.
+ *
+ * English has two categories — "one" for exactly 1, "other" for everything
+ * else — so a two-form message uses index 0 for 1 and index 1 otherwise. This
+ * mirrors what Chrome does with the `|`-separated message it receives.
+ */
+function selectPlural(
+  forms: string[],
+  substitutions?: string | string[]
+): string {
+  const raw = Array.isArray(substitutions) ? substitutions[0] : substitutions;
+  const count = Number(raw);
+
+  // No usable count: take the first form. Picking the plural form here instead
+  // would leave "$1" unsubstituted and render "Found $1 snippets" — half-built
+  // copy in a stub whose purpose is to show what the user actually reads.
+  if (!Number.isFinite(count)) return forms[0] ?? "";
+
+  return forms[count === 1 ? 0 : 1] ?? forms[0] ?? "";
 }
 
 /**
@@ -90,6 +139,9 @@ export const i18n = {
   t(key: string, substitutions?: string | string[]): string {
     const template = lookup(key);
     if (template === undefined) return key;
+    if (Array.isArray(template)) {
+      return substitute(selectPlural(template, substitutions), substitutions);
+    }
     return substitute(template, substitutions);
   },
 
