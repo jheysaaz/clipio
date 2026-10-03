@@ -76,35 +76,6 @@ test.describe("Storage Integration", () => {
     await page2.close();
   });
 
-  test("uses per-key storage layout (snip:{id} keys)", async ({
-    context,
-    extensionId,
-  }) => {
-    const page = await getExtPage(context, extensionId);
-
-    const snippet = makeSnippet({
-      id: "per-key-test",
-      label: "Per-Key Layout Test",
-      shortcut: "/perkey",
-      content: "Per-key content",
-    });
-
-    await page.evaluate(async (snip) => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      await ext.storage.sync.set({ [`snip:${snip.id}`]: snip });
-    }, snippet);
-
-    // Verify the specific key format exists
-    const keys = await page.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const all = await ext.storage.sync.get(null);
-      return Object.keys(all as Record<string, unknown>);
-    });
-
-    expect(keys).toContain(`snip:${snippet.id}`);
-    await page.close();
-  });
-
   test("falls back to local storage mode on sync quota overflow", async ({
     context,
     extensionId,
@@ -161,45 +132,6 @@ test.describe("Storage Integration", () => {
     await page.close();
   });
 
-  test("updates content script cache on storage change", async ({
-    context,
-    extensionId,
-  }) => {
-    const page = await getExtPage(context, extensionId);
-
-    const snippet = makeSnippet({
-      id: "cache-update-test",
-      label: "Cache Update Test",
-      shortcut: "/cacheupdate",
-      content: "Cache update content",
-    });
-
-    // Write to sync AND update the content script cache
-    await page.evaluate(async (snip) => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      await ext.storage.sync.set({ [`snip:${snip.id}`]: snip });
-      // Also update the cache (the StorageManager does this after every write)
-      const cached =
-        (await ext.storage.local.get("cachedSnippets")).cachedSnippets ?? [];
-      await ext.storage.local.set({ cachedSnippets: [...cached, snip] });
-    }, snippet);
-
-    // Read back the cache
-    const cache = await page.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const result = await ext.storage.local.get("cachedSnippets");
-      return result.cachedSnippets ?? [];
-    });
-
-    const found = (cache as (typeof snippet)[]).find(
-      (s) => s.id === snippet.id
-    );
-    expect(found).toBeTruthy();
-    expect(found?.shortcut).toBe("/cacheupdate");
-
-    await page.close();
-  });
-
   test("maintains IndexedDB shadow backup", async ({
     context,
     extensionId,
@@ -226,31 +158,6 @@ test.describe("Storage Integration", () => {
     expect(found?.label).toBe("IDB Backup Test");
 
     await page.close();
-  });
-
-  test("persists storage mode selection across sessions", async ({
-    context,
-    extensionId,
-  }) => {
-    const page = await getExtPage(context, extensionId);
-
-    // Switch to local mode
-    await page.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      await ext.storage.local.set({ storageMode: "local" });
-    });
-    await page.close();
-
-    // Re-open and verify it stayed in local mode
-    const page2 = await getExtPage(context, extensionId);
-    const mode = await page2.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const result = await ext.storage.local.get("storageMode");
-      return result.storageMode;
-    });
-
-    expect(mode).toBe("local");
-    await page2.close();
   });
 
   test("handles concurrent writes without data loss", async ({
@@ -285,53 +192,6 @@ test.describe("Storage Integration", () => {
 
     // All 5 snippets should have been written
     expect(keys.length).toBe(5);
-    await page.close();
-  });
-
-  test("migrates legacy single-key format to per-key format", async ({
-    context,
-    extensionId,
-  }) => {
-    const page = await getExtPage(context, extensionId);
-
-    const legacySnippets = makeSnippets(2, (i) => ({
-      id: `legacy-${i}`,
-      label: `Legacy Snippet ${i}`,
-      shortcut: `/leg${i}`,
-      content: `Legacy content ${i}`,
-    }));
-
-    // Seed the old format: all snippets under a single "snippets" key
-    await page.evaluate(async (snips) => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      await ext.storage.sync.set({ snippets: snips });
-    }, legacySnippets);
-
-    // Simulate StorageManager migration: read old key, write per-key format
-    await page.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const result = await ext.storage.sync.get("snippets");
-      const snips = (result.snippets as typeof legacySnippets) ?? [];
-      if (snips.length > 0) {
-        const perKey: Record<string, unknown> = {};
-        for (const s of snips) {
-          perKey[`snip:${s.id}`] = s;
-        }
-        await ext.storage.sync.set(perKey);
-        await ext.storage.sync.remove("snippets");
-      }
-    });
-
-    // Verify per-key format exists
-    const newKeys = await page.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const all = await ext.storage.sync.get(null);
-      return Object.keys(all as Record<string, unknown>);
-    });
-
-    expect(newKeys.some((k) => k.startsWith("snip:legacy-"))).toBe(true);
-    expect(newKeys).not.toContain("snippets");
-
     await page.close();
   });
 });

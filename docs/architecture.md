@@ -1,6 +1,6 @@
 # Architecture
 
-How Clipio is put together. For *why* any of this was chosen, see
+How Clipio is put together. For _why_ any of this was chosen, see
 [`decisions/`](./decisions/).
 
 ---
@@ -29,23 +29,23 @@ Three surfaces, one service worker:
 
 ## Entrypoints
 
-| Path            | Role |
-| --------------- | ---- |
+| Path            | Role                                                                                                                                  |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `content.ts`    | Runs on every page. Watches for shortcut prefixes, builds the index, expands on selection. The only entrypoint that touches page DOM. |
 | `background.ts` | Service worker. Owns storage sync, alarms, context menus, notifications. Survives no tab, so it holds nothing that belongs to a page. |
-| `popup/`        | The dashboard. Lists and searches snippets. |
-| `options/`      | Settings, import/export, diagnostics. |
+| `popup/`        | The dashboard. Lists and searches snippets.                                                                                           |
+| `options/`      | Settings, import/export, diagnostics.                                                                                                 |
 
 ## Storage
 
 Four backends behind one manager (`src/storage/manager.ts`):
 
-| Backend     | Holds                                          |
-| ----------- | ---------------------------------------------- |
-| `sync.ts`   | Snippets and settings. Cross-device. Hard quota — see [0004](./decisions/0004-refuse-sync-writes-over-quota.md) |
-| `local.ts`  | Explicit fallback when sync is unavailable      |
-| `indexeddb.ts` | Media blobs, and a shadow backup of snippets  |
-| `media.ts`  | Blobs only. Content-hashed, so the same image pasted twice is one record. |
+| Backend        | Holds                                                                                                           |
+| -------------- | --------------------------------------------------------------------------------------------------------------- |
+| `sync.ts`      | Snippets and settings. Cross-device. Hard quota — see [0004](./decisions/0004-refuse-sync-writes-over-quota.md) |
+| `local.ts`     | Explicit fallback when sync is unavailable                                                                      |
+| `indexeddb.ts` | Media blobs, and a shadow backup of snippets                                                                    |
+| `media.ts`     | Blobs only. Content-hashed, so the same image pasted twice is one record.                                       |
 
 28 typed items in `src/storage/items.ts`. Every one has a default and a validator —
 an untrusted import payload runs the same validator as a fresh write.
@@ -56,12 +56,12 @@ the source of real clobbering bugs.
 
 ## Code layout
 
-| Directory      | Holds                                                | Test approach |
-| -------------- | ---------------------------------------------------- | ------------- |
-| `src/lib/`     | Pure logic. No DOM, no browser APIs.                 | Fast unit tests |
-| `src/storage/` | The backends and the manager.                        | Unit tests against `fake-indexeddb` |
-| `src/components/` | React. Thin — logic lives in `lib/`.               | Mostly E2E |
-| `src/pages/`   | Page composition.                                     | E2E |
+| Directory         | Holds                                | Test approach                       |
+| ----------------- | ------------------------------------ | ----------------------------------- |
+| `src/lib/`        | Pure logic. No DOM, no browser APIs. | Fast unit tests                     |
+| `src/storage/`    | The backends and the manager.        | Unit tests against `fake-indexeddb` |
+| `src/components/` | React. Thin — logic lives in `lib/`. | Mostly E2E                          |
+| `src/pages/`      | Page composition.                    | E2E                                 |
 
 The split is deliberate: `src/lib/` is where the logic that can break lives, so it
 is where the tests are.
@@ -80,11 +80,11 @@ Two gates keep it honest: `pnpm check:locales` (every key is read somewhere) and
 
 Three layers, and each is chosen for what it can actually prove.
 
-| Layer | Runs | Proves |
-| ----- | ---- | ------ |
-| **Unit** — Vitest | ~7s | Logic in `lib/` and `storage/`. Fast enough to run constantly. |
-| **E2E** — Playwright | ~90s | The real extension in a real browser: injection, `storage.sync`, service-worker lifecycle. |
-| **Coverage** | — | 80% across all code. A ratchet, not a target — see `AGENTS.md`. |
+| Layer                | Runs | Proves                                                                                     |
+| -------------------- | ---- | ------------------------------------------------------------------------------------------ |
+| **Unit** — Vitest    | ~7s  | Logic in `lib/` and `storage/`. Fast enough to run constantly.                             |
+| **E2E** — Playwright | ~56s | The real extension in a real browser: injection, `storage.sync`, service-worker lifecycle. |
+| **Coverage**         | —    | 80% across all code. A ratchet, not a target — see `AGENTS.md`.                            |
 
 **E2E is deliberately small.** Only things that cannot be proven any other way:
 that the content script is actually injected, that `storage.sync` behaves under a

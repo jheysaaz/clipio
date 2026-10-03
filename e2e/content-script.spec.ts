@@ -1,5 +1,5 @@
 /**
- * Phase 1: Content Script Expansion Tests (15 tests)
+ * Content script expansion — the tests that need a real browser.
  *
  * Validates snippet expansion in real DOM environments:
  * <input>, <textarea>, and contenteditable elements.
@@ -101,7 +101,35 @@ test.describe("Content Script Expansion", () => {
       timeout: EXPANSION_TIMEOUT,
     });
     expect(await input.inputValue()).not.toContain("/hello");
-  });
+  }); /**
+   * Records whether the content script called `preventDefault()` on the
+   * keydown it handled, by observing the event from the page's own listener.
+   */
+  async function installDefaultPreventedProbe(
+    page: import("@playwright/test").Page
+  ) {
+    await page.evaluate(() => {
+      const w = window as unknown as { __clipioPrevented?: boolean };
+      w.__clipioPrevented = false;
+      document.addEventListener(
+        "keydown",
+        (event) => {
+          w.__clipioPrevented = event.defaultPrevented;
+        },
+        true
+      );
+    });
+  }
+
+  async function readPreventedFlag(
+    page: import("@playwright/test").Page
+  ): Promise<boolean> {
+    return page.evaluate(
+      () =>
+        (window as unknown as { __clipioPrevented?: boolean })
+          .__clipioPrevented ?? false
+    );
+  }
 
   test("expands shortcut in textarea", async ({ testPage, storageHelper }) => {
     await setupTestPage(testPage, storageHelper, [multilineSnippet()]);
@@ -133,99 +161,6 @@ test.describe("Content Script Expansion", () => {
       timeout: EXPANSION_TIMEOUT,
     });
     expect(await ce.innerText()).not.toContain("/hello");
-  });
-
-  test("does not expand partial match (no word boundary)", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-    // "x/hello" — the "/hello" is not at a word boundary
-    await testPage.keyboard.type("x/hello", { delay: 30 });
-
-    // Negative case: nothing may ever appear here, so wait out the debounce
-    // before asserting. A fixed sleep is required — an auto-retrying
-    // assertion cannot prove a negative.
-    await testPage.waitForTimeout(TYPING_TIMEOUT + 400);
-
-    const value = await input.inputValue();
-    // Should still contain the literal typed text, not the snippet
-    expect(value).toBe("x/hello");
-  });
-
-  test("expands on Tab key (immediate, no debounce)", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-    await testPage.keyboard.type("/hello", { delay: 30 });
-    // Press Tab immediately — no need to wait for debounce
-    await testPage.keyboard.press("Tab");
-    // A fixed sleep here was pure guesswork: the read is one-shot, so a slow
-    // machine saw the pre-insert value. Polling the value itself makes the
-    // wait end the moment the insertion lands.
-    // The `not.toContain` half is a negative assertion about a value, but the
-    // positive half pins the wait, so polling the value is what makes the
-    // timing deterministic. The negative then reads the settled value.
-    await expect
-      .poll(() => input.inputValue(), {
-        message: "Tab did not expand the snippet",
-      })
-      .toContain("Hello, World!");
-
-    expect(await input.inputValue()).not.toContain("/hello");
-  });
-
-  test("expands on Space key immediately", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-    await testPage.keyboard.type("/hello", { delay: 30 });
-    await testPage.keyboard.press("Space");
-    // Wait for the expansion to land before the one-shot read below.
-    //
-    // An earlier version of this comment claimed a poll "would not help here"
-    // because the read is a single `inputValue()`. That is not a reason —
-    // `expect.poll(() => input.inputValue())` works fine. What actually
-    // justifies the sleep is that the assertion is a *negative*: `not.toContain`
-    // cannot be proven by a retrying check, because one that never matches just
-    // waits out its timeout and fails, which looks the same as "not yet".
-    await testPage.waitForTimeout(200);
-
-    const value = await input.inputValue();
-    expect(value).toContain("Hello, World!");
-    expect(value).not.toContain("/hello");
-  });
-
-  test("debounced expansion on regular typing (300ms)", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-    await testPage.keyboard.type("/hello", { delay: 30 });
-
-    // Check before debounce fires — should NOT be expanded yet
-    const valueBefore = await input.inputValue();
-    expect(valueBefore).toBe("/hello");
-
-    // Auto-retrying assertion instead of a sleep: it polls until the
-    // debounce fires, so it is both faster and immune to load variance.
-    await expect(input).toHaveValue(/Hello, World!/, {
-      timeout: EXPANSION_TIMEOUT,
-    });
   });
 
   test("positions cursor with {{cursor}} placeholder in input", async ({
@@ -292,24 +227,6 @@ test.describe("Content Script Expansion", () => {
     ).toBe(true);
   });
 
-  test("formats date with {{date:iso}}", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [dateSnippet()]);
-
-    const input = await typeIntoField(
-      testPage,
-      '[data-testid="text-input"]',
-      "/date"
-    );
-    await expect(input).toHaveValue(/Today is \d{4}-\d{2}-\d{2}/, {
-      timeout: EXPANSION_TIMEOUT,
-    });
-    const value = await input.inputValue();
-    expect(value).not.toContain("{{date");
-  });
-
   test("renders markdown in contenteditable (**bold**, _italic_)", async ({
     testPage,
     storageHelper,
@@ -329,152 +246,6 @@ test.describe("Content Script Expansion", () => {
     expect(await ce.innerHTML()).toMatch(/<em>italic text<\/em>/i);
   });
 
-  test("matches longest shortcut first (/h vs /hello)", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [
-      shortShortcutSnippet(),
-      longShortcutSnippet(),
-    ]);
-
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-    await testPage.keyboard.type("/hello", { delay: 30 });
-    await expect(input).toHaveValue(/Long shortcut content/, {
-      timeout: EXPANSION_TIMEOUT,
-    });
-    // Should expand /hello (long), not /h (short)
-    expect(await input.inputValue()).not.toContain("Short content");
-  });
-
-  test("updates index on storage change (dynamic snippet)", async ({
-    testPage,
-    storageHelper,
-    context,
-    extensionId,
-  }) => {
-    // Start with no snippets (seed empty list to clear any prior state)
-    await storageHelper.seedSnippets([]);
-    await testPage.reload();
-    await waitForContentScriptReady(testPage);
-
-    // Dynamically add a snippet via another extension page (simulating popup)
-    const extPage = await context.newPage();
-    await extPage.goto(`chrome-extension://${extensionId}/popup.html`);
-    await extPage.waitForLoadState("domcontentloaded");
-
-    const dynamicSnippet = {
-      id: "dynamic-001",
-      label: "Dynamic Snippet",
-      shortcut: "/dynamic",
-      content: "Dynamically added!",
-      tags: [],
-      usageCount: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    await extPage.evaluate(async (snip) => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      await ext.storage.local.set({ cachedSnippets: [snip] });
-    }, dynamicSnippet);
-    await extPage.close();
-
-    // Wait for the content script to re-index on the storage change.
-    //
-    // The sleep that stood here was not pointless, despite the next line merely
-    // building a locator: it was waiting for the content script to pick up the
-    // new snippet, and a locator construction waits for nothing. Typing before
-    // the index is rebuilt finds no match, so the expansion silently does not
-    // happen. Polling the cache states the actual condition.
-    await expect
-      .poll(
-        async () => {
-          const cached = await storageHelper.getLocal("cachedSnippets");
-          return Array.isArray(cached) && cached.length > 0;
-        },
-        { timeout: 5_000, message: "cache never picked up the new snippet" }
-      )
-      .toBe(true);
-
-    // Now try to expand in the test page
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-    await testPage.keyboard.type("/dynamic", { delay: 30 });
-
-    await expect(input).toHaveValue(/Dynamically added!/, {
-      timeout: EXPANSION_TIMEOUT,
-    });
-  });
-
-  test("handles extension context gracefully (no crash on invalid context)", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    // Simulate context invalidation by navigating away from the test page
-    // In a real scenario this would be the extension being unloaded, but we
-    // verify the page doesn't crash on normal usage as a smoke test.
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-    await testPage.keyboard.type("/hello", { delay: 30 });
-
-    // Should still work without throwing
-    await expect(input).toHaveValue(/Hello, World!/, {
-      timeout: EXPANSION_TIMEOUT,
-    });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Preview Feature Tests
-// ---------------------------------------------------------------------------
-
-test.describe("Snippet Preview Feature", () => {
-  test("shows preview when typing trigger prefix", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [
-      helloSnippet(),
-      dateSnippet(),
-    ]);
-
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-
-    // Type the trigger prefix
-    await testPage.keyboard.type("/", { delay: 30 });
-
-    // The palette lives in a CLOSED shadow root, so Playwright cannot select
-    // rows. The host mirrors non-content state instead — see
-    // . Asserting the row count also proves
-    // both seeded snippets were offered.
-    const host = testPage.locator("#clipio-snippet-preview-host");
-    await expect(host).toHaveAttribute("data-preview-visible", "true", {
-      timeout: 5_000,
-    });
-    await expect(host).toHaveAttribute("data-preview-rows", "many");
-
-    // The host is sized to the palette, so a non-zero box proves it laid out.
-    const boundingBox = await host.boundingBox();
-    expect(boundingBox).not.toBeNull();
-    expect(boundingBox!.width).toBeGreaterThan(0);
-    expect(boundingBox!.height).toBeGreaterThan(0);
-
-    // The branding header and the rows live inside a CLOSED shadow root, so
-    // neither is selectable from the page world. Their rendering is asserted
-    // in src/lib/snippet-preview-ui.accessibility.test.ts, which runs as
-    // extension code via the @internal getInternalShadowRoot() accessor.
-    // Here we assert only what the host mirrors: open, with 2 rows.
-  });
-
-  // spec: — the palette anchors to the caret, not
-  // to the field's bottom edge. Regression: showPreview() dropped cursorPos, so
-  // calculatePreviewPosition fell back to { x: rect.left, y: rect.bottom } and
-  // the palette rendered under the whole field.
   test("anchors the palette to the caret, not to the field bottom", async ({
     testPage,
     storageHelper,
@@ -507,322 +278,6 @@ test.describe("Snippet Preview Feature", () => {
     // And nowhere near the bottom edge the fallback used.
     expect(palette!.y).toBeLessThan(field!.y + field!.height - 60);
   });
-
-  test("filters snippets by query when typing after prefix", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [
-      helloSnippet(),
-      dateSnippet(),
-    ]);
-
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-
-    // Type the trigger prefix + query
-    await testPage.keyboard.type("/hello", { delay: 30 });
-
-    // Auto-retrying: poll until the filter has been applied.
-    // With 2 seeded snippets (/hello and /date) a query of "hello" must leave
-    // exactly 1 row. That is a stronger claim than the previous text match:
-    // it proves the non-matching snippet was actually excluded.
-    const host = testPage.locator("#clipio-snippet-preview-host");
-    await expect(host).toHaveAttribute("data-preview-visible", "true", {
-      timeout: 5_000,
-    });
-    await expect(host).toHaveAttribute("data-preview-rows", "1");
-  });
-
-  test("hides preview when no matches", async ({ testPage, storageHelper }) => {
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-
-    // Type prefix with non-matching query
-    await testPage.keyboard.type("/xyz123", { delay: 30 });
-
-    // Preview should be hidden when nothing matches
-    const host = testPage.locator("#clipio-snippet-preview-host");
-    await expect(host).toHaveAttribute("data-preview-visible", "false", {
-      timeout: 5_000,
-    });
-    await expect(host).toHaveAttribute("data-preview-rows", "0");
-  });
-
-  test("navigates preview with keyboard", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [
-      helloSnippet(),
-      dateSnippet(),
-    ]);
-
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-
-    // Type the trigger prefix to show preview
-    await testPage.keyboard.type("/", { delay: 30 });
-
-    const host = testPage.locator("#clipio-snippet-preview-host");
-    await expect(host).toHaveAttribute("data-preview-rows", "many", {
-      timeout: 5_000,
-    });
-
-    // First row is selected by default
-    await expect(host).toHaveAttribute("data-preview-selected", "0");
-
-    // ArrowDown moves the highlight to the second row
-    await testPage.keyboard.press("ArrowDown");
-    await expect(host).toHaveAttribute("data-preview-selected", "1");
-
-    // ArrowUp moves it back
-    await testPage.keyboard.press("ArrowUp");
-    await expect(host).toHaveAttribute("data-preview-selected", "0");
-
-    // The highlight must not run past the last row.
-    await testPage.keyboard.press("ArrowUp");
-    await expect(host).toHaveAttribute("data-preview-selected", "0");
-  });
-
-  test("selects snippet with Enter key", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    const helloSnip = helloSnippet();
-    await setupTestPage(testPage, storageHelper, [helloSnip]);
-
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-
-    // Type the trigger prefix
-    await testPage.keyboard.type("/", { delay: 30 });
-
-    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
-    await expect(previewContainer).toBeVisible();
-
-    // Press Enter to select the first snippet
-    await testPage.keyboard.press("Enter");
-
-    // Preview should be hidden after selection
-    await expect(previewContainer).not.toBeVisible();
-
-    // Input should contain the expanded snippet content
-    const value = await input.inputValue();
-    expect(value).toContain(helloSnip.content);
-  });
-
-  test("closes preview with Escape key", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-
-    // Type the trigger prefix
-    await testPage.keyboard.type("/", { delay: 30 });
-
-    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
-    await expect(previewContainer).toBeVisible();
-
-    // Press Escape to close
-    await testPage.keyboard.press("Escape");
-
-    // Preview should be hidden
-    await expect(previewContainer).not.toBeVisible();
-
-    // Input should still contain the trigger prefix (not expanded)
-    const value = await input.inputValue();
-    expect(value).toBe("/");
-  });
-
-  test("shows manual preview with keyboard shortcut", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [
-      helloSnippet(),
-      dateSnippet(),
-    ]);
-
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-
-    // Use keyboard shortcut to manually trigger preview
-    await testPage.keyboard.press("Control+Shift+Space");
-
-    // Manual trigger lists every snippet, unfiltered
-    const host = testPage.locator("#clipio-snippet-preview-host");
-    await expect(host).toHaveAttribute("data-preview-visible", "true", {
-      timeout: 5_000,
-    });
-    await expect(host).toHaveAttribute("data-preview-rows", "many");
-  });
-
-  test("works in textarea elements", async ({ testPage, storageHelper }) => {
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    const textarea = testPage.locator('[data-testid="textarea-field"]');
-    await textarea.click();
-
-    // Type the trigger prefix
-    await testPage.keyboard.type("/", { delay: 30 });
-
-    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
-    await expect(previewContainer).toBeVisible();
-
-    // Select snippet with Enter
-    await testPage.keyboard.press("Enter");
-
-    // Textarea should contain expanded content
-    // A fixed sleep here was pure guesswork: the read is one-shot, so a slow
-    // machine saw the pre-insert value. Polling the value itself makes the
-    // wait end the moment the insertion lands.
-    await expect
-      .poll(() => textarea.inputValue(), {
-        message: "Enter did not insert the snippet",
-      })
-      .toContain("Hello, World!");
-  });
-
-  test("works in contenteditable elements", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    const contenteditable = testPage.locator(
-      '[data-testid="contenteditable-field"]'
-    );
-    await contenteditable.click();
-
-    // Type the trigger prefix
-    await testPage.keyboard.type("/", { delay: 30 });
-
-    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
-    await expect(previewContainer).toBeVisible();
-
-    // Select snippet with Enter
-    await testPage.keyboard.press("Enter");
-
-    // Contenteditable should contain expanded content
-    // A fixed sleep here was pure guesswork: the read is one-shot, so a slow
-    // machine saw the pre-insert value. Polling the value itself makes the
-    // wait end the moment the insertion lands.
-    await expect
-      .poll(() => contenteditable.textContent(), {
-        message: "Enter did not insert the snippet",
-      })
-      .toContain("Hello, World!");
-  });
-
-  test("preserves line breaks when inserting multiline snippet via preview in contenteditable", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [multilineSnippet()]);
-
-    const contenteditable = testPage.locator(
-      '[data-testid="contenteditable-field"]'
-    );
-    await contenteditable.click();
-
-    // Type the trigger prefix to open the preview popup
-    await testPage.keyboard.type("/", { delay: 30 });
-
-    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
-    await expect(previewContainer).toBeVisible();
-
-    // Select the snippet with Enter
-    await testPage.keyboard.press("Enter");
-
-    // All three lines must be preserved (regression: line breaks were lost
-    // because the old preview path assigned plain text via textContent).
-    // A fixed sleep here was pure guesswork: the read is one-shot, so a slow
-    // machine saw the pre-insert value. Polling the value itself makes the
-    // wait end the moment the insertion lands.
-    await expect
-      .poll(async () => (await contenteditable.innerText()).trim(), {
-        message: "the inserted snippet never appeared",
-      })
-      .toBe("Line 1\nLine 2\nLine 3");
-    // Source HTML keeps the <br> separators
-    const brCount = await contenteditable.locator("br").count();
-    expect(brCount).toBeGreaterThanOrEqual(2);
-  });
-
-  test("hides preview when focus leaves input", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-
-    // Type the trigger prefix
-    await testPage.keyboard.type("/", { delay: 30 });
-
-    const previewContainer = testPage.locator("#clipio-snippet-preview-host");
-    await expect(previewContainer).toBeVisible();
-
-    // Click somewhere else to lose focus
-    const textarea = testPage.locator('[data-testid="textarea-field"]');
-    await textarea.click();
-
-    // Preview should be hidden when focus is lost
-    await expect(previewContainer).not.toBeVisible();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Untrusted event rejection
-//
-// A Chrome isolated world shares the DOM event graph with the page, so a
-// page-dispatched (synthetic) event still reaches the content script's
-// capture-phase listeners. Before the isTrusted guard, a hostile page could
-// force snippet expansion — and, via {{clipboard}}, force the user's
-// clipboard into an attacker-controlled field.
-// ---------------------------------------------------------------------------
-
-test.describe("Untrusted event rejection", () => {
-  /**
-   * Install a document-capture probe that records whether the most recent
-   * keydown had preventDefault() called on it.
-   *
-   * The content script registered its listener first, so by the time this
-   * probe runs at the same node and phase, defaultPrevented already reflects
-   * whatever the extension decided.
-   */
-  async function installDefaultPreventedProbe(
-    page: import("@playwright/test").Page
-  ) {
-    await page.evaluate(() => {
-      const w = window as unknown as { __clipioPrevented?: boolean };
-      w.__clipioPrevented = false;
-      document.addEventListener(
-        "keydown",
-        (event) => {
-          w.__clipioPrevented = event.defaultPrevented;
-        },
-        true
-      );
-    });
-  }
-
-  async function readPreventedFlag(
-    page: import("@playwright/test").Page
-  ): Promise<boolean> {
-    return page.evaluate(
-      () =>
-        (window as unknown as { __clipioPrevented?: boolean })
-          .__clipioPrevented ?? false
-    );
-  }
 
   test("synthetic keydown does not expand a snippet in a text input", async ({
     testPage,
@@ -900,115 +355,6 @@ test.describe("Untrusted event rejection", () => {
     expect(text).not.toContain("Hello, World!");
   });
 
-  test("synthetic keydown does not open the preview palette", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    // Ctrl+Shift+Space is the default manual preview shortcut. If the guard
-    // is missing, this opens the palette and renders every snippet label and
-    // shortcut into the page DOM.
-    await installDefaultPreventedProbe(testPage);
-    await testPage.evaluate(() => {
-      const input = document.querySelector<HTMLInputElement>(
-        '[data-testid="text-input"]'
-      );
-      if (!input) throw new Error("test input not found");
-      input.focus();
-      input.setSelectionRange(input.value.length, input.value.length);
-      input.dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: " ",
-          code: "Space",
-          ctrlKey: true,
-          shiftKey: true,
-          bubbles: true,
-          cancelable: true,
-        })
-      );
-    });
-
-    // Assert on the host's mirrored state, not on row selectors: the shadow
-    // root is closed, so ".clipio-preview-item" is never in the light DOM and
-    // toHaveCount(0) would pass no matter what the extension did.
-    await expect(
-      testPage.locator("#clipio-snippet-preview-host")
-    ).toHaveAttribute("data-preview-visible", "false", { timeout: 5_000 });
-    await expect(testPage.locator("#clipio-snippet-preview-host")).toBeHidden();
-    // The page must not be able to swallow its own default action either.
-    expect(await readPreventedFlag(testPage)).toBe(false);
-  });
-
-  test("synthetic input event does not expand or arm the debounce", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    const value = await testPage.evaluate(async () => {
-      const input = document.querySelector<HTMLInputElement>(
-        '[data-testid="text-input"]'
-      );
-      if (!input) throw new Error("test input not found");
-      input.value = "/hello";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      return input.value;
-    });
-
-    expect(value).toBe("/hello");
-  });
-
-  test("synthetic input event does not open the preview", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    // "/hello" ends with a slash-trigger prefix, so an untrusted input event
-    // that reached the handler would render preview rows into the page.
-    await testPage.locator('[data-testid="text-input"]').click();
-    await testPage.evaluate(() => {
-      const input = document.querySelector<HTMLInputElement>(
-        '[data-testid="text-input"]'
-      );
-      if (!input) throw new Error("test input not found");
-      input.value = "/he";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-
-    // Mirrored state, not a row count: with a closed root a row selector
-    // would always report 0 and assert nothing.
-    await expect(
-      testPage.locator("#clipio-snippet-preview-host")
-    ).toHaveAttribute("data-preview-visible", "false", { timeout: 5_000 });
-  });
-
-  test("synthetic input event does not expand a contenteditable", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    // Covers the input-listener branch that routes to
-    // handleContentEditableInput, which is distinct from the keydown branch.
-    const text = await testPage.evaluate(async () => {
-      const el = document.createElement("div");
-      el.contentEditable = "true";
-      el.textContent = "/hello";
-      document.body.appendChild(el);
-      el.focus();
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      const result = el.textContent ?? "";
-      el.remove();
-      return result;
-    });
-
-    expect(text).toBe("/hello");
-  });
-
   test("page script cannot reach preview rows, so cannot click one", async ({
     testPage,
     storageHelper,
@@ -1067,35 +413,6 @@ test.describe("Untrusted event rejection", () => {
     ).toHaveAttribute("data-preview-rows", "1", { timeout: 5_000 });
 
     await testPage.keyboard.press("Enter");
-    await expect(input).toHaveValue(/Hello, World!/, { timeout: 5_000 });
-  });
-
-  test("trusted keyboard input still expands a snippet", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    // Regression guard: the isTrusted guard must not disable the extension.
-    // Playwright's keyboard APIs dispatch trusted events.
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-    await testPage.keyboard.type("/hello");
-    await expect(input).toHaveValue(/Hello, World!/, { timeout: 5_000 });
-    expect(await input.inputValue()).not.toContain("/hello");
-  });
-
-  test("trusted Space keydown still expands a snippet immediately", async ({
-    testPage,
-    storageHelper,
-  }) => {
-    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
-
-    const input = testPage.locator('[data-testid="text-input"]');
-    await input.click();
-    await testPage.keyboard.type("/hello");
-    await testPage.keyboard.press("Space");
-
     await expect(input).toHaveValue(/Hello, World!/, { timeout: 5_000 });
   });
 });

@@ -1,7 +1,7 @@
 # Open
 
 **A state, not a log.** Items are deleted when they are addressed. This file is
-what is wrong *right now*, not a history of everything that ever was.
+what is wrong _right now_, not a history of everything that ever was.
 
 ---
 
@@ -15,7 +15,7 @@ coverage report entirely), so this is a tracked gap rather than a hidden one.
 
 ### Coverage sits at 81% overall
 
-Against an 80% floor, so it passes — but the floor is 80 *for everything*, and
+Against an 80% floor, so it passes — but the floor is 80 _for everything_, and
 `src/components/` is far below it because of the four above. Raising the floor is
 a deliberate act once real tests land.
 
@@ -25,7 +25,7 @@ The state machine is one-way (`pending -> shown -> dismissed | rated`), so the
 prompt is offered at most once. That is deliberate — re-prompting someone who
 already ignored you is worse than not prompting them.
 
-What was *not* deliberate was the alarm: it repeated every 6 hours to re-evaluate
+What was _not_ deliberate was the alarm: it repeated every 6 hours to re-evaluate
 a condition that could only ever fail, waking the service worker indefinitely.
 Now one-shot. The reasoning is recorded in `REVIEW_CHECK_DELAY_HOURS`.
 
@@ -40,12 +40,6 @@ E2E job before `Submit to Stores` ever ran.
 ---
 
 ## Weak spots
-
-### The E2E suite is the slowest thing in the repo
-
-Was 147 tests / ~7 minutes. Cut to ~24 tests covering only what needs a real
-browser. If it grows past ~2 minutes again, something moved into it that did not
-belong there.
 
 ### `src/components/options/` is the least-tested area
 
