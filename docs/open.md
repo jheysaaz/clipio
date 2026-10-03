@@ -7,17 +7,16 @@ what is wrong _right now_, not a history of everything that ever was.
 
 ## Known gaps
 
-### Four components have no tests
+### Every file is above 80%, and the ratchet has not caught up
 
-`ConfirmDialog`, `ImportWizard`, `NewSnippetView`, `SnippetDetailView` — 0%
-coverage. They are measured now (previously they were silently missing from the
-coverage report entirely), so this is a tracked gap rather than a hidden one.
+All 51 configured files clear 80%; the lowest is `storage/backends/indexeddb.ts`
+at 80.8%. Overall statements are 94.28%, up from a true 81.76% when four
+components were still at 0%.
 
-### Coverage sits at 81% overall
-
-Against an 80% floor, so it passes — but the floor is 80 _for everything_, and
-`src/components/` is far below it because of the four above. Raising the floor is
-a deliberate act once real tests land.
+The global thresholds in `vitest.config.ts` are still the 81/73/76/81 figures
+that were honest when those four components dragged the average down. They are a
+ratchet, and a ratchet that sits far below the real number is not ratcheting.
+Raising them is a deliberate act.
 
 ### The review prompt fires once per install
 
@@ -44,6 +43,8 @@ E2E job before `Submit to Stores` ever ran.
 ### `src/components/options/` is the least-tested area
 
 The options redesign moved a lot of behaviour into panels that have no unit tests.
+They clear 80% on the presentation they share with the tested components, but the
+panel-specific logic is reached through the popup e2e rather than directly.
 
 ---
 

@@ -86,13 +86,15 @@ export default defineConfig({
         // while the config asked for 50.
         //
         // With the real file set — all 50, including four at 0% — the honest
-        // measurement is 81.76 / 73.94 / 76.58 / 81.76. Setting the bar to the
-        // true number means the suite now fails if coverage REGRESSES, and
-        // every number in CI describes the whole configured surface.
+        // measurement was 81.76 / 73.94 / 76.58 / 81.76. Setting the bar to the
+        // true number meant the suite failed if coverage REGRESSED, and every
+        // number in CI described the whole configured surface.
         //
-        // Raising these back toward 80/80/75/80 means writing tests for the
-        // untested components listed in `specs/coverage-honesty.spec.md`.
-        // They are a known, tracked gap — not an invisible one.
+        // Those four components now have tests and every configured file clears
+        // 80%, with overall statements at 94.28%. The numbers below have not
+        // moved yet, so they now sit well below the real measurement and no
+        // longer function as a ratchet. Raising them is a deliberate act —
+        // tracked in `docs/open.md`.
         // ------------------------------------------------------------------
         lines: 81,
         functions: 73,
