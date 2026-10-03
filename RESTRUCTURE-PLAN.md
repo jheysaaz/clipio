@@ -14,11 +14,11 @@
 | # | Ask | Status | Notes |
 |---|-----|--------|-------|
 | 1 | Drop what I said was droppable | `[x]` | Done in `da99e91`. Stryker, flake gate, review machinery, 2 spec files |
-| 2 | Rethink E2E — reserve for critical/high-priority only | `[ ]` | Currently 147 tests / 7 min. Biggest single win available. |
-| 3 | Simplify tests + one flat 80% coverage for all code | `[ ]` | Kill the per-module + per-directory threshold ladder |
+| 2 | Rethink E2E — reserve for critical/high-priority only | `[~]` | Answers received. Starting the audit of which tests need a real browser. |
+| 3 | Simplify tests + one flat 80% coverage for all code | `[ ]` | 80% everywhere, no exclusions without asking you |
 | 4 | Slim AGENTS.md to essentials | `[ ]` | 502 lines is far too long |
 | 5 | Rethink specs structure; research SDD + TDD | `[ ]` | Needs research before I touch anything |
-| 6 | Update all dependencies to latest, incl. majors | `[ ]` | Must not break the build; verify at each step |
+| 6 | Update all dependencies to latest, incl. majors | `[ ]` | Always latest. Verify after each change. |
 | 7 | Drop unnecessary scripts | `[~]` | 9 remain (4 were yours). Still to review the 3 checks |
 | 8 | Restructure code tree, keep WXT guidelines | `[ ]` | WXT layout is a hard constraint |
 | 9 | Remove root files not needed for a solo project | `[ ]` | |
@@ -53,33 +53,31 @@ Chosen so each step leaves the repo green. Risky work is isolated.
 
 ## Decisions I need from you
 
-### Q1 — E2E scope (item 2)
+### Q1 — E2E scope (item 2) — ANSWERED
 
-E2E is ~7 minutes and 147 tests. You want it reserved for critical paths.
+**Your answer:** snippet insert is the main critical path. Then basic CRUD, then
+data surviving restart. And: much of the current E2E is really unit-testing, and
+should move because it is faster and cheaper.
 
-**My proposal:** keep only what a user would notice breaking:
+**Plan:** E2E keeps only what genuinely needs a real browser —
+snippet insertion, CRUD across a reload, persistence across restart. Everything
+that can be proven without a browser moves to unit tests (currently ~7s for
+1712 tests, vs ~7min for 153 E2E). Target: roughly 15–25 E2E tests, under 90s.
 
-- Insert a snippet into a page (the core loop)
-- Create / edit / delete a snippet
-- Data survives a browser restart
-- Settings change and persist
+`content-script.spec.ts` (37) and `options.spec.ts` (44) are 53% of the suite
+and are the first candidates — most of that is DOM/JSX behaviour that happy-dom
+covers in milliseconds.
 
-Target: **15–25 tests, under 90 seconds.** Everything else moves to unit tests,
-which run in ~7 seconds.
+### Q2 — Coverage (item 3) — ANSWERED
 
-**Question:** which features are *most* important to you? Anything you'd be
-upset to ship broken?
+**Your answer:** 80% across all code is non-negotiable. Write the tests. If I
+genuinely believe a file should not be held to 80%, I must ask you first, with
+real reasons.
 
-### Q2 — Coverage (item 3)
-
-You want a flat 80% for all code.
-
-One thing you should know before deciding: the components layer currently sits
-at ~3%, because four components have no tests at all. Flat 80% across *everything*
-means writing real tests for those, or excluding them with a written reason.
-
-**Question:** flat 80% on everything, or 80% on everything except the four
-untested components (excluded with a written reason until they have tests)?
+**So:** no exclusions without asking. Four components currently at 0%
+(`ConfirmDialog`, `ImportWizard`, `NewSnippetView`, `SnippetDetailView`) get
+**real tests**, not a written-reason exclusion. I will interrupt you only if I
+hit a genuine case, and I will bring reasons.
 
 ### Q3 — Local vs shipped files (item 11)
 
@@ -91,24 +89,27 @@ it's currently the reviewer agent definition, which item 1 drops anyway.
 **Question:** do you want any agent instructions at all, or would you rather I
 just leave `AGENTS.md` as the single source?
 
-### Q4 — Dependency majors (item 6)
+### Q4 — Dependency majors (item 6) — ANSWERED
 
-Updating majors will change behaviour, not just versions. WXT 0.20 → newer, React
-19 → newer, Vitest 4 → newer.
+**Your answer:** always latest. If we have WXT 0.20.2 and 0.21.1 exists, go to
+0.21.1.
 
-**Question:** do you want me to go all the way to latest majors, or stay on
-current majors and only patch/minor? I'll verify the build after every step
-either way, but full majors is a longer job.
+**So:** `latest` for every dependency, majors included. Verify compile + tests +
+build after each change so a break is attributable to one package.
 
-### Q5 — Specs (item 5)
+### Q5 — Specs (item 5) — still open
 
-I'm researching this before I touch anything. Rough direction: specs describe
-*what the system does*, tests verify *the rules*, and you write the spec for a
-feature once — not per-change.
+The research came back (see above) and recommends 47 files -> 4. I need your
+yes before deleting 5,739 lines of your writing.
 
-**Question:** do you actually enjoy writing specs, or is it friction? That
-changes whether the answer is "one spec per module" or "a short design note per
-feature".
+**Question:** go ahead with the 4-file structure?
+
+### Q6 — Store credentials
+
+You said these will be configured in another day. Noted — not my problem to solve,
+and it is **separate** from the v1.6.0 failure (that died in E2E, before
+`Submit to Stores` ever ran). I will leave the publish workflow's secret names
+untouched so your setup matches it.
 
 ---
 
