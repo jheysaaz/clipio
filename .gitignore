@@ -40,6 +40,9 @@ release/
 # Test coverage
 coverage/
 
+# TypeScript incremental build cache
+*.tsbuildinfo
+
 # Playwright E2E test artifacts
 test-results/
 playwright-report/

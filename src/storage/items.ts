@@ -49,7 +49,6 @@ export const storageModeReasonItem = storage.defineItem<"quota" | "manual">(
 // UI flags
 // ---------------------------------------------------------------------------
 
-
 /** Set to true by the background when a sync sign-out wipe is detected. */
 export const syncDataLostItem = storage.defineItem<boolean>(
   "local:syncDataLost",
