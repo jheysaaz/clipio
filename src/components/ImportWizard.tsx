@@ -46,6 +46,13 @@ import type {
   UnsupportedPlaceholderEntry,
   UnsupportedPlaceholderAction,
 } from "@/lib/importers/types";
+import {
+  applyUnsupportedAction,
+  buildFinalSnippets,
+  detectConflicts,
+  estimateJsonSize,
+  suggestShortcut,
+} from "@/lib/importers/merge";
 import { SYNC_QUOTA } from "@/config/constants";
 import { restoreMediaEntry } from "@/storage/backends/media";
 import { captureError, captureMessage } from "@/lib/sentry";
@@ -71,145 +78,6 @@ const PARSERS = {
   textblaze: TextBlazeParser,
   powertext: PowerTextParser,
 } as const;
-
-function applyUnsupportedAction(
-  snippet: ParsedSnippet,
-  action: UnsupportedPlaceholderAction
-): ParsedSnippet | null {
-  if (action === "skip") return null;
-  if (action === "remove") {
-    // Strip any remaining {token} patterns (single-brace) that are NOT our {{...}} ones
-    const cleaned = snippet.content.replace(/(?<!\{)\{(?!\{)[^}]+\}/g, "");
-    return { ...snippet, content: cleaned, unsupportedPlaceholders: [] };
-  }
-  // "keep" — leave as literal text
-  return { ...snippet, unsupportedPlaceholders: [] };
-}
-
-function detectConflicts(
-  incoming: ParsedSnippet[],
-  existing: Snippet[]
-): ConflictEntry[] {
-  const byId = new Map(existing.map((s) => [s.id, s]));
-  const byShortcut = new Map(existing.map((s) => [s.shortcut, s]));
-  const entries: ConflictEntry[] = [];
-
-  for (const snippet of incoming) {
-    const idMatch = byId.get(snippet.suggestedId);
-    const shortcutMatch = byShortcut.get(snippet.shortcut);
-
-    if (!idMatch && !shortcutMatch) continue;
-
-    // Determine conflict type
-    let conflictType: ConflictEntry["conflictType"];
-    let existing: Snippet;
-    if (idMatch && shortcutMatch && idMatch.id === shortcutMatch.id) {
-      conflictType = "both";
-      existing = idMatch;
-    } else if (idMatch) {
-      conflictType = "id";
-      existing = idMatch;
-    } else {
-      conflictType = "shortcut";
-      existing = shortcutMatch!;
-    }
-
-    entries.push({
-      incoming: snippet,
-      existing,
-      conflictType,
-      resolution: "skip",
-    });
-  }
-
-  return entries;
-}
-
-function suggestShortcut(base: string, existing: Snippet[]): string {
-  const taken = new Set(existing.map((s) => s.shortcut));
-  if (!taken.has(base)) return base;
-  let i = 2;
-  while (taken.has(`${base}_${i}`)) i++;
-  return `${base}_${i}`;
-}
-
-function estimateJsonSize(snippets: Snippet[]): number {
-  return JSON.stringify(snippets).length;
-}
-
-function buildFinalSnippets(
-  existing: Snippet[],
-  incoming: ParsedSnippet[],
-  conflicts: ConflictEntry[]
-): Snippet[] {
-  const conflictByShortcut = new Map(
-    conflicts.map((c) => [c.incoming.shortcut, c])
-  );
-  const conflictById = new Map(
-    conflicts.map((c) => [c.incoming.suggestedId, c])
-  );
-
-  // IDs of existing snippets to remove (overwritten ones)
-  const idsToRemove = new Set<string>();
-  for (const c of conflicts) {
-    if (c.resolution === "overwrite") {
-      idsToRemove.add(c.existing.id);
-    }
-  }
-
-  const base = existing.filter((s) => !idsToRemove.has(s.id));
-
-  const toAdd: Snippet[] = [];
-  const now = new Date().toISOString();
-
-  for (const parsed of incoming) {
-    const idConflict = conflictById.get(parsed.suggestedId);
-    const shortcutConflict = conflictByShortcut.get(parsed.shortcut);
-    const conflict = idConflict ?? shortcutConflict;
-
-    if (conflict) {
-      if (conflict.resolution === "skip") continue;
-      if (conflict.resolution === "overwrite") {
-        // Already removed the existing one above
-        toAdd.push({
-          id: parsed.suggestedId,
-          label: parsed.label,
-          shortcut: parsed.shortcut,
-          content: parsed.content,
-          tags: parsed.tags,
-          usageCount: 0,
-          createdAt: now,
-          updatedAt: now,
-        });
-      } else if (conflict.resolution === "rename") {
-        const newShortcut = conflict.renamedShortcut ?? parsed.shortcut;
-        toAdd.push({
-          id: crypto.randomUUID(),
-          label: parsed.label,
-          shortcut: newShortcut,
-          content: parsed.content,
-          tags: parsed.tags,
-          usageCount: 0,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-    } else {
-      toAdd.push({
-        id: parsed.suggestedId,
-        label: parsed.label,
-        shortcut: parsed.shortcut,
-        content: parsed.content,
-        tags: parsed.tags,
-        usageCount: 0,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-  }
-
-  return [...base, ...toAdd];
-}
 
 // ---------------------------------------------------------------------------
 // Sub-components
