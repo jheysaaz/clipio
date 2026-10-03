@@ -96,11 +96,34 @@ Note there is **no `--` separator** — pnpm forwards flags to the Stryker CLI
 directly, and inserting one makes it read the flags as positional arguments
 (`error: too many arguments for 'run'`).
 
-## Threshold
+## Threshold, and what each field actually does
 
-A ratchet, like the coverage numbers: `high: 80`, `low: 60`, `break: null`. The
-first full run landed at 81.00%, so the gate is already meaningful and does not
-need to be lowered to pass.
+Only `break` can fail the build. `high` and `low` colour a row in the report and
+do nothing else.
+
+```js
+thresholds: {
+  high: 80,    // colour green at/above - no effect on exit code
+  low: 60,     // colour red below    - no effect on exit code
+  break: 79,   // THE ONLY ONE THAT FAILS THE BUILD
+}
+```
+
+An earlier version of this config had `break: null` while being described as "a
+ratchet like the coverage numbers" and wired into a merge-gating CI job. It could
+**not** have failed. Stryker is explicit about this:
+
+> No breaking threshold configured. Won't fail the build no matter how low your
+> mutation score is.
+
+`break: 79` sits two points below the measured 81.00%, so ordinary churn does not
+break it while a real drop - a deleted test, or a refactor that quietly stops
+exercising a branch - does.
+
+**Verified:** running the gate with a temporary `break: 99` against a module
+scoring 100% exits 1; with `break: 79` it exits 0. A gate that cannot fail was
+found by the independent reviewer of the very change that introduced it, which is
+the argument for having one.
 
 ## Implementation notes worth keeping
 

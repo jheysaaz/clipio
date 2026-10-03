@@ -391,7 +391,9 @@ Individually: `format:check` · `lint` · `compile` (src **and** e2e) ·
 ### Coverage thresholds are ratchets, not targets
 
 The numbers in `vitest.config.ts` are set to each scope's **true current
-measurement**, and the suite fails if any of them regresses. They are lower than
+measurement** — for a `src/**` glob, the aggregate across every file it matches,
+which is how Vitest applies it, not the printed report row — and the suite fails if
+any of them regresses. They are lower than
 the 80/80/75/80 they used to be, because those described 46 files while the
 config asked for 50 — four components were being silently dropped from the
 report, so the bar excluded exactly the files with no tests.
@@ -400,10 +402,11 @@ report, so the bar excluded exactly the files with no tests.
 again. Raising a threshold is a deliberate act, done when real tests land.
 
 Current honest values: global **81 / 73 / 76 / 81** over 50 files, plus
-per-directory floors for `src/components/**`, `src/lib/**` and `src/storage/**`.
+per-directory floors of `src/lib/**` 93/91/92/87 and `src/storage/**` 95/88/93/90
+(lines/functions/statements/branches).
 
-**`src/components/**` has a floor of 3% because four components have no tests at
-all.** That is a tracked gap in
+**`src/components/**` has a floor of 3% because four components have no tests
+at all.** That is a tracked gap in
 [`specs/coverage-honesty.spec.md`](specs/coverage-honesty.spec.md), not a passing
 grade. Writing those tests is the highest-value outstanding work in the repo.
 

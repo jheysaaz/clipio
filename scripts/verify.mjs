@@ -33,7 +33,10 @@
  *
  *   0  every step passed
  *   1  a step failed — the failing step's own output is already on screen
- *   2  bad usage
+ *
+ * `--full` is the only flag; an unknown flag is ignored rather than rejected, so
+ * there is no third exit code. (`flake-gate.mjs` does validate its flags and
+ * does exit 2 — the two are separate scripts.)
  */
 
 import { spawn } from "child_process";
@@ -144,6 +147,8 @@ console.log(
 
 const results = [];
 let failedAt = -1;
+/** Output of the failing step, kept for the summary after the loop breaks. */
+let failureOutput = "";
 
 for (const [i, step] of steps.entries()) {
   const label = `${String(i + 1).padStart(2)}/${steps.length}  ${step.name}`;
@@ -160,6 +165,11 @@ for (const [i, step] of steps.entries()) {
   } else {
     process.stdout.write(`  ${" ".repeat(34)}${RED(`✗ ${secs}s`)}\n\n`);
     failedAt = i;
+    // Retained for the summary below: the loop breaks here, so this is the only
+    // place the failing step's output survives. Reading it from the step's
+    // config object instead (as an earlier version did) yielded `undefined`
+    // and printed an empty block under every failure.
+    failureOutput = captured ?? "";
     // Later steps cannot meaningfully run on top of a failure — a type error
     // makes unit-test output noise, and coverage would not be regenerated.
     break;
@@ -183,7 +193,10 @@ console.log(DIM(`  ${passed}/${ran} passed · ${total}s total\n`));
 if (failedAt !== -1) {
   const step = steps[failedAt];
   console.log(RED(BOLD(`  FAILED: ${step.name}`)) + "\n");
-  for (const line of tail(step.captured ?? "")) {
+  // `failureOutput`, not `step.captured` — the latter is the step's *config*
+  // object and has no output on it, so the summary was silently reading
+  // `undefined` and printing an empty block under every failure.
+  for (const line of tail(failureOutput)) {
     console.log(DIM("  │ ") + line);
   }
   console.log(DIM(`\n  Re-run this step alone: pnpm run ${step.cmd[2]}\n`));

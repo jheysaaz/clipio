@@ -35,13 +35,13 @@
  * `test-honesty`, `i18n`, `e2e-suite`) are skipped: they describe a concern
  * rather than a module.
  *
- * Exit codes: 0 clean, 1 drift, 2 bad usage.
+ * Exit codes: 0 clean, 1 drift.
  *
  * Usage: pnpm check:spec-drift   (run automatically by `pnpm verify`)
  */
 
 import { existsSync, readFileSync, readdirSync } from "fs";
-import { dirname, join, relative, resolve, sep } from "path";
+import { dirname, join, resolve, sep } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

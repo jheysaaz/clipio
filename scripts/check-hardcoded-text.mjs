@@ -217,13 +217,14 @@ for (const file of walk(SRC)) {
   // Scanned copy has comments blanked; `content` keeps the real text so
   // findings report what a user would actually see.
   const scannable = blankComments(content);
-  const lines = content.split("\n");
-
   /** 1-indexed line number for a character offset. */
   const lineAt = (offset) => content.slice(0, offset).split("\n").length;
 
-  /** The source line an offset falls on, for the "already localised?" test. */
-  const lineFor = (offset) => lines[lineAt(offset) - 1] ?? "";
+  // `lineFor(offset)` used to sit here — "the source line an offset falls on,
+  // for the already-localised? test" — and was never called. It predates the
+  // i18n fix in ab899f2 and was left behind as dead code. Removing it is what
+  // let `scripts/**/*.mjs` be linted at all: the file was excluded from ESLint
+  // by a blanket ignore, so nothing had flagged it since.
 
   JSX_TEXT.lastIndex = 0;
   let m;

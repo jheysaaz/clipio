@@ -63,6 +63,14 @@ const sha = (
 const MAX_FILES = 15;
 const MAX_LINES = 800;
 
+/**
+ * Diff size cap for the packet.
+ *
+ * A packet is meant to be read, so it cannot hold an unbounded diff. But any cap
+ * must be announced: see `pushDiff`, which names every withheld file.
+ */
+const DIFF_LINE_CAP = 4000;
+
 const git = (...args) =>
   execFileSync("git", args, {
     cwd: ROOT,
@@ -151,22 +159,69 @@ if (files.length === 0) {
 
 const SPECS_DIR = join(ROOT, "specs");
 
-/** Specs whose source or body mentions a changed file. */
-function specsTouchedBy(changedFiles) {
+/**
+ * Which specs are authoritative for this change.
+ *
+ * A spec contributes criteria only if a module it DECLARES AS ITS SOURCE changed.
+ * That declaration is the `> Source:` header, which names the module the spec is
+ * about.
+ *
+ * The earlier rule — "any spec whose text mentions a changed file's basename" —
+ * produced a transitive closure, because the changed file list itself contains
+ * spec `.md` files. One commit that touched `specs/blocked-sites.spec.md` (and
+ * that spec happens to mention `content-script-trust.spec.md` in prose) pulled in
+ * every spec reachable by a mention-chain. On the first real run, 51 of the 59
+ * "authoritative" criteria were about modules the change never touched, and the
+ * 8 that mattered were buried among them.
+ *
+ * Since these criteria become the reviewer's entire authority (see rule 1 in
+ * `.opencode/agent/reviewer.md`), noise here is not cosmetic — it actively
+ * misdirects the review. Specs the commit merely EDITED are reported separately,
+ * as edits, not as sources of requirements.
+ *
+ * @param {string[]} changedFiles all changed paths
+ * @returns {{ authoritative: Array, edited: string[] }}
+ */
+function relevantSpecs(changedFiles) {
+  const changedCode = changedFiles.filter(
+    (f) => !f.startsWith("specs/") && /\.(ts|tsx)$/.test(f)
+  );
+  const editedSpecs = changedFiles.filter((f) => f.startsWith("specs/"));
+
   const specs = existsSync(SPECS_DIR)
     ? readdirSync(SPECS_DIR).filter((f) => f.endsWith(".md"))
     : [];
-  const hits = [];
+
+  const authoritative = [];
   for (const s of specs) {
+    const rel = `specs/${s}`;
     const text = readFileSync(join(SPECS_DIR, s), "utf-8");
-    const relevant = changedFiles.some((f) => {
-      const base = f.split("/").pop();
-      // Match on basename so `src/lib/giphy.ts` matches a spec naming it in prose.
-      return text.includes(f) || (base && text.includes(base));
-    });
-    if (relevant) hits.push({ file: `specs/${s}`, text });
+    const sources = declaredSources(text);
+
+    // Relevant only when a module it declares as its subject actually changed.
+    if (sources.some((src) => changedCode.includes(src))) {
+      authoritative.push({ file: rel, text });
+    }
   }
-  return hits;
+  return { authoritative, editedSpecs };
+}
+
+/** Paths named in a spec's `> Source:` headers (all lines, all backticked tokens). */
+function declaredSources(text) {
+  const out = [];
+  for (const line of text.split("\n")) {
+    const m = line.match(/^>\s*Source:\s*(.*)$/);
+    if (!m) continue;
+    for (const t of m[1].matchAll(/`([^`]+)`/g)) {
+      const p = t[1].trim();
+      // Only concrete source paths; skip directories and globs, and skip the
+      // parenthetical symbol lists.
+      if (/^(src|e2e)\//.test(p) && !p.includes("*") && !p.endsWith("/")) {
+        out.push(p);
+      }
+    }
+  }
+  return out;
 }
 
 /** Extract `- [ ]` / `- [x]` acceptance criteria with their section context. */
@@ -187,8 +242,8 @@ function extractACs(text) {
   return out;
 }
 
-const relevantSpecs = specsTouchedBy(files);
-const allACs = relevantSpecs.flatMap((s) =>
+const { authoritative, editedSpecs } = relevantSpecs(files);
+const allACs = authoritative.flatMap((s) =>
   extractACs(s.text).map((ac) => ({ ...ac, spec: s.file }))
 );
 
@@ -259,7 +314,7 @@ push(
 push("");
 push("## Change");
 push("");
-let subject = "";
+let subject;
 try {
   subject = git("log", "-1", "--format=%s", target).trim();
 } catch {
@@ -310,8 +365,11 @@ if (allACs.length === 0) {
   );
 } else {
   push(
-    `_Extracted from the ${relevantSpecs.length} spec(s) this change touches. This list_`,
-    `_**is** the definition of done — not the diff._`
+    `_Extracted from the ${authoritative.length} spec(s) whose declared source module this change`,
+    `_alters. This list_ **_is** the definition of done — not the diff._`,
+    "",
+    `_Only specs that declare a changed module as their source are included. Specs the change`,
+    `_merely edited are listed separately below and contribute no criteria._`
   );
   push("");
   if (unresolved.length > 0) {
@@ -337,6 +395,21 @@ if (allACs.length === 0) {
   );
 }
 push("");
+
+if (editedSpecs.length > 0) {
+  push("## Specs edited by this change");
+  push("");
+  push(
+    "_Listed for awareness. These contribute NO acceptance criteria above — editing a"
+  );
+  push(
+    "spec is not the same as changing the module it describes, and treating it as"
+  );
+  push("authoritative is what made an earlier packet 51-of-59 noise._");
+  push("");
+  for (const s of editedSpecs) push(`- \`${s}\``);
+  push("");
+}
 
 push("## Specs the touched tests claim to derive from");
 push("");
@@ -380,14 +453,81 @@ push("---");
 push("");
 push("## Diff");
 push("");
-push("```diff");
-push(
-  git("diff", `${base}...${target}`)
-    .split("\n")
-    .slice(0, 4000) // cap so the packet stays readable
-    .join("\n")
-);
-push("```");
+
+/**
+ * Emit the diff, or say exactly what was withheld.
+ *
+ * The diff is capped so the packet stays readable, but the cap is stated out
+ * loud and every omitted file is named. An earlier version truncated silently:
+ * a 6829-line diff was cut at 4000, 30 of 48 files never reached the reviewer,
+ * and nothing in the packet said so. The files withheld included
+ * `scripts/verify.mjs` — the gate itself — so the reviewer could not tell that
+ * the thing they were reviewing was not in front of them. Silent truncation in
+ * a tool whose entire purpose is to make review honest is the worst failure it
+ * could have.
+ *
+ */
+function pushDiff() {
+  const raw = git("diff", `${base}...${target}`);
+  const lines = raw.split("\n");
+
+  if (lines.length <= DIFF_LINE_CAP) {
+    push("```diff");
+    push(raw);
+    push("```");
+    return;
+  }
+
+  // Emit whole-file hunks only. Cutting mid-hunk produces a patch that will not
+  // apply and a file that looks complete when it is not.
+  const kept = [];
+  let currentFile = null;
+  let omitted = [];
+
+  for (const line of lines) {
+    if (line.startsWith("diff --git ")) {
+      const m = line.match(/ b\/(.+)$/);
+      currentFile = m ? m[1] : "(unknown)";
+    }
+    if (kept.length >= DIFF_LINE_CAP) {
+      if (currentFile && !omitted.includes(currentFile))
+        omitted.push(currentFile);
+      continue;
+    }
+    kept.push(line);
+  }
+
+  // Roll back to the last complete file boundary so no hunk is cut in half.
+  while (kept.length > 0 && !kept[kept.length - 1].startsWith("diff --git ")) {
+    const lastFileHeader = kept.findLastIndex((l) =>
+      l.startsWith("diff --git ")
+    );
+    if (lastFileHeader === -1) break;
+    const m = kept[lastFileHeader].match(/ b\/(.+)$/);
+    const file = m ? m[1] : "(unknown)";
+    kept.length = lastFileHeader;
+    if (!omitted.includes(file)) omitted.push(file);
+  }
+
+  push(
+    `> ⚠️ **Diff truncated: ${lines.length} lines total, showing ${kept.length}.**`,
+    `> **${omitted.length} file(s) are NOT in this packet:**`,
+    ""
+  );
+  for (const f of omitted) push(`> - \`${f}\``);
+  push(
+    "",
+    "> Read them directly with `git show <sha> -- <path>`. A file absent from",
+    "> this packet has NOT been reviewed — do not treat this as an approval of",
+    "> anything in the list above."
+  );
+  push("");
+  push("```diff");
+  push(kept.join("\n"));
+  push("```");
+}
+
+pushDiff();
 
 const outDir = join(ROOT, "review");
 if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });

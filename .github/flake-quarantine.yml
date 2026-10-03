@@ -31,7 +31,13 @@
 # The expiry is the part that matters. A quarantine without a deadline becomes a
 # graveyard, and a graveyard is worse than a red build because it looks handled.
 #
-# The flake gate runs the suite N times on release tags and on any push to main.
-# See `.github/workflows/flake-gate.yml`.
+# The flake gate runs the suite N times on a weekly schedule and on manual
+# dispatch — see `.github/workflows/flake-gate.yml`. It does NOT run on release
+# tags or on pushes to main; it is a scheduled diagnostic, not a merge gate, so
+# a known flake cannot block a merge. A release tag runs the suite once, with
+# retries at 0, exactly like CI.
+#
+# If a release is blocked by a flake, the fix is to add an entry here so the
+# weekly run stops reporting it — not to raise retries.
 
 entries: []

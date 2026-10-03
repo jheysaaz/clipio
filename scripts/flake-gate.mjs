@@ -41,7 +41,7 @@
  *   pnpm test:flake -- --runs=5
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdtempSync } from "fs";
+import { existsSync, readFileSync, mkdtempSync } from "fs";
 import { spawn } from "child_process";
 import { tmpdir } from "os";
 import { dirname, join, resolve } from "path";

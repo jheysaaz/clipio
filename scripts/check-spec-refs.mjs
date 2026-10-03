@@ -35,7 +35,7 @@
  * produce false failures. The goal is to keep real links honest, not to force
  * every comment into a shape.
  *
- * Exit codes: 0 clean, 1 dead reference(s), 2 bad usage.
+ * Exit codes: 0 clean, 1 dead reference(s).
  *
  * Usage: pnpm check:spec-refs   (run automatically by `pnpm verify`)
  */
@@ -133,15 +133,10 @@ const problems = [];
 let checked = 0;
 let fileLinks = 0;
 
-/**
- * Match `// spec: …` comments that carry a spec *path*.
- *
- * Accepts both forms in use in this repo:
- *     // spec: specs/foo.spec.md#anchor
- *     // spec: foo.spec.md#anchor          (bare filename)
- */
-const REF =
-  /\/\/\s*spec:\s*(?:specs\/)?([a-z0-9-]+\.spec\.md)(#([a-z0-9-]+))?/gi;
+// A spec *path* inside a `// spec:` comment, in either form used in this repo:
+//     // spec: specs/foo.spec.md#anchor
+//     // spec: foo.spec.md#anchor          (bare filename)
+const SPEC_PATH = /^(?:specs\/)?([a-z0-9-]+\.spec\.md)(?:#([a-z0-9-]+))?/i;
 
 for (const scanRoot of SCAN_ROOTS) {
   const abs = join(ROOT, scanRoot);
@@ -155,9 +150,7 @@ for (const scanRoot of SCAN_ROOTS) {
       const m = line.match(/\/\/\s*spec:\s*(.+)$/);
       if (!m) return;
       const tail = m[1];
-      const refMatch = tail.match(
-        /^(?:specs\/)?([a-z0-9-]+\.spec\.md)(?:#([a-z0-9-]+))?/i
-      );
+      const refMatch = tail.match(SPEC_PATH);
       // Not a file reference — free-form prose such as `// spec: MUST …`.
       if (!refMatch) return;
 

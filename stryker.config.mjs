@@ -139,16 +139,26 @@ export default {
 
   // ── Thresholds ────────────────────────────────────────────────────────
   //
-  // A ratchet, like the coverage numbers in vitest.config.ts. High enough that
-  // a genuinely untested branch fails; low enough to be reachable.
+  // `high` and `low` only COLOUR a row in the report. They never set an exit
+  // code. `break` is the only value that can fail the build, and it defaults to
+  // `null` — which Stryker states plainly:
+  //
+  //   "No breaking threshold configured. Won't fail the build no matter how low
+  //    your mutation score is."
+  //
+  // An earlier version of this config had `break: null` while being described
+  // as a ratchet and wired into a merge-gating CI job. It could not have failed.
+  // `break` is therefore set below the measured score, and the comment says what
+  // each field actually does.
   thresholds: {
-    // 80% of mutants killed means the test suite genuinely pins the behaviour
-    // of these modules, rather than merely exercising their lines.
+    // Colour the score row green at or above this. No effect on exit code.
     high: 80,
-    // 60% is the floor for "still worth running". Below this the suite is not
-    // really testing this code and the number stops being informative.
+    // Colour it red below this. No effect on exit code.
     low: 60,
-    break: null,
+    // The one that can fail the build. Set 2 points below the measured 81.00%
+    // so ordinary churn does not break it, but a real drop — losing a test, or
+    // a refactor that quietly stops exercising a branch — does.
+    break: 79,
   },
 
   // ── Runtime ───────────────────────────────────────────────────────────

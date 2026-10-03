@@ -7,7 +7,17 @@ export default defineConfig({
     environment: "happy-dom",
 
     // Test file patterns
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx", "tests/**/*.test.ts"],
+    //
+    // `scripts/` is included because the gate scripts carry real logic — the
+    // coverage-integrity glob compiler, for one — and a gate that is itself
+    // untested is exactly the kind of thing these Testing Standards exist to
+    // prevent. Scoped to `*.test.ts` so the `.mjs` gates are not swept up.
+    include: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "tests/**/*.test.ts",
+      "scripts/**/*.test.ts",
+    ],
 
     // Global setup file for browser API mocks
     setupFiles: ["tests/setup.ts"],
@@ -94,11 +104,29 @@ export default defineConfig({
         // A single global average lets a well-tested pure-logic module
         // (`dateUtils` at 100%) mask a directory at 3%. That is not a
         // hypothetical: `src/components/` was reporting 29% while containing a
-        // file at 28% and three files that were missing entirely. These floors
-        // are set at each directory's honest current value so a regression in
-        // any one of them fails loudly instead of being averaged away.
+        // file at 28% and three files that were missing entirely.
+        //
+        // Vitest applies a glob threshold as an AGGREGATE over every file the
+        // glob matches — not per file, and not as the printed directory row. The
+        //
+        // The values below were read from Vitest's OWN failure output (by
+        // setting each floor to 100 and recording what it reported), because
+        // recomputing them from `coverage-final.json` produced different
+        // numbers: that file only holds files that reached the report, whereas
+        // the threshold is evaluated across the whole glob. Each is floored to
+        // an integer so a passing run cannot depend on rounding:
+        //
+        //     src/lib/**         lines 93.26 · funcs 91.40 · stmts 92.08 · branches 87.77
+        //     src/storage/**     lines 95.50 · funcs 88.46 · stmts 93.55 · branches 90.62
+        //
+        // An earlier version set these from the printed report rows and left lib
+        // at 80 against a real 93.26 while describing them as "honest current
+        // values". A floor thirteen points under the truth will not catch a
+        // meaningful regression in that directory.
         //
         // Same rule as the global ratchet: raise these as real tests land.
+        // `src/components/**` is near-zero because four components have no tests
+        // at all — tracked in `specs/coverage-honesty.spec.md`.
         "src/components/**": {
           lines: 3,
           functions: 1,
@@ -106,16 +134,16 @@ export default defineConfig({
           statements: 3,
         },
         "src/lib/**": {
-          lines: 80,
-          functions: 75,
-          branches: 72,
-          statements: 80,
+          lines: 93,
+          functions: 91,
+          branches: 87,
+          statements: 92,
         },
         "src/storage/**": {
-          lines: 91,
-          functions: 84,
-          branches: 89,
-          statements: 91,
+          lines: 95,
+          functions: 88,
+          branches: 90,
+          statements: 93,
         },
 
         // Critical pure-logic modules — highest bar

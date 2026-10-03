@@ -99,22 +99,30 @@ understate the intended set — the exact failure it exists to prevent.
 
 ### Thresholds corrected to the truth
 
-The honest measurement over all 50 files is **81.76 / 73.94 / 76.58 / 82.78**.
+The honest measurement over all 50 files is **81.76 / 73.94 / 76.58 / 81.76**.
 The global thresholds are now `81 / 73 / 76 / 81`.
 
 **These are lower than the 80/80/75/80 they replace, and that is a correction,
 not a relaxation.** The old numbers described 46 files. The new ones describe all
 50, including four at 0%. The suite now fails if coverage _regresses_.
 
-Added per-directory floors at each directory's honest current value, so a
-regression in any one fails loudly instead of being averaged:
+Added per-directory floors, so a regression in any one directory fails loudly
+instead of being averaged into the global number.
 
-| Scope               | lines | functions | branches |
-| ------------------- | ----- | --------- | -------- |
-| global (ratchet)    | 81    | 73        | 76       |
-| `src/components/**` | 3     | 1         | 0        |
-| `src/lib/**`        | 80    | 75        | 72       |
-| `src/storage/**`    | 91    | 84        | 89       |
+Vitest applies a glob threshold as an **aggregate over every file the glob
+matches** — not per file, and not as the printed report row. The floors below
+are the measured aggregates, floored to integers:
+
+| Scope               | measured s/f/b        | floor lines | functions | branches |
+| ------------------- | --------------------- | ----------- | --------- | -------- |
+| global (ratchet)    | 81.76/73.94/76.58     | 81          | 73        | 76       |
+| `src/components/**` | 3.48 / 1.79 / 0.75    | 3           | 1         | 0        |
+| `src/lib/**`        | 91.24 / 90.00 / 86.62 | 91          | 90        | 86       |
+| `src/storage/**`    | 98.51 / 97.67 / 93.88 | 98          | 97        | 93       |
+
+An earlier revision set these from the printed report rows and put `lib` at 80
+against a real 91.24, describing them as "honest current values". A floor eleven
+points below the truth would not catch a meaningful regression in that directory.
 
 ### e2e type-checking wired in
 

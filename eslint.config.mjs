@@ -17,7 +17,11 @@ export default defineConfig([
     "test-results/",
     "**/dist/",
     "**/*.js",
-    "**/*.mjs",
+    // `.mjs` is deliberately NOT ignored. The gate scripts under `scripts/` are
+    // real code that runs on every `pnpm verify` and on every release tag, and
+    // excluding them left an entire directory of logic unlinted — which is how
+    // `check-spec-refs.mjs` came to carry a dead duplicate regex that nothing
+    // complained about.
     "**/*.cjs",
   ]),
   eslint.configs.recommended,
@@ -41,6 +45,40 @@ export default defineConfig([
       "jsx-a11y/role-has-required-aria-props": "error",
       "jsx-a11y/role-supports-aria-props": "error",
       "no-console": ["warn", { allow: ["warn", "error"] }],
+    },
+  },
+  {
+    // Node-side tooling: the gate scripts in `scripts/`, and the root configs.
+    //
+    // `.mjs` is no longer globally ignored (see above), so these files are
+    // actually linted now. They are plain Node ESM — no JSX, no browser
+    // globals, no React — so they get their own environment rather than
+    // inheriting the browser setup the `**/*.{ts,tsx}` block provides.
+    files: ["**/*.mjs", "**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: "module",
+      globals: {
+        process: "readonly",
+        console: "readonly",
+        URL: "readonly",
+        Buffer: "readonly",
+        TextEncoder: "readonly",
+        TextDecoder: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        fetch: "readonly",
+      },
+    },
+    rules: {
+      // The gate scripts strip ANSI escapes out of Playwright/Vitest output with
+      // a character class containing the ESC control character. That is the
+      // correct expression for the job; the rule flags any control character in
+      // a regex, this one included.
+      "no-control-regex": "off",
+      // These are command-line tools: reporting to stdout is the point, and
+      // `console.warn`/`console.error` are the only diagnostics channel.
+      "no-console": "off",
     },
   },
   {
