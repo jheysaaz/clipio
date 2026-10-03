@@ -29,7 +29,7 @@ import {
   type RichTextEditorRef,
 } from "./types";
 import { serializeToMarkdown, deserializeContent } from "./serialization";
-import { copyMarkdownAsRichText } from "@/lib/copyMarkdownAsRichText";
+import { copyMarkdownAsRichText } from "@/lib/copy-markdown-as-rich-text";
 import {
   ClipboardPlaceholderPlugin,
   DatePlaceholderPlugin,
@@ -46,20 +46,20 @@ import {
   DatepickerPlaceholderElement,
   ImagePlaceholderElement,
   GifPlaceholderElement,
-} from "./components/placeholders";
+} from "./placeholders";
 import {
   BoldLeaf,
   ItalicLeaf,
   UnderlineLeaf,
   StrikethroughLeaf,
   CodeLeaf,
-} from "./components/leaves";
-import { LinkElementComponent } from "./components/LinkElement";
-import { BLOCK_PLUGINS } from "./components/BlockElements";
-import { FloatingToolbar } from "./components/FloatingToolbar";
-import { SlashCommandMenu } from "./components/SlashCommandMenu";
-import { GifPicker } from "./components/GifPicker";
-import { ImagePicker } from "./components/ImagePicker";
+} from "./leaves";
+import { LinkElementComponent } from "./LinkElement";
+import { BLOCK_PLUGINS } from "./BlockElements";
+import { FloatingToolbar } from "./FloatingToolbar";
+import { SlashCommandMenu } from "./SlashCommandMenu";
+import { GifPicker } from "./GifPicker";
+import { ImagePicker } from "./ImagePicker";
 import { saveMedia, compressMedia } from "@/storage/backends/media";
 import { MEDIA_LIMITS } from "@/config/constants";
 import { captureError, captureMessage } from "@/lib/sentry";

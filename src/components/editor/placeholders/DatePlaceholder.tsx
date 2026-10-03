@@ -6,7 +6,7 @@ import { ICON_STROKE } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
 import type { TElement } from "platejs";
-import { DATE_FORMATS } from "../../types";
+import { DATE_FORMATS } from "../types";
 
 interface DatePlaceholderElementProps {
   children: React.ReactNode;

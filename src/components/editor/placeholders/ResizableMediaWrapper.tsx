@@ -22,7 +22,7 @@ import {
   FALLBACK_MAX_WIDTH,
   clampWidth,
   getScrollParentWidth,
-} from "./mediaResize";
+} from "./media-resize";
 
 interface ResizableMediaWrapperProps {
   /** The Plate element node (used to locate it in the tree for setNodes / removeNodes). */

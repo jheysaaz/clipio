@@ -1,9 +1,9 @@
 /**
- * Tests for src/utils/dateUtils.ts
+ * Tests for src/lib/date-utils.ts
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { getRelativeTime, formatShortDate, formatFullDate } from "./dateUtils";
+import { getRelativeTime, formatShortDate, formatFullDate } from "./date-utils";
 
 // ---------------------------------------------------------------------------
 // Helpers

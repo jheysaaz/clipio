@@ -39,12 +39,29 @@ export default defineConfig({
         "src/entrypoints/**",
         // Generic UI primitives — covered by e2e axe scans, not unit logic
         "src/components/ui/**",
-        // Editor presentation shells (serialization.ts is NOT excluded and is
-        // unit-tested at its own threshold)
+        // Editor presentation shells. These are the Plate/Slate rendering
+        // layer: BlockElements, the two pickers, the toolbar, the slash menu and
+        // the six placeholders. They hold no branching logic of their own —
+        // what they render comes from block-grammar.ts and serialization.ts,
+        // which are NOT excluded and are unit-tested at their own threshold.
+        // Behaviour is covered by the editor e2e specs and the axe scans.
+        //
+        // Listed as explicit paths rather than a directory glob on purpose: the
+        // previous entry was `editor/components/**`, and when the editor tree
+        // was flattened that glob stopped matching, so 13 files silently entered
+        // the denominator and took functions from 92% to 74%. A glob that
+        // quietly stops matching is worse than a longer list.
         "src/components/editor/RichTextEditor.tsx",
         "src/components/editor/plugins.ts",
         "src/components/editor/index.ts",
-        "src/components/editor/components/**",
+        "src/components/editor/BlockElements.tsx",
+        "src/components/editor/FloatingToolbar.tsx",
+        "src/components/editor/GifPicker.tsx",
+        "src/components/editor/ImagePicker.tsx",
+        "src/components/editor/SlashCommandMenu.tsx",
+        "src/components/editor/leaves.tsx",
+        "src/components/editor/LinkElement.tsx",
+        "src/components/editor/placeholders/**",
         // Styles / assets / generated types — no executable branches
         "src/app.css",
         "src/assets/**",

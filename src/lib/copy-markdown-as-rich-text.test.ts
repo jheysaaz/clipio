@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
-import { copyMarkdownAsRichText } from "./copyMarkdownAsRichText";
+import { copyMarkdownAsRichText } from "./copy-markdown-as-rich-text";
 
 // ---------------------------------------------------------------------------
 // Mocks

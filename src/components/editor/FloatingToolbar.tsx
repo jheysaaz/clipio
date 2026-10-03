@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { useFloatingToolbar, useFloatingToolbarState } from "@platejs/floating";
 import { useEditorRef, useEditorSelector } from "platejs/react";
 import type { TElement } from "platejs";
-import { LINK_ELEMENT } from "../types";
+import { LINK_ELEMENT } from "./types";
 import { i18n } from "#i18n";
 
 interface FloatingToolbarProps {

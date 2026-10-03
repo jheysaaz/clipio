@@ -21,12 +21,12 @@ const copyMarkdownAsRichText = vi.fn();
 const getSnippetUsageCount = vi.fn();
 const incrementSnippetUsage = vi.fn();
 
-vi.mock("@/lib/copyMarkdownAsRichText", () => ({
+vi.mock("@/lib/copy-markdown-as-rich-text", () => ({
   copyMarkdownAsRichText: (...args: unknown[]) =>
     copyMarkdownAsRichText(...args),
 }));
 
-vi.mock("@/utils/usageTracking", () => ({
+vi.mock("@/storage/usage-tracking", () => ({
   getSnippetUsageCount: (...args: unknown[]) => getSnippetUsageCount(...args),
   incrementSnippetUsage: (...args: unknown[]) => incrementSnippetUsage(...args),
 }));

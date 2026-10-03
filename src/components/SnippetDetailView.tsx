@@ -20,14 +20,14 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import type { Snippet } from "@/types";
 import { InlineError } from "@/components/ui/inline-error";
-import { getRelativeTime } from "@/utils/dateUtils";
+import { getRelativeTime } from "@/lib/date-utils";
 import {
   getSnippetUsageCount,
   incrementSnippetUsage,
-} from "@/utils/usageTracking";
+} from "@/storage/usage-tracking";
 import { i18n } from "#i18n";
 import { captureError } from "@/lib/sentry";
-import { copyMarkdownAsRichText } from "@/lib/copyMarkdownAsRichText";
+import { copyMarkdownAsRichText } from "@/lib/copy-markdown-as-rich-text";
 
 interface SnippetDetailViewProps {
   snippet: Snippet;

@@ -1,5 +1,5 @@
 /**
- * Tests for src/utils/usageTracking.ts
+ * Tests for src/storage/usage-tracking.ts
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
@@ -10,7 +10,7 @@ import {
   resetSnippetUsage,
   clearAllUsageCounts,
   incrementTotalInsertions,
-} from "./usageTracking";
+} from "./usage-tracking";
 
 // ---------------------------------------------------------------------------
 // Mock the storage item and sentry

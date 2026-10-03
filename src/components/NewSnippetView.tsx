@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { InlineError } from "@/components/ui/inline-error";
 import type { Snippet, SnippetFormData } from "@/types";
-import { detectShortcutConflict } from "@/lib/snippetUtils";
+import { detectShortcutConflict } from "@/lib/snippet-utils";
 import { i18n } from "#i18n";
 
 interface NewSnippetViewProps {

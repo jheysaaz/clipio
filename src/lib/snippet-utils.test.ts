@@ -1,9 +1,9 @@
 /**
- * Tests for src/lib/snippetUtils.ts
+ * Tests for src/lib/snippet-utils.ts
  */
 
 import { describe, it, expect } from "vitest";
-import { selectNewest, detectShortcutConflict } from "./snippetUtils";
+import { selectNewest, detectShortcutConflict } from "./snippet-utils";
 import type { Snippet } from "@/types";
 
 const makeSnippet = (overrides: Partial<Snippet> = {}): Snippet => ({

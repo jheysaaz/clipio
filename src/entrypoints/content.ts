@@ -35,7 +35,7 @@ function debugLog(
 import {
   incrementSnippetUsage,
   incrementTotalInsertions,
-} from "@/utils/usageTracking";
+} from "@/storage/usage-tracking";
 import confetti from "canvas-confetti";
 import { initSentry, captureError, captureMessage } from "@/lib/sentry-content";
 import {

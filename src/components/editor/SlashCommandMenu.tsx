@@ -10,7 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
 import { useVirtualFloating, offset, flip, shift } from "@platejs/floating";
-import type { SlashCommandMenuProps } from "../types";
+import type { SlashCommandMenuProps } from "./types";
 import { i18n } from "#i18n";
 
 export function SlashCommandMenu({

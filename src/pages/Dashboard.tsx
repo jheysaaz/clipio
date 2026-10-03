@@ -51,7 +51,7 @@ import {
   dismissedUpdateVersionItem,
 } from "@/storage/items";
 import { captureError } from "@/lib/sentry";
-import { selectNewest } from "@/lib/snippetUtils";
+import { selectNewest } from "@/lib/snippet-utils";
 import { openReleasePage } from "@/lib/update-checker";
 
 const CONTEXT_MENU_DRAFT_SESSION_KEY = "__clipioContextMenuDraft__";
