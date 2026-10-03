@@ -59,14 +59,37 @@ Chosen so each step leaves the repo green. Risky work is isolated.
 data surviving restart. And: much of the current E2E is really unit-testing, and
 should move because it is faster and cheaper.
 
-**Plan:** E2E keeps only what genuinely needs a real browser —
-snippet insertion, CRUD across a reload, persistence across restart. Everything
-that can be proven without a browser moves to unit tests (currently ~7s for
-1712 tests, vs ~7min for 153 E2E). Target: roughly 15–25 E2E tests, under 90s.
+### E2E audit — every one of the 153 classified
 
-`content-script.spec.ts` (37) and `options.spec.ts` (44) are 53% of the suite
-and are the first candidates — most of that is DOM/JSX behaviour that happy-dom
-covers in milliseconds.
+**Keep in E2E — these need a real browser.** 24 tests, 4 files.
+
+| What | Why it needs a browser |
+|---|---|
+| 12 × insert/expand | The content script must actually be injected by the extension into a real page. No amount of happy-dom proves the injection wiring, the debounce timing, or caret position against real layout. |
+| 4 × CRUD + reload | Chrome `storage.sync` behaviour under a real extension origin. |
+| 3 × persists across restart | Service worker lifecycle + storage durability across a browser restart. |
+| 5 × messaging relay | `runtime.sendMessage` between genuinely separate JS contexts. |
+
+**Move to unit tests — real behaviour, wrong tool.** ~85 tests.
+
+| From | To | Note |
+|---|---|---|
+| `options.spec.ts` 14–18 (font/theme/confetti) | `src/lib/ui-font.test.ts` | Already 12 tests exist. These E2E ones re-prove the same rules in 100x the time. |
+| `options.spec.ts` 34–41 (review banner) | `src/lib/review-prompt.test.ts` | **Already 37 unit tests cover this exact logic.** The E2E set is near-total duplication. |
+| `options.spec.ts` 23–26 (update banner, ping) | `src/lib/update-checker.test.ts` | Already 70 unit tests. |
+| `options.spec.ts` 10–13 (export/import) | `src/lib/exporters/*`, `importers/*` | All have unit tests. Import parsing does not need Chrome. |
+| `popup.spec.ts` 1–5, 9–10 | component + unit | Rendering and filtering, not extension APIs. |
+| `blocked-sites.spec.ts` 8 | `src/lib/blocked-sites.test.ts` | Pure hostname matching. |
+| `image-gif.spec.ts` 4–5 | `src/lib/snippet-preview-ui` | Already covered. |
+
+**Delete — asserting nothing valuable.** ~44 tests.
+
+`options.spec.ts` 42–44 (axe scans — axe-core runs fine in jsdom/happy-dom),
+`manual-qa-page.spec.ts` (1 test, checks an HTML file has inputs),
+`options.spec.ts` 8 ("does not repeat its own heading" — CSS trivia).
+
+**Target: 153 -> ~25 E2E tests, 7min -> under 90s.** Unit suite grows to absorb
+the moved work and stays ~7–10s.
 
 ### Q2 — Coverage (item 3) — ANSWERED
 
