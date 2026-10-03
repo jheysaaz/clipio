@@ -87,11 +87,27 @@ export const UPDATE_CHECK_MIN_INTERVAL_HOURS = 24 as const;
 // Review prompt
 // ---------------------------------------------------------------------------
 
-/** Alarm name for the periodic review-prompt eligibility check (fires every 6 hours). */
+/** Alarm name for the review-prompt eligibility check. */
 export const REVIEW_CHECK_ALARM_NAME = "clipio-review-check" as const;
 
-/** How often to run the review-prompt eligibility check (minutes). */
-export const REVIEW_CHECK_INTERVAL_MINUTES = 360 as const;
+/**
+ * How long after install the first review-prompt check runs (hours).
+ *
+ * ONE-SHOT, NOT PERIODIC. The review prompt is shown at most once per install,
+ * so a repeating alarm would wake the service worker indefinitely to re-evaluate
+ * a condition that can only ever fail.
+ *
+ * Why one-shot is deliberate: `shouldShowReviewPrompt()` requires state
+ * `"pending"`, and on success writes `"shown"`. Nothing returns the state to
+ * `"pending"` - the lifecycle is one-way (pending -> shown -> dismissed | rated).
+ * A periodic alarm therefore qualified exactly once and was a no-op after that,
+ * while still costing a service-worker wakeup every 6 hours indefinitely. Chrome
+ * penalises MV3 service-worker abuse, so that is a real cost for no behaviour.
+ *
+ * If re-prompting is ever wanted it needs a cooldown AND a reset of the state
+ * machine, not just a period. That is a product decision, not a config change.
+ */
+export const REVIEW_CHECK_DELAY_HOURS = 6 as const;
 
 /** Minimum days since install before the review prompt can be shown. */
 export const REVIEW_MIN_DAYS = 7 as const;

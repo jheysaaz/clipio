@@ -19,14 +19,18 @@ Against an 80% floor, so it passes — but the floor is 80 *for everything*, and
 `src/components/` is far below it because of the four above. Raising the floor is
 a deliberate act once real tests land.
 
-### The review prompt can only fire once
+### The review prompt fires once per install
 
-The alarm is periodic and calls `shouldShowReviewPrompt()`, which requires state
-`"pending"` — then writes `"shown"`. Nothing returns the state to `"pending"`, so
-the alarm is a no-op after its first tick.
+The state machine is one-way (`pending -> shown -> dismissed | rated`), so the
+prompt is offered at most once. That is deliberate — re-prompting someone who
+already ignored you is worse than not prompting them.
 
-This wastes a periodic wakeup of the service worker indefinitely. Behaviour
-(one-shot prompting) is defensible; the perpetual alarm is not. Decision pending.
+What was *not* deliberate was the alarm: it repeated every 6 hours to re-evaluate
+a condition that could only ever fail, waking the service worker indefinitely.
+Now one-shot. The reasoning is recorded in `REVIEW_CHECK_DELAY_HOURS`.
+
+Re-prompting would need a cooldown and a state reset — a product decision, not a
+config change.
 
 ### Chrome / Firefox store credentials not yet configured
 

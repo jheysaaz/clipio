@@ -3,7 +3,7 @@ import {
   UPDATE_CHECK_ALARM_NAME,
   UPDATE_CHECK_INTERVAL_MINUTES,
   REVIEW_CHECK_ALARM_NAME,
-  REVIEW_CHECK_INTERVAL_MINUTES,
+  REVIEW_CHECK_DELAY_HOURS,
   ONBOARDING_SUPPORTED_LOCALES,
   TIMING,
 } from "@/config/constants";
@@ -48,9 +48,11 @@ async function setupBackgroundAlarms(): Promise<void> {
         delayInMinutes: UPDATE_CHECK_INTERVAL_MINUTES,
         periodInMinutes: UPDATE_CHECK_INTERVAL_MINUTES,
       }),
+      // No `periodInMinutes`: the review prompt is shown at most once per
+      // install, so a repeating alarm would be a permanent no-op costing a
+      // service-worker wakeup each cycle. See REVIEW_CHECK_DELAY_HOURS.
       browser.alarms.create(REVIEW_CHECK_ALARM_NAME, {
-        delayInMinutes: REVIEW_CHECK_INTERVAL_MINUTES,
-        periodInMinutes: REVIEW_CHECK_INTERVAL_MINUTES,
+        delayInMinutes: REVIEW_CHECK_DELAY_HOURS * 60,
       }),
     ]);
   } catch (err) {
