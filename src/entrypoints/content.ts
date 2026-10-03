@@ -643,7 +643,7 @@ export default defineContentScript({
     async function expandSnippetInContentEditable(
       element: HTMLElement,
       textNode: Node,
-      range: Range,
+      _range: Range,
       match: { snippet: Snippet; startPos: number; endPos: number }
     ) {
       const { snippet, startPos, endPos } = match;

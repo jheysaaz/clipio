@@ -2,13 +2,12 @@
  * Tests for src/storage/backends/sync.ts — SyncBackend
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { SyncBackend } from "./sync";
 import { StorageQuotaError } from "../types";
 import {
   resetBrowserMocks,
   seedSyncStore,
-  simulateSyncQuotaError,
   simulateSyncQuotaErrorSustained,
   clearSyncSetFailure,
   mockStorageSync,

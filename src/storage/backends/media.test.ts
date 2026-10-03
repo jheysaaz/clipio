@@ -110,7 +110,6 @@ describe("saveMedia", () => {
   it("throws media.errors.storageFull when total would exceed MAX_TOTAL_SIZE", async () => {
     // We cannot physically fill 50MB in tests, so we directly verify the guard
     // logic by spying on getTotalSize to simulate a near-full state.
-    const { getTotalSize: realGetTotalSize } = await import("./media");
 
     // Temporarily override the internal check by saving a normal file and then
     // using vi.spyOn on the module to fake a large total.

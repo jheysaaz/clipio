@@ -21,7 +21,7 @@
  * mock's internals, and so recording is guaranteed rather than incidental.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 /** Every `defineItem(key, options)` call, in the order items.ts makes them. */
 const recorded = vi.hoisted(() => ({

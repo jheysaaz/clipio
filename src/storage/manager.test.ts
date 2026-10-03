@@ -659,11 +659,6 @@ describe("StorageManager", () => {
     });
 
     /** Make debugLog reject, so the `.catch(() => {})` handlers run. */
-    async function breakDebugLog() {
-      const { debugLog } = await import("~/lib/debug");
-      vi.mocked(debugLog).mockRejectedValue(new Error("debug error"));
-    }
-
     afterEach(async () => {
       const { debugLog } = await import("~/lib/debug");
       vi.mocked(debugLog).mockResolvedValue(undefined);

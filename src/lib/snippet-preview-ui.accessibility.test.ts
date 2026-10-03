@@ -48,7 +48,6 @@ describe("SnippetPreviewUI Accessibility", () => {
     });
 
     it("should have aria-label on the listbox", () => {
-      const host = document.getElementById("clipio-snippet-preview-host");
       const shadow = ui.getInternalShadowRoot()!;
       const list = shadow!.querySelector('[role="listbox"]');
       expect(list!.getAttribute("aria-label")).toBe("Snippet suggestions");
@@ -62,7 +61,6 @@ describe("SnippetPreviewUI Accessibility", () => {
 
       ui.show({ x: 0, y: 0, maxHeight: 200 }, snippets);
 
-      const host = document.getElementById("clipio-snippet-preview-host");
       const shadow = ui.getInternalShadowRoot()!;
       const list = shadow!.querySelector('[role="listbox"]');
       expect(list!.getAttribute("aria-activedescendant")).toBe(
@@ -82,7 +80,6 @@ describe("SnippetPreviewUI Accessibility", () => {
       const event = new KeyboardEvent("keydown", { key: "ArrowDown" });
       ui.handleKeyDown(event);
 
-      const host = document.getElementById("clipio-snippet-preview-host");
       const shadow = ui.getInternalShadowRoot()!;
       const list = shadow!.querySelector('[role="listbox"]');
       expect(list!.getAttribute("aria-activedescendant")).toBe(
@@ -100,7 +97,6 @@ describe("SnippetPreviewUI Accessibility", () => {
 
       ui.show({ x: 0, y: 0, maxHeight: 200 }, snippets);
 
-      const host = document.getElementById("clipio-snippet-preview-host");
       const shadow = ui.getInternalShadowRoot()!;
       const options = shadow!.querySelectorAll('[role="option"]');
       expect(options.length).toBe(2);
@@ -118,7 +114,6 @@ describe("SnippetPreviewUI Accessibility", () => {
 
       ui.show({ x: 0, y: 0, maxHeight: 200 }, snippets);
 
-      const host = document.getElementById("clipio-snippet-preview-host");
       const shadow = ui.getInternalShadowRoot()!;
       const firstOption = shadow!.querySelector('[role="option"]');
       expect(firstOption!.getAttribute("aria-selected")).toBe("true");
@@ -132,7 +127,6 @@ describe("SnippetPreviewUI Accessibility", () => {
 
       ui.show({ x: 0, y: 0, maxHeight: 200 }, snippets);
 
-      const host = document.getElementById("clipio-snippet-preview-host");
       const shadow = ui.getInternalShadowRoot()!;
       const options = shadow!.querySelectorAll('[role="option"]');
       expect(options[0].id).toBe("clipio-preview-option-0");
@@ -147,7 +141,6 @@ describe("SnippetPreviewUI Accessibility", () => {
 
       ui.show({ x: 0, y: 0, maxHeight: 200 }, snippets);
 
-      const host = document.getElementById("clipio-snippet-preview-host");
       const shadow = ui.getInternalShadowRoot()!;
       const firstOption = shadow!.querySelector('[role="option"]');
       expect(firstOption!.classList.contains("selected")).toBe(true);
@@ -165,7 +158,6 @@ describe("SnippetPreviewUI Accessibility", () => {
       const downEvent = new KeyboardEvent("keydown", { key: "ArrowDown" });
       ui.handleKeyDown(downEvent);
 
-      const host = document.getElementById("clipio-snippet-preview-host");
       const shadow = ui.getInternalShadowRoot()!;
       const options = shadow!.querySelectorAll('[role="option"]');
       expect(options[0].getAttribute("aria-selected")).toBe("false");
@@ -182,7 +174,6 @@ describe("SnippetPreviewUI Accessibility", () => {
 
       ui.show({ x: 0, y: 0, maxHeight: 200 }, snippets);
 
-      const host = document.getElementById("clipio-snippet-preview-host");
       const shadow = ui.getInternalShadowRoot()!;
       const liveRegion = shadow!.querySelector('[aria-live="polite"]');
       expect(liveRegion).not.toBeNull();
@@ -201,7 +192,6 @@ describe("SnippetPreviewUI Accessibility", () => {
       const downEvent = new KeyboardEvent("keydown", { key: "ArrowDown" });
       ui.handleKeyDown(downEvent);
 
-      const host = document.getElementById("clipio-snippet-preview-host");
       const shadow = ui.getInternalShadowRoot()!;
       const liveRegion = shadow!.querySelector('[aria-live="polite"]');
       expect(liveRegion!.textContent).toContain("World");
@@ -269,7 +259,6 @@ describe("SnippetPreviewUI Accessibility", () => {
     it("should have high-contrast CSS for selected items", () => {
       ui.init();
 
-      const host = document.getElementById("clipio-snippet-preview-host");
       const shadow = ui.getInternalShadowRoot()!;
       const style = shadow!.querySelector("style");
       expect(style!.textContent).toContain("prefers-contrast: high");
@@ -279,7 +268,6 @@ describe("SnippetPreviewUI Accessibility", () => {
 
   describe("Header accessibility", () => {
     it("should hide header from accessibility tree", () => {
-      const host = document.getElementById("clipio-snippet-preview-host");
       const shadow = ui.getInternalShadowRoot()!;
       const header = shadow!.querySelector(".clipio-preview-header");
       expect(header!.getAttribute("aria-hidden")).toBe("true");

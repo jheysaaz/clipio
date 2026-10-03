@@ -18,11 +18,8 @@ import {
   helloSnippet,
   cursorSnippet,
   clipboardSnippet,
-  dateSnippet,
   markdownSnippet,
   multilineSnippet,
-  shortShortcutSnippet,
-  longShortcutSnippet,
 } from "./helpers/snippets.js";
 import { waitForContentScriptReady } from "./helpers/content-script.js";
 

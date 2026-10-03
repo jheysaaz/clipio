@@ -4,7 +4,7 @@ import {
   createStackParser,
   eventFromUnknownInput,
   eventFromMessage as coreEventFromMessage,
-  inboundFiltersIntegration,
+  eventFiltersIntegration,
   linkedErrorsIntegration,
   dedupeIntegration,
 } from "@sentry/core";
@@ -98,7 +98,7 @@ export function initSentry(): void {
     transport: makeRelayTransport,
     stackParser,
     integrations: [
-      inboundFiltersIntegration(),
+      eventFiltersIntegration(),
       linkedErrorsIntegration(),
       dedupeIntegration(),
     ],

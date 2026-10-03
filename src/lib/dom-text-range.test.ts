@@ -176,7 +176,7 @@ describe("locateTextRange", () => {
       selection!.addRange(range);
     }
 
-    function placeCaretAt(element: HTMLElement, node: Node, offset: number) {
+    function placeCaretAt(_element: HTMLElement, node: Node, offset: number) {
       const selection = window.getSelection();
       const range = document.createRange();
       range.setStart(node, offset);

@@ -243,7 +243,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
     const deleteSlashTrigger = useCallback(
       (
         manual: boolean,
-        range: import("platejs").TRange | null,
+        _range: import("platejs").TRange | null,
         query: string
       ) => {
         if (!manual) {

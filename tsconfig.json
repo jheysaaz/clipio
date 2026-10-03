@@ -6,9 +6,17 @@
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "allowJs": false,
     "skipLibCheck": true,
-    "esModuleInterop": false,
+    "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
+    // WXT 0.21 turns this on in .wxt/tsconfig.json. It flags ~250 existing
+    // index accesses as possibly-undefined, which is a real improvement but is
+    // a separate piece of work from a dependency bump: fixing them properly
+    // means auditing each access rather than asserting a non-null.
+    //
+    // Opting out here keeps this commit to the upgrade itself. Turn it on as its
+    // own change, with the source edits that follow.
+    "noUncheckedIndexedAccess": false,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
