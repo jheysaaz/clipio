@@ -582,16 +582,27 @@ export default defineContentScript({
     }
 
     /**
-     * `input[type=password]` is never a snippet target.
+     * Password-bearing inputs are never a snippet target.
      *
      * Expanding here would drop plaintext snippet content into a credential
      * field, and — worse for the user — open the preview palette *inside* it,
      * painting snippet labels and content next to a password. The manual QA
      * harness (`e2e/helpers/manual-qa.html`) asserts this as its negative case.
-     * spec: specs/shortcut-boundary.spec.md
+     *
+     * Reads the *attribute*, not `input.type`. `current-password` and
+     * `new-password` are separate states in the HTML standard rather than
+     * aliases of the Password state, so the IDL getter reports `"text"` for
+     * them — and those are precisely the fields on sign-in and change-password
+     * forms. spec: specs/shortcut-boundary.spec.md
      */
     function isPasswordInput(target: EventTarget | null): boolean {
-      return target instanceof HTMLInputElement && target.type === "password";
+      if (!(target instanceof HTMLInputElement)) return false;
+      const type = target.getAttribute("type");
+      return (
+        type === "password" ||
+        type === "current-password" ||
+        type === "new-password"
+      );
     }
 
     // ── Event handlers ───────────────────────────────────────────────
@@ -1265,7 +1276,12 @@ export default defineContentScript({
         (event) => {
           if (!isUserGesture(event)) return;
           const target = event.target as HTMLElement;
-          if (isPasswordInput(event.target)) return;
+          // No password gate here: handleInput must still run so that its first
+          // action — consuming the one-shot `justExpanded` flag — happens for
+          // every keystroke. Bailing out above it would let the flag survive a
+          // password-field keystroke and swallow the next genuine one in a
+          // normal field, losing that keystroke's preview detection and debounce.
+          // handleInput declines password inputs itself.
           if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
             handleInput(event);
           } else if (target.isContentEditable) {
@@ -1351,12 +1367,12 @@ export default defineContentScript({
           }
 
           const target = event.target as HTMLElement;
-          if (isPasswordInput(event.target)) return;
           if (
             target.tagName === "INPUT" ||
             target.tagName === "TEXTAREA" ||
             target.isContentEditable
           ) {
+            // handleKeyDown declines password inputs itself.
             handleKeyDown(event);
           }
         },

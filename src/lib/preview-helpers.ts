@@ -451,8 +451,8 @@ export function detectPreviewTrigger(
   }
 
   // Check the boundary before the prefix (unless at start). Shares
-  // isShortcutBoundary with findSnippetMatch so expansion and preview can never
-  // disagree about where a trigger may begin.
+  // isShortcutBoundary with findSnippetMatch so both paths use one definition of
+  // the boundary.
   // spec: specs/shortcut-boundary.spec.md
   if (lastPrefixIndex > 0) {
     if (!isShortcutBoundary(text[lastPrefixIndex - 1])) {

@@ -91,7 +91,10 @@ const SENTENCE_PUNCTUATION_RE = /[.,;!?…()[\]{}"'‘’“”«»]/;
  * Whether `char` may immediately precede a shortcut / preview trigger prefix.
  *
  * Shared by `findSnippetMatch` (expansion) and `detectPreviewTrigger` (preview)
- * so the two paths can never disagree about where a trigger is allowed to start.
+ * so there is one definition of the boundary. Note the two callers test
+ * *different* characters — expansion the char before the shortcut, the preview
+ * the char before the trigger prefix — so a shortcut that does not begin with
+ * the prefix can still be accepted by one path and declined by the other.
  */
 export function isShortcutBoundary(char: string | undefined): boolean {
   if (char === undefined) return false; // start of text is handled by the caller
