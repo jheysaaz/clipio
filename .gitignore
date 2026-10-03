@@ -66,3 +66,7 @@ playwright/.cache/
 # audit trail of the review, so they belong in version control.
 #
 # Only the free-text scratch report from the flake gate is ignored.
+
+# Agent working documents — local only, never committed
+RESTRUCTURE-PLAN.md
+SPEC-CLASSIFICATION.md
