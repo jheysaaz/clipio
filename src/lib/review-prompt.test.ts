@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   shouldShowReviewPrompt,
+  shouldShowReviewBanner,
   setReviewPromptState,
   snoozeReviewPrompt,
   getStoreReviewUrl,
@@ -516,5 +517,83 @@ describe("getStoreReviewUrl", () => {
         configurable: true,
       });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// shouldShowReviewBanner — the options-page predicate
+// ---------------------------------------------------------------------------
+//
+// This was an inline copy inside OptionsPage.tsx until it was moved here. It is
+// a DIFFERENT question from shouldShowReviewPrompt (see the module docs), and
+// the most important assertion below is the last one: that the two are not
+// interchangeable. Swapping one for the other is the exact bug this extraction
+// was meant to prevent.
+
+describe("shouldShowReviewBanner", () => {
+  beforeEach(() => {
+    mockReviewPromptStateItem.getValue.mockResolvedValue("pending");
+    mockLastSentryErrorAtItem.getValue.mockResolvedValue(null);
+  });
+
+  it("is false while the state is pending — nothing has been prompted yet", async () => {
+    mockReviewPromptStateItem.getValue.mockResolvedValue("pending");
+    expect(await shouldShowReviewBanner()).toBe(false);
+  });
+
+  it("is true when shown and there is no recent error", async () => {
+    mockReviewPromptStateItem.getValue.mockResolvedValue("shown");
+    mockLastSentryErrorAtItem.getValue.mockResolvedValue(null);
+    expect(await shouldShowReviewBanner()).toBe(true);
+  });
+
+  it("is false when dismissed", async () => {
+    mockReviewPromptStateItem.getValue.mockResolvedValue("dismissed");
+    expect(await shouldShowReviewBanner()).toBe(false);
+  });
+
+  it("is false when rated", async () => {
+    mockReviewPromptStateItem.getValue.mockResolvedValue("rated");
+    expect(await shouldShowReviewBanner()).toBe(false);
+  });
+
+  it("is false when a Sentry error happened within the snooze window", async () => {
+    mockReviewPromptStateItem.getValue.mockResolvedValue("shown");
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    mockLastSentryErrorAtItem.getValue.mockResolvedValue(oneHourAgo);
+    expect(await shouldShowReviewBanner()).toBe(false);
+  });
+
+  it("is true when the Sentry error is older than the snooze window", async () => {
+    mockReviewPromptStateItem.getValue.mockResolvedValue("shown");
+    const twoDaysAgo = new Date(
+      Date.now() - 2 * 24 * 60 * 60 * 1000
+    ).toISOString();
+    mockLastSentryErrorAtItem.getValue.mockResolvedValue(twoDaysAgo);
+    expect(await shouldShowReviewBanner()).toBe(true);
+  });
+
+  it("returns false rather than throwing when storage rejects", async () => {
+    mockReviewPromptStateItem.getValue.mockRejectedValue(
+      new Error("storage unavailable")
+    );
+    await expect(shouldShowReviewBanner()).resolves.toBe(false);
+  });
+
+  it("is NOT interchangeable with shouldShowReviewPrompt", async () => {
+    // The regression this extraction exists to prevent. Once the state is
+    // "shown", the banner must be visible — but shouldShowReviewPrompt()
+    // requires "pending" and returns false. Calling the wrong one silently
+    // hides the banner forever.
+    mockReviewPromptStateItem.getValue.mockResolvedValue("shown");
+    mockReviewPromptSnoozedUntilItem.getValue.mockResolvedValue(null);
+    mockExtensionInstalledAtItem.getValue.mockResolvedValue(
+      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    );
+    mockTotalSnippetInsertionsItem.getValue.mockResolvedValue(500);
+    mockLastSentryErrorAtItem.getValue.mockResolvedValue(null);
+
+    expect(await shouldShowReviewBanner()).toBe(true);
+    expect(await shouldShowReviewPrompt()).toBe(false);
   });
 });

@@ -88,6 +88,51 @@ export async function shouldShowReviewPrompt(): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
+// Banner visibility (options page)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true when the options page should render the review banner.
+ *
+ * This asks a DIFFERENT question from shouldShowReviewPrompt, and the two are
+ * not interchangeable:
+ *
+ *   shouldShowReviewPrompt()  "is this user eligible to be prompted at all?"
+ *                             Requires state === "pending". Called by the
+ *                             background alarm, which writes "shown" on success.
+ *
+ *   shouldShowReviewBanner()  "has this user already been prompted, and not
+ *                             acted on it?" Requires state === "shown".
+ *                             Called by the options page.
+ *
+ * The lifecycle is one-way (pending -> shown -> dismissed | rated), so these two
+ * read opposite ends of it. Substituting one for the other is a bug: calling
+ * shouldShowReviewPrompt() from the options page would return false every time,
+ * because by the time the page can ask, the state is already "shown".
+ *
+ * This previously lived as an inline copy inside OptionsPage.tsx. Two copies of
+ * one policy is how they drift, so it lives here now.
+ *
+ * Never throws.
+ */
+export async function shouldShowReviewBanner(): Promise<boolean> {
+  try {
+    const state = await reviewPromptStateItem.getValue();
+    if (state !== "shown") return false;
+
+    const lastErrorAt = await lastSentryErrorAtItem.getValue();
+    if (lastErrorAt) {
+      const errorAgeMs = Date.now() - new Date(lastErrorAt).getTime();
+      const twentyFourHoursMs = REVIEW_ERROR_SNOOZE_HOURS * 60 * 60 * 1000;
+      if (errorAgeMs < twentyFourHoursMs) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // State helpers
 // ---------------------------------------------------------------------------
 

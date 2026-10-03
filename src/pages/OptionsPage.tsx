@@ -16,7 +16,6 @@ import { Heart, X } from "lucide-react";
 import { Alert, AlertDescription, AlertAction } from "@/components/ui/alert";
 import { Icon } from "@/components/ui/icon";
 import { i18n } from "#i18n";
-import { reviewPromptStateItem, lastSentryErrorAtItem } from "@/storage/items";
 import {
   SECTIONS,
   searchSettings,
@@ -35,7 +34,11 @@ import {
   readSidebarWidth,
   SIDEBAR_WIDTH_KEY,
 } from "@/components/options/settings/SidebarResizer";
-import { setReviewPromptState, getStoreReviewUrl } from "@/lib/review-prompt";
+import {
+  getStoreReviewUrl,
+  setReviewPromptState,
+  shouldShowReviewBanner,
+} from "@/lib/review-prompt";
 
 const DEFAULT_SECTION: SectionId = "library";
 
@@ -94,20 +97,9 @@ export default function OptionsPage() {
   const searching = query.trim().length > 0;
 
   useEffect(() => {
-    Promise.all([
-      reviewPromptStateItem.getValue(),
-      lastSentryErrorAtItem.getValue(),
-    ])
-      .then(([state, lastErrorAt]) => {
-        if (state !== "shown") return;
-        if (lastErrorAt) {
-          const errorAgeMs = Date.now() - new Date(lastErrorAt).getTime();
-          const twentyFourHoursMs = 24 * 60 * 60 * 1000;
-          if (errorAgeMs < twentyFourHoursMs) return;
-        }
-        setShowReviewBanner(true);
-      })
-      .catch(console.warn);
+    // Policy lives in review-prompt.ts, not here. This was previously an inline
+    // copy of two of those conditions, and the two copies had drifted apart.
+    shouldShowReviewBanner().then(setShowReviewBanner).catch(console.warn);
   }, []);
 
   return (
