@@ -54,6 +54,16 @@ export const TIMING = {
    * trigger one full store read per snippet.
    */
   CACHE_REFRESH_DEBOUNCE_MS: 250,
+
+  /**
+   * How long a list row waits before treating a click as a plain selection.
+   *
+   * A double-click emits click, click, dblclick, so the row has already handled
+   * two clicks by the time the editor opens. Deferring the click by this long
+   * and cancelling it if a dblclick arrives is the only way to stop
+   * "double-click to rename" from also selecting the snippet.
+   */
+  DOUBLE_CLICK_MS: 250,
 } as const;
 
 /** Runtime message type for dev-only Sentry test (content script). */

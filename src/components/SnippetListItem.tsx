@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import type { Snippet } from "@/types";
 import { cn } from "@/lib/utils";
+import { TIMING } from "@/config/constants";
 
 // Max characters for content preview
 const PREVIEW_MAX_LENGTH = 60;
@@ -71,6 +72,8 @@ export default function SnippetListItem({
   );
   const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  // Timer for deferring the row's onClick so a double-click can cancel it.
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const contentPreview = getContentPreview(snippet.content);
 
@@ -81,7 +84,54 @@ export default function SnippetListItem({
     }
   }, [editingField]);
 
+  // NOTE: the e.stopPropagation() here does NOT stop the row's onClick from
+  // firing. A double-click emits click, click, dblclick — the two clicks reach
+  // the row before this handler ever runs. Since Dashboard's selection handler
+  // is not idempotent (it consults `detailHasChanges` and can open the
+  // unsaved-changes guard), double-clicking a label to rename it also selects
+  // the snippet twice.
+  //
+  // Fixed on the row below by ignoring clicks that turn out to be the first
+  // click of a double-click, rather than here.
+  /**
+   * Defer the row's onClick by one double-click interval.
+   *
+   * A double-click emits click, click, dblclick — so by the time the
+   * dblclick handler runs, the row has already handled two clicks. Propagate
+   * alone cannot prevent that, because propagation has already happened.
+   *
+   * Holding the click briefly and cancelling it if a dblclick arrives means a
+   * double-click to edit does not also select the snippet. That matters because
+   * selection is not idempotent: Dashboard consults `detailHasChanges` and can
+   * route through the unsaved-changes guard, so a stray selection could raise
+   * the confirm dialog about work the user was in the middle of.
+   */
+  const handleRowClick = () => {
+    if (clickTimer.current) clearTimeout(clickTimer.current);
+    clickTimer.current = setTimeout(() => {
+      clickTimer.current = null;
+      onClick();
+    }, TIMING.DOUBLE_CLICK_MS);
+  };
+
+  /** Cancel a pending row click because this became a double-click. */
+  const cancelPendingRowClick = () => {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+    }
+  };
+
+  // Clean up a pending timer if the row unmounts mid-defer.
+  useEffect(
+    () => () => {
+      if (clickTimer.current) clearTimeout(clickTimer.current);
+    },
+    []
+  );
+
   const handleDoubleClickLabel = (e: React.MouseEvent) => {
+    cancelPendingRowClick();
     e.preventDefault();
     e.stopPropagation();
     setEditValue(snippet.label);
@@ -89,6 +139,7 @@ export default function SnippetListItem({
   };
 
   const handleDoubleClickShortcut = (e: React.MouseEvent) => {
+    cancelPendingRowClick();
     e.preventDefault();
     e.stopPropagation();
     setEditValue(snippet.shortcut);
@@ -132,7 +183,7 @@ export default function SnippetListItem({
           ? "bg-muted text-foreground border-l-2 border-l-primary"
           : "hover:bg-muted/50 border-l-2 border-l-transparent"
       )}
-      onClick={onClick}
+      onClick={handleRowClick}
     >
       <div className="flex flex-col gap-1 w-0 min-w-full overflow-hidden">
         {/* Header row: title + shortcut */}

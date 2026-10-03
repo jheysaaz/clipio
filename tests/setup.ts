@@ -10,6 +10,21 @@
 import { vi, beforeEach, afterAll } from "vitest";
 import { mockBrowser } from "./mocks/browser";
 
+// jest-dom matchers (toBeInTheDocument, toHaveValue, …) are available in every
+// test file. Imported here rather than per-file because a component test that
+// forgets them fails with "expected undefined to be in the document", which
+// reads like a rendering bug rather than a missing import.
+import "@testing-library/jest-dom/vitest";
+import { cleanup } from "@testing-library/react";
+import { afterEach } from "vitest";
+
+// Unmount anything a component test rendered. Without this, components stay in
+// the document between tests and queries match nodes from a previous render —
+// which passes for the wrong reason and breaks on reordering.
+afterEach(() => {
+  cleanup();
+});
+
 // ---------------------------------------------------------------------------
 // browser global — WXT and all extension code references `browser.*`
 // ---------------------------------------------------------------------------
