@@ -58,6 +58,12 @@ Each of these came from a real defect in this repo, not from theory.
 8. **`retries: 0`, permanently.** A retry hides a flake instead of fixing it.
    Detection is `pnpm test:flake`. See
    [0005](docs/decisions/0005-zero-test-retries.md).
+9. **When the app looks wrong, say so — do not adapt the test to it.** Loosening an
+   assertion, adding a timeout, or switching to a stabler selector to reach green
+   is the one move that makes a suite worthless. Flag it for a human instead.
+10. **A `data-testid` an e2e test selects on is a contract.** Renaming or
+    repurposing one means updating the test in the same change. Anything touching
+    visible copy or a component's DOM runs `pnpm test:e2e` before it lands.
 
 ## Coverage
 
