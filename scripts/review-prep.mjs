@@ -469,52 +469,75 @@ push("");
  */
 function pushDiff() {
   const raw = git("diff", `${base}...${target}`);
-  const lines = raw.split("\n");
+  // Named `diffLines`, NOT `lines`: the packet builder already has a
+  // module-level `lines` array that `push()` writes into. Shadowing it here
+  // meant every `push()` call in this function appended to the DIFF instead of
+  // the packet — so the truncation banner was written into the patch and the
+  // packet shipped without one.
+  const diffLines = raw.split("\n");
 
-  if (lines.length <= DIFF_LINE_CAP) {
+  if (diffLines.length <= DIFF_LINE_CAP) {
     push("```diff");
     push(raw);
     push("```");
     return;
   }
 
-  // Emit whole-file hunks only. Cutting mid-hunk produces a patch that will not
-  // apply and a file that looks complete when it is not.
+  // Emit whole-file hunks only. Cutting mid-hunk produces a patch that
+  // will not apply, and a file that looks complete when it is not.
   const kept = [];
+  const omitted = new Set();
   let currentFile = null;
-  let omitted = [];
+  let overflowing = false;
 
-  for (const line of lines) {
+  for (const line of diffLines) {
     if (line.startsWith("diff --git ")) {
-      const m = line.match(/ b\/(.+)$/);
-      currentFile = m ? m[1] : "(unknown)";
+      currentFile = line.match(/ b\/(.+)$/)?.[1] ?? "(unknown)";
+      // Once the cap is reached, every later file is withheld whole.
+      if (overflowing) omitted.add(currentFile);
     }
+    if (overflowing) continue;
     if (kept.length >= DIFF_LINE_CAP) {
-      if (currentFile && !omitted.includes(currentFile))
-        omitted.push(currentFile);
+      overflowing = true;
+      if (currentFile) omitted.add(currentFile);
       continue;
     }
     kept.push(line);
   }
 
-  // Roll back to the last complete file boundary so no hunk is cut in half.
-  while (kept.length > 0 && !kept[kept.length - 1].startsWith("diff --git ")) {
-    const lastFileHeader = kept.findLastIndex((l) =>
-      l.startsWith("diff --git ")
-    );
-    if (lastFileHeader === -1) break;
-    const m = kept[lastFileHeader].match(/ b\/(.+)$/);
-    const file = m ? m[1] : "(unknown)";
-    kept.length = lastFileHeader;
-    if (!omitted.includes(file)) omitted.push(file);
+  // Roll back to the last COMPLETE file boundary, so the final shown file is not
+  // left half-rendered. An earlier version trimmed in a loop until `kept` was
+  // empty, which meant an oversized diff produced a packet containing ZERO lines
+  // of diff while announcing that files had been withheld - strictly worse than
+  // the silent truncation it replaced.
+  if (overflowing) {
+    const headerIdx = kept
+      .map((l, i) => (l.startsWith("diff --git ") ? i : -1))
+      .filter((i) => i >= 0);
+    const lastHeader = headerIdx[headerIdx.length - 1];
+    if (lastHeader !== undefined) {
+      omitted.add(kept[lastHeader].match(/ b\/(.+)$/)?.[1] ?? "(unknown)");
+      kept.length = lastHeader;
+    }
+  }
+
+  // A file that is shown must not also be listed as withheld.
+  const keptFiles = new Set(
+    kept
+      .filter((l) => l.startsWith("diff --git "))
+      .map((l) => l.match(/ b\/(.+)$/)?.[1])
+      .filter(Boolean)
+  );
+  for (const f of [...omitted]) {
+    if (keptFiles.has(f)) omitted.delete(f);
   }
 
   push(
-    `> ⚠️ **Diff truncated: ${lines.length} lines total, showing ${kept.length}.**`,
-    `> **${omitted.length} file(s) are NOT in this packet:**`,
+    `> ⚠️ **Diff truncated: ${diffLines.length} lines total, showing ${kept.length}.**`,
+    `> **${omitted.size} file(s) are NOT in this packet:**`,
     ""
   );
-  for (const f of omitted) push(`> - \`${f}\``);
+  for (const f of [...omitted].sort()) push(`> - \`${f}\``);
   push(
     "",
     "> Read them directly with `git show <sha> -- <path>`. A file absent from",
