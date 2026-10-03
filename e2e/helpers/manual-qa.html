@@ -225,6 +225,19 @@
             />
           </div>
 
+          <div class="field">
+            <label for="qa-new-password">
+              New password, sign-in form (negative test)
+            </label>
+            <input
+              id="qa-new-password"
+              data-testid="qa-new-password"
+              type="new-password"
+              autocomplete="new-password"
+              placeholder="Should not expand either"
+            />
+          </div>
+
           <div class="field wide">
             <label for="qa-textarea">Textarea</label>
             <textarea
@@ -302,6 +315,8 @@
         "#qa-ce-basic",
         "#qa-ce-nested",
         "#qa-ce-rich",
+        "#qa-password",
+        "#qa-new-password",
       ];
 
       const statusEl = document.getElementById("qa-status");

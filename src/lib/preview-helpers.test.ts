@@ -549,13 +549,18 @@ describe("detectPreviewTrigger", () => {
     }
   );
 
-  // spec: specs/shortcut-boundary.spec.md — widening the boundary must not
-  // pop the palette open while a URL or path is being typed.
+  // spec: specs/shortcut-boundary.spec.md — widening the boundary must not pop
+  // the palette open while a URL or path is being typed.
+  //
+  // Every case contains a "/" so it reaches the boundary predicate. A case
+  // without one returns null at the "no prefix found" guard instead, and would
+  // pass whether or not the boundary had been widened — which is why the
+  // `mailto:` and `report-final` entries below carry a trailing "/wor".
   it.each([
-    "https://example.com",
-    "mailto:someone@example.com",
-    "src/index",
-    "report-final",
+    "https://example.com/wor",
+    "mailto:someone@example.com/wor",
+    "src/index/wor",
+    "report-final/wor",
   ])("does not trigger inside %j", (text) => {
     expect(detectPreviewTrigger(text, text.length, settings)).toBeNull();
   });

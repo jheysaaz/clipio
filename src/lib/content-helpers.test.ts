@@ -150,7 +150,7 @@ describe("findSnippetMatch", () => {
     "report-final/hi",
     "a/hi",
   ])("still does NOT match in %j", (text) => {
-    expect(findSnippetMatch(text as string, text.length, index)).toBeNull();
+    expect(findSnippetMatch(text, text.length, index)).toBeNull();
   });
 
   // spec: specs/shortcut-boundary.spec.md
