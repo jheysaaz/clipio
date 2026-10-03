@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/importers/clipio.ts
- * spec: specs/importers.spec.md#ClipioParser
  */
 
 import { describe, it, expect } from "vitest";
@@ -76,7 +75,6 @@ describe("ClipioParser.canParse", () => {
  * where the flag is the sole record that the body is HTML, so if the flag is
  * stripped without converting, the body is stored as markdown for good and
  * inserts as visible escaped text with no way back.
- * spec: specs/content-format-migration.spec.md
  */
 describe("ClipioParser.parse — legacy contentFormat", () => {
   it("converts a legacy html body to markdown", () => {
@@ -420,7 +418,6 @@ describe("importClipioZip", () => {
 
 // ---------------------------------------------------------------------------
 // Trust boundary for an untrusted .clipio.zip
-// spec: specs/media-import-hardening.spec.md
 // ---------------------------------------------------------------------------
 
 describe("isValidMediaId", () => {

@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/snippet-schema.ts
- * spec: specs/import-validation.spec.md
  */
 
 import { describe, it, expect } from "vitest";
@@ -54,7 +53,6 @@ describe("validateImportedSnippet — accepted", () => {
   it("does not carry a contentFormat key into storage", () => {
     // The field was retired. A 1.x export still carries it, so it is accepted
     // on the wire, but it must not survive into a stored snippet.
-    // spec: specs/content-format-migration.spec.md
     expect(Object.keys(accept(valid()))).not.toContain("contentFormat");
     expect(Object.keys(accept(valid({ contentFormat: "html" })))).not.toContain(
       "contentFormat"
@@ -78,7 +76,6 @@ describe("validateImportedSnippet — accepted", () => {
    * recorded the true format is now gone, there is no way back. This validator
    * is also the storage-level import path, so it is the last point at which the
    * body can be fixed.
-   * spec: specs/content-format-migration.spec.md
    */
   it("converts a legacy html body to markdown", () => {
     const out = accept(

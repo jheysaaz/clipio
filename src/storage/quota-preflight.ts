@@ -1,7 +1,6 @@
 /**
  * Sync quota preflight.
  *
- * spec: specs/storage-quota-preflight.spec.md
  *
  * `storage.sync` is hard-capped at three limits (see `SYNC_QUOTA`). Clipio hits
  * them in normal use: a snippet over 8 KB cannot be stored at all, and a few

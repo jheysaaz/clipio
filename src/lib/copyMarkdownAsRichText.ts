@@ -26,7 +26,6 @@ export async function copyMarkdownAsRichText(markdown: string): Promise<void> {
   // deduplicated: two references to the same image can carry different widths,
   // and the replacement below rewrites by media id, so collapsing them here
   // would lose a size.
-  // spec: specs/media-placeholders.spec.md
   const imageRefs = extractMediaRefs(markdown).filter(
     (ref) => ref.kind === "image"
   );

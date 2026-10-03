@@ -66,7 +66,7 @@ import { hostBucket } from "@/lib/sentry-scrub";
  * Blocklist matching lives in src/lib/blocked-sites.ts so it can be unit
  * tested directly — it was previously a file-local function here with zero
  * coverage, and a second copy of the normalisation logic lived inside
- * SnippetsSection.tsx. spec: specs/blocked-sites.spec.md
+ * SnippetsSection.tsx. spec:
  */
 
 export default defineContentScript({
@@ -388,7 +388,6 @@ export default defineContentScript({
       let resolveMedia:
         | ((id: string) => { src: string; alt?: string | null } | null)
         | undefined;
-      // spec: specs/media-placeholders.spec.md
       if (asHtml && hasImagePlaceholder(content)) {
         const uniqueIds = [...new Set(extractImageIds(content))];
         const blobMap = new Map<string, { src: string; alt?: string | null }>();
@@ -593,7 +592,7 @@ export default defineContentScript({
      * `new-password` are separate states in the HTML standard rather than
      * aliases of the Password state, so the IDL getter reports `"text"` for
      * them — and those are precisely the fields on sign-in and change-password
-     * forms. spec: specs/shortcut-boundary.spec.md
+     * forms. spec:
      */
     function isPasswordInput(target: EventTarget | null): boolean {
       if (!(target instanceof HTMLInputElement)) return false;
@@ -894,13 +893,12 @@ export default defineContentScript({
       // not blocked. On a blocked site we inject nothing at all — otherwise
       // the preview host element and tooltip live in the page DOM for the
       // whole session, which is the opposite of what "hide on this site"
-      // promises. spec: specs/blocked-sites.spec.md
+      // promises. spec:
       if (previewSettings.enabled && !isBlocked) {
         // The palette is injected into the page, where the extension's stylesheet
         // does not apply, so it has to be told which interface font to use. Read
         // it before init() because the @font-face for that family has to be in
         // the shadow root's <style> the moment it is built.
-        // spec: specs/ui-font.spec.md
         // Awaited, not floated: initialize() is already async, and the
         // readiness marker below must not be published before the shadow root
         // exists — show() bails silently if the container is missing, so a fast
@@ -942,7 +940,6 @@ export default defineContentScript({
       // cursorPos must be forwarded: without it calculatePreviewPosition has no
       // caret to measure and falls back to the element's bottom-right corner, so
       // the palette rendered under the whole field instead of at the caret.
-      // spec: specs/preview-anchor.spec.md
       const position = calculatePreviewPosition(element, cursorPos);
       snippetPreviewUI.show(position, filteredSnippets);
     }
@@ -1268,7 +1265,6 @@ export default defineContentScript({
       // a {{clipboard}} snippet to run document.execCommand("paste") into a
       // field the page owns.
       //
-      // spec: specs/content-script-trust.spec.md
       const isUserGesture = (event: Event): boolean => event.isTrusted;
 
       document.addEventListener(
@@ -1305,7 +1301,7 @@ export default defineContentScript({
           // Blocked hosts must not open the preview either — this branch
           // renders the entire snippet list (labels, shortcuts, previews)
           // into the page. handleInput / handleKeyDown already bail on
-          // isBlocked; this one did not. spec: specs/blocked-sites.spec.md
+          // isBlocked; this one did not. spec:
           if (previewSettings.enabled && !isBlocked) {
             const shortcut = previewSettings.keyboardShortcut.toLowerCase();
             const hasCtrl = shortcut.includes("ctrl")

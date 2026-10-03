@@ -8,7 +8,6 @@
  * While armed the control owns the keyboard: it swallows Space and the arrows
  * so the page does not scroll, and Escape cancels without writing.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";

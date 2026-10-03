@@ -24,7 +24,7 @@ const REGEX_PATTERNS = {
   cursor: /^\{\{cursor\}\}/,
   datepicker: /^\{\{datepicker:(\d{4}-\d{2}-\d{2})\}\}/,
   // Width suffix (:NNN) is optional — matches both {{image:uuid}} and
-  // {{image:uuid:200}}. Owned by specs/media-placeholders.spec.md.
+  // {{image:uuid:200}}. Owned by .
   image: IMAGE_PLACEHOLDER_ANCHORED,
   gif: GIF_PLACEHOLDER_ANCHORED,
   link: /^\[([^\]]+)\]\(([^)]+)\)/,
@@ -124,7 +124,7 @@ function serializeNode(node: Descendant): string {
   // --- block elements ---------------------------------------------------
   //
   // These previously fell through to `return children`, which is what erased
-  // every block marker on save. spec: specs/markdown-block-grammar.spec.md
+  // every block marker on save. spec:
   const heading = element.type.match(/^h([1-6])$/);
   if (heading) {
     // No trailing space for an empty heading, so `#` round-trips as `#`.
@@ -298,7 +298,6 @@ export function deserializeContent(content: string): TElement[] {
  * context read the snippet first. The migration uses the DOM-free converter in
  * src/lib/html-to-markdown.ts instead, in every context.
  *
- * spec: specs/content-format-migration.spec.md
  */
 import {
   IMAGE_PLACEHOLDER_ANCHORED,
@@ -334,7 +333,6 @@ function deserializeFromMarkdown(markdown: string): TElement[] {
   // their `##`, lists became indistinguishable paragraphs, and a two-cell table
   // serialised to `"ab"` with no separator at all.
   //
-  // spec: specs/markdown-block-grammar.spec.md
   const result = parseBlocks(markdown, (text) =>
     parseMarkdownInline(text)
   ) as TElement[];
@@ -574,7 +572,6 @@ function deserializeNodes(element: Node): Descendant[] {
       // makes `htmlToMarkdown` (which is just
       // `serializeToMarkdown(deserializeFromHtml(…))`) block-aware for free.
       //
-      // spec: specs/markdown-block-grammar.spec.md
       const headingMatch = tagName.match(/^h([1-6])$/);
       if (headingMatch) {
         const children = deserializeNodes(el);

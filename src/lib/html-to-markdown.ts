@@ -1,4 +1,3 @@
-// spec: specs/content-format-migration.spec.md
 //
 // Converts a legacy HTML snippet body to markdown WITHOUT a DOM.
 //

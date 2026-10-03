@@ -5,7 +5,6 @@
  * storage would let a stale or hand-edited value collapse the rail or squeeze
  * the content pane off-screen.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { describe, it, expect, afterEach } from "vitest";

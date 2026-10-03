@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/content-format-migration.ts
- * spec: specs/content-format-migration.spec.md
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
@@ -199,7 +198,6 @@ describe("migrateContentFormat — the no-total-loss guard", () => {
     // manufacture visible junk in a snippet the user never wrote. This is a
     // distinct outcome from the guard above, where the conversion ran and
     // produced nothing.
-    // spec: specs/content-format-migration.spec.md
     hoisted.throwOnConvert = true;
     const body = "<strong>Bold</strong> body";
     const out = migrateContentFormat(

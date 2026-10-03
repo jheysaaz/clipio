@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/sentry-scrub.ts
- * spec: specs/sentry-scrub.spec.md
  */
 
 import { describe, it, expect } from "vitest";
@@ -222,7 +221,6 @@ describe("scrubBreadcrumb", () => {
 
 // ---------------------------------------------------------------------------
 // hostBucket — coarse site attribution without disclosing the exact site
-// spec: specs/sentry-scrub.spec.md
 // ---------------------------------------------------------------------------
 
 describe("hostBucket", () => {

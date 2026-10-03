@@ -1,6 +1,5 @@
 /**
  * Durability tests for src/storage/backends/sync.ts
- * spec: specs/storage-durability.spec.md
  *
  * Every test here corresponds to a way a write could previously have
  * destroyed a user's snippets while reporting success.

@@ -5,7 +5,6 @@
  * place, because all three answer "what is in my library?" rather than
  * "how do I configure a behaviour?".
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { useEffect, useRef, useState, lazy, Suspense } from "react";

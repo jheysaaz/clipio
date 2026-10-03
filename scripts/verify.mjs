@@ -19,7 +19,7 @@
  *
  *   pnpm verify        fast gate — runs on every save/commit (~35s)
  *     format, lint, types (src + e2e), unit tests with coverage, and the
- *     integrity/spec gates that make the other numbers trustworthy
+ *     integrity gate that makes the coverage number trustworthy
  *
  *   pnpm verify:full   fast gate + build + e2e (~4min)
  *     what CI and a release tag run
@@ -84,8 +84,6 @@ const FAST_STEPS = [
   },
   { name: "locale parity", cmd: ["pnpm", "run", "check:locales"] },
   { name: "hardcoded text", cmd: ["pnpm", "run", "check:hardcoded-text"] },
-  { name: "spec references", cmd: ["pnpm", "run", "check:spec-refs"] },
-  { name: "spec drift", cmd: ["pnpm", "run", "check:spec-drift"] },
 ];
 
 const FULL_STEPS = [

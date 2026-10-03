@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/media-placeholders.ts
- * spec: specs/media-placeholders.spec.md
  *
  * The invariant these exist to protect: **capture group 1 is always the id, and
  * group 2 is always the width**. Two of the three regex flavours this module

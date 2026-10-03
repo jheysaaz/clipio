@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/ui-font.ts
- * spec: specs/ui-font.spec.md
  */
 
 import { describe, it, expect } from "vitest";

@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/content-helpers.ts
- * spec: specs/content-expansion.spec.md
  */
 
 import { describe, it, expect } from "vitest";
@@ -126,7 +125,7 @@ describe("findSnippetMatch", () => {
     expect(result).toBeNull();
   });
 
-  // spec: specs/shortcut-boundary.spec.md — a shortcut typed at the end of
+  // spec: — a shortcut typed at the end of
   // pre-filled prose is preceded by a full stop, not a space. That is the
   // caret position every rich editor puts you in when you edit existing
   // content, so it must still expand.
@@ -140,7 +139,7 @@ describe("findSnippetMatch", () => {
     }
   );
 
-  // spec: specs/shortcut-boundary.spec.md — the boundary widening must not
+  // spec: — the boundary widening must not
   // reopen the cases the original rule existed for. Every one of these is a
   // character that occurs inside a URL, a path or a file name.
   it.each([
@@ -153,7 +152,6 @@ describe("findSnippetMatch", () => {
     expect(findSnippetMatch(text, text.length, index)).toBeNull();
   });
 
-  // spec: specs/shortcut-boundary.spec.md
   it("treats an undefined preceding character as a non-boundary", () => {
     // Only reachable via an out-of-range index; guards the exported predicate's
     // contract rather than the caller.
@@ -394,7 +392,6 @@ describe("processSnippetContent", () => {
     expect(result.content).toContain("hello");
   });
 
-  // spec: content-expansion.spec.md#behavior-when-ashtml--true
   it("keeps non-empty HTML output for edited markdown+placeholder snippets", () => {
     const result = processSnippetContent(
       "**Dear** {{clipboard}} _team_",
@@ -408,7 +405,6 @@ describe("processSnippetContent", () => {
     expect(result.content).toContain("Clipio");
   });
 
-  // spec: content-expansion.spec.md#behavior-when-ashtml--true
   it("renders edited markdown with cursor placeholder in HTML mode", () => {
     const result = processSnippetContent(
       "Hi **there** {{cursor}} and _welcome_",

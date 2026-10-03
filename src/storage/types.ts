@@ -100,7 +100,6 @@ export interface StorageStatus {
  * limit broke and by how much. The UI needs it to say anything more useful
  * than "quota exceeded".
  *
- * spec: specs/storage-quota-preflight.spec.md
  */
 export class StorageQuotaError extends Error {
   readonly reasons?: readonly QuotaBreach[];

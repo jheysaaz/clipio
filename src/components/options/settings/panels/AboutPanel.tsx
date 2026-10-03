@@ -1,7 +1,6 @@
 /**
  * About — version, update state, and the feedback entry point.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { useEffect, useState } from "react";

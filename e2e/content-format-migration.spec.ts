@@ -1,6 +1,5 @@
 /**
  * Legacy `contentFormat: "html"` snippets.
- * spec: specs/content-format-migration.spec.md
  *
  * The corruption this covers: the editor always serialised markdown, while the
  * flag was carried forward onto the markdown body. So a snippet labelled

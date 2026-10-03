@@ -527,7 +527,6 @@ export default defineBackground(() => {
     //
     // The background worker is the only context that both outlives a page and
     // can observe a sync-area change, so it is where this belongs.
-    // spec: specs/cache-coherence.spec.md
     const gainedOrChanged = snipChanges.some(
       ([, change]) => change.newValue !== undefined
     );

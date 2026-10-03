@@ -7,7 +7,6 @@
  * tests assert that the closed shadow root plus the tooltip's relocation
  * actually keep snippet data out of the light DOM.
  *
- * spec: specs/preview-encapsulation.spec.md
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";

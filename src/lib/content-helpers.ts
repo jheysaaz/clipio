@@ -7,7 +7,7 @@
  * All functions in this module are pure — they do not access the DOM,
  * browser APIs, or storage directly.
  *
- * @see specs/content-expansion.spec.md for the behavioral specification.
+ * @see for the behavioral specification.
  */
 
 import {
@@ -79,7 +79,7 @@ const WORD_BOUNDARY_RE = /[\s\n]/;
  * caret at the end of existing prose, so a shortcut typed there is preceded by a
  * full stop rather than a space. Requiring whitespace alone meant neither the
  * preview palette nor auto-expansion ever opened in exactly the field where the
- * user is editing an existing document — see specs/shortcut-boundary.spec.md.
+ * user is editing an existing document — see .
  *
  * Deliberately a whitelist, not "anything non-alphanumeric": `:` `/` `\` `-` `_`
  * are what URLs (`https://`, `mailto:`), paths (`src/index`) and file names
@@ -219,7 +219,6 @@ export function formatDate(format: string, dateStr?: string): string {
  * never resolve. The width is now parsed out of the id rather than swallowed
  * into it.
  *
- * spec: specs/media-placeholders.spec.md
  */
 function resolveMediaPlaceholders(
   content: string,
@@ -310,7 +309,6 @@ export function processSnippetContent(
 
     // 4. Image placeholders → "[image]"
     // 5. GIF placeholders → Giphy URL
-    // spec: specs/media-placeholders.spec.md
     processedContent = resolveMediaPlaceholders(processedContent, resolveGif);
 
     // Strip markdown and handle cursor offset

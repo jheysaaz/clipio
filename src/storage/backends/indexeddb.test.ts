@@ -1,6 +1,6 @@
 /**
  * IndexedDBBackend — the disaster-recovery path.
- * spec: specs/test-infrastructure.spec.md (Wave 4.3)
+ * spec: (Wave 4.3)
  *
  * This is the layer that stands between a user who signed out of their browser
  * account and losing every snippet they ever wrote. It was excluded from

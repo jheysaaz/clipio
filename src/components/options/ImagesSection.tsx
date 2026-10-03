@@ -85,7 +85,6 @@ export function ImagesSection() {
 
         const refMap: Record<string, string[]> = {};
         for (const snippet of snippets) {
-          // spec: specs/media-placeholders.spec.md
           for (const id of extractImageIds(snippet.content)) {
             if (!refMap[id]) refMap[id] = [];
             if (!refMap[id].includes(snippet.label)) {

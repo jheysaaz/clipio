@@ -5,7 +5,6 @@
  * storage meter and per-row actions, and burying it under import/export made
  * both harder to find.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { ImagesSection } from "@/components/options/ImagesSection";

@@ -1,6 +1,5 @@
 /**
  * Tests for src/storage/backends/sync.ts — SyncBackend
- * spec: specs/storage.spec.md#SyncBackend
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";

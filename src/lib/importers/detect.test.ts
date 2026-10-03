@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/importers/detect.ts
- * spec: specs/importers.spec.md#detectFormat
  */
 
 import { describe, it, expect } from "vitest";
@@ -118,7 +117,7 @@ describe("detectFormat", () => {
     expect(detectFormat({ snippets: "data", hi: "Hello" })).toBeNull();
   });
 
-  // ── Cross-parser collisions (detection order, specs/importers.spec.md) ─────
+  // ── Cross-parser collisions (detection order, ) ─────
 
   // spec: detection order 1 > 3 — a Clipio envelope marker outranks the
   // TextBlaze shape; a TextBlaze-shaped object with format:"clipio" is

@@ -10,7 +10,6 @@
  * `useValue`/`setValue` read and write storage. React stays out of this module
  * so the filtering below can be unit-tested without a renderer.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import {
@@ -62,7 +61,7 @@ export type SectionId =
  * `i18n.t` is typed against the keys WXT generates from en.yml, so it rejects a
  * bare `string`. Spelling these out makes a renamed or deleted key a **compile
  * error** rather than a silently untranslated row — the same technique
- * `app-sidebar.tsx` uses for its nav labels. spec: specs/i18n.spec.md
+ * `app-sidebar.tsx` uses for its nav labels. spec:
  */
 export type SettingTitleKey =
   | "options.setting.previewEnabled.title"

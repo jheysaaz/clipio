@@ -686,7 +686,6 @@ test.describe("Options Page", () => {
     );
   });
 
-  // spec: specs/ui-font.spec.md
   test("applies the interface font everywhere and leaves monospace alone", async ({
     optionsPage,
     extensionId,
@@ -710,7 +709,7 @@ test.describe("Options Page", () => {
     // click on the trigger.
     await optionsPage.keyboard.press("Escape");
 
-    // spec: specs/ui-font.spec.md — each option's label is drawn in that
+    // spec: — each option's label is drawn in that
     // option's own face, so the menu previews the fonts rather than listing
     // names. Asserted on the real computed style, because an inline
     // `font-family` that never resolves (a family no @font-face declares) would
@@ -855,7 +854,7 @@ test.describe("Options Page", () => {
     await popupPage.close();
   });
 
-  // spec: specs/ui-font.spec.md — monospace surfaces must not follow the
+  // spec: — monospace surfaces must not follow the
   // interface font, or the debug log loses the column alignment that makes it
   // scannable.
   test("keeps monospace surfaces on JetBrains Mono under every font", async ({
@@ -889,7 +888,7 @@ test.describe("Options Page", () => {
     }
   });
 
-  // spec: specs/ui-font.spec.md — an unrecognised stored value must degrade to
+  // spec: — an unrecognised stored value must degrade to
   // the default instead of leaving the select blank and the page unstyled.
   test("falls back to Inter when the stored font is not a known option", async ({
     optionsPage,
@@ -1248,7 +1247,7 @@ test.describe("Diagnostics Section", () => {
     await pingButton.click();
 
     // The ping outcome is reported as a Sonner toast — assert on that toast
-    // (spec: specs/e2e-suite.spec.md — no literal copy via textContent("body")).
+    // (spec: — no literal copy via textContent("body")).
     const toast = optionsPage.locator("[data-sonner-toast]").first();
     await expect(toast).toBeVisible({ timeout: 5_000 });
     await expect(toast).toContainText(
@@ -1459,8 +1458,6 @@ test.describe("Diagnostics Section", () => {
 // ---------------------------------------------------------------------------
 
 test.describe("Review Prompt Banner", () => {
-  // spec: review-prompt.spec.md#options-page-banner
-
   /**
    * Seed review-banner storage keys and re-assert until stable.
    *
@@ -1532,7 +1529,6 @@ test.describe("Review Prompt Banner", () => {
     context,
     extensionId,
   }) => {
-    // spec: review-prompt.spec.md#options-page-banner
     // No storage seeding — default state is "pending"
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/options.html`);
@@ -1555,7 +1551,6 @@ test.describe("Review Prompt Banner", () => {
     extensionId,
     storageHelper,
   }) => {
-    // spec: review-prompt.spec.md#options-page-banner
     // Seed state before opening options page (re-assert: background captureError races)
     const page = await openOptionsAfterSeed(
       context,
@@ -1581,7 +1576,6 @@ test.describe("Review Prompt Banner", () => {
     extensionId,
     storageHelper,
   }) => {
-    // spec: review-prompt.spec.md#options-page-banner
     const recentError = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1 hour ago
     const page = await openOptionsAfterSeed(
       context,
@@ -1607,7 +1601,6 @@ test.describe("Review Prompt Banner", () => {
     extensionId,
     storageHelper,
   }) => {
-    // spec: review-prompt.spec.md#options-page-banner
     const oldError = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(); // 25 hours ago
     const page = await openOptionsAfterSeed(
       context,
@@ -1631,7 +1624,6 @@ test.describe("Review Prompt Banner", () => {
     extensionId,
     storageHelper,
   }) => {
-    // spec: review-prompt.spec.md#options-page-banner
     const page = await openOptionsAfterSeed(
       context,
       extensionId,
@@ -1668,7 +1660,6 @@ test.describe("Review Prompt Banner", () => {
     extensionId,
     storageHelper,
   }) => {
-    // spec: review-prompt.spec.md#options-page-banner
     const page = await openOptionsAfterSeed(
       context,
       extensionId,
@@ -1714,7 +1705,6 @@ test.describe("Review Prompt Banner", () => {
     extensionId,
     storageHelper,
   }) => {
-    // spec: review-prompt.spec.md#options-page-banner
     // Terminal state — banner must never reappear
     await storageHelper.setLocal("reviewPromptState", "dismissed");
 
@@ -1737,7 +1727,6 @@ test.describe("Review Prompt Banner", () => {
     extensionId,
     storageHelper,
   }) => {
-    // spec: review-prompt.spec.md#options-page-banner
     // Terminal state — banner must never reappear
     await storageHelper.setLocal("reviewPromptState", "rated");
 
@@ -1762,7 +1751,6 @@ test.describe("Review Prompt Banner", () => {
   test("options page has no critical accessibility violations", async ({
     optionsPage,
   }) => {
-    // spec: specs/e2e-suite.spec.md
     // @axe-core/playwright v4 exposes the AxeBuilder class — the old
     // injectAxe/checkA11y free functions do not exist.
     //

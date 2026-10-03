@@ -1,4 +1,3 @@
-// spec: specs/blocked-sites.spec.md
 import { describe, it, expect } from "vitest";
 import {
   normalizeHostname,

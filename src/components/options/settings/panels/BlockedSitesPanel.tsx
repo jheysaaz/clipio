@@ -4,7 +4,6 @@
  * Extracted from `SnippetsSection`, which previously buried this between
  * preview settings and import/export under a nav item called "Snippets".
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { useEffect, useState } from "react";

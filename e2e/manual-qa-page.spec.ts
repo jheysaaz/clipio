@@ -1,6 +1,5 @@
 /**
  * Manual QA harness smoke checks.
- * spec: specs/manual-qa-page.spec.md
  */
 
 import { test, expect } from "./fixtures.js";

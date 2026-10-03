@@ -8,7 +8,6 @@
  * drift apart, which is the exact failure that made the legacy
  * `contentFormat` migration inconsistent before it was consolidated.
  *
- * spec: specs/content-format-migration.spec.md
  */
 
 import type { Snippet } from "@/types";

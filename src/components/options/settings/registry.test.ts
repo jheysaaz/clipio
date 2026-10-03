@@ -1,7 +1,6 @@
 /**
  * Tests for the settings registry and its search ranking.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { describe, it, expect } from "vitest";
@@ -71,7 +70,7 @@ describe("registry shape", () => {
     expect(missing.map((s) => s.id)).toEqual([]);
   });
 
-  // spec: specs/ui-font.spec.md — an icon-segment with no options renders an
+  // spec: — an icon-segment with no options renders an
   // empty radiogroup, and one without icons renders three unlabelled buttons
   // that only their text can distinguish.
   it("gives every icon-segment both options and an icon per option", () => {
@@ -91,7 +90,7 @@ describe("registry shape", () => {
     }
   });
 
-  // spec: specs/ui-font.spec.md — optionFonts is what makes a font picker show
+  // spec: — optionFonts is what makes a font picker show
   // each face in itself. An entry that declares it must cover every option, or
   // one row would preview in its own face and the rest in the default.
   it("gives every option a preview face where optionFonts is declared", () => {

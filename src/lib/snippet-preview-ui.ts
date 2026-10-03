@@ -2,9 +2,8 @@
  * Shadow DOM UI component for the snippet preview feature.
  *
  * Creates a styled popup with snippet list, keyboard navigation, and hover tooltips.
- * Uses Shadow DOM with a CLOSED shadow root (see specs/preview-encapsulation.spec.md).
+ * Uses Shadow DOM with a CLOSED shadow root (see ).
  *
- * spec: specs/snippet-preview.spec.md
  */
 
 import type { PreviewPosition, FilteredSnippet } from "./preview-helpers";
@@ -27,7 +26,6 @@ import openDyslexicBoldUrl from "@/assets/fonts/OpenDyslexic-Bold.woff2?url";
  * from web-accessible chrome-extension:// URLs. Declared per option and injected
  * lazily so that picking OpenDyslexic does not also fetch 350 KB of Inter.
  *
- * spec: specs/ui-font.spec.md
  */
 const FONT_FACES: Record<UiFont, string> = {
   inter: `
@@ -65,7 +63,6 @@ const FONT_FACES: Record<UiFont, string> = {
  * has never heard of. The system tail is inherited from UI_FONT_STACKS so a
  * glyph the bundled face lacks falls through instead of rendering as tofu.
  *
- * spec: specs/ui-font.spec.md
  */
 function paletteStack(font: UiFont): string {
   // Global, not first-match: a stack that ever listed a family twice must not
@@ -139,7 +136,6 @@ export class SnippetPreviewUI {
     // palette. It was "open" purely for E2E selector convenience; those
     // assertions now use the data-preview-visible attribute on the host
     // instead, which exposes state and not content.
-    // spec: specs/preview-encapsulation.spec.md
     this.shadowRoot = this.shadowHost.attachShadow({ mode: "closed" });
 
     const prefersDark =
@@ -635,13 +631,13 @@ export class SnippetPreviewUI {
       // Add click handler.
       // Defence in depth. The shadow root is mode:"closed", so page script has
       // no handle on a row and cannot reach this handler at all — see
-      // specs/preview-encapsulation.spec.md. This guard covers the case where
+      // . This guard covers the case where
       // the root is ever reopened, and it was a live exploit before the root
       // was closed: a page could querySelector('.clipio-preview-item').click()
       // and reach onSelect -> insertSnippetIn*, which for a {{clipboard}}
       // snippet forces a clipboard read into a field the page controls.
       // isTrusted is UA-set and unforgeable; element.click() and dispatchEvent()
-      // both produce false. spec: specs/content-script-trust.spec.md
+      // both produce false. spec:
       item.addEventListener("click", (event: MouseEvent) => {
         if (!event.isTrusted) return;
         if (this.onSelect) {

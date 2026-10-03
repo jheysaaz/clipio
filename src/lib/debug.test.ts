@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/debug.ts — debugLog utility
- * spec: specs/developers-section.spec.md#debug-mode
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";

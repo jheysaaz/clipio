@@ -1,7 +1,6 @@
 /**
  * Tests for the markdown block grammar.
  *
- * spec: specs/markdown-block-grammar.spec.md
  *
  * These are round-trip tests. The claim under test is that opening a snippet and
  * saving it does not change the snippet, so the assertions are about the *pair*

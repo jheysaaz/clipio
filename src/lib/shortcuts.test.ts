@@ -1,7 +1,6 @@
 /**
  * Tests for the keyboard shortcut grammar.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { describe, it, expect, afterEach } from "vitest";

@@ -1,6 +1,5 @@
 /**
  * Tests for src/utils/dateUtils.ts
- * spec: specs/date-utils.spec.md
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";

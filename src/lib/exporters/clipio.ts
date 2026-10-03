@@ -70,7 +70,6 @@ export function buildClipioExportV2(
 
 /**
  * Returns true if any snippet content contains an {{image:...}} placeholder.
- * spec: specs/media-placeholders.spec.md
  */
 export function snippetsContainMedia(snippets: Snippet[]): boolean {
   return snippets.some((s) => hasImagePlaceholder(s.content));
@@ -89,7 +88,6 @@ export function snippetsContainMedia(snippets: Snippet[]): boolean {
  * keep two references to the same image apart, because they can carry different
  * widths, while an export manifest wants one entry per blob.
  *
- * spec: specs/media-placeholders.spec.md
  */
 export function collectReferencedMediaIds(snippets: Snippet[]): string[] {
   const ids = new Set<string>();

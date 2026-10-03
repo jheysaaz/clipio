@@ -1,6 +1,5 @@
 /**
  * Tests for src/storage/normalize.ts
- * spec: specs/content-format-migration.spec.md
  *
  * This function was three byte-identical private copies, one per backend, so
  * there is now one definition to change.

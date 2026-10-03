@@ -6,7 +6,6 @@
  * bounded and type-checked here, once, so no importer and no storage path has
  * to repeat the checks — and so a second, weaker copy of them cannot drift in.
  *
- * spec: specs/import-validation.spec.md
  */
 
 import type { Snippet } from "@/types";
@@ -129,7 +128,6 @@ export function validateImportedSnippet(raw: unknown): ValidationResult {
   //
   // Converting at validation also means the stored snippet is already
   // canonical, so the on-read migration later sees no flag and does no work.
-  // spec: specs/content-format-migration.spec.md
   const rawFormat = raw["contentFormat"];
   if (
     rawFormat !== undefined &&

@@ -5,7 +5,6 @@
  * a log viewer you have not enabled is noise, and the box was previously
  * rendered above its own switch.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { useEffect, useRef, useState } from "react";

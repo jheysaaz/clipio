@@ -10,7 +10,6 @@
  * the blocked-site list, the storage meter, the media library, the health
  * check and the debug log. Everything else is a `SettingControl`.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { BlockedSitesPanel } from "./settings/panels/BlockedSitesPanel";

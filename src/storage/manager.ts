@@ -137,7 +137,6 @@ export class StorageManager {
    * is DOM-free: the background converts a body exactly as a page would, so
    * the migration cannot depend on a page happening to read first.
    *
-   * @see specs/cache-coherence.spec.md
    */
   async getSnippets(): Promise<Snippet[]> {
     return this.readActive();
@@ -242,7 +241,6 @@ export class StorageManager {
    * changed, and a `StorageQuotaError` carrying the reasons is thrown for the
    * caller to explain.
    *
-   * spec: specs/storage-quota-preflight.spec.md
    *
    * @param project what the store will look like after `mutate` succeeds.
    * @param mutate performs the write against whichever backend is active.
@@ -479,7 +477,6 @@ export class StorageManager {
     // filter only checked that four fields were strings — no bounds, no
     // timestamps, no tags, no prototype keys — so a single 10 KB `content`
     // string in a hostile file could permanently exhaust the sync quota.
-    // spec: specs/import-validation.spec.md
     const { accepted, rejected, tooManySnippets } =
       validateImportPayload(parsed);
 

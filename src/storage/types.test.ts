@@ -1,6 +1,5 @@
 /**
  * Tests for src/storage/types.ts — StorageQuotaError
- * spec: specs/storage.spec.md#StorageQuotaError
  */
 
 import { describe, it, expect } from "vitest";

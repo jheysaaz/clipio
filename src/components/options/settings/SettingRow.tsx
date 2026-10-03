@@ -5,7 +5,6 @@
  * Rows are separated by hairlines, carry a fixed-width control column so labels
  * never reflow as values change, and expose an optional reset affordance.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { type ReactNode } from "react";

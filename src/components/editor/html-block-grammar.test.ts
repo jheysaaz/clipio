@@ -2,7 +2,6 @@
  * Tests for the HTML → markdown path, which the TextBlaze and PowerText
  * importers both depend on.
  *
- * spec: specs/markdown-block-grammar.spec.md
  *
  * `htmlToMarkdown` is `serializeToMarkdown(deserializeFromHtml(html))`, so it
  * inherits the block grammar only if the HTML deserialiser produces the same

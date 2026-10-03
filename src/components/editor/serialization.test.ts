@@ -1,6 +1,5 @@
 /**
  * Tests for src/components/editor/serialization.ts
- * spec: specs/serialization.spec.md
  */
 
 import { describe, it, expect } from "vitest";
@@ -539,7 +538,6 @@ describe("serialize → deserialize → serialize round-trip", () => {
     expect(roundTrip("{{gif:abc123XYZ:350}}")).toBe("{{gif:abc123XYZ:350}}");
   });
 
-  // spec: content-expansion.spec.md#behavior-when-ashtml--true
   it("round-trips edited markdown with placeholders used by contenteditable expansion", () => {
     const md = "**Dear** {{clipboard}} _team_ {{cursor}}";
     expect(roundTrip(md)).toBe(md);
@@ -809,7 +807,7 @@ describe("markdownToPlainText", () => {
  * htmlToMarkdown is the editor-side converter used by the TextBlaze and Power
  * Text importers. It is DOM-based, so it only runs in a page — the legacy
  * contentFormat migration deliberately uses a different, DOM-free converter so
- * it can also run in the MV3 service worker. See specs/content-format-migration.spec.md
+ * it can also run in the MV3 service worker. See
  */
 describe("htmlToMarkdown", () => {
   it("returns empty for empty input", () => {

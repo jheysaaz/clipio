@@ -1,6 +1,5 @@
 /**
  * Tests for src/storage/backends/media.ts
- * spec: specs/media-storage.spec.md
  *
  * Uses fake-indexeddb to simulate the IndexedDB environment without a real browser.
  */
@@ -847,7 +846,6 @@ describe("restoreMediaEntry (deduplication)", () => {
 
 // ---------------------------------------------------------------------------
 // restoreMediaEntry — trust boundary for untrusted ZIP imports
-// spec: specs/media-import-hardening.spec.md
 //
 // The docstring used to claim "skips validation since the data was previously
 // validated on export". That is false for an export someone else authored.
@@ -1036,7 +1034,6 @@ describe("restoreMediaEntry — validates an untrusted import", () => {
 //
 // The quota threshold is unreachable without seeding ~50 MB into
 // fake-indexeddb, so the decision is a pure function and is tested as one.
-// spec: specs/media-import-hardening.spec.md
 // ---------------------------------------------------------------------------
 
 describe("isWithinMediaQuota", () => {

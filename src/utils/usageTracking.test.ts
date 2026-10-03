@@ -1,6 +1,5 @@
 /**
  * Tests for src/utils/usageTracking.ts
- * spec: specs/usage-tracking.spec.md
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";

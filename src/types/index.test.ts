@@ -1,6 +1,5 @@
 /**
  * Tests for src/types/index.ts — createSnippet factory function
- * spec: specs/snippet-model.spec.md
  */
 
 import { describe, it, expect } from "vitest";
@@ -23,7 +22,6 @@ describe("createSnippet", () => {
     expect(snippet).toHaveProperty("content");
     // The pre-1.x `contentFormat` flag is retired: it must never be recreated
     // on a new snippet, or the migration would run again on its own output.
-    // spec: specs/content-format-migration.spec.md
     expect(snippet).not.toHaveProperty("contentFormat");
     expect(snippet).toHaveProperty("tags");
     expect(snippet).toHaveProperty("usageCount");
@@ -75,7 +73,7 @@ describe("createSnippet", () => {
   it("does not carry a contentFormat key", () => {
     // The field was retired: the editor always serialised markdown while the
     // flag was carried forward onto the markdown body, corrupting HTML-format
-    // snippets on open/save. spec: specs/content-format-migration.spec.md
+    // snippets on open/save. spec:
     const snippet = createSnippet({ label: "L", shortcut: "s", content: "c" });
     expect(Object.keys(snippet)).not.toContain("contentFormat");
   });

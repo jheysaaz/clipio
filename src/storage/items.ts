@@ -95,7 +95,6 @@ import { DEFAULT_UI_FONT } from "@/lib/ui-font";
  * can be restored from a backup or written by another extension context and is
  * not guaranteed to hold one of our options.
  *
- * spec: specs/ui-font.spec.md
  */
 export const uiFontItem = storage.defineItem<UiFont>("local:uiFont", {
   defaultValue: DEFAULT_UI_FONT,

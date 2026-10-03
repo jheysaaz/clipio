@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/update-checker.ts
- * spec: specs/update-checker.spec.md
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -352,7 +351,6 @@ describe("checkForUpdate — HTTP errors", () => {
 
 // ---------------------------------------------------------------------------
 // sanitizeReleaseUrl — allowlist for the release page link
-// spec: specs/update-checker.spec.md
 // ---------------------------------------------------------------------------
 
 describe("sanitizeReleaseUrl", () => {
@@ -539,7 +537,7 @@ describe("openReleasePage", () => {
 
 /**
  * The update-check throttle.
- * spec: specs/test-infrastructure.spec.md (Wave 4.2)
+ * spec: (Wave 4.2)
  *
  * `checkForUpdate()` is called at the top level of the service worker, so it
  * runs on every wake-up, and an MV3 worker is evicted after ~30s idle. Before
@@ -674,7 +672,7 @@ describe("checkForUpdate — throttling", () => {
 
 /**
  * The throttle's own error paths.
- * spec: specs/test-infrastructure.spec.md (Wave 4.2)
+ * spec: (Wave 4.2)
  *
  * Each of these is a place where a secondary failure could take down the update
  * check — or, worse, be allowed to escape into the service worker's top level.

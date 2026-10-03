@@ -1,7 +1,6 @@
 /**
  * Renderers for the block elements the markdown grammar produces.
  *
- * spec: specs/markdown-block-grammar.spec.md
  *
  * The block grammar (Wave 10) taught `deserializeContent` to emit `h1`–`h6`,
  * `ul`/`ol`/`li`, `blockquote`, `hr`, `code` and `table`/`thead`/`tbody`/`tr`/

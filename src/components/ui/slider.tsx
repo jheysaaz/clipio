@@ -14,7 +14,6 @@ import { cn } from "@/lib/utils";
  * Slider (the same primitive family as Switch/Select) so it matches the rest of
  * the UI and is keyboard- and screen-reader-operable.
  *
- * spec: specs/options-redesign.spec.md
  */
 function Slider({
   className,

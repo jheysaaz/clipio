@@ -1,4 +1,3 @@
-// spec: specs/content-format-migration.spec.md
 //
 // Retires the vestigial `contentFormat` flag.
 //

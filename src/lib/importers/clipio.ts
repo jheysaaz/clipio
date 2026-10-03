@@ -45,7 +45,7 @@ function snippetToParsed(raw: Snippet): ParsedSnippet {
   // is treated as markdown for good and inserts as visible escaped text.
   //
   // Both Clipio entry points (the JSON file and the v2 ZIP) funnel through
-  // here, so one call covers both. spec: specs/content-format-migration.spec.md
+  // here, so one call covers both. spec:
   const snippet = migrateContentFormat(raw);
   return {
     suggestedId: snippet.id,
@@ -119,7 +119,6 @@ export const ClipioParser: FormatParser = {
  * user at the media cap produces media of exactly MAX_TOTAL_SIZE, and the
  * manifest is on top of it. Without the headroom such a user cannot restore
  * their own backup.
- * spec: specs/media-import-hardening.spec.md
  */
 /** Headroom for export.json, which is not media and is not quota-bound. */
 export const MAX_MANIFEST_INFLATED_BYTES = 8 * 1024 * 1024;
@@ -138,7 +137,6 @@ export const MAX_ZIP_INFLATED_BYTES =
  * What actually matters is that an id cannot contain a path separator, a dot,
  * or the brace/colon characters that would let it escape into a placeholder.
  *
- * spec: specs/media-import-hardening.spec.md
  */
 const MEDIA_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 

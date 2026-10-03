@@ -6,7 +6,6 @@
  * suppressing the prompt when the extension has recently encountered errors —
  * avoiding negative reviews caused by bugs.
  *
- * spec: review-prompt.spec.md
  */
 
 import {
@@ -44,7 +43,6 @@ export type { ReviewPromptState };
  *
  * Never throws — returns false on any storage read failure.
  *
- * spec: review-prompt.spec.md#eligibility
  */
 export async function shouldShowReviewPrompt(): Promise<boolean> {
   try {
@@ -140,7 +138,6 @@ export async function shouldShowReviewBanner(): Promise<boolean> {
  * Transition the review prompt to a new lifecycle state.
  * Once "dismissed" or "rated", the prompt is permanently suppressed.
  *
- * spec: review-prompt.spec.md#state-helpers
  */
 export async function setReviewPromptState(
   state: ReviewPromptState
@@ -152,7 +149,6 @@ export async function setReviewPromptState(
  * Snooze the review prompt for the given number of hours.
  * Sets reviewPromptSnoozedUntil to now + hours.
  *
- * spec: review-prompt.spec.md#state-helpers
  */
 export async function snoozeReviewPrompt(hours: number): Promise<void> {
   const snoozedUntil = new Date(
@@ -172,7 +168,6 @@ export async function snoozeReviewPrompt(hours: number): Promise<void> {
  * - Chrome/Edge/etc → Chrome Web Store review URL (uses browser.runtime.id)
  * - Fallback (browser unavailable) → Chrome Web Store homepage
  *
- * spec: review-prompt.spec.md#store-url-resolution
  */
 /**
  * Whether this is a Chromium-based browser.

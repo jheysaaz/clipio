@@ -28,8 +28,6 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "check:coverage-integrity": "node scripts/check-coverage-integrity.mjs",
-    "check:spec-refs": "node scripts/check-spec-refs.mjs",
-    "check:spec-drift": "node scripts/check-spec-drift.mjs",
     "verify": "node scripts/verify.mjs",
     "verify:full": "node scripts/verify.mjs --full",
     "test:e2e": "playwright test",

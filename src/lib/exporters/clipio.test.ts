@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/exporters/clipio.ts
- * spec: specs/exporters.spec.md
  */
 
 import { describe, it, expect } from "vitest";

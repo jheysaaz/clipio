@@ -1,6 +1,5 @@
 /**
  * The `{{image:…}}` and `{{gif:…}}` placeholder grammar, in one place.
- * spec: specs/media-placeholders.spec.md
  *
  * These two placeholders used to be matched by 17 hand-retyped regular
  * expressions across 9 modules, in three incompatible flavours. Two of those

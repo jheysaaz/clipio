@@ -1,8 +1,5 @@
 /**
  * Tests for src/lib/preview-helpers.ts
- * spec: specs/snippet-preview.spec.md
- * spec: specs/preview-anchor.spec.md
- * spec: specs/preview-helpers.spec.md
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -534,7 +531,7 @@ describe("detectPreviewTrigger", () => {
     expect(result).toBeNull(); // No word boundary before "/"
   });
 
-  // spec: specs/shortcut-boundary.spec.md — the caret in a pre-filled
+  // spec: — the caret in a pre-filled
   // contenteditable sits at the end of existing prose, so the prefix is
   // preceded by punctuation rather than whitespace. The palette must open
   // there or insertion is unreachable in exactly the fields that hold
@@ -549,7 +546,7 @@ describe("detectPreviewTrigger", () => {
     }
   );
 
-  // spec: specs/shortcut-boundary.spec.md — widening the boundary must not pop
+  // spec: — widening the boundary must not pop
   // the palette open while a URL or path is being typed.
   //
   // Every case contains a "/" so it reaches the boundary predicate. A case

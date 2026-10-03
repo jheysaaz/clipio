@@ -21,7 +21,6 @@
  * row of numbers. Colour is reserved for the one thing that genuinely warrants
  * attention: being close to the sync ceiling.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { Cloud, CloudOff, HardDrive, TriangleAlert } from "lucide-react";

@@ -7,7 +7,6 @@
  * Routing is hash-based so a section is linkable and survives a reload — the
  * old page ignored `#feedback` entirely and always booted to the dashboard.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";

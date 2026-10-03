@@ -20,7 +20,6 @@ const makeSnippet = (overrides: Partial<Snippet> = {}): Snippet => {
 };
 
 /**
- * spec: specs/storage-quota-preflight.spec.md
  *
  * Every test here asserts on the real `checkQuota` output. Nothing reconstructs
  * the byte arithmetic by hand and asserts on that, which is the failure mode

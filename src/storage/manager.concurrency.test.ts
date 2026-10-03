@@ -1,6 +1,5 @@
 /**
  * Cross-context concurrency tests for StorageManager.
- * spec: specs/storage-durability.spec.md
  *
  * The popup and the options page are separate JavaScript contexts, each with
  * its own StorageManager, mutating one shared browser.storage.sync. These
@@ -233,7 +232,6 @@ describe("StorageManager cross-context concurrency", () => {
   it("does not switch storage mode on a quota error from an upsert", async () => {
     // A quota-failed write is refused, not redirected. Flipping the install to
     // local mode here — silently and permanently — is what Wave 9 removed.
-    // spec: specs/storage-quota-preflight.spec.md
     const shared = createSharedStore([]);
     shared.upsertSnippets = vi.fn(async () => {
       throw new StorageQuotaError();

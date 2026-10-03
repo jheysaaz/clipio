@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/markdown.ts — shared Markdown utilities
- * spec: specs/markdown.spec.md
  */
 
 import { describe, it, expect } from "vitest";

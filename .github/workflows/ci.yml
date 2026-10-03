@@ -44,7 +44,6 @@ jobs:
       #
       #   format · lint · types (src + e2e) · unit + coverage
       #   coverage integrity · locale parity · hardcoded text
-      #   spec references · spec drift
       #
       - name: Run fast gate
         run: pnpm verify

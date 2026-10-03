@@ -2,8 +2,6 @@
  * Every editable field on the manual QA harness must expand a snippet, and the
  * two negative fields must not.
  *
- * spec: specs/shortcut-boundary.spec.md
- * spec: specs/manual-qa-page.spec.md
  *
  * This is the release gate for the bug where the pre-filled rich contenteditable
  * (`#qa-ce-rich`) expanded nothing and showed no palette at all: its content ends
@@ -31,7 +29,7 @@ const CLEAR = '[data-testid="qa-clear"]';
  * Derived from the shipped default rather than hardcoded, so raising
  * `TIMING.TYPING_TIMEOUT` cannot make these assertions pass vacuously by
  * outliving nothing: the expansion timer is cleared and re-armed on every
- * keystroke, so the wait has to exceed the last one. See specs/e2e-suite.spec.md
+ * keystroke, so the wait has to exceed the last one. See
  * for why only an outlived wait can prove an absence.
  */
 const NEGATIVE_SETTLE_MS = TIMING.TYPING_TIMEOUT + 700;

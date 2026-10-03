@@ -1,6 +1,5 @@
 /**
  * Tests for src/storage/backends/local.ts — LocalBackend + updateContentScriptCache
- * spec: specs/storage.spec.md#LocalBackend
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
@@ -66,9 +65,8 @@ describe("LocalBackend", () => {
       expect(result).toEqual([]);
     });
 
-    // spec: specs/storage.spec.md#LocalBackend — legacy snippets without
+    // spec: #LocalBackend — legacy snippets without
     // The legacy contentFormat flag is converted away on read.
-    // spec: specs/content-format-migration.spec.md
     it("converts a legacy HTML body to markdown and drops the flag", async () => {
       const legacy = {
         ...makeSnippet(),
@@ -125,7 +123,7 @@ describe("LocalBackend", () => {
 
   // ── upsertSnippets / removeSnippetsById ─────────────────────────────────
   //
-  // The intent-based API from specs/storage-durability.spec.md. These exist so
+  // The intent-based API from . These exist so
   // two extension contexts can each change one snippet without the second
   // write clobbering the first, which is what a whole-list save did.
 

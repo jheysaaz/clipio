@@ -30,7 +30,7 @@ import {
  */
 async function waitForPopupReady(page: import("@playwright/test").Page) {
   // Wait for the stable hydration landmarks added under e2e coverage
-  // (specs/e2e-suite.spec.md): either the snippet list or the empty state.
+  // (): either the snippet list or the empty state.
   await page.waitForSelector(
     '[data-testid="snippet-list"], [data-testid="empty-state"]',
     { timeout: 10_000 }
@@ -472,7 +472,6 @@ test.describe("Popup (Dashboard)", () => {
   test("popup has no critical accessibility violations", async ({
     popupPage,
   }) => {
-    // spec: specs/e2e-suite.spec.md
     // @axe-core/playwright v4 exposes the AxeBuilder class — the old
     // injectAxe/checkA11y free functions do not exist. Scan the hydrated
     // popup; fail on critical/serious violations without suppression, and
@@ -498,7 +497,6 @@ test.describe("Popup (Dashboard)", () => {
 // ---------------------------------------------------------------------------
 
 test.describe("Popup (Dashboard) — oversized snippet is refused, not silently diverted", () => {
-  // spec: specs/storage-quota-preflight.spec.md
   test("refuses a snippet over the per-item sync limit and keeps sync mode", async ({
     popupPage,
   }) => {
@@ -535,7 +533,6 @@ test.describe("Popup (Dashboard) — oversized snippet is refused, not silently 
 });
 
 test.describe("Popup (Dashboard) — block structure survives a save", () => {
-  // spec: specs/markdown-block-grammar.spec.md
   test("keeps a heading, a list and a table through an open/save cycle", async ({
     popupPage,
   }) => {

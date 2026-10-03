@@ -12,7 +12,6 @@
  * Stored form is platform-neutral: `Mod` means ⌘ on macOS and Ctrl elsewhere,
  * so a payload synced from a Mac stays correct on Windows.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 export type Platform = "mac" | "other";

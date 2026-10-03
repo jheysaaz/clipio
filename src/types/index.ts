@@ -9,7 +9,6 @@
  * always serialised markdown while the flag was carried forward onto the
  * markdown body, so opening and saving an HTML-format snippet corrupted it.
  * Legacy HTML bodies are converted once, on read — see
- * specs/content-format-migration.spec.md.
  */
 export interface Snippet {
   id: string;

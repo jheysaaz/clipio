@@ -5,7 +5,6 @@
  * and content formatting for the preview UI. Extracted from content script for
  * unit testing without browser environment dependencies.
  *
- * spec: specs/snippet-preview.spec.md
  */
 
 import { markdownToPlainText } from "@/lib/markdown";
@@ -72,7 +71,6 @@ export interface TriggerMatch {
 
 /**
  * Performs fuzzy matching on snippet shortcut and label, returning scored and highlighted results.
- * spec: snippet-preview.spec.md#fuzzyMatchSnippets
  */
 export function fuzzyMatchSnippets(
   query: string,
@@ -226,7 +224,7 @@ function mergeRanges(
  *
  * `cursorPos` is the caret offset for input/textarea. Without it there is nothing to
  * measure, and the palette falls back to the element's own bounds — which is why every
- * caller must pass it. spec: specs/preview-anchor.spec.md
+ * caller must pass it. spec:
  */
 export function calculatePreviewPosition(
   targetElement: HTMLElement,
@@ -311,7 +309,6 @@ export function calculatePreviewPosition(
  * caret; the position of a marker span appended after that text is the caret's
  * position within the control.
  *
- * spec: specs/preview-anchor.spec.md#getcursorcoordsininput
  */
 function getCursorCoordsInInput(
   element: HTMLInputElement | HTMLTextAreaElement,
@@ -421,7 +418,6 @@ function getCursorCoordsInContentEditable(): { x: number; y: number } {
 
 /**
  * Detects if the text before cursor should trigger the preview (prefix-based triggering).
- * spec: snippet-preview.spec.md#detectPreviewTrigger
  */
 export function detectPreviewTrigger(
   text: string,
@@ -453,7 +449,6 @@ export function detectPreviewTrigger(
   // Check the boundary before the prefix (unless at start). Shares
   // isShortcutBoundary with findSnippetMatch so both paths use one definition of
   // the boundary.
-  // spec: specs/shortcut-boundary.spec.md
   if (lastPrefixIndex > 0) {
     if (!isShortcutBoundary(text[lastPrefixIndex - 1])) {
       return null;
@@ -477,7 +472,6 @@ export function detectPreviewTrigger(
 
 /**
  * Formats snippet content for hover tooltip display (first ~100 characters).
- * spec: snippet-preview.spec.md#createPreviewTooltip
  */
 export function createPreviewTooltip(content: string): string {
   if (!content || !content.trim()) {

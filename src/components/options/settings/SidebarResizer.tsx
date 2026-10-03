@@ -5,7 +5,6 @@
  * the 6px hit area, which is what makes a hairline divider usable as a grip.
  * The width is persisted so it survives a page reload.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { useCallback, useEffect, useRef } from "react";

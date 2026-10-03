@@ -1,4 +1,3 @@
-// spec: specs/blocked-sites.spec.md
 //
 // Single source of truth for the "hide on this site" blocklist. This logic
 // previously lived as a file-local, unexported, untested function in

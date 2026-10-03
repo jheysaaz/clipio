@@ -8,7 +8,6 @@
  *
  * `⌘K` / `Ctrl+K` focuses the field from anywhere on the page.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { useCallback, useEffect, useMemo, useRef } from "react";

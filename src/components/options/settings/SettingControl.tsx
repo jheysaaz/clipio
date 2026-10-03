@@ -5,7 +5,6 @@
  * inside search results — so a value changed from the search list is reflected
  * in the section behind it without a second source of truth.
  *
- * spec: specs/options-redesign.spec.md
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -53,7 +52,7 @@ export function SettingControl({ entry }: { entry: SettingEntry }) {
   // Theme is the one setting whose effect is not storage: ThemeContext owns the
   // `dark` class on <html> and persists on its own. Writing the item directly
   // leaves the page visually unchanged until the next reload, so the change is
-  // routed through the context instead. spec: specs/options-redesign.spec.md
+  // routed through the context instead. spec:
   const { setThemeMode } = useTheme();
 
   // Guard against a slow initial read overwriting a value the user has already

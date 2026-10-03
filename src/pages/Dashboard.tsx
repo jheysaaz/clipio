@@ -346,7 +346,7 @@ export default function Dashboard() {
         //
         // This used to retry the save "after manager has switched to local
         // mode". The manager no longer switches: Wave 9 replaced the silent
-        // fallback with a refusal (specs/storage-quota-preflight.spec.md), so
+        // fallback with a refusal (), so
         // the retry ran the identical, stateless preflight and could not
         // succeed. The snippet is now simply not saved, which is a real
         // behaviour change — the user is told and can switch storage mode from

@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/importers/powertext.ts
- * spec: specs/importers.spec.md#PowerTextParser
  */
 
 import { describe, it, expect } from "vitest";

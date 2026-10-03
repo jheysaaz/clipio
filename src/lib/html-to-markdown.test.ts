@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/html-to-markdown.ts
- * spec: specs/content-format-migration.spec.md
  *
  * This converter runs in every extension context, including the MV3 service
  * worker, so it must not touch the DOM. It is a single code path used
@@ -392,7 +391,7 @@ describe("decodeEntities — invalid code points", () => {
 describe("htmlToMarkdownPortable — tables", () => {
   // These used to fall through to the generic text path, which emitted each
   // cell separated by a space, so a two-cell row became "a b 1 2" and the table
-  // structure was gone. spec: specs/markdown-block-grammar.spec.md
+  // structure was gone. spec:
   it("converts a table with a header row", () => {
     expect(
       htmlToMarkdownPortable(

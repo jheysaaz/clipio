@@ -8,7 +8,7 @@
  * `@internal` getInternalShadowRoot() accessor rather than host.shadowRoot.
  * That is sound because extension code and its tests share a JS world: an
  * isolated world is unreachable from the page, so an internal method is not a
- * page-facing surface. spec: specs/preview-encapsulation.spec.md
+ * page-facing surface. spec:
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";

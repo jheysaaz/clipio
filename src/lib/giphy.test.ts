@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/giphy.ts
- * spec: specs/giphy.spec.md
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";

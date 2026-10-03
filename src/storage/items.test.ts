@@ -1,6 +1,5 @@
 /**
  * The storage item registry.
- * spec: specs/test-infrastructure.spec.md
  *
  * `items.ts` is the single source of truth for every storage **key** and every
  * **default value** the extension has, and it is mocked or stubbed out by

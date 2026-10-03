@@ -1,7 +1,6 @@
 /**
  * Markdown block grammar.
  *
- * spec: specs/markdown-block-grammar.spec.md
  *
  * `serialization.ts` used to split on `/\n/` and wrap every line in a paragraph,
  * so any block structure in a snippet was destroyed on the first open/save cycle:

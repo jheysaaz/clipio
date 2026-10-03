@@ -19,5 +19,4 @@ catching regressions instead of breaking on trivia:
   retries/timeouts; diagnose the actual cause. If the app behavior itself
   looks wrong, flag it for a human instead of adapting the test to it.
 
-Testing standards and the current repair notes live in
-`specs/e2e-suite.spec.md`.
+Testing standards live in [`AGENTS.md`](./AGENTS.md).

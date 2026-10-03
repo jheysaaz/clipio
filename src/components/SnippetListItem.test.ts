@@ -1,6 +1,5 @@
 /**
  * Tests for src/components/SnippetListItem.tsx
- * spec: specs/media-placeholders.spec.md
  *
  * Only the content-preview pipeline is covered here. The component itself is
  * presentation (excluded from unit coverage and reached through the popup e2e),
@@ -83,7 +82,7 @@ describe("getContentPreview — markdown marks come from the canonical stripper"
     // It also means a snippet containing a link shows raw `[label](url)` in the
     // list. That is a genuine rough edge, but whether to show the label or the
     // URL is a product decision, not a refactor — so it is recorded rather than
-    // changed here. spec: specs/media-placeholders.spec.md
+    // changed here. spec:
     expect(getContentPreview("see [my site](https://x.test)")).toBe(
       "see [my site](https://x.test)"
     );

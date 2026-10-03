@@ -1,5 +1,4 @@
 /**
- * spec: specs/blocked-sites.spec.md
  *
  * "Hide on this site" must suppress snippet expansion *and* preview rendering
  * on a blocked host. The unit suite in src/lib/blocked-sites.test.ts covers the

@@ -257,18 +257,19 @@ To do a dry run first (recommended when setting up for the first time):
 2. Check the **Dry Run** checkbox.
 3. Click **Run workflow**.
 
-## Specifications
+## Documentation
 
-Behavioral specifications for every tested module live in `specs/`. Each spec file describes what a module must do, independent of implementation details.
+| Where                            | What                                                     |
+| -------------------------------- | -------------------------------------------------------- |
+| [`AGENTS.md`](./AGENTS.md)       | How to work on this codebase — commands, rules, boundaries |
+| [`docs/architecture.md`](./docs/architecture.md) | How it is put together                        |
+| [`docs/decisions/`](./docs/decisions/) | Decisions and the reasoning behind them            |
+| [`docs/open.md`](./docs/open.md) | Known gaps. A state, not a log — items are deleted when fixed |
 
-Specs follow a Spec-Driven Development (SDD) + TDD workflow:
-
-1. Write or update `specs/<module>.spec.md` describing the required behavior.
-2. Write failing tests that encode every `MUST` clause from the spec.
-3. Implement until all tests pass.
-4. PRs must include: spec update + tests + implementation.
-
-See [`specs/README.md`](specs/README.md) for the full directory index and conventions.
+Module behaviour is specified by its tests, not by a parallel prose document. A
+test can fail; a paragraph describing it cannot. When the *reason* behind a choice
+matters — why something was rejected, what would justify revisiting it — that
+goes in `docs/decisions/`, where it does not rot against the code.
 
 ## License
 

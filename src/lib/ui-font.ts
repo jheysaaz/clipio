@@ -5,7 +5,6 @@
  * content-script preview palette can read the same stacks without importing
  * each other.
  *
- * spec: specs/ui-font.spec.md
  */
 
 export const UI_FONT_OPTIONS = ["inter", "system", "dyslexic"] as const;

@@ -16,7 +16,6 @@ import { captureError } from "@/lib/sentry";
  * therefore stays a plain `select` with no `entry.id === "font"` special-casing
  * in SettingControl, unlike `theme`.
  *
- * spec: specs/ui-font.spec.md
  */
 export function FontProvider() {
   useEffect(() => {

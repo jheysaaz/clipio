@@ -1,6 +1,5 @@
 /**
  * The content-script cache must have exactly one writer.
- * spec: specs/cache-coherence.spec.md
  *
  * The cache is a derived projection of the snippet list, and the bug this file
  * guards is a stale one: the content script reads only the cache, so a snippet

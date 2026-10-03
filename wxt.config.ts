@@ -64,7 +64,7 @@ export default defineConfig({
     // the logo + Inter font via chrome-extension:// URLs. Chrome blocks such
     // subresource requests from web pages unless they are declared here —
     // without this entry the preview branding logo and font never load.
-    // (Found by the e2e preview-header test — see specs/e2e-suite.spec.md.)
+    // (Found by the e2e preview-header test in e2e/content-script.spec.ts.)
     web_accessible_resources: [
       {
         resources: [

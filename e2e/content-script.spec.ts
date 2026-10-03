@@ -450,7 +450,7 @@ test.describe("Snippet Preview Feature", () => {
 
     // The palette lives in a CLOSED shadow root, so Playwright cannot select
     // rows. The host mirrors non-content state instead — see
-    // specs/preview-encapsulation.spec.md. Asserting the row count also proves
+    // . Asserting the row count also proves
     // both seeded snippets were offered.
     const host = testPage.locator("#clipio-snippet-preview-host");
     await expect(host).toHaveAttribute("data-preview-visible", "true", {
@@ -471,7 +471,7 @@ test.describe("Snippet Preview Feature", () => {
     // Here we assert only what the host mirrors: open, with 2 rows.
   });
 
-  // spec: specs/preview-anchor.spec.md — the palette anchors to the caret, not
+  // spec: — the palette anchors to the caret, not
   // to the field's bottom edge. Regression: showPreview() dropped cursorPos, so
   // calculatePreviewPosition fell back to { x: rect.left, y: rect.bottom } and
   // the palette rendered under the whole field.
@@ -781,7 +781,6 @@ test.describe("Snippet Preview Feature", () => {
 
 // ---------------------------------------------------------------------------
 // Untrusted event rejection
-// spec: specs/content-script-trust.spec.md
 //
 // A Chrome isolated world shares the DOM event graph with the page, so a
 // page-dispatched (synthetic) event still reaches the content script's

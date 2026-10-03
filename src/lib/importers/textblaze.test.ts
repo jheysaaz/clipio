@@ -1,6 +1,5 @@
 /**
  * Tests for src/lib/importers/textblaze.ts
- * spec: specs/importers.spec.md#TextBlazeParser
  */
 
 import { describe, it, expect, vi } from "vitest";

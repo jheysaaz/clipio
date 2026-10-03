@@ -8,7 +8,6 @@
  * syncs. The result is a snippet that is listed in the popup and refuses to
  * insert on any page.
  *
- * spec: specs/cache-coherence.spec.md
  *
  * Two things about running these reliably, both learned the hard way:
  *

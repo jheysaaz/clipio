@@ -192,7 +192,6 @@ export async function saveMedia(file: File | Blob): Promise<MediaEntry> {
  *
  * Extracted so the limit is unit-testable without seeding tens of megabytes
  * into fake-indexeddb to reach the threshold.
- * spec: specs/media-import-hardening.spec.md
  */
 export function isWithinMediaQuota(
   currentTotal: number,
@@ -206,7 +205,6 @@ export function isWithinMediaQuota(
  *
  * The allow-list is intentionally narrow: no `image/svg+xml` (script-capable
  * in some embedding contexts) and no `text/html`.
- * spec: specs/media-import-hardening.spec.md
  */
 export function isSupportedMediaType(
   mimeType: string | undefined | null
@@ -219,7 +217,6 @@ export function isSupportedMediaType(
 
 /**
  * Pure: is this blob within the per-file size limit?
- * spec: specs/media-import-hardening.spec.md
  */
 export function isWithinFileSizeLimit(size: number): boolean {
   return size <= MEDIA_LIMITS.MAX_FILE_SIZE;
@@ -242,7 +239,6 @@ export function isWithinFileSizeLimit(size: number): boolean {
  * runs first so a re-import neither duplicates bytes nor consumes quota.
  *
  * Throws on validation failure or IDB errors.
- * spec: specs/media-import-hardening.spec.md
  */
 export async function restoreMediaEntry(entry: MediaEntry): Promise<void> {
   // Validate MIME type against the same allow-list as saveMedia.

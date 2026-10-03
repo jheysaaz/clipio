@@ -1,6 +1,5 @@
 /**
  * Tests for src/storage/manager.ts — StorageManager
- * spec: specs/storage.spec.md#StorageManager
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -31,7 +30,6 @@ const {
     saveSnippets: vi.fn(),
     // Intent-based mutations. The manager uses these for single-snippet CRUD
     // so a concurrent write in another context is not clobbered — see
-    // specs/storage-durability.spec.md.
     upsertSnippets: vi.fn(),
     removeSnippetsById: vi.fn(),
     clear: vi.fn(),
@@ -223,7 +221,7 @@ describe("StorageManager", () => {
       await expect(manager.getSnippets()).rejects.toThrow("Network error");
     });
 
-    // spec: specs/storage.spec.md#StorageManager — fallback is keyed on the
+    // spec: #StorageManager — fallback is keyed on the
     // StorageQuotaError TYPE, never on message text: a plain Error that merely
     // mentions quota must NOT switch the manager to local mode.
     it("does not fall back for a plain Error with a quota-like message", async () => {
@@ -244,7 +242,7 @@ describe("StorageManager", () => {
   // This block used to assert that a quota-failed sync write switches the whole
   // install to local mode, permanently, with no prompt. That silent, permanent
   // loss of cross-device sync is the behaviour Wave 9 removed; the write is now
-  // refused and the user chooses. See specs/storage-quota-preflight.spec.md.
+  // refused and the user chooses. See .
   //
   // The read path keeps its fallback, which is a different question: sync being
   // *unreadable* is not the user's fault and there is nothing to prompt about.
@@ -337,7 +335,7 @@ describe("StorageManager", () => {
   describe("saveSnippet", () => {
     it("upserts only the new snippet, not the whole list", async () => {
       // Writing the whole list is what clobbered a concurrent write in
-      // another context. spec: specs/storage-durability.spec.md
+      // another context. spec:
       const newSnippet = makeSnippet({ id: "new" });
       mockSyncBackend.getSnippets.mockResolvedValue([
         makeSnippet({ id: "existing" }),
@@ -454,7 +452,6 @@ describe("StorageManager", () => {
   // is mutated. The options page has a manual storage-mode switch, so refusing
   // cannot strand them.
   //
-  // spec: specs/storage-quota-preflight.spec.md
 
   describe("quota handling in the write path", () => {
     beforeEach(() => {
