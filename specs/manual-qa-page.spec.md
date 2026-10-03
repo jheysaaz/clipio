@@ -29,12 +29,12 @@ Standalone HTML page for manual testing of snippet expansion in content scripts.
 themselves, because the page is the only fixture that holds a **pre-filled**
 contenteditable:
 
-| Field | Expectation |
-| ----- | ----------- |
-| `#qa-input`, `#qa-textarea`, `#qa-ce-basic`, `#qa-ce-nested` | Typing a shortcut at the caret opens the preview, then expands |
-| `#qa-ce-rich` (pre-filled rich HTML) | Same, **with no space before the shortcut** — the caret follows a full stop, which is what regressed |
-| `#qa-password`, `#qa-new-password` | Keystrokes stay verbatim, no preview |
-| `#qa-readonly` | Value unchanged, no preview |
+| Field                                                        | Expectation                                                                                          |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `#qa-input`, `#qa-textarea`, `#qa-ce-basic`, `#qa-ce-nested` | Typing a shortcut at the caret opens the preview, then expands                                       |
+| `#qa-ce-rich` (pre-filled rich HTML)                         | Same, **with no space before the shortcut** — the caret follows a full stop, which is what regressed |
+| `#qa-password`, `#qa-new-password`                           | Keystrokes stay verbatim, no preview                                                                 |
+| `#qa-readonly`                                               | Value unchanged, no preview                                                                          |
 
 The `#qa-ce-rich` case is the load-bearing one. Its content ends in `.`, so it is
 the only field where the trigger is not preceded by whitespace, and it was the
@@ -54,7 +54,7 @@ repurposed without updating these tests in the same change.
 
 ## Change History
 
-| Date       | Change       | Author |
-| ---------- | ------------ | ------ |
-| 2026-03-11 | Initial spec | —      |
-| 2026-10-02 | Documented the automated field coverage | — |
+| Date       | Change                                  | Author |
+| ---------- | --------------------------------------- | ------ |
+| 2026-03-11 | Initial spec                            | —      |
+| 2026-10-02 | Documented the automated field coverage | —      |

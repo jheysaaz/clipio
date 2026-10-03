@@ -35,7 +35,7 @@ viewport-aware positioning, and building the tooltip's plain-text label.
 - Returns the trigger token ending at the caret when the prefix and keyboard-shortcut settings
   are satisfied, or `null`.
 - Uses the same `isShortcutBoundary` predicate as `findSnippetMatch`, so both paths share one
-  definition of the boundary. (They test *different* characters — expansion the char before the
+  definition of the boundary. (They test _different_ characters — expansion the char before the
   shortcut, the preview the char before the trigger prefix — so a shortcut that does not begin
   with the prefix can still be accepted by one path and declined by the other.)
 - The prefix must be preceded by whitespace or sentence punctuation — which is what makes it
@@ -89,8 +89,8 @@ viewport-aware positioning, and building the tooltip's plain-text label.
 
 ## Change History
 
-| Date       | Change                                                                                | Author |
-| ---------- | ------------------------------------------------------------------------------------- | ------ |
-| 2026-09-27 | Removed the phantom `computePreviewPrivacy`; documented the four functions that exist | —      |
-| 2026-10-02 | Corrected the `calculatePreviewPosition` signature; details moved to `preview-anchor.spec.md` | — |
-| 2026-03-11 | Initial spec                                                                          | —      |
+| Date       | Change                                                                                        | Author |
+| ---------- | --------------------------------------------------------------------------------------------- | ------ |
+| 2026-09-27 | Removed the phantom `computePreviewPrivacy`; documented the four functions that exist         | —      |
+| 2026-10-02 | Corrected the `calculatePreviewPosition` signature; details moved to `preview-anchor.spec.md` | —      |
+| 2026-03-11 | Initial spec                                                                                  | —      |

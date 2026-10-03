@@ -15,9 +15,14 @@ into Clipio (or shared with other users).
 
 ---
 
-## `exportToClipio(snippets: Snippet[]): ClipioExport`
+## `buildClipioExport(snippets: Snippet[]): ClipioExportV1`
 
 Produces a Clipio-format export object.
+
+> **Renamed.** This section previously read `exportToClipio`. The implementation
+> exports `buildClipioExport`; the spec heading was never updated, so every
+> reader looking for `exportToClipio` found nothing. Corrected by
+> `specs/coverage-honesty.spec.md`'s drift gate.
 
 **Behavior:**
 

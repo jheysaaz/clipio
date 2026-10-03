@@ -15,7 +15,9 @@ function startQaServer() {
 
   qaServer.on("exit", (code) => {
     if (shuttingDown) return;
-    console.error(`[dev-with-qa] QA server exited with code ${code ?? 0}, restarting...`);
+    console.error(
+      `[dev-with-qa] QA server exited with code ${code ?? 0}, restarting...`
+    );
     setTimeout(startQaServer, 1000);
   });
 }

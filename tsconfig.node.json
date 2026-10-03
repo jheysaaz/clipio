@@ -1,9 +1,22 @@
 {
   "compilerOptions": {
+    // `composite: true` makes this a referenced project, which is what
+    // `tsconfig.json`'s `references` array requires. A referenced project may
+    // not set `noEmit`, because composite projects emit declaration output by
+    // design — declaring both produced:
+    //
+    //     TS6310: Referenced project 'tsconfig.node.json' may not disable emit
+    //
+    // which broke `pnpm compile` entirely. Emitting to a temp dir keeps the
+    // check honest without polluting the tree.
     "composite": true,
+    "outDir": "./.wxt/tsconfig-node",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "emitDeclarationOnly": true
   },
-  "include": ["vite.config.ts", "manifest.ts"]
+  "include": ["wxt.config.ts", "vitest.config.ts", "playwright.config.ts"]
 }

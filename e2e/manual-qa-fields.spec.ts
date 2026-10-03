@@ -16,7 +16,8 @@
  * attributable to a specific field.
  */
 
-import { test, expect, type Page } from "./fixtures.js";
+import type { Page } from "@playwright/test";
+import { test, expect } from "./fixtures.js";
 import { helloSnippet, makeSnippet } from "./helpers/snippets.js";
 import { waitForContentScriptReady } from "./helpers/content-script.js";
 import { TIMING } from "../src/config/constants.js";
@@ -75,7 +76,7 @@ async function openManualQa(page: Page): Promise<void> {
  * position that regressed: in `#qa-ce-rich` it lands directly after a full stop.
  */
 async function caretToEnd(page: Page, testId: string): Promise<void> {
-  await page.evaluate((id) => {
+  await page.evaluate((id: string) => {
     const el = document.querySelector(`[data-testid="${id}"]`) as HTMLElement;
     el.focus();
     if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {

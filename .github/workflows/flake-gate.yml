@@ -1,0 +1,83 @@
+name: Flake Gate
+
+# WHY THIS EXISTS
+#
+# The e2e suite runs with `retries: 0`, and that is correct — a retry hides a
+# flake instead of fixing it (AGENTS.md Testing Standards rule 12). But "no
+# retries" with no detection is not a policy, it is a coin flip, and the cost
+# lands on release tags.
+#
+# It already has. v1.6.0 shipped from this commit:
+#
+#     CI:      25b503be569aff66cd72eb573403e835cf89dd51  success
+#     Publish: 25b503be569aff66cd72eb573403e835cf89dd51  failure
+#
+# The SAME SHA. E2E passed on one runner and failed on another — a 5s timeout
+# waiting for the first new browser tab, racing the background worker's own
+# onboarding tab. CI got lucky; the release did not.
+#
+# So this runs the suite N times and classifies each test as deterministic,
+# flaky, or fine. A deterministic failure fails the ordinary e2e job, so it is
+# reported here only as context.
+#
+# Not a required check: it is slow (~12 min) and informational. It must not block
+# a merge on its own, because a red main from a known flake is worse than a
+# visible one.
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "How many times to run the suite"
+        type: string
+        default: "3"
+  schedule:
+    # Sunday 06:17 UTC. Off-the-hour on purpose — the top of the hour is when
+    # every scheduled workflow on GitHub fires at once.
+    - cron: "17 6 * * 0"
+
+jobs:
+  flake-gate:
+    name: Flake Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.5.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium with system dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Build extension
+        run: pnpm build
+        env:
+          SENTRY_AUTH_TOKEN: ""
+
+      - name: Run suite N times and classify
+        run: pnpm test:flake --runs=${{ github.event.inputs.runs || '3' }}
+        env:
+          E2E_SKIP_BUILD: "1"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flake-reports
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

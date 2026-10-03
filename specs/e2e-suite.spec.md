@@ -64,10 +64,10 @@ once.)
 > **Stale as of 2026-10-02.** `rg -o waitForTimeout e2e/` now returns **10** (9 in spec files), not
 > 15/14 — later suites removed more sleeps than this section was updated for. Left uncorrected
 > rather than renumbered here, because the tree is being changed concurrently and a number
-> recomputed mid-flight would go stale again the same way. The *rule* the counts document is
+> recomputed mid-flight would go stale again the same way. The _rule_ the counts document is
 > unaffected and still binding: a sleep is only acceptable in the three categories below.
 > `manual-qa-fields.spec.ts` adds one, in category 1 (outliving the debounce in front of a
-> negative assertion — the password/readonly fields must be proven *not* to expand, and only
+> negative assertion — the password/readonly fields must be proven _not_ to expand, and only
 > outlasting the debounce can prove an absence).
 
 **What the 14 are.** They fall into three groups, and it is worth being accurate about which is

@@ -49,6 +49,9 @@ about the things that were silently wrong in it.
 
 ### `getCursorCoordsInInput(element, cursorPos)`
 
+> Module-private in `src/lib/preview-helpers.ts` — not exported. It is reached
+> through `calculatePreviewPosition` and exercised through that entry point.
+
 - The mirror must reproduce the control's **content box**, not its border box:
   `box-sizing: border-box` + `width: element.offsetWidth` (the border-box width), with the
   control's padding and border copied too. Both other pairings are wrong: the computed
@@ -69,6 +72,11 @@ about the things that were silently wrong in it.
 - The mirror is removed in `finally`, including on throw.
 
 ### `showPreview(element, filteredSnippets, cursorPos)`
+
+> A nested function inside the content script's IIFE in
+> `src/entrypoints/content.ts`, not an export. It has to be: it closes over the
+> per-page content-script state (the snippet index, the preview UI instance), so
+> it cannot be lifted to module scope without a signature change.
 
 - Must pass `cursorPos` to `calculatePreviewPosition`. This is the regression that caused the
   bug; the unit tests below pin the helper, the e2e test pins the wiring.

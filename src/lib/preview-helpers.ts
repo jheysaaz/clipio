@@ -311,7 +311,7 @@ export function calculatePreviewPosition(
  * caret; the position of a marker span appended after that text is the caret's
  * position within the control.
  *
- * spec: specs/preview-anchor.spec.md#getCursorCoordsInInput
+ * spec: specs/preview-anchor.spec.md#getcursorcoordsininput
  */
 function getCursorCoordsInInput(
   element: HTMLInputElement | HTMLTextAreaElement,

@@ -14,14 +14,23 @@ Searches Giphy for GIFs to insert into snippets.
 
 ---
 
-## `searchGiphy(query: string, limit?: number): Promise<GiphyResult[]>`
+## `search(query: string, opts?: SearchOptions): Promise<GiphySearchResult>`
 
 **Behavior:**
 
-- Calls Giphy API with API key from env.
-- Returns array of `{ id, url, previewUrl, title }`.
-- Returns `[]` on network error or invalid response.
-- Pure function aside from fetch.
+- Calls the Giphy API with the API key from `getGiphyApiKey()`.
+- `opts.limit` defaults to 20; `opts.offset` defaults to 0.
+- Returns a `GiphySearchResult`, which carries paging metadata alongside the GIF
+  list — not a bare array.
+- `GiphyNetworkError` / `GiphyRateLimitError` are thrown on failure rather than
+  resolved to an empty list, so a caller can distinguish "no results" from
+  "the request failed".
+
+> **Corrected.** This section previously read `searchGiphy(query, limit?)`
+> returning `Promise<GiphyResult[]>` and resolving to `[]` on error. Neither the
+> name, the options shape, the return shape, nor the error behaviour matched the
+> implementation. Found by the drift gate in
+> `specs/coverage-honesty.spec.md`.
 
 ---
 

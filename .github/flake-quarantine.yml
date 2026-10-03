@@ -1,0 +1,37 @@
+# Flake quarantine ledger
+#
+# WHY THIS FILE EXISTS
+#
+# AGENTS.md Testing Standards rule 12 says retries must stay 0, and that is the
+# right call: a retry hides a flake instead of fixing it. But `retries: 0` on its
+# own is only half a policy. Without any flake *detection*, every release tag is
+# a coin flip.
+#
+# That is not hypothetical. The v1.6.0 release ran on this commit:
+#
+#     CI:      25b503be569aff66cd72eb573403e835cf89dd51  success
+#     Publish: 25b503be569aff66cd72eb573403e835cf89dd51  failure
+#
+# The SAME SHA. E2E passed on one runner and failed on another — a 5s timeout on
+# `browserContext.waitForEvent("page")`, which resolves on the *first* new tab and
+# therefore raced the background worker's own onboarding tab. The release was
+# blocked by a race CI had already gotten lucky on.
+#
+# So: retries stay 0, and detection is added beside them.
+#
+# HOW IT WORKS
+#
+#   1. A deterministically failing test fails all N runs → CI is correct, no entry.
+#   2. A test that fails intermittently fails some but not all → that is a flake,
+#      and the flake gate fails to make it visible.
+#   3. A known flake is listed below so it does not block everyone else, but it
+#      carries an `expires` date. When that date passes, CI fails hard until
+#      someone either fixes it or renews it in writing.
+#
+# The expiry is the part that matters. A quarantine without a deadline becomes a
+# graveyard, and a graveyard is worse than a red build because it looks handled.
+#
+# The flake gate runs the suite N times on release tags and on any push to main.
+# See `.github/workflows/flake-gate.yml`.
+
+entries: []

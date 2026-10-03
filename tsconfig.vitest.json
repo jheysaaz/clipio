@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "Used ONLY by Stryker's sandbox (see stryker.config.mjs).",
+    "",
+    "Stryker copies the mutated files and their dependencies into",
+    "`.stryker-tmp/sandbox*/` and runs vitest there. The repo's tsconfig.json",
+    "opens with `\"extends\": \"./.wxt/tsconfig.json\"`, and `.wxt/` is generated",
+    "by `wxt prepare` and is not copied into the sandbox. The result was that",
+    "esbuild could not resolve the extends and every one of the 54 test files",
+    "failed to load — 54/54 failures before a single mutant was generated.",
+    "",
+    "This config inherits `.wxt/tsconfig.json` directly so the relative path",
+    "resolves from the repo root, and adds the settings the sandbox needs.",
+    "",
+    "It is deliberately NOT a replacement for tsconfig.json: `pnpm compile` still",
+    "type-checks the real project configuration."
+  ],
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowJs": false,
+    "skipLibCheck": true,
+    "esModuleInterop": false,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["vitest/globals", "node"]
+  },
+  "include": ["src", ".wxt/wxt.d.ts", "tests", "vitest.config.ts"]
+}

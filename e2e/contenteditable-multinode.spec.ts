@@ -27,11 +27,11 @@ test.describe("Contenteditable insertion flow", () => {
     await testPage.keyboard.type("Hello ", { delay: 30 });
 
     // "/" follows a word boundary -> preview must open.
+    // (Failure here means: preview should open when typing / after existing text.
+    // `toBeVisible` takes no `message` option in Playwright 1.61, so the
+    // diagnosis lives here rather than in a silently-ignored argument.)
     await testPage.keyboard.type("/", { delay: 30 });
-    await expect(preview).toBeVisible({
-      timeout: 5000,
-      message: "preview should open when typing / after existing text",
-    });
+    await expect(preview).toBeVisible({ timeout: 5000 });
 
     // The trigger text must survive in the field.
     await expect(field).toContainText("Hello /");
@@ -52,10 +52,8 @@ test.describe("Contenteditable insertion flow", () => {
     // Ctrl+Shift+Space (default manual shortcut) must open the snippet list
     // even though the field already contains text and no "/" trigger prefix.
     await testPage.keyboard.press("Control+Shift+Space");
-    await expect(preview).toBeVisible({
-      timeout: 5000,
-      message: "shortcut should open preview with existing text",
-    });
+    // (Failure here means: shortcut should open preview with existing text.)
+    await expect(preview).toBeVisible({ timeout: 5000 });
   });
 
   test("inserts snippet with caret at its end and renders confetti", async ({
@@ -73,17 +71,22 @@ test.describe("Contenteditable insertion flow", () => {
     // left the caret staged here after a rich-text edit.
     await field.evaluate((el) => {
       el.innerHTML = "<div>Hello </div><div>World<br></div>";
-      const worldText = [...el.querySelectorAll("*")].reduce<Text | null>(
-        (found, node) =>
-          found ??
-          [...node.childNodes].find(
-            (n) => n.nodeType === Node.TEXT_NODE && n.textContent === "World"
-          ) ??
-          null,
-        null
-      );
+      // Narrow to `Text` explicitly rather than asserting with `!`: the
+      // `nodeType` check is a runtime guarantee, and casting it away hid the
+      // fact from the type checker (it was an error until e2e was type-checked).
+      const worldText = [...el.querySelectorAll("*")]
+        .flatMap((node) => [...node.childNodes])
+        .find(
+          (n): n is Text =>
+            n.nodeType === Node.TEXT_NODE && n.textContent === "World"
+        );
+      if (!worldText) {
+        throw new Error(
+          'fixture HTML did not produce the expected "World" text node'
+        );
+      }
       const range = document.createRange();
-      range.setStart(worldText!, 0);
+      range.setStart(worldText, 0);
       range.collapse(true);
       const sel = window.getSelection();
       sel?.removeAllRanges();

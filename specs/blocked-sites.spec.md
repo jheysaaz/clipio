@@ -1,6 +1,6 @@
 # Spec: Blocked-Site Enforcement
 
-> Source: `src/lib/blocked-sites.ts` (new), `src/entrypoints/content.ts`, `src/entrypoints/background.ts`, `src/components/options/SnippetsSection.tsx`
+> Source: `src/lib/blocked-sites.ts` (new), `src/entrypoints/content.ts`, `src/entrypoints/background.ts`, `src/components/options/settings/panels/BlockedSitesPanel.tsx`
 > Unit tests: `src/lib/blocked-sites.test.ts`
 > E2E: `e2e/blocked-sites.spec.ts`
 > Status: implemented

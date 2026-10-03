@@ -6,7 +6,7 @@
 
 ## Purpose
 
-A single definition of *where a shortcut or preview trigger may begin*, shared by
+A single definition of _where a shortcut or preview trigger may begin_, shared by
 the two code paths that decide it.
 
 ## Problem
@@ -20,7 +20,7 @@ fields unusable:
   end of existing prose, so the prefix is preceded by a full stop, not a space.
   The palette never opened and expansion never ran.
 - This is precisely the manual QA harness's `#qa-ce-rich` field, and precisely
-  the case where a user is *editing content they already have* rather than
+  the case where a user is _editing content they already have_ rather than
   starting from an empty box.
 
 The original rule is still needed, and the reported bug is not an argument
@@ -41,16 +41,16 @@ against it: without it, `https://example.com`, `mailto:a@b.c`, `src/index` and
 
 ## Excluded fields: password inputs
 
-`isShortcutBoundary` decides *where* a trigger may start inside an eligible field.
+`isShortcutBoundary` decides _where_ a trigger may start inside an eligible field.
 A separate gate, `isPasswordInput` in `src/entrypoints/content.ts`, decides
 whether the field is eligible at all. It matches on the `type` **attribute**,
 covering all three credential states:
 
-| Attribute | `input.type` (IDL) | Excluded |
-| --------- | ------------------ | -------- |
-| `password` | `"password"` | yes |
-| `current-password` | `"text"` | yes |
-| `new-password` | `"text"` | yes |
+| Attribute          | `input.type` (IDL) | Excluded |
+| ------------------ | ------------------ | -------- |
+| `password`         | `"password"`       | yes      |
+| `current-password` | `"text"`           | yes      |
+| `new-password`     | `"text"`           | yes      |
 
 The last two are separate states in the HTML standard rather than aliases of the
 Password state, so the IDL getter reports `"text"` for them — and they are exactly
@@ -94,8 +94,8 @@ field, and the palette paints snippet labels and content next to the password.
 
 ## Change History
 
-| Date       | Change                                          | Author |
-| ---------- | ----------------------------------------------- | ------ |
-| 2026-10-02 | Initial spec (boundary widened to punctuation)  | —      |
-| 2026-10-02 | Recorded the `notes.md` false-trigger cost      | —      |
-| 2026-10-02 | Password gate extended to `current-password` / `new-password` | — |
+| Date       | Change                                                        | Author |
+| ---------- | ------------------------------------------------------------- | ------ |
+| 2026-10-02 | Initial spec (boundary widened to punctuation)                | —      |
+| 2026-10-02 | Recorded the `notes.md` false-trigger cost                    | —      |
+| 2026-10-02 | Password gate extended to `current-password` / `new-password` | —      |

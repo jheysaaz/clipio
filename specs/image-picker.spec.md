@@ -1,6 +1,6 @@
 # Module: Image Picker
 
-> Source: `src/components/ImagePicker.tsx`
+> Source: `src/components/editor/components/ImagePicker.tsx`
 > Coverage target: 85%
 
 ## Purpose

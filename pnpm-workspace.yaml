@@ -2,7 +2,7 @@ packages:
   - "."
 
 allowBuilds:
-  '@sentry/cli': true
+  "@sentry/cli": true
   esbuild: true
   spawn-sync: true
 

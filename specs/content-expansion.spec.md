@@ -104,7 +104,7 @@ a known shortcut that is preceded by a shortcut boundary (or start of text).
 punctuation and bracket/quote delimiters. See `specs/shortcut-boundary.spec.md`.
 
 > **Revised 2026-10-02.** This section previously required whitespace only
-> (`/[\s\n]/`). That made the shortcut unreachable in every *pre-filled* field,
+> (`/[\s\n]/`). That made the shortcut unreachable in every _pre-filled_ field,
 > because the caret there follows existing prose and the trigger is preceded by
 > a full stop rather than a space — see `specs/shortcut-boundary.spec.md`. The
 > rule now also accepts sentence punctuation, and still rejects the characters
@@ -182,14 +182,16 @@ all dynamic placeholders and optionally converting to HTML.
 The `readClipboard` function is injected as a dependency to keep this function
 pure and testable without DOM access.
 
-**Behavior (placeholder processing — happens before format conversion):**
+### Placeholder processing
+
+Happens before format conversion:
 
 - MUST replace all `{{clipboard}}` occurrences with the result of `readClipboard()`.
 - MUST replace all `{{date:format}}` occurrences with `formatDate(format)`.
 - MUST replace all `{{datepicker:YYYY-MM-DD}}` occurrences with `formatDate("long", dateStr)`.
 - MUST reset regex `lastIndex` to 0 after each date placeholder replacement to avoid skipping matches.
 
-**Behavior when `asHtml === true`:**
+### Behavior when `asHtml === true`
 
 - MUST convert the processed Markdown to HTML using `markdownToHtml`.
 - MUST preserve non-empty edited snippet content (including markdown marks and placeholders) so contenteditable insertion is not silently skipped.

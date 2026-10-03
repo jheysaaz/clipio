@@ -61,7 +61,10 @@ export default defineConfig([
     },
   },
   {
-    files: ["src/components/ui/**/*.{ts,tsx}", "src/components/editor/**/*.{ts,tsx}"],
+    files: [
+      "src/components/ui/**/*.{ts,tsx}",
+      "src/components/editor/**/*.{ts,tsx}",
+    ],
     rules: {
       "react-hooks/exhaustive-deps": "off",
       "react-hooks/set-state-in-effect": "off",
