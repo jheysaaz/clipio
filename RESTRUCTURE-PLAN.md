@@ -151,11 +151,21 @@ re-notification — a user who ignored the first notification gets no second cha
 regardless of how much they go on to use the extension, which reads as the
 opposite of the intent behind "20 insertions".
 
-**Options:**
-- **(a)** Make the alarm one-shot and create a fresh one after dismissal. Matches
-  the current one-way state machine.
-- **(b)** Drop the `pending` requirement, re-allow showing after a cooldown.
-- **(c)** It is intentional, and I add a comment saying so.
+**Your answer: (d) — one source of truth.** Done in `bf2fafd`.
+
+Extracted the banner predicate out of `OptionsPage.tsx` into
+`shouldShowReviewBanner()` in `review-prompt.ts`, with 8 new tests.
+
+**One thing I found while doing it, worth knowing:** the two predicates are *not*
+interchangeable, and the duplication had hidden that. The alarm asks "may I prompt
+this user?" and needs `"pending"`. The options page asks "have I already prompted
+them?" and needs `"shown"`. Since the lifecycle is one-way, by the time the page
+renders the state is already `"shown"` — so had anyone "simplified" by calling
+`shouldShowReviewPrompt()` from the page, the banner would have silently vanished
+forever. There is now a test asserting the two disagree.
+
+**Still open:** the alarm only fires once. (a)/(b)/(c) remain undecided — that is
+the state-machine half, which (d) did not touch.
 
 ### Q6 — Store credentials
 
