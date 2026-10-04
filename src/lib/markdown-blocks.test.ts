@@ -214,3 +214,54 @@ describe("markdownToHtmlWithBlocks — parity with markdownToHtml", () => {
     expect(markdownToHtmlWithBlocks("")).toBe("");
   });
 });
+
+describe("blank lines between blocks", () => {
+  it("does not put a <br> between two blocks separated by a blank line", () => {
+    // The regression: an empty part is not a block, so the guard added a <br>
+    // next to whichever block bordered it.
+    expect(markdownToHtmlWithBlocks("# H\n\nbody")).toBe("<h1>H</h1>body");
+    expect(markdownToHtmlWithBlocks("intro\n\n# H\n\noutro")).toBe(
+      "intro<h1>H</h1>outro"
+    );
+  });
+
+  it("still breaks between two non-block lines with a blank between", () => {
+    expect(markdownToHtmlWithBlocks("one\n\ntwo")).toBe("one<br>two");
+  });
+
+  it("drops leading and trailing blank lines", () => {
+    expect(markdownToHtmlWithBlocks("\n\nbody\n\n")).toBe("body");
+  });
+});
+
+describe("fenced code closing", () => {
+  it("does not close on a body line that starts with an info string", () => {
+    // The regression: `startsWith(marker)` closed here, so the rest of the code
+    // leaked out and rendered as live markdown.
+    const html = markdownToHtmlWithBlocks(
+      "```js\nconst a = 1;\n```js is not a fence\nconst b = 2;\n```"
+    );
+    expect(html).toContain("const a = 1;");
+    expect(html).toContain("const b = 2;");
+    expect(html).toContain("```js is not a fence");
+    // The whole body stayed inside the one <pre>, and nothing leaked as markup.
+    expect(html.match(/<pre>/g)).toHaveLength(1);
+    expect(html.endsWith("</code></pre>")).toBe(true);
+  });
+
+  it("does not close on a longer marker of a different character", () => {
+    const html = markdownToHtmlWithBlocks("```\n~~~ is not a fence\n```");
+    expect(html).toContain("~~~ is not a fence");
+  });
+
+  it("closes on a longer marker of the same character", () => {
+    const html = markdownToHtmlWithBlocks("```\nbody\n`````");
+    expect(html).toBe("<pre><code>body</code></pre>");
+  });
+
+  it("treats an unterminated fence as running to the end", () => {
+    const html = markdownToHtmlWithBlocks("```\nnever closed\n**bold**");
+    expect(html).toContain("**bold**");
+    expect(html).toBe("<pre><code>never closed\n**bold**</code></pre>");
+  });
+});

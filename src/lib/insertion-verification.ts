@@ -24,13 +24,21 @@
  *
  *  - `<br>` is a line break
  *  - a block boundary (`</p>`, `</li>`, `</h1>`, …) ends a line
- *  - a block *opening* tag starts a line, except at the very beginning
- *  - `<li>` is additionally prefixed with a bullet, because that is what
- *    `innerText` renders for a list
+ *  - a block *opening* tag starts a line
  *
- * Deliberately not a spec-complete HTML renderer: it handles the block and line
+ * **List markers are deliberately absent.** A `<ul>` renders its bullet with CSS
+ * `::marker`, which is not part of `innerText` — verified in Chromium, where
+ * `<ul><li>a</li><li>b</li></ul>` gives `"a\nb"`, not `"• a\n• b"`. Injecting a
+ * bullet here made every list-bearing snippet compare against text the field
+ * never contains: confetti stopped firing, and `reportInsertionReverted` told
+ * Sentry a successful insertion had been reverted.
+ *
+ * Deliberately not a spec-complete HTML renderer. It handles the block and line
  * break elements Clipio can emit, and the comparison below is whitespace-
- * normalised so a construct it does not model cannot cause a false failure.
+ * normalised, so a construct it does not model can only cause a false
+ * *positive* — reporting a reverted insertion as a success, which is the safe
+ * direction to fail. Getting one wrong in the other direction is what the list
+ * marker above was.
  */
 const BLOCK_TAGS =
   "p|div|li|ul|ol|h[1-6]|blockquote|pre|table|thead|tbody|tfoot|tr|section|article|figure|hr|dl|dt|dd";
@@ -57,8 +65,6 @@ export function plainTextFromHtml(html: string): string {
   // Remaining void elements carry no text, and leaving them in would let the tag
   // names survive into the output.
   text = text.replace(/<(img|hr|source|input)\b[^>]*>/gi, "");
-  // A list bullet, matching what `innerText` puts before each item.
-  text = text.replace(/<li\b[^>]*>/gi, "\n• ");
   text = text.replace(OPEN_BLOCK, "\n");
   text = text.replace(CLOSE_BLOCK, "\n");
 

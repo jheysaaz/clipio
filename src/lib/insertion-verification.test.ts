@@ -31,9 +31,17 @@ describe("plainTextFromHtml", () => {
     expect(plainTextFromHtml("<h1>Title</h1><p>body</p>")).toBe("Title\nbody");
   });
 
-  it("bullets list items the way innerText does", () => {
+  it("does NOT add list bullets, because innerText does not render them", () => {
+    // The bug this guards, and why it existed: a bullet was injected on the
+    // premise that `innerText` renders one. It does not — the bullet is CSS
+    // `::marker`, verified in Chromium as "a\nb" for a two-item list. So the
+    // extractor produced text the field never contained, and every list-bearing
+    // snippet lost confetti and reported a phantom reverted insertion to Sentry.
     expect(plainTextFromHtml("<ul><li>one</li><li>two</li></ul>")).toBe(
-      "• one\n• two"
+      "one\ntwo"
+    );
+    expect(plainTextFromHtml("<ol><li>one</li><li>two</li></ol>")).toBe(
+      "one\ntwo"
     );
   });
 
@@ -102,8 +110,11 @@ describe("insertionTextMatches", () => {
       "<h1>Heading</h1><p>Some <strong>bold</strong>, some <em>italic</em>.</p>" +
       "<ul><li>first item</li><li>second item</li></ul>" +
       "<blockquote>a blockquote</blockquote><ol><li>one</li><li>two</li></ol>";
+    // Transcribed from a real Chromium `innerText`, with no bullets — which is
+    // the point. The previous version typed "one" with a bullet and so agreed
+    // with the implementation by construction; it asserted the bug.
     const rendered =
-      "Heading\nSome bold, some italic.\n• first item\n• second item\na blockquote\n• one\n• two";
+      "Heading\n\nSome bold, some italic.\n\nfirst item\nsecond item\na blockquote\none\ntwo";
 
     expect(insertionTextMatches(html, rendered)).toBe(true);
   });

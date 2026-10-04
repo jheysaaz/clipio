@@ -219,6 +219,24 @@ test.describe("Content Script Expansion", () => {
     // emitted the tags *and* left the source behind.
     await expect(ce).not.toContainText("# Heading");
     await expect(ce).not.toContainText("> a blockquote");
+
+    // The insertion check runs against this snippet too, and this snippet is the
+    // only fixture that produces a `<li>` — so it is the one that exposes whether
+    // the renderer and the check agree about what a list renders as.
+    //
+    // They did not, for one commit: the check injected a `•` before every item on
+    // the premise that `innerText` renders one. It does not (`::marker` is not
+    // text), so every list-bearing snippet stopped firing confetti *and* reported
+    // a phantom reverted insertion to Sentry. Asserting the rendered elements and
+    // the confetti run in the same test is what stops the two modules drifting
+    // apart again — either assertion alone passes while the pair is broken.
+    await expect
+      .poll(
+        () =>
+          testPage.evaluate(() => document.querySelectorAll("canvas").length),
+        { timeout: 5000 }
+      )
+      .toBeGreaterThan(0);
   });
 
   test("positions cursor with {{cursor}} placeholder in input", async ({

@@ -29,8 +29,16 @@ const UL_ITEM_RE = /^([-*+])\s+(.*)$/;
 const OL_ITEM_RE = /^(\d+)[.)]\s+(.*)$/;
 /** Blockquote: one or more `>` then optional whitespace. */
 const QUOTE_RE = /^>\s?(.*)$/;
-/** Fenced code block delimiter, ``` or ~~~. */
+/** Opening or standalone fence delimiter: ``` or ~~~, plus an optional info string. */
 const FENCE_RE = /^(`{3,}|~{3,})\s*([\w-]*)\s*$/;
+/**
+ * Closing fence: the marker and nothing else.
+ *
+ * CommonMark does not allow an info string on the closing fence, and accepting
+ * one here broke it — a code block whose *body* contained a line starting with
+ * ```js closed early, and the rest of the code leaked out as live markdown.
+ */
+const CLOSING_FENCE_RE = /^(`{3,}|~{3,})\s*$/;
 
 /**
  * Convert markdown, including block structure, to an HTML string.
@@ -59,7 +67,7 @@ export function markdownToHtmlWithBlocks(content: string): string {
       const language = fence[2];
       const body: string[] = [];
       i++;
-      while (i < lines.length && !lines[i].trimStart().startsWith(marker)) {
+      while (i < lines.length && !closesFence(lines[i], marker)) {
         body.push(lines[i]);
         i++;
       }
@@ -135,6 +143,21 @@ export function markdownToHtmlWithBlocks(content: string): string {
   return joinWithBreaks(out);
 }
 
+/**
+ * Whether a line closes the fence opened with `marker`.
+ *
+ * The same character and at least as many of them, per CommonMark, and nothing
+ * after it. `startsWith(marker)` was wrong on both counts: it closed on a body
+ * line that merely began with backticks followed by an info string, which
+ * truncated the block and let the remainder render as live markdown.
+ */
+function closesFence(line: string, marker: string): boolean {
+  const m = CLOSING_FENCE_RE.exec(line.trim());
+  if (!m) return false;
+  const char = marker[0];
+  return m[1][0] === char && m[1].length >= marker.length;
+}
+
 function joinWithBreaks(parts: string[]): string {
   let result = "";
   // The *previous part*, not the accumulated string. Testing the accumulated
@@ -144,6 +167,11 @@ function joinWithBreaks(parts: string[]): string {
   // `<br>` landed after `</h1>`.
   let previous = "";
   for (const part of parts) {
+    // A blank source line contributes an empty part. Left in, it is not a block,
+    // so the guard below put a `<br>` next to whichever block bordered it —
+    // `<h1>H</h1><br><p>body</p>`, which renders as a stray blank line. The line
+    // break a blank line means is already implied by the block boundary.
+    if (part === "") continue;
     if (result === "") {
       result = part;
       previous = part;
