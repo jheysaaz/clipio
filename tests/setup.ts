@@ -50,15 +50,31 @@ vi.mock("wxt/utils/storage", () => ({
     defineItem: vi.fn(<T>(_key: string, options?: { defaultValue?: T }) => {
       const defaultValue = options?.defaultValue as T;
       let value = defaultValue;
+      // Watchers are real, and fire on write.
+      //
+      // This used to be `watch: vi.fn(() => () => {})` — a stub that registered
+      // nothing and so could never notify a subscriber. That made any behaviour
+      // depending on a watch untestable: the settings store adopts a font written
+      // in another extension page *through* a watcher, so with this stub the
+      // cross-context path could not be exercised at all, and a test asserting
+      // it failed in a way that looked like a bug in the store.
+      const watchers = new Set<(v: T) => void>();
       return {
         getValue: vi.fn(async () => value),
         setValue: vi.fn(async (v: T) => {
           value = v;
+          for (const watcher of watchers) watcher(v);
         }),
         removeValue: vi.fn(async () => {
           value = defaultValue;
+          for (const watcher of watchers) watcher(defaultValue);
         }),
-        watch: vi.fn(() => () => {}),
+        watch: vi.fn((cb: (v: T) => void) => {
+          watchers.add(cb);
+          return () => {
+            watchers.delete(cb);
+          };
+        }),
       };
     }),
   },

@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { SettingRow } from "./SettingRow";
 import { ShortcutRecorder } from "./ShortcutRecorder";
-import { useTheme } from "@/hooks/ThemeContext";
+import { setThemeMode } from "@/state/settings";
 import type { SettingEntry } from "./registry";
 import { captureError } from "@/lib/sentry";
 import { i18n } from "#i18n";
@@ -59,12 +59,10 @@ export function SettingControl({
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
 
-  // Theme is the one setting whose effect is not storage: ThemeContext owns the
-  // `dark` class on <html> and persists on its own. Writing the item directly
-  // leaves the page visually unchanged until the next reload, so the change is
-  // routed through the context instead.
-  const { setThemeMode } = useTheme();
-
+  // Theme is the one setting whose effect is not only storage: the settings
+  // store owns the `dark` class on <html> and persists on its own. Writing the
+  // item directly would leave the page visually unchanged until the next reload,
+  // so the change is routed through the store instead.
   // Guard against a slow initial read overwriting a value the user has already
   // changed by toggling the row before storage answered.
   const dirty = useRef(false);
