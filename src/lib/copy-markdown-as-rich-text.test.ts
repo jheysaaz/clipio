@@ -293,3 +293,65 @@ describe("copyMarkdownAsRichText", () => {
     expect(html).toBe("");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Block-level markdown
+// ---------------------------------------------------------------------------
+
+describe("copyMarkdownAsRichText — block markdown", () => {
+  /**
+   * The same failure as the insertion path, through the clipboard: a heading or a
+   * list pasted into a rich field arrived as its own source.
+   *
+   * It was invisible until a snippet containing one existed — see
+   * samples/clipio-export.json's "Markdown kitchen sink".
+   */
+  const KITCHEN_SINK = [
+    "# Heading",
+    "",
+    "Some **bold** and _italic_.",
+    "",
+    "- first item",
+    "- second item",
+    "",
+    "> a blockquote",
+    "",
+    "1. one",
+    "2. two",
+  ].join("\n");
+
+  it("writes block elements into the text/html flavour", async () => {
+    await copyMarkdownAsRichText(KITCHEN_SINK);
+    const html = await getWrittenHtml();
+
+    expect(html).toContain("<h1>Heading</h1>");
+    expect(html).toContain("<ul><li>first item</li><li>second item</li></ul>");
+    expect(html).toContain("<blockquote>a blockquote</blockquote>");
+    expect(html).toContain("<ol><li>one</li><li>two</li></ol>");
+
+    // Not one marker may survive into the pasted content.
+    expect(html).not.toContain("# Heading");
+    expect(html).not.toContain("- first item");
+    expect(html).not.toContain("> a blockquote");
+  });
+
+  it("still writes inline formatting into the html flavour", async () => {
+    // Guards against the blocks being fixed by dropping the inline converter.
+    await copyMarkdownAsRichText(KITCHEN_SINK);
+    const html = await getWrittenHtml();
+
+    expect(html).toContain("<strong>bold</strong>");
+    expect(html).toContain("<em>italic</em>");
+  });
+
+  it("leaves the text/plain flavour as readable text, not markup", async () => {
+    // The plain flavour is what a plain target receives; putting tags in it would
+    // paste literal angle brackets.
+    await copyMarkdownAsRichText(KITCHEN_SINK);
+    const text = await getWrittenText();
+
+    expect(text).toContain("Heading");
+    expect(text).not.toContain("<h1>");
+    expect(text).not.toContain("<ul>");
+  });
+});

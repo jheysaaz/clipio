@@ -15,6 +15,7 @@
 import { test, expect } from "./fixtures.js";
 import type { StorageHelper } from "./fixtures.js";
 import {
+  blockMarkdownSnippet,
   helloSnippet,
   cursorSnippet,
   clipboardSnippet,
@@ -158,6 +159,30 @@ test.describe("Content Script Expansion", () => {
       timeout: EXPANSION_TIMEOUT,
     });
     expect(await ce.innerText()).not.toContain("/hello");
+  });
+
+  test("renders block markdown as elements in a contenteditable", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    // The reported bug: `# Heading`, `- item` and `> quote` were inserted as their
+    // own source. Asserted on real elements in a real browser, because the unit
+    // tests could only prove the converter's output shape.
+    await setupTestPage(testPage, storageHelper, [blockMarkdownSnippet()]);
+
+    const ce = testPage.locator('[data-testid="contenteditable-field"]');
+    await ce.click();
+    await testPage.keyboard.type("/bm", { delay: 30 });
+
+    await expect(ce.locator("h1")).toHaveText("Heading");
+    await expect(ce.locator("ul li")).toHaveCount(2);
+    await expect(ce.locator("blockquote")).toHaveText("a blockquote");
+
+    // Not one marker may reach the field. This is the assertion that fails on a
+    // regression — the element checks above would pass against a renderer that
+    // emitted the tags *and* left the source behind.
+    await expect(ce).not.toContainText("# Heading");
+    await expect(ce).not.toContainText("> a blockquote");
   });
 
   test("positions cursor with {{cursor}} placeholder in input", async ({

@@ -90,6 +90,30 @@ export function markdownSnippet(): Snippet {
   });
 }
 
+/**
+ * A snippet exercising block-level markdown.
+ *
+ * Separate from `markdownSnippet` on purpose. That one covers inline formatting
+ * only — which is precisely why block-level markdown reached production broken:
+ * the e2e test asserted `**bold**` rendered, so the suite was green while
+ * `# Heading`, `- item` and `> quote` were inserted as literal source.
+ */
+export function blockMarkdownSnippet(): Snippet {
+  return makeSnippet({
+    id: "block-markdown-snippet",
+    label: "Block Markdown Snippet",
+    shortcut: "/bm",
+    content: [
+      "# Heading",
+      "",
+      "- first item",
+      "- second item",
+      "",
+      "> a blockquote",
+    ].join("\n"),
+  });
+}
+
 /** A multi-line snippet for textarea testing. */
 export function multilineSnippet(): Snippet {
   return makeSnippet({

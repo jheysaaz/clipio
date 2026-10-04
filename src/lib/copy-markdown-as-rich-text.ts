@@ -14,13 +14,16 @@
  */
 
 import { extractMediaRefs } from "@/lib/media-placeholders";
-import { markdownToHtml, markdownToPlainText } from "./markdown";
+import { markdownToPlainText } from "./markdown";
+import { markdownToHtmlWithBlocks } from "./markdown-blocks";
 import { getMedia } from "@/storage/backends/media";
 import { captureError } from "@/lib/sentry";
 
 export async function copyMarkdownAsRichText(markdown: string): Promise<void> {
   const plainText = markdownToPlainText(markdown);
-  let html = markdownToHtml(markdown);
+  // Block-aware, for the same reason as the insertion path: copying a
+  // snippet with a heading pasted its own markdown into the target.
+  let html = markdownToHtmlWithBlocks(markdown);
 
   // Every image reference, with the optional :width suffix. Deliberately not
   // deduplicated: two references to the same image can carry different widths,
