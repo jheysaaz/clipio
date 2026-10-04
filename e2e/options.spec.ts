@@ -94,6 +94,56 @@ test.describe("Options Page", () => {
     await expect(libraryNav).not.toHaveAttribute("aria-current", "page");
   });
 
+  test("searching a rendered option label finds the setting that offers it", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+
+    // "OpenDyslexic" is one of the three options rendered inside the interface
+    // font select on the Appearance section. Search used to score the i18n *key*
+    // name rather than the copy on screen, so this query returned nothing and
+    // the user had no route to a setting whose control they could see.
+    //
+    // The query is typed as data; the assertion is on a testid, so changing the
+    // copy does not break this test and changing the search ranking does.
+    await optionsPage.getByTestId("options-search").fill("opendyslexic");
+
+    const hit = optionsPage.getByTestId("option-setting-font-family");
+    await expect(hit).toBeVisible();
+
+    // The result renders the setting's live control, not just a link to the
+    // section — that is the whole point of indexing rows rather than sections.
+    await expect(hit.getByTestId("setting-font-family-select")).toBeVisible();
+  });
+
+  test("searching a word from a setting description finds it", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+
+    // Descriptions were never indexed at all before.
+    await optionsPage.getByTestId("options-search").fill("filterable");
+    await expect(
+      optionsPage.getByTestId("option-setting-preview-enabled")
+    ).toBeVisible();
+  });
+
+  test("shows a no-results message rather than every setting for a bad query", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+
+    // The regression this guards: a query that matches nothing must not be
+    // mistaken for an empty query, which renders the full registry.
+    await optionsPage.getByTestId("options-search").fill("zzzzqqq");
+    await expect(
+      optionsPage.getByTestId("options-search-empty-page")
+    ).toBeVisible();
+    await expect(
+      optionsPage.getByTestId("option-setting-font-family")
+    ).toHaveCount(0);
+  });
+
   test("every advertised import format renders a decoded brand mark", async ({
     optionsPage,
   }) => {

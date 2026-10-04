@@ -517,52 +517,10 @@ export function rowsForSection(section: SectionId): SettingEntry[] {
   return settingsForSection(section).filter((s) => !s.panelOwned);
 }
 
-/**
- * Normalise a query for comparison: lowercase, strip diacritics.
- *
- * Without the diacritic fold a Spanish user typing "confeti" or "tematica"
- * gets no results from an English or accented locale.
- */
-export function normalizeQuery(query: string): string {
-  return query.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-}
-
-/**
- * Rank settings against a query.
- *
- * Scoring is deliberately simple and ordered: an id match outranks a title
- * match, which outranks a keyword match. Prefix matches outrank substring
- * matches, so typing "con" surfaces confetti above a setting that merely
- * mentions "connection" in its description.
- *
- * Returns `[]` for an empty query — callers show all settings instead.
- */
-export function searchSettings(
-  query: string,
-  entries: readonly SettingEntry[] = SETTINGS
-): SettingEntry[] {
-  const q = normalizeQuery(query);
-  if (!q) return [];
-
-  const scored: Array<{ entry: SettingEntry; score: number }> = [];
-
-  for (const entry of entries) {
-    const id = normalizeQuery(entry.id);
-    const title = normalizeQuery(entry.titleKey.split(".").pop() ?? "");
-    const keywords = normalizeQuery((entry.keywords ?? []).join(" "));
-
-    let score = 0;
-    if (id === q) score = 100;
-    else if (id.startsWith(q)) score = 80;
-    else if (title.startsWith(q)) score = 70;
-    else if (title.includes(q)) score = 50;
-    else if (keywords.startsWith(q)) score = 40;
-    else if (keywords.includes(q)) score = 30;
-
-    if (score > 0) scored.push({ entry, score });
-  }
-
-  return scored
-    .sort((a, b) => b.score - a.score || a.entry.id.localeCompare(b.entry.id))
-    .map((s) => s.entry);
-}
+// Search deliberately does not live here.
+//
+// This registry is declarative data: no i18n resolution, no ranking, no text
+// folding. Resolving copy and matching a query against it is a different job,
+// and when it lived here it could only be tested through this module's storage
+// dependencies. It is now `src/lib/setting-index.ts`, which is pure and tested
+// directly, with the wiring between the two in `./search.ts`.

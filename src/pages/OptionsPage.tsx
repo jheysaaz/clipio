@@ -17,12 +17,12 @@ import { Icon } from "@/components/ui/icon";
 import { i18n } from "#i18n";
 import {
   SECTIONS,
-  searchSettings,
   rowsForSection,
   SECTION_LABEL_KEYS,
   type SectionId,
   type SettingEntry,
 } from "@/components/options/settings/registry";
+import { searchRegistryEntries } from "@/components/options/settings/search";
 import { SettingsSidebar } from "@/components/options/settings/SettingsSidebar";
 import { SettingControl } from "@/components/options/settings/SettingControl";
 import {
@@ -195,7 +195,7 @@ export default function OptionsPage() {
  * changed without leaving the result list.
  */
 function SearchResults({ query }: { query: string }) {
-  const results = searchSettings(query);
+  const results = searchRegistryEntries(query);
 
   if (results.length === 0) {
     return (
@@ -213,7 +213,7 @@ function SearchResults({ query }: { query: string }) {
       <h1 className="mb-3 text-lg font-semibold text-foreground">
         {i18n.t("options.search.resultsTitle", [String(results.length)])}
       </h1>
-      {results.map((entry) => (
+      {results.map(({ entry, titleHits }) => (
         // Focusable so ArrowDown from the search field can land here; the row
         // itself is not a control, so the wrapper carries the tab stop.
         <div
@@ -222,7 +222,7 @@ function SearchResults({ query }: { query: string }) {
           tabIndex={-1}
           className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <SettingControl entry={entry} />
+          <SettingControl entry={entry} highlight={titleHits} />
         </div>
       ))}
     </div>

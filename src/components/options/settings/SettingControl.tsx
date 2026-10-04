@@ -44,7 +44,17 @@ const IMMEDIATE_CONTROLS = new Set<SettingEntry["control"]>([
  * would be lying, and the next visit would silently revert.
  */
 
-export function SettingControl({ entry }: { entry: SettingEntry }) {
+export function SettingControl({
+  entry,
+  highlight,
+}: {
+  entry: SettingEntry;
+  /**
+   * Ranges in the title to emphasise, from the search index. Only search
+   * results pass this; a section row omits it and renders unchanged.
+   */
+  highlight?: readonly { start: number; end: number }[];
+}) {
   const [value, setValue] = useState<unknown>(undefined);
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
@@ -142,6 +152,7 @@ export function SettingControl({ entry }: { entry: SettingEntry }) {
     <SettingRow
       title={i18n.t(entry.titleKey)}
       description={i18n.t(entry.descKey)}
+      highlight={highlight}
       testId={entry.testId}
       onReset={entry.reset ? handleReset : undefined}
       canReset={canReset}
