@@ -40,10 +40,6 @@ release/
 # Test coverage
 coverage/
 
-# Mutation testing (Stryker)
-reports/mutation/
-.stryker-tmp/
-
 # TypeScript incremental build cache
 *.tsbuildinfo
 
@@ -52,21 +48,11 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
-# Generated review packets (`pnpm review:prep`) are deliberately NOT ignored.
-#
-# An earlier version ignored `review/*.md`, which silently defeated the whole
-# point of the review protocol: `reviewer.md` rule 6 says a rejected finding is
-# closed once it is recorded in `review/<sha>.md`, and `review/README.md` says the
-# rejections must be written down or the next round re-raises them. If the record
-# is gitignored, a fresh clone or any reviewer that did not generate the packet
-# locally cannot see it — so rule 6 can never fire and every rejected finding
-# comes back. That is the exact spiral this machinery exists to end.
-#
-# Packets are small (a diff and a checklist) and carry no secrets; they are the
-# audit trail of the review, so they belong in version control.
-#
-# Only the free-text scratch report from the flake gate is ignored.
 
-# Agent working documents — local only, never committed
-RESTRUCTURE-PLAN.md
-SPEC-CLASSIFICATION.md
+# Removed with their tooling, and kept here only as a note:
+#   - Mutation testing (Stryker) and its scratch dirs, dropped in da99e91.
+#   - The `review/` packet protocol (`pnpm review:prep`, `reviewer.md`),
+#     dropped in da99e91. Its .gitignore entries went with it.
+#   - RESTRUCTURE-PLAN.md and SPEC-CLASSIFICATION.md, the agent working
+#     documents, retired 2026-10-04. Their reasoning lives in
+#     docs/decisions/0006, 0007 and 0008 now, which are committed.

@@ -56,7 +56,7 @@ Each of these came from a real defect in this repo, not from theory.
 7. **Comments in tests describe what the test proves**, not what you hoped it
    proves.
 8. **`retries: 0`, permanently.** A retry hides a flake instead of fixing it.
-   Detection is `pnpm test:flake`. See
+   There is no flake-detection script — a red E2E build *is* the detection. See
    [0005](docs/decisions/0005-zero-test-retries.md).
 9. **When the app looks wrong, say so — do not adapt the test to it.** Loosening an
    assertion, adding a timeout, or switching to a stabler selector to reach green

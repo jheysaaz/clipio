@@ -18,9 +18,18 @@ Identical SHA. One browser tab event timed out on one runner and not the other.
 
 **`retries: 0`, permanently.** A retry hides a flake rather than fixing it.
 
-Detection is separate: `pnpm test:flake` runs the suite N times and classifies each
-test as deterministic, flaky, or clean, so a race is *found* rather than absorbed.
-Known flakes are listed in `.github/flake-quarantine.yml` with an expiry date.
+Detection was a separate concern: a `pnpm test:flake` script ran the suite N
+times and classified each test as deterministic, flaky, or clean, with known
+flakes listed in `.github/flake-quarantine.yml` and an expiry date.
+
+> **Amended 2026-10-04.** The `retries: 0` decision stands unchanged. The
+> detection tooling above was **removed** in `da99e91` — the flake gate and the
+> quarantine file no longer exist, and `pnpm test:flake` is not a script. That
+> change is recorded in [0006](0006-e2e-only-what-needs-a-browser.md), which cut
+> the suite from 153 tests to 31; with far less surface to race on, the gate was
+> judged not worth its upkeep. Until detection exists again, the only honest
+> reading of this ADR is: no retries, and a flake will surface as a red build
+> rather than as a found-and-filed bug.
 
 ## Alternatives considered
 
@@ -39,3 +48,8 @@ mysterious bug report months later.
 
 Never — unless the suite stops being race-prone, at which point the flake gate
 becomes unnecessary and the whole arrangement can be simplified.
+
+Note that the gate it refers to no longer exists. With `retries: 0` and no
+detection, the practical consequence is that a flake is now *found* by CI rather
+than *absorbed* — which satisfies the intent of this decision, just with the cost
+landing on whoever is watching. Restoring detection is a separate change.
