@@ -39,12 +39,23 @@ vi.mock("@sentry/core", async () => {
     await vi.importActual<typeof import("@sentry/core")>("@sentry/core");
   return {
     ...actual,
+    eventFromUnknownInput: (...a: unknown[]) =>
+      mockEventFactories.eventFromUnknownInput(
+        ...(a as Parameters<typeof mockEventFactories.eventFromUnknownInput>)
+      ),
+    eventFromMessage: (...a: unknown[]) =>
+      mockEventFactories.eventFromMessage(
+        ...(a as Parameters<typeof mockEventFactories.eventFromMessage>)
+      ),
     Client: class {
       init = mockClient.init;
       captureException = mockClient.captureException;
       captureMessage = mockClient.captureMessage;
       getOptions = mockClient.getOptions;
-      constructor(public _options: unknown) {}
+      constructor(public _options: unknown) {
+        mockBuilt.client = this;
+        mockBuilt.options = _options as Record<string, unknown>;
+      }
     },
     Scope: class {
       setTag = mockScope.setTag;
@@ -55,6 +66,41 @@ vi.mock("@sentry/core", async () => {
     },
   };
 });
+
+// The two event factories ContentClient delegates to. Held as refs because the
+// tests below assert on what the client hands them, not on Sentry's output.
+const mockEventFactories = vi.hoisted(() => ({
+  eventFromUnknownInput: vi.fn((_c: unknown, _p: unknown, input: unknown) => ({
+    event_id: "from-exception",
+    input,
+  })),
+  eventFromMessage: vi.fn(
+    (
+      _p: unknown,
+      message: string,
+      level: string,
+      _h: unknown,
+      _a: unknown
+    ) => ({
+      event_id: "from-message",
+      message,
+      level,
+    })
+  ),
+}));
+
+// The constructed client and its options. ContentClient subclasses the mocked
+// Client, so its own methods are only reachable through a real instance — which
+// is what initSentry() builds.
+const mockBuilt = vi.hoisted(() => ({
+  client: null as unknown,
+  options: null as Record<string, unknown> | null,
+}));
+
+const mockScrub = vi.hoisted(() => ({
+  scrubEvent: vi.fn((e: unknown) => e),
+  scrubBreadcrumb: vi.fn((b: unknown) => b),
+}));
 
 const mockLastSentryErrorAtItem = vi.hoisted(() => ({
   getValue: vi.fn(async () => null as string | null),
@@ -79,10 +125,7 @@ vi.mock("./sentry-relay", () => ({
   makeRelayTransport: vi.fn(() => ({})),
 }));
 
-vi.mock("./sentry-scrub", () => ({
-  scrubEvent: vi.fn((e: unknown) => e),
-  scrubBreadcrumb: vi.fn((b: unknown) => b),
-}));
+vi.mock("./sentry-scrub", () => mockScrub);
 
 vi.mock("@/lib/sentry", () => ({ initSentry: vi.fn() }));
 
@@ -110,6 +153,12 @@ describe("sentry-content", () => {
     mockScope.setTag.mockClear();
     mockScope.setExtras.mockClear();
     mockClient.init.mockClear();
+    mockEventFactories.eventFromUnknownInput.mockClear();
+    mockEventFactories.eventFromMessage.mockClear();
+    mockScrub.scrubEvent.mockClear();
+    mockScrub.scrubBreadcrumb.mockClear();
+    mockBuilt.client = null;
+    mockBuilt.options = null;
     mockLastSentryErrorAtItem.setValue.mockClear();
     // Default: a captured error is "long ago", so the 24h suppression is off.
     mockLastSentryErrorAtItem.getValue.mockResolvedValue(null);
@@ -211,6 +260,152 @@ describe("sentry-content", () => {
     it("is safe to call twice", () => {
       initSentry();
       expect(() => initSentry()).not.toThrow();
+    });
+
+    it("tags the context and falls back to unknown when there is no extension id", () => {
+      // The catch around `browser.runtime.id` is not defensive noise: in the
+      // content script the API exists, but this module is also imported by unit
+      // tests and by any future context where it might not. Without the
+      // fallback the tag would be `undefined` on every event.
+      initSentry();
+      expect(mockScope.setTag).toHaveBeenCalledWith(
+        "extension.context",
+        "content"
+      );
+      const idCall = mockScope.setTag.mock.calls.find(
+        (c) => c[0] === "extension.id"
+      );
+      expect(idCall).toBeDefined();
+      expect(typeof idCall?.[1]).toBe("string");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // The scrubbing hooks are the whole privacy boundary for this context. They
+  // are wired as options on the client, so nothing about them is observable
+  // unless they are pulled back off the constructed client and invoked.
+  // -----------------------------------------------------------------------
+
+  describe("the client's scrubbing hooks", () => {
+    function hooks() {
+      initSentry();
+      const options = mockBuilt.options;
+      expect(options).not.toBeNull();
+      return options as {
+        beforeSend: (e: unknown) => unknown;
+        beforeBreadcrumb: (b: unknown) => unknown;
+      };
+    }
+
+    it("sends every event through the scrubber before it leaves", () => {
+      const { beforeSend } = hooks();
+      const event = { event_id: "abc" };
+      const scrubbed = { event_id: "abc", extra: { hostname: "[url]" } };
+      mockScrub.scrubEvent.mockReturnValueOnce(scrubbed);
+
+      expect(beforeSend(event)).toBe(scrubbed);
+      expect(mockScrub.scrubEvent).toHaveBeenCalledWith(event);
+    });
+
+    it("drops the event when the scrubber returns null", () => {
+      // The negative case, and the only one that proves the hook is wired to
+      // the return value rather than merely called. Returning null is how
+      // Sentry is told not to send; if beforeSend swallowed it, scrubbing would
+      // be cosmetic and every redacted field would still be transmitted.
+      const { beforeSend } = hooks();
+      mockScrub.scrubEvent.mockReturnValueOnce(null);
+
+      expect(beforeSend({ event_id: "abc" })).toBeNull();
+    });
+
+    it("scrubs breadcrumbs before they leave", () => {
+      const { beforeBreadcrumb } = hooks();
+      const crumb = { message: "visited mail.google.com", data: { url: "x" } };
+      const scrubbed = { message: "visited [url]", data: { url: "[url]" } };
+      mockScrub.scrubBreadcrumb.mockReturnValueOnce(scrubbed);
+
+      expect(beforeBreadcrumb(crumb)).toBe(scrubbed);
+      expect(mockScrub.scrubBreadcrumb).toHaveBeenCalledWith(crumb);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // ContentClient exists to override two methods Sentry's abstract Client
+  // declares but does not implement. If either override regressed, the
+  // content script would throw on every captured error instead of reporting it.
+  // -----------------------------------------------------------------------
+
+  describe("ContentClient event factories", () => {
+    type Factories = {
+      eventFromException: (
+        e: unknown,
+        hint?: unknown
+      ) => Promise<{ event_id: string }>;
+      eventFromMessage: (
+        m: string,
+        l?: string,
+        hint?: unknown
+      ) => Promise<{ event_id: string; message: string; level: string }>;
+    };
+
+    function client(): Factories {
+      initSentry();
+      expect(mockBuilt.client).not.toBeNull();
+      return mockBuilt.client as Factories;
+    }
+
+    it("builds an event from an exception using the configured stack parser", async () => {
+      const c = client();
+      const error = new Error("boom");
+      const hint = { mechanism: { handled: false } };
+
+      const event = await c.eventFromException(error, hint);
+
+      expect(event.event_id).toBe("from-exception");
+      expect(mockEventFactories.eventFromUnknownInput).toHaveBeenCalledWith(
+        mockBuilt.client,
+        mockBuilt.options?.stackParser,
+        error,
+        hint
+      );
+    });
+
+    it("works with no hint at all", async () => {
+      const c = client();
+      const error = new TypeError("nope");
+
+      await expect(c.eventFromException(error)).resolves.toEqual(
+        expect.objectContaining({ event_id: "from-exception" })
+      );
+      expect(mockEventFactories.eventFromUnknownInput).toHaveBeenCalledWith(
+        mockBuilt.client,
+        mockBuilt.options?.stackParser,
+        error,
+        undefined
+      );
+    });
+
+    it("defaults the severity to info", async () => {
+      const c = client();
+
+      const event = await c.eventFromMessage("something happened");
+
+      expect(event.level).toBe("info");
+      expect(mockEventFactories.eventFromMessage).toHaveBeenCalledWith(
+        mockBuilt.options?.stackParser,
+        "something happened",
+        "info",
+        undefined,
+        undefined
+      );
+    });
+
+    it("forwards an explicit severity", async () => {
+      const c = client();
+
+      const event = await c.eventFromMessage("it broke", "error");
+
+      expect(event.level).toBe("error");
     });
   });
 });
