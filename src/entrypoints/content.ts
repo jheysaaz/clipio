@@ -50,6 +50,10 @@ import {
 } from "@/lib/protocol";
 import { buildGifUrl } from "@/lib/giphy";
 import {
+  insertionTextMatches,
+  plainTextFromHtml,
+} from "@/lib/insertion-verification";
+import {
   fuzzyMatchSnippets,
   calculatePreviewPosition,
   detectPreviewTrigger,
@@ -434,18 +438,20 @@ export default defineContentScript({
     }
 
     // Plain text from HTML for contenteditable verification
-    function getPlainTextFromHtml(html: string): string {
-      const div = document.createElement("div");
-      div.innerHTML = html;
-      return (div.textContent || "").trim();
-    }
-
     function verifyInsertionSuccessForContentEditable(
       element: HTMLElement,
       insertedHtml: string
     ): Promise<boolean> {
-      const expectedPlain = getPlainTextFromHtml(insertedHtml);
-      if (!expectedPlain) {
+      // `insertionTextMatches` rather than a `textContent` vs `innerText`
+      // comparison done here. `textContent` drops line breaks and `innerText`
+      // produces them, so a multi-line snippet never matched, and confetti — which
+      // is gated on this — never fired in a rich editor. It worked in textareas
+      // because that path compares against the raw field value, and it worked for
+      // single-line snippets, which is all the e2e covered.
+      //
+      // Extracted to src/lib/insertion-verification.ts so it is unit-tested; a
+      // content script is excluded from coverage.
+      if (!plainTextFromHtml(insertedHtml)) {
         // Image-only snippet: verify by checking whether the element gained
         // at least one <img> element after the insertion.
         if (/<img/i.test(insertedHtml)) {
@@ -463,7 +469,7 @@ export default defineContentScript({
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             const actual = element.innerText || element.textContent || "";
-            resolve(actual.includes(expectedPlain));
+            resolve(insertionTextMatches(insertedHtml, actual));
           });
         });
       });
@@ -646,7 +652,7 @@ export default defineContentScript({
         true
       );
 
-      // Allow image-only snippets through — getPlainTextFromHtml returns ""
+      // Allow image-only snippets through — plainTextFromHtml returns ""
       // for HTML with no text nodes (e.g. a single <img>), which would
       // incorrectly drop valid image-only snippets.
       if (!processedContent?.trim()) {

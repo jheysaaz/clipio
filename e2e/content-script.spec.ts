@@ -16,6 +16,7 @@ import { test, expect } from "./fixtures.js";
 import type { StorageHelper } from "./fixtures.js";
 import {
   blockMarkdownSnippet,
+  multilineRichSnippet,
   helloSnippet,
   cursorSnippet,
   clipboardSnippet,
@@ -159,6 +160,41 @@ test.describe("Content Script Expansion", () => {
       timeout: EXPANSION_TIMEOUT,
     });
     expect(await ce.innerText()).not.toContain("/hello");
+  });
+
+  test("fires confetti in a rich editor for a multi-line snippet", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    // The reported bug: confetti fired in textareas and never in rich editors.
+    //
+    // The insertion check compared `textContent` (which joins lines with nothing)
+    // against `innerText` (which separates them), so it never matched for a
+    // multi-line snippet — and confetti is gated on that match. Single-line
+    // snippets matched, which is why every existing test stayed green.
+    //
+    // Observable rather than inferred: the confetti helper appends a canvas to
+    // <html>, so its presence is the signal. A test that only checked the text
+    // landed would pass with confetti broken.
+    // No confetti preference is written: the content script defaults it to on and
+    // only lets storage override that, so leaving it unset exercises the default
+    // path — which is what a user gets.
+    await setupTestPage(testPage, storageHelper, [multilineRichSnippet()]);
+
+    const ce = testPage.locator('[data-testid="contenteditable-field"]');
+    await ce.click();
+    await testPage.keyboard.type("/mr", { delay: 30 });
+
+    // The snippet's text is in the field...
+    await expect(ce).toContainText("Second line of the snippet");
+    // ...and confetti actually ran.
+    await expect
+      .poll(
+        () =>
+          testPage.evaluate(() => document.querySelectorAll("canvas").length),
+        { timeout: 5000 }
+      )
+      .toBeGreaterThan(0);
   });
 
   test("renders block markdown as elements in a contenteditable", async ({

@@ -114,6 +114,24 @@ export function blockMarkdownSnippet(): Snippet {
   });
 }
 
+/**
+ * A multi-line snippet for the confetti-in-rich-editors regression.
+ *
+ * Distinct from `markdownSnippet` (single line) and `blockMarkdownSnippet`
+ * (block structure). This one is deliberately several plain lines with no block
+ * syntax, because that is the exact shape that broke confetti: the insertion
+ * check compared `textContent` — which joins lines with nothing — against
+ * `innerText`, which separates them. A single line matched; two did not.
+ */
+export function multilineRichSnippet(): Snippet {
+  return makeSnippet({
+    id: "multiline-rich-snippet",
+    label: "Multiline Rich Snippet",
+    shortcut: "/mr",
+    content: "First line of the snippet\nSecond line of the snippet",
+  });
+}
+
 /** A multi-line snippet for textarea testing. */
 export function multilineSnippet(): Snippet {
   return makeSnippet({
