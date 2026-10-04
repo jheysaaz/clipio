@@ -298,9 +298,13 @@ export default defineConfig({
 
   resolve: {
     alias: {
+      // `import.meta.dirname`, not `__dirname`: Vite is moving `configLoader` to
+      // `'native'`, which loads this file as real ESM where `__dirname` does not
+      // exist. Vite warns today and throws in the next major.
+      //
       // Match the WXT/tsconfig "~" path alias → "./src"
-      "~": resolve(__dirname, "src"),
-      "@": resolve(__dirname, "src"),
+      "~": resolve(import.meta.dirname, "src"),
+      "@": resolve(import.meta.dirname, "src"),
 
       // `#i18n` is a WXT virtual module generated into .wxt/i18n/ by
       // `wxt prepare`. Without this alias it is unresolvable, and the
@@ -315,7 +319,7 @@ export default defineConfig({
       // The stub resolves real keys against the real `en.yml`, so tests assert
       // on the real user-visible copy rather than a fabricated string.
       // `scripts/check-coverage-integrity.mjs` guards the invariant.
-      "#i18n": resolve(__dirname, "tests/mocks/i18n.ts"),
+      "#i18n": resolve(import.meta.dirname, "tests/mocks/i18n.ts"),
     },
   },
 });
