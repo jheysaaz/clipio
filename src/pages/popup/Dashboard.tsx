@@ -28,7 +28,6 @@ import { InlineError } from "@/components/ui/inline-error";
 import { toast } from "sonner";
 
 import type { Snippet, SnippetFormData } from "@/types";
-import { fuzzyMatchSnippets } from "@/lib/preview-helpers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -46,6 +45,7 @@ import {
   findSnippet,
   useSnippets,
 } from "@/state/snippets";
+import { setSearchQuery, useSearch, useVisibleSnippets } from "@/state/search";
 import { WarningBanner } from "@/components/ui/warning-banner";
 import {
   contextMenuDraftItem,
@@ -97,7 +97,6 @@ export default function Dashboard() {
     void navigate({ to: NEW_ROUTE, replace: true });
   }, [navigate]);
 
-  const [searchQuery, setSearchQuery] = useState("");
   const [draftSnippet, setDraftSnippet] = useState<SnippetFormData>({
     label: "",
     shortcut: "",
@@ -112,6 +111,7 @@ export default function Dashboard() {
   // another context, so a snippet deleted in the options page stayed in this list
   // with a delete button that would fail. One store, one owner, one event.
   const snippets = useSnippets((s) => s.snippets);
+  const searchQuery = useSearch((s) => s.query);
   const loading = useSnippets((s) => !s.isLoaded);
   const quotaWarning = useSnippets((s) => s.quotaWarning);
   const syncPausedWarning = useSnippets((s) => s.syncPausedWarning);
@@ -384,15 +384,10 @@ export default function Dashboard() {
   // Filtering & keyboard navigation
   // -------------------------------------------------------------------------
 
-  const filteredSnippets: Snippet[] = useMemo(
-    () =>
-      searchQuery
-        ? fuzzyMatchSnippets(searchQuery, snippets).map(
-            (f) => f.snippet as unknown as Snippet
-          )
-        : [...snippets].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    [searchQuery, snippets]
-  );
+  // The list the sidebar renders, and the list the keyboard handler walks. One
+  // value, so they cannot disagree — which a `useMemo` and a separate piece of
+  // state invited.
+  const filteredSnippets = useVisibleSnippets(snippets);
 
   const handleKeyboardNavigation = useCallback(
     (e: KeyboardEvent) => {
