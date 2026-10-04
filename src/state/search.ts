@@ -47,10 +47,6 @@ export function setSearchQuery(query: string): void {
   searchStore.setState(() => ({ query }));
 }
 
-export function clearSearch(): void {
-  searchStore.setState(() => ({ query: "" }));
-}
-
 /**
  * The list the sidebar should render.
  *

@@ -130,12 +130,6 @@ export function normaliseForComparison(text: string): string {
 }
 
 /**
- * Whether the inserted HTML's text is present in what the field now contains.
- *
- * Returns `false` for markup with no text at all — an image-only snippet, which
- * has to be verified by counting `<img>` elements instead.
- */
-/**
  * Whether an insertion that carries no text actually landed.
  *
  * An image-only snippet has no text to look for, so the check falls back to
@@ -163,11 +157,23 @@ export function imageCountGained(before: number, after: number): boolean {
  * to be distinguishable from "no text *and* no image": the first is an image-only
  * snippet, verified by counting; the second is nothing at all, and no amount of
  * counting will find an insertion that was never made.
+ *
+ * Recomputes `plainTextFromHtml` rather than taking it as an argument. The caller
+ * has already computed it to get here, so this parses twice per image-only
+ * insertion — negligible next to a DOM round trip, and a second parameter
+ * threading a value through two call sites buys nothing. Noted so the next reader
+ * does not read it as a redundant guard and "fix" it into a bug.
  */
 export function isImageOnlyMarkup(html: string): boolean {
   return plainTextFromHtml(html) === "" && /<img/i.test(html);
 }
 
+/**
+ * Whether the inserted HTML's text is present in what the field now contains.
+ *
+ * Returns `false` for markup with no text at all — an image-only snippet, which
+ * has to be verified with `imageCountGained` instead.
+ */
 export function insertionTextMatches(
   insertedHtml: string,
   actualFieldText: string

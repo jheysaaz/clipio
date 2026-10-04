@@ -227,6 +227,14 @@ function joinWithBreaks(parts: string[]): string {
     : parts;
 
   let result = "";
+  // Whether anything has been emitted yet, tracked separately from `result`.
+  //
+  // `result === ""` cannot answer that: a document whose parts are *all* empty
+  // strings leaves `result` empty after every iteration, so no `<br>` was ever
+  // emitted and `"\n"` rendered as `""` where `markdownToHtml` gives `"<br>"`. A
+  // snippet that is only blank lines inserted nothing at all, and the caller then
+  // skipped the insertion as empty.
+  let started = false;
   // The *previous part*, not the accumulated string. Testing the accumulated
   // string looks right for a document that starts with a block and is wrong for
   // one that does not: in `intro\n# H\noutro` the accumulator begins with
@@ -234,9 +242,10 @@ function joinWithBreaks(parts: string[]): string {
   // `<br>` landed after `</h1>`.
   let previous = "";
   for (const part of kept) {
-    if (result === "") {
+    if (!started) {
       result = part;
       previous = part;
+      started = true;
       continue;
     }
     if (isBlockElement(previous) || isBlockElement(part)) {

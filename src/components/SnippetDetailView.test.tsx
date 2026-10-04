@@ -21,6 +21,11 @@ const copyMarkdownAsRichText = vi.fn();
 const getSnippetUsageCount = vi.fn();
 const incrementSnippetUsage = vi.fn();
 
+vi.mock("@/lib/sentry", () => ({ captureError: vi.fn() }));
+
+import { captureError } from "@/lib/sentry";
+import { SnippetWriteRefused } from "@/state/snippets";
+
 vi.mock("@/lib/copy-markdown-as-rich-text", () => ({
   copyMarkdownAsRichText: (...args: unknown[]) =>
     copyMarkdownAsRichText(...args),
@@ -119,6 +124,7 @@ describe("SnippetDetailView", () => {
     copyMarkdownAsRichText.mockResolvedValue(undefined);
     onDelete.mockResolvedValue(undefined);
     onUpdate.mockResolvedValue(undefined);
+    vi.mocked(captureError).mockClear();
   });
 
   afterEach(() => {
@@ -248,6 +254,43 @@ describe("SnippetDetailView", () => {
     expect(
       await screen.findByText("Failed to save snippet. Please try again.")
     ).toBeInTheDocument();
+  });
+
+  it("shows the store's explanation for a quota refusal, and does not report it", async () => {
+    // The case the generic-message assertion above cannot distinguish.
+    //
+    // A refusal is not an exception: it is an expected condition with an
+    // explanation already worked out. Before this, `Dashboard` threw the
+    // localised string as a bare `Error`, this handler filed it to Sentry as
+    // user-facing copy, and then replaced it with "please try again" — so the
+    // limit detail the store had computed was thrown away, and every user who hit
+    // the quota ceiling produced an exception report.
+    const user = userEvent.setup();
+    onUpdate.mockRejectedValue(
+      new SnippetWriteRefused(
+        "This snippet is 210.5 KB and sync allows 100.0 KB."
+      )
+    );
+    renderView();
+
+    await user.click(
+      screen.getByRole("button", { name: /remove "personal"/i })
+    );
+    await user.click(screen.getByTestId("snippet-save"));
+
+    expect(
+      await screen.findByText(
+        "This snippet is 210.5 KB and sync allows 100.0 KB."
+      )
+    ).toBeInTheDocument();
+    // Not the generic copy: the specific one replaced it.
+    expect(
+      screen.queryByText("Failed to save snippet. Please try again.")
+    ).not.toBeInTheDocument();
+    expect(captureError).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ action: "saveSnippet" })
+    );
   });
 
   it("re-enables save after a failed save so the edit is not stranded", async () => {

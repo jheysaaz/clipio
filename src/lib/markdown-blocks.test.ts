@@ -195,6 +195,17 @@ describe("markdownToHtmlWithBlocks — parity with markdownToHtml", () => {
     "Trailing {{cursor}} placeholder",
     "",
     "   ",
+    // Blank-only documents. `joinWithBreaks` used `result === ""` to mean "nothing
+    // emitted yet", which is not the same thing: with every part empty, `result`
+    // stayed empty after every iteration, no `<br>` was ever written, and `"\n"`
+    // rendered as `""`. A snippet of only blank lines then inserted nothing and
+    // the caller skipped it as empty. These were absent from this list, which is
+    // why a suite built to catch exactly this divergence could not see it.
+    "\n",
+    "\n ",
+    "\n\n",
+    "\n\n\n",
+    "\t\n",
     "100% of the time",
     "a-b and c_d and 2+2",
     "<script>alert(1)</script>",

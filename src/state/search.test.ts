@@ -3,7 +3,6 @@ import { act, renderHook } from "@testing-library/react";
 import { useSearch, useVisibleSnippets } from "./search";
 
 import {
-  clearSearch,
   resetSearchForTests,
   searchStore,
   setSearchQuery,
@@ -57,12 +56,6 @@ describe("query state", () => {
     expect(searchStore.state.query).toBe("gam");
   });
 
-  it("clears", () => {
-    setSearchQuery("gam");
-    clearSearch();
-    expect(searchStore.state.query).toBe("");
-  });
-
   it("notifies subscribers on change", () => {
     // Without this the store would type-check and render nothing: the query would
     // change while the list kept showing the previous result set.
@@ -73,7 +66,7 @@ describe("query state", () => {
 
     setSearchQuery("a");
     setSearchQuery("ab");
-    clearSearch();
+    setSearchQuery("");
     subscription.unsubscribe();
 
     expect(seen).toEqual(["a", "ab", ""]);

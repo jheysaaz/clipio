@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import type { Snippet } from "@/types";
 import { InlineError } from "@/components/ui/inline-error";
 import { getRelativeTime } from "@/lib/date-utils";
+import { isWriteRefusal } from "@/state/snippets";
 import {
   getSnippetUsageCount,
   incrementSnippetUsage,
@@ -138,9 +139,22 @@ export default function SnippetDetailView({
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2000);
     } catch (error) {
-      console.error("Error saving snippet:", error);
-      captureError(error, { action: "saveSnippet", snippetId: snippet.id });
-      setActionError(i18n.t("snippetDetail.errors.failedToSave"));
+      if (isWriteRefusal(error)) {
+        // An expected refusal with an explanation already worked out — storage
+        // over quota, naming the limit. Shown as-is and *not* reported: a user
+        // hitting the quota ceiling is not an exception, and filing one on every
+        // occurrence buried the signal this report exists to raise.
+        //
+        // Before this, the store's message was thrown as a bare `Error`, caught
+        // here, filed to Sentry as localised user-facing copy, and then replaced
+        // with a generic "please try again" — so the limit detail was computed and
+        // thrown away in the same breath.
+        setActionError(error.userMessage);
+      } else {
+        console.error("Error saving snippet:", error);
+        captureError(error, { action: "saveSnippet", snippetId: snippet.id });
+        setActionError(i18n.t("snippetDetail.errors.failedToSave"));
+      }
     } finally {
       setIsSaving(false);
     }
@@ -151,9 +165,15 @@ export default function SnippetDetailView({
     try {
       await onDelete(snippet.id);
     } catch (error) {
-      console.error("Error deleting snippet:", error);
-      captureError(error, { action: "deleteSnippet", snippetId: snippet.id });
-      setActionError(i18n.t("snippetDetail.errors.failedToDelete"));
+      // Same split as the save path: a refusal is an explained outcome, not an
+      // exception. See the note there.
+      if (isWriteRefusal(error)) {
+        setActionError(error.userMessage);
+      } else {
+        console.error("Error deleting snippet:", error);
+        captureError(error, { action: "deleteSnippet", snippetId: snippet.id });
+        setActionError(i18n.t("snippetDetail.errors.failedToDelete"));
+      }
     } finally {
       setIsDeleting(false);
       setShowDeleteDialog(false);

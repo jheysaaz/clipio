@@ -70,16 +70,33 @@ export function emitStorageChange(changes: StorageChanges, areaName: string) {
   }
 }
 
-/** Keys whose value actually differs — the change set Chrome reports. */
+/**
+ * The change set Chrome reports for the keys an operation touched.
+ *
+ * Scoped to the area that was written. Reading across areas — the first version
+ * did `syncStore[key] ?? localStore[key]` — reports a *removal* from `local` as
+ * `newValue: <the sync value>` whenever the same key happens to exist in both.
+ *
+ * That is not hypothetical: `StorageManager.forceSetMode` writes the new area and
+ * flips the mode without clearing the old one, so after one sync→local switch
+ * `snip:<id>` exists in both areas. And production branches on precisely the field
+ * that would be wrong — `background.ts` selects removals with
+ * `oldValue !== undefined && newValue === undefined`, so under this mock a real
+ * removal was invisible to the sign-out wipe detector while the "something was
+ * written" branch fired instead, scheduling a pointless cache refresh.
+ */
 function diffKeys(
   before: Record<string, unknown>,
+  after: Record<string, unknown>,
   keys: string[]
 ): StorageChanges {
   const changes: StorageChanges = {};
   for (const key of keys) {
     const oldValue = before[key];
-    const newValue = syncStore[key] ?? localStore[key];
+    const newValue = after[key];
     if (oldValue === newValue) continue;
+    // A removal reports `oldValue` and *no* `newValue` key at all, which is how
+    // Chrome distinguishes it from a write of `undefined`.
     changes[key] =
       newValue === undefined ? { oldValue } : { oldValue, newValue };
   }
@@ -118,7 +135,7 @@ export const mockStorageSync = {
   set: vi.fn(async (items: Record<string, unknown>) => {
     const before = { ...syncStore };
     Object.assign(syncStore, items);
-    emitStorageChange(diffKeys(before, Object.keys(items)), "sync");
+    emitStorageChange(diffKeys(before, syncStore, Object.keys(items)), "sync");
   }),
 
   remove: vi.fn(async (keys: string | string[]) => {
@@ -127,7 +144,7 @@ export const mockStorageSync = {
     for (const k of toRemove) {
       delete syncStore[k];
     }
-    emitStorageChange(diffKeys(before, toRemove), "sync");
+    emitStorageChange(diffKeys(before, syncStore, toRemove), "sync");
   }),
 
   getBytesInUse: vi.fn(async () => 0),
@@ -172,7 +189,10 @@ export const mockStorageLocal = {
   set: vi.fn(async (items: Record<string, unknown>) => {
     const before = { ...localStore };
     Object.assign(localStore, items);
-    emitStorageChange(diffKeys(before, Object.keys(items)), "local");
+    emitStorageChange(
+      diffKeys(before, localStore, Object.keys(items)),
+      "local"
+    );
   }),
 
   remove: vi.fn(async (keys: string | string[]) => {
@@ -181,7 +201,7 @@ export const mockStorageLocal = {
     for (const k of toRemove) {
       delete localStore[k];
     }
-    emitStorageChange(diffKeys(before, toRemove), "local");
+    emitStorageChange(diffKeys(before, localStore, toRemove), "local");
   }),
 
   getBytesInUse: vi.fn(async () => 0),

@@ -107,54 +107,128 @@ export const snippetsStore = createStore<SnippetsState>({
 // ---------------------------------------------------------------------------
 
 /**
- * Guards against an out-of-order read landing last.
+ * Orders every read of the library, whatever asked for it.
  *
- * `loadSnippets` is called on mount and again from the storage-change listener,
- * and the two can overlap — a snippet saved in another context fires the
- * listener while the initial read is still in flight. Without this, the initial
- * read's response (issued first, containing the older list) could resolve second
- * and overwrite the newer one, silently reverting the user's snippet.
+ * `loadSnippets` runs on mount and `refreshSnippets` runs from the
+ * storage-change listener, and the two overlap constantly — a snippet saved in
+ * another context fires the listener while the initial read is still in flight.
+ * On `storage.sync` that is two network round-trips, so the code does not get to
+ * assume which lands first.
+ *
+ * Each read takes a ticket when it is *issued* and applies its result only if it
+ * is still the newest. The bug this prevents is the one an earlier version had:
+ * the counter was bumped only by `loadSnippets`, so a slow listener refresh
+ * resolved after a newer load and wiped the library — the snippet the user had
+ * just created vanished from the sidebar and stayed gone. Its own docstring
+ * described that exact scenario while not defending against it.
  */
-let loadGeneration = 0;
+let readTicket = 0;
+
+/** Take a ticket, and get a predicate saying whether it is still the newest. */
+function takeTicket(): { isStale: () => boolean } {
+  const ticket = ++readTicket;
+  return { isStale: () => ticket !== readTicket };
+}
+
+/**
+ * Recompute the storage warnings from a status read.
+ *
+ * Split out because a status read can fail on its own, and lumping it in with
+ * the library read made its failure indistinguishable: the `catch` set
+ * `loadError`, so `Dashboard` rendered "Failed to load snippets." in place of a
+ * library that was in memory and correct. The user was told their snippets were
+ * lost, and they were not.
+ */
+async function applyStorageStatus(isStale: () => boolean): Promise<void> {
+  let status: Awaited<ReturnType<typeof getStorageStatus>>;
+  try {
+    status = await getStorageStatus();
+  } catch (error) {
+    // Reported, and nothing else. The warnings stay at whatever they were, which
+    // is the safe direction: a banner the user has already dismissed does not
+    // reappear because one status read failed.
+    captureError(error, { action: "getStorageStatus" });
+    return;
+  }
+  if (isStale()) return;
+  snippetsStore.setState((prev) => ({
+    ...prev,
+    quotaWarning: status.quotaExceeded,
+    // Quota is the more urgent of the two, so it wins. Showing both would tell the
+    // user their edits are not syncing *and* that there is no room, which is one
+    // problem described twice.
+    syncPausedWarning:
+      !status.quotaExceeded &&
+      status.mode === "local" &&
+      status.localReason === "manual",
+  }));
+}
 
 export async function loadSnippets(): Promise<void> {
-  const generation = ++loadGeneration;
-  const isStale = () => generation !== loadGeneration;
-
-  // Marked loading only for the *first* read. A background refresh must not flip
-  // `isLoaded` back to false, which would blank the list the user is reading.
-  if (!snippetsStore.state.isLoaded) {
-    snippetsStore.setState((prev) => ({ ...prev, isLoaded: false }));
-  }
+  const { isStale } = takeTicket();
 
   try {
     const list = await getSnippetsFromStorage();
     if (isStale()) return;
-    snippetsStore.setState((prev) => ({ ...prev, snippets: list }));
-
-    const status = await getStorageStatus();
-    if (isStale()) return;
     snippetsStore.setState((prev) => ({
       ...prev,
+      snippets: list,
+      // Set on success and on failure alike. A library that has arrived is loaded;
+      // leaving this false would keep the dashboard spinning over content it
+      // already has.
       isLoaded: true,
-      quotaWarning: status.quotaExceeded,
-      syncPausedWarning:
-        !status.quotaExceeded &&
-        status.mode === "local" &&
-        status.localReason === "manual",
     }));
   } catch (error) {
     if (isStale()) return;
     console.error("[Clipio] Failed to load snippets:", error);
     captureError(error, { action: "loadSnippets" });
-    // `isLoaded` is set even on failure. Leaving it false would keep the
-    // dashboard spinning forever on an error it cannot show.
     snippetsStore.setState((prev) => ({
       ...prev,
       isLoaded: true,
       loadError: i18n.t("dashboard.errors.failedToLoad"),
     }));
+    return;
   }
+
+  await applyStorageStatus(isStale);
+}
+
+/**
+ * Re-read after a change made in another context.
+ *
+ * Takes a ticket like `loadSnippets` does, which is the point: without that, a
+ * refresh in flight when the user creates a snippet would land afterwards with a
+ * list that predates it and erase it.
+ *
+ * Recomputes the warnings as well as the list. A library that crosses the quota
+ * limit in the options page while a popup is open must raise the banner there —
+ * the docstring on the dismiss actions calls them "a statement about storage that
+ * stays true until it stops being true", and that is not true of a path that only
+ * ever re-reads the list.
+ */
+export async function refreshSnippets(): Promise<void> {
+  const { isStale } = takeTicket();
+  try {
+    const list = await getSnippetsFromStorage();
+    if (isStale()) return;
+    snippetsStore.setState((prev) => ({
+      ...prev,
+      snippets: list,
+      isLoaded: true,
+    }));
+  } catch (error) {
+    // A failed refresh must not clear the list the user is reading, and must not
+    // be reported as a failed load — the previous load may well have succeeded.
+    // `isLoaded` is settled anyway, so a failure on a *first* read cannot leave a
+    // spinner running with no error to show.
+    captureError(error, { action: "snippets.refresh" });
+    snippetsStore.setState((prev) => ({
+      ...prev,
+      isLoaded: prev.isLoaded || prev.snippets.length > 0,
+    }));
+    return;
+  }
+  await applyStorageStatus(isStale);
 }
 
 /**
@@ -212,14 +286,6 @@ const SNIPPET_KEY_PREFIX = "snip:";
  * is anything the user is currently looking at: a dismissed recovery banner, an
  * error they have not acted on yet.
  */
-function applyRefreshedList(list: Snippet[]): void {
-  snippetsStore.setState((prev) => ({
-    ...prev,
-    snippets: list,
-    isLoaded: true,
-  }));
-}
-
 /**
  * Re-read when a snippet key changes in any storage area.
  *
@@ -229,8 +295,15 @@ function applyRefreshedList(list: Snippet[]): void {
  * promise nobody kept.
  *
  * Every area is watched, not just the active one, because the manager's mode can
- * change while the popup is open. Re-reading through the manager always reads the
- * right area, so a change in the *inactive* one is simply a no-op read.
+ * change while the popup is open. `refreshSnippets` re-reads through the manager,
+ * which always reads the right area, so a change in the *inactive* one is simply
+ * a no-op read. That is also why this listener cannot be filtered by area: after
+ * one sync→local switch `forceSetMode` leaves the same `snip:<id>` keys in both
+ * areas, so filtering would drop exactly the events that matter.
+ *
+ * The read is `refreshSnippets`, which takes a read ticket. It has to share the
+ * ticket sequence `loadSnippets` uses: a refresh that landed after a newer load
+ * would otherwise wipe the library.
  */
 if (typeof browser !== "undefined" && browser.storage?.onChanged) {
   browser.storage.onChanged.addListener((changes, areaName) => {
@@ -239,13 +312,12 @@ if (typeof browser !== "undefined" && browser.storage?.onChanged) {
     );
     if (!touched) return;
 
-    getSnippetsFromStorage()
-      .then(applyRefreshedList)
-      .catch((error: unknown) => {
-        // A failed refresh must not clear the list the user is reading. Report
-        // it and leave the previous contents in place.
-        captureError(error, { action: "snippets.refresh", areaName });
-      });
+    void refreshSnippets().catch((error: unknown) => {
+      // `refreshSnippets` handles its own failures, so reaching here means
+      // something threw outside its try — worth knowing about, and worth
+      // attributing to the area it came from.
+      captureError(error, { action: "snippets.refresh.listen", areaName });
+    });
   });
 }
 
@@ -256,6 +328,37 @@ if (typeof browser !== "undefined" && browser.storage?.onChanged) {
 /** The outcome of a write, so callers can react to a refusal. */
 export type WriteOutcome<T = void> =
   { ok: true; value: T } | { ok: false; error: string };
+
+/**
+ * A write the backend refused for a reason the user can act on.
+ *
+ * Its own type, not a plain `Error`, because the two need opposite handling and
+ * were being given the same one. A *refusal* — storage over quota — is an
+ * expected condition with an actionable explanation already computed. Routing it
+ * through `captureError` filed a Sentry exception on every occurrence carrying
+ * localised user-facing copy; routing it through a bare `new Error(message)` had
+ * callers show a generic "please try again" and throw away the limit detail the
+ * store had just computed.
+ *
+ * So: a refusal is thrown as this, callers render `userMessage`, and nothing
+ * reports it to Sentry. A genuine failure is still an ordinary `Error` and is
+ * still reported.
+ */
+export class SnippetWriteRefused extends Error {
+  /** The explanation to show, already localised. */
+  readonly userMessage: string;
+
+  constructor(userMessage: string) {
+    super(userMessage);
+    this.name = "SnippetWriteRefused";
+    this.userMessage = userMessage;
+  }
+}
+
+/** Whether a caught value is a refusal rather than a genuine failure. */
+export function isWriteRefusal(error: unknown): error is SnippetWriteRefused {
+  return error instanceof SnippetWriteRefused;
+}
 
 /** Bytes as KB, for the quota message. The limits are small enough that one
  *  decimal is enough to be useful and never enough to be misleading. */
@@ -358,23 +461,34 @@ export async function addSnippet(
   }
 }
 
-export async function editSnippet(
-  snippet: Snippet
-): Promise<WriteOutcome<Snippet>> {
+/**
+ * Save an edited snippet.
+ *
+ * **Throws**, unlike `addSnippet`, because every caller of this one already has a
+ * `try`/`catch` that renders a failure — the detail view and the inline rename.
+ * Returning a result made `Dashboard` convert it back into a throw, and the value
+ * it threw was the localised explanation, which the catch then discarded in favour
+ * of a generic message while filing the localised string to Sentry.
+ *
+ * A quota refusal throws `SnippetWriteRefused` and is *not* reported: it is an
+ * expected condition with an actionable explanation, and the banner is raised here
+ * so it stays up. A genuine failure is reported, once, here.
+ */
+export async function editSnippet(snippet: Snippet): Promise<Snippet> {
   try {
     await updateSnippetInStorage(snippet);
     snippetsStore.setState((prev) => ({
       ...prev,
       snippets: prev.snippets.map((s) => (s.id === snippet.id ? snippet : s)),
     }));
-    return { ok: true, value: snippet };
+    return snippet;
   } catch (error) {
     if (error instanceof StorageQuotaError) {
       snippetsStore.setState((prev) => ({ ...prev, quotaWarning: true }));
-      return { ok: false, error: quotaMessage(error) };
+      throw new SnippetWriteRefused(quotaMessage(error));
     }
     captureError(error, { action: "updateSnippet" });
-    return { ok: false, error: i18n.t("dashboard.errors.failedToUpdate") };
+    throw new SnippetWriteRefused(i18n.t("dashboard.errors.failedToUpdate"));
   }
 }
 
@@ -385,9 +499,9 @@ export async function editSnippet(
  * deleting the snippet the URL points at leaves that URL dangling. Returning it
  * here saves the caller reading the store between the delete and the navigation.
  *
- * The error is reported *and* rethrown. The caller rethrows for its own callers
- * (the confirm dialog's error path), and swallowing it would leave the delete
- * dialog claiming success over a snippet that is still there.
+ * A quota refusal throws `SnippetWriteRefused` and is not reported; anything else
+ * is reported here, once, and rethrown unchanged so the delete dialog cannot
+ * claim success over a snippet that is still there.
  */
 export async function removeSnippet(
   snippetId: string
@@ -400,6 +514,12 @@ export async function removeSnippet(
     snippetsStore.setState((prev) => ({ ...prev, snippets: remaining }));
     return { remaining };
   } catch (error) {
+    if (error instanceof StorageQuotaError) {
+      // A refusal to delete is nearly always a refusal to write the tombstone, so
+      // the quota banner is the right thing to raise.
+      snippetsStore.setState((prev) => ({ ...prev, quotaWarning: true }));
+      throw new SnippetWriteRefused(quotaMessage(error));
+    }
     console.error("[Clipio] Failed to delete snippet:", error);
     captureError(error, { action: "deleteSnippet" });
     throw error;
@@ -512,12 +632,12 @@ export function findSnippet(
 /**
  * Reset the store to its initial state.
  *
- * Exported for tests only. It also bumps `loadGeneration`, so a test that leaves
- * an in-flight `loadSnippets` behind cannot have it land in the next test's
+ * Exported for tests only. It also invalidates outstanding read tickets, so a test
+ * that leaves an in-flight read behind cannot have it land in the next test's
  * store — the guard is the same one production uses, not a second mechanism.
  */
 export function resetSnippetsStoreForTests(): void {
-  loadGeneration++;
+  readTicket++;
   snippetsStore.setState(() => ({
     snippets: [],
     isLoaded: false,

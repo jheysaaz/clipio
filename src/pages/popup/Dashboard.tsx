@@ -361,8 +361,8 @@ export default function Dashboard() {
   };
 
   const handleDeleteSnippet = async (snippetId: string) => {
-    // `removeSnippet` reports and rethrows; this rethrow is for its own callers,
-    // which show a delete failure rather than pretending it worked.
+    // `removeSnippet` throws on failure; this propagates to the delete dialog,
+    // which shows a message rather than pretending it worked.
     const { remaining } = await removeSnippet(snippetId);
     // Deleting the addressed snippet has to move the address too, or the URL
     // would keep pointing at something that no longer exists.
@@ -375,8 +375,7 @@ export default function Dashboard() {
   };
 
   const handleUpdateSnippet = async (updated: Snippet) => {
-    const result = await editSnippet(updated);
-    if (!result.ok) throw new Error(result.error);
+    await editSnippet(updated);
     toast.success(i18n.t("dashboard.toast.snippetUpdated"));
   };
 

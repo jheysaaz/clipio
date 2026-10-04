@@ -14,6 +14,8 @@ import {
   dismissLoadError,
   dismissRecoveryError,
   findSnippet,
+  isWriteRefusal,
+  refreshSnippets,
   resetSnippetsStoreForTests,
   snippetsStore,
   type SnippetsState,
@@ -61,6 +63,7 @@ vi.mock("@/storage/items", () => ({
 
 vi.mock("@/lib/sentry", () => ({ captureError: vi.fn() }));
 
+import { captureError } from "@/lib/sentry";
 import { syncDataLostItem } from "@/storage/items";
 import {
   emitStorageChange,
@@ -94,6 +97,7 @@ function state(): SnippetsState {
 beforeEach(() => {
   resetBrowserMocks();
   resetSnippetsStoreForTests();
+  vi.mocked(captureError).mockClear();
   storage.getSnippets.mockResolvedValue([]);
   storage.getStorageStatus.mockResolvedValue(OK_STATUS);
   storage.saveSnippet.mockResolvedValue(undefined);
@@ -129,9 +133,16 @@ describe("loadSnippets", () => {
     expect(state().isLoaded).toBe(true);
   });
 
-  it("marks loaded even when only the status read fails", async () => {
-    // The list is the thing the user is waiting for. Losing the *warning* is not a
-    // reason to leave a spinner up over a library that has arrived.
+  it("shows the library, not an error, when only the status read fails", async () => {
+    // The one the previous version of this file got wrong.
+    //
+    // The status read shared a `try` with the library read, so its failure landed
+    // in the same `catch` and set `loadError`. `Dashboard` renders
+    // `loading ? spinner : loadError ? <InlineError> : list`, so the user was told
+    // "Failed to load snippets." in place of a library that was in memory and
+    // correct — told their snippets were lost, and they were not. The test that
+    // appeared to cover this asserted the list length and `isLoaded`, reasoned
+    // about the spinner, and stopped: it could not fail on the bug above.
     storage.getSnippets.mockResolvedValue([makeSnippet()]);
     storage.getStorageStatus.mockRejectedValue(new Error("status unavailable"));
 
@@ -139,6 +150,31 @@ describe("loadSnippets", () => {
 
     expect(state().snippets).toHaveLength(1);
     expect(state().isLoaded).toBe(true);
+    expect(state().loadError).toBeNull();
+    // Reported, so a persistently failing status read is visible rather than
+    // silently leaving the warnings frozen.
+    expect(captureError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ action: "getStorageStatus" })
+    );
+  });
+
+  it("keeps existing warnings when the status read fails", async () => {
+    // A banner the user has already dismissed must not reappear because one
+    // status read failed.
+    storage.getSnippets.mockResolvedValue([makeSnippet()]);
+    storage.getStorageStatus.mockResolvedValue({
+      ...OK_STATUS,
+      quotaExceeded: true,
+    });
+    await loadSnippets();
+    expect(state().quotaWarning).toBe(true);
+
+    dismissQuotaWarning();
+    storage.getStorageStatus.mockRejectedValue(new Error("status unavailable"));
+    await loadSnippets();
+
+    expect(state().quotaWarning).toBe(false);
   });
 
   it("raises the quota warning when storage reports over-quota", async () => {
@@ -181,6 +217,67 @@ describe("loadSnippets", () => {
     await loadSnippets();
 
     expect(state().syncPausedWarning).toBe(false);
+  });
+
+  it("does not let a stale refresh wipe a newer load", async () => {
+    // The race the ticket counter was originally written for and did not cover.
+    //
+    // `readTicket` was bumped only by `loadSnippets`, so a refresh issued by the
+    // storage-change listener while a load was in flight was not tracked at all.
+    // Observed before the fix: the newer load applied `['fresh']`, then the older
+    // listener refresh landed and applied `[]` — the snippet the user had just
+    // created vanished from the sidebar and stayed gone. The docstring described
+    // this exact scenario while not defending against it, and the only race test
+    // raced two `loadSnippets` calls against each other.
+    const stale = makeSnippet({ id: "stale" });
+    const fresh = makeSnippet({ id: "fresh" });
+
+    let releaseRefresh!: () => void;
+    const refreshGate = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+
+    // The listener's read: issued first, resolves last, and carries the older list.
+    storage.getSnippets.mockReturnValueOnce(
+      refreshGate.then(() => [stale]) as never
+    );
+    const refresh = refreshSnippets();
+
+    // A newer load overtakes it.
+    storage.getSnippets.mockResolvedValue([fresh]);
+    await loadSnippets();
+    expect(state().snippets.map((s) => s.id)).toEqual(["fresh"]);
+
+    releaseRefresh();
+    await refresh;
+
+    expect(state().snippets.map((s) => s.id)).toEqual(["fresh"]);
+  });
+
+  it("does not report a failed refresh as a failed load", async () => {
+    snippetsStore.setState((prev) => ({ ...prev, snippets: [makeSnippet()] }));
+    storage.getSnippets.mockRejectedValue(new Error("context invalidated"));
+
+    await refreshSnippets();
+
+    // The previous load may well have succeeded, so the list the user is reading
+    // stands and no error is shown.
+    expect(state().snippets).toHaveLength(1);
+    expect(state().loadError).toBeNull();
+  });
+
+  it("claims nothing when a refresh fails with nothing loaded", async () => {
+    // `isLoaded` stays false and no error is claimed: there is no library, so
+    // there is nothing to report having failed. A refresh can only fire after a
+    // storage change, which in practice follows a successful load — this is the
+    // shape of the edge case, not a path a user reaches.
+    storage.getSnippets.mockRejectedValue(new Error("context invalidated"));
+
+    await refreshSnippets();
+
+    expect(state().isLoaded).toBe(false);
+    // No library and no list to keep: still false, and no error claimed.
+    expect(state().loadError).toBeNull();
   });
 
   it("does not let a stale read overwrite a newer one", async () => {
@@ -378,23 +475,53 @@ describe("editSnippet", () => {
     snippetsStore.setState((prev) => ({ ...prev, snippets: [makeSnippet()] }));
     storage.updateSnippet.mockRejectedValue(new Error("network down"));
 
-    const result = await editSnippet(makeSnippet({ label: "Renamed" }));
+    await expect(
+      editSnippet(makeSnippet({ label: "Renamed" }))
+    ).rejects.toThrow();
 
-    expect(result.ok).toBe(false);
+    // A failed write must not look like a successful one.
     expect(state().snippets[0].label).toBe("First");
   });
 
-  it("raises the banner on a quota refusal", async () => {
+  it("throws a refusal carrying the limit on a quota breach", async () => {
     storage.updateSnippet.mockRejectedValue(
       new storage.StorageQuotaError([
-        { kind: "count", actual: 600, limit: 500 },
+        { kind: "total", actual: 120_000, limit: 100_000 },
       ])
     );
 
-    const result = await editSnippet(makeSnippet());
+    // A *refusal*, not a plain Error. The distinction is load-bearing: callers
+    // check it to decide between rendering the explanation and reporting an
+    // exception. Before it, a quota breach was reported to Sentry on every
+    // occurrence carrying localised copy, then displayed as a generic "please try
+    // again" — the limit detail computed and thrown away in the same breath.
+    const error = await editSnippet(makeSnippet()).catch((e: unknown) => e);
 
-    expect(result.ok).toBe(false);
+    expect(isWriteRefusal(error)).toBe(true);
+    if (!isWriteRefusal(error)) throw new Error("expected a refusal");
+    expect(error.userMessage).toContain("117.2 KB");
+    expect(error.userMessage).toContain("97.7 KB");
+    // The banner is a fact about storage, raised here so it stays up.
     expect(state().quotaWarning).toBe(true);
+    // And it is not an exception worth reporting.
+    expect(captureError).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ action: "updateSnippet" })
+    );
+  });
+
+  it("reports a genuine failure rather than treating it as a refusal", async () => {
+    storage.updateSnippet.mockRejectedValue(new Error("network down"));
+
+    const error = await editSnippet(makeSnippet()).catch((e: unknown) => e);
+
+    // Still thrown as a refusal so every caller has one path to handle, but it
+    // *is* reported, because a network failure is not an expected outcome.
+    expect(isWriteRefusal(error)).toBe(true);
+    expect(captureError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ action: "updateSnippet" })
+    );
   });
 });
 
@@ -416,6 +543,7 @@ describe("removeSnippet", () => {
   it("rethrows so the caller cannot report a failure as a success", async () => {
     snippetsStore.setState((prev) => ({ ...prev, snippets: [makeSnippet()] }));
     storage.deleteSnippet.mockRejectedValue(new Error("locked"));
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
 
     await expect(removeSnippet("s1")).rejects.toThrow("locked");
     // The library is untouched: a failed delete must not look like a delete.

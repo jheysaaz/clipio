@@ -446,13 +446,19 @@ export default defineContentScript({
       /**
        * How many `<img>` elements the field held *before* the insertion.
        *
-       * Optional so the two existing call sites keep compiling, but that is a
-       * hazard rather than a convenience: omitting it means "0 before", which
-       * makes any field that already contained an image look like a success. Both
-       * call sites pass it; if a third appears, this signature should be
-       * required rather than defaulted.
+       * Required, not defaulted. The obvious default is `0`, and `0` is exactly
+       * the value that reproduces the bug this parameter exists to fix: a field
+       * already holding one image would count as a gain on every insertion, so a
+       * host that reverted it would be reported as a success and
+       * `reportInsertionReverted` — the only signal that a host is fighting the
+       * extension — would never fire.
+       *
+       * `src/entrypoints/**` is excluded from coverage, so a test cannot catch a
+       * call site that passes the wrong thing. Making the argument mandatory is
+       * the only gate available: a third call site now fails to compile rather
+       * than silently defaulting to the broken value.
        */
-      imagesBeforeInsertion?: number
+      imagesBeforeInsertion: number
     ): Promise<boolean> {
       // `insertionTextMatches` rather than a `textContent` vs `innerText`
       // comparison done here. `textContent` drops line breaks and `innerText`
@@ -463,11 +469,11 @@ export default defineContentScript({
       //
       // Extracted to src/lib/insertion-verification.ts so it is unit-tested; a
       // content script is excluded from coverage.
-      // Sampled *before* the insertion, not here. A host that reverts on a mutation
-      // observer does it before this call, so sampling inside would record the
-      // reverted state as the baseline and every image-only insertion would
-      // look like a success.
-      const imagesBefore = imagesBeforeInsertion ?? 0;
+      // The baseline is sampled by the caller, before the mutation. A host that
+      // reverts on a mutation observer does it before this call, so sampling in
+      // here would record the reverted state as the baseline and every
+      // image-only insertion would look like a success.
+      const imagesBefore = imagesBeforeInsertion;
       if (!plainTextFromHtml(insertedHtml)) {
         // Image-only snippet: verified by whether the field *gained* an image.
         // "Does it contain one?" is not the question — a field that already held
