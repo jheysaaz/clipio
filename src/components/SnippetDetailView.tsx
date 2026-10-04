@@ -66,15 +66,26 @@ export default function SnippetDetailView({
   const hasChanges = editedContent.trim() !== snippet.content || tagsChanged;
 
   const snippetIdRef = useRef(snippet.id);
+
+  // Reset the editor when a *different* snippet is selected. Guarded on the id,
+  // so a same-id content change (e.g. the parent echoing back a save) does not
+  // wipe local edits — and that guard is also why `snippet.content` and
+  // `snippet.tags` can safely be dependencies: when only they change, this
+  // returns immediately.
   useEffect(() => {
-    if (snippetIdRef.current !== snippet.id) {
-      snippetIdRef.current = snippet.id;
-      setEditedContent(snippet.content);
-      setEditedTags(snippet.tags || []);
-      setNewTagInput("");
-      setIsAddingTag(false);
-      setCopied(false);
-    }
+    if (snippetIdRef.current === snippet.id) return;
+    snippetIdRef.current = snippet.id;
+    setEditedContent(snippet.content);
+    setEditedTags(snippet.tags || []);
+    setNewTagInput("");
+    setIsAddingTag(false);
+    setCopied(false);
+  }, [snippet.id, snippet.content, snippet.tags]);
+
+  // Usage count is a separate concern keyed on the id alone. It used to share
+  // the reset effect above, which meant it refetched whenever the body text
+  // changed — an extra storage read per save.
+  useEffect(() => {
     getSnippetUsageCount(snippet.id)
       .then(setUsageCount)
       .catch((err) => {
@@ -82,9 +93,18 @@ export default function SnippetDetailView({
       });
   }, [snippet.id]);
 
+  // `onHasChanges` is reached through a ref instead of being listed as a
+  // dependency. The parent passes an inline arrow, so depending on its identity
+  // would fire this on *every* render — and a parent that sets state in
+  // response would then loop forever.
+  const onHasChangesRef = useRef(onHasChanges);
+  useEffect(() => {
+    onHasChangesRef.current = onHasChanges;
+  }, [onHasChanges]);
+
   // Notify parent when dirty state changes
   useEffect(() => {
-    onHasChanges?.(hasChanges);
+    onHasChangesRef.current?.(hasChanges);
   }, [hasChanges]);
 
   const handleCopy = async () => {

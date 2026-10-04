@@ -404,6 +404,95 @@ describe("SnippetDetailView", () => {
     ).toBeEnabled();
   });
 
+  it("calls the newest onHasChanges, not the one from first render", async () => {
+    const user = userEvent.setup();
+    // Two distinct identities for the same prop, as a parent re-creating an
+    // inline arrow on every render would pass. The component reaches the
+    // callback through a ref, so the *latest* one must be the one invoked.
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = renderView({ onHasChanges: first });
+    await waitFor(() => expect(first).toHaveBeenCalledWith(false));
+
+    rerender(
+      <SnippetDetailView
+        snippet={snippet}
+        onDelete={onDelete}
+        onUpdate={onUpdate}
+        onHasChanges={second}
+        onToggleSidebar={onToggleSidebar}
+      />
+    );
+    second.mockClear();
+
+    await user.click(
+      screen.getByRole("button", { name: /remove "personal"/i })
+    );
+
+    // If the ref went stale, the report would land on the discarded `first`
+    // and the parent would never arm its unsaved-changes guard.
+    await waitFor(() => expect(second).toHaveBeenCalledWith(true));
+    expect(first).not.toHaveBeenCalledWith(true);
+  });
+
+  it("does not re-report dirty state when only the callback identity changes", async () => {
+    // The other half of the ref indirection, and the reason it exists.
+    // Satisfying `react-hooks/exhaustive-deps` the obvious way — putting
+    // `onHasChanges` straight into the dependency array — makes this component
+    // report once per parent render, because an inline arrow has a fresh
+    // identity every time. A parent that setState in response would then spin.
+    //
+    // This test fails under that fix, which is the point of writing it.
+    const parent = vi.fn();
+    const { rerender } = renderView({ onHasChanges: parent });
+    await waitFor(() => expect(parent).toHaveBeenCalledTimes(1));
+    parent.mockClear();
+
+    // Identical snippet and identical dirty state; only a new function identity.
+    const replacement = vi.fn();
+    rerender(
+      <SnippetDetailView
+        snippet={snippet}
+        onDelete={onDelete}
+        onUpdate={onUpdate}
+        onHasChanges={replacement}
+        onToggleSidebar={onToggleSidebar}
+      />
+    );
+
+    // Asserted on the *new* callback, not the original. The dirty state never
+    // changed, so a correct component reports nothing; one that re-ran on
+    // identity churn would call this immediately with `false`.
+    expect(replacement).not.toHaveBeenCalled();
+    expect(parent).not.toHaveBeenCalled();
+  });
+
+  it("does not refetch the usage count when only the content changes", async () => {
+    // The reset effect and the usage-count read are keyed on different things.
+    // Sharing one effect meant a same-id content change — the parent echoing a
+    // save back — refetched the count for a snippet whose count cannot have
+    // moved. Pinned because the two effects are easy to merge back together.
+    const edited: Snippet = { ...snippet, content: "999 Real Street" };
+    const { rerender } = renderView();
+    await waitFor(() => expect(getSnippetUsageCount).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <SnippetDetailView
+        snippet={edited}
+        onDelete={onDelete}
+        onUpdate={onUpdate}
+        onHasChanges={onHasChanges}
+        onToggleSidebar={onToggleSidebar}
+      />
+    );
+
+    // Proof the rerender actually landed, so the count assertion below cannot
+    // pass vacuously: the id guard kept the *old* body in local state, so the
+    // component now correctly reports itself dirty against the new prop.
+    await waitFor(() => expect(onHasChanges).toHaveBeenCalledWith(true));
+    expect(getSnippetUsageCount).toHaveBeenCalledTimes(1);
+  });
+
   // --- copy ------------------------------------------------------------
 
   it("increments the usage count after a successful copy", async () => {
