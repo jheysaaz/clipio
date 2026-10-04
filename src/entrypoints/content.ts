@@ -50,7 +50,9 @@ import {
 } from "@/lib/protocol";
 import { buildGifUrl } from "@/lib/giphy";
 import {
+  imageCountGained,
   insertionTextMatches,
+  isImageOnlyMarkup,
   plainTextFromHtml,
 } from "@/lib/insertion-verification";
 import {
@@ -440,7 +442,17 @@ export default defineContentScript({
     // Plain text from HTML for contenteditable verification
     function verifyInsertionSuccessForContentEditable(
       element: HTMLElement,
-      insertedHtml: string
+      insertedHtml: string,
+      /**
+       * How many `<img>` elements the field held *before* the insertion.
+       *
+       * Optional so the two existing call sites keep compiling, but that is a
+       * hazard rather than a convenience: omitting it means "0 before", which
+       * makes any field that already contained an image look like a success. Both
+       * call sites pass it; if a third appears, this signature should be
+       * required rather than defaulted.
+       */
+      imagesBeforeInsertion?: number
     ): Promise<boolean> {
       // `insertionTextMatches` rather than a `textContent` vs `innerText`
       // comparison done here. `textContent` drops line breaks and `innerText`
@@ -451,14 +463,27 @@ export default defineContentScript({
       //
       // Extracted to src/lib/insertion-verification.ts so it is unit-tested; a
       // content script is excluded from coverage.
+      // Sampled *before* the insertion, not here. A host that reverts on a mutation
+      // observer does it before this call, so sampling inside would record the
+      // reverted state as the baseline and every image-only insertion would
+      // look like a success.
+      const imagesBefore = imagesBeforeInsertion ?? 0;
       if (!plainTextFromHtml(insertedHtml)) {
-        // Image-only snippet: verify by checking whether the element gained
-        // at least one <img> element after the insertion.
-        if (/<img/i.test(insertedHtml)) {
+        // Image-only snippet: verified by whether the field *gained* an image.
+        // "Does it contain one?" is not the question — a field that already held
+        // a logo answers yes before anything is inserted, so a reverted
+        // insertion looked like a success and `reportInsertionReverted` — the
+        // only signal that a host is fighting us — never fired.
+        if (isImageOnlyMarkup(insertedHtml)) {
           return new Promise((resolve) => {
             requestAnimationFrame(() => {
               requestAnimationFrame(() => {
-                resolve(element.querySelectorAll("img").length > 0);
+                resolve(
+                  imageCountGained(
+                    imagesBefore,
+                    element.querySelectorAll("img").length
+                  )
+                );
               });
             });
           });
@@ -677,6 +702,9 @@ export default defineContentScript({
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = processedContent;
 
+      // The image baseline for an image-only snippet, taken before any node moves.
+      const imagesBefore = element.querySelectorAll("img").length;
+
       // Locate the cursor marker inside tempDiv BEFORE moving nodes into the
       // fragment — this scopes the lookup to the current insertion only and
       // prevents picking up a stale marker left by a previous expansion.
@@ -719,7 +747,8 @@ export default defineContentScript({
 
       const insertionStuck = await verifyInsertionSuccessForContentEditable(
         element,
-        processedContent
+        processedContent,
+        imagesBefore
       );
       debugLog("expand:done", {
         shortcut: snippet.shortcut,
@@ -1142,6 +1171,9 @@ export default defineContentScript({
         const tempDiv = document.createElement("div");
         tempDiv.innerHTML = processedContent;
 
+        // The image baseline for an image-only snippet, before any node moves.
+        const imagesBefore = element.querySelectorAll("img").length;
+
         // Locate the cursor marker BEFORE moving nodes into the fragment so the
         // lookup is scoped to the current insertion only.
         const cursorMarker = tempDiv.querySelector(
@@ -1216,7 +1248,8 @@ export default defineContentScript({
 
         const insertionStuck = await verifyInsertionSuccessForContentEditable(
           element,
-          processedContent
+          processedContent,
+          imagesBefore
         );
         if (!insertionStuck) {
           reportInsertionReverted("contenteditable");

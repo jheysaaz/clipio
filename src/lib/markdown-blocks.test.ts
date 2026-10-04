@@ -225,8 +225,20 @@ describe("blank lines between blocks", () => {
     );
   });
 
-  it("still breaks between two non-block lines with a blank between", () => {
-    expect(markdownToHtmlWithBlocks("one\n\ntwo")).toBe("one<br>two");
+  it("does not treat a whitespace-only line as blank", () => {
+    // The half-applied version of this fix: only a literally empty part was
+    // skipped, so a line holding a space or a tab still put a `<br>` next to the
+    // block, plus a stray whitespace text node in the user's document.
+    expect(markdownToHtmlWithBlocks("# H\n \nbody")).toBe("<h1>H</h1>body");
+    expect(markdownToHtmlWithBlocks("# H\n\t\nbody")).toBe("<h1>H</h1>body");
+    expect(markdownToHtmlWithBlocks("body\n \n# H")).toBe("body<h1>H</h1>");
+  });
+
+  it("keeps a blank line between two plain lines", () => {
+    // The other half. Away from a block a blank line is content — the paragraph
+    // break the user typed. Dropping it collapsed their spacing, which is a
+    // regression rather than a fix.
+    expect(markdownToHtmlWithBlocks("one\n\ntwo")).toBe("one<br><br>two");
   });
 
   it("drops leading and trailing blank lines", () => {
@@ -249,9 +261,28 @@ describe("fenced code closing", () => {
     expect(html.endsWith("</code></pre>")).toBe(true);
   });
 
-  it("does not close on a longer marker of a different character", () => {
-    const html = markdownToHtmlWithBlocks("```\n~~~ is not a fence\n```");
-    expect(html).toContain("~~~ is not a fence");
+  it("does not close on a marker of a different character", () => {
+    // A ~-delimited fence is not closed by ``` and vice versa.
+    //
+    // Shaped so this actually discriminates. `startsWith` happened to get it right,
+    // and an implementation that checks only the marker *length* closes on these —
+    // so the body marker is longer than the opener, and a line of real code
+    // follows it. Without that trailing line both implementations produce the same
+    // string and the test proves nothing. The previous version of this fixture had
+    // exactly that problem.
+    expect(markdownToHtmlWithBlocks("```\n~~~~\nstill code\n```")).toBe(
+      "<pre><code>~~~~\nstill code</code></pre>"
+    );
+    expect(markdownToHtmlWithBlocks("~~~\n````\nstill code\n~~~")).toBe(
+      "<pre><code>````\nstill code</code></pre>"
+    );
+  });
+
+  it("does not close on a shorter marker of the same character", () => {
+    // CommonMark: the closing fence must be at least as long as the opener.
+    expect(markdownToHtmlWithBlocks("````\n```\ninner\n```\n````")).toBe(
+      "<pre><code>```\ninner\n```</code></pre>"
+    );
   });
 
   it("closes on a longer marker of the same character", () => {
@@ -263,5 +294,105 @@ describe("fenced code closing", () => {
     const html = markdownToHtmlWithBlocks("```\nnever closed\n**bold**");
     expect(html).toContain("**bold**");
     expect(html).toBe("<pre><code>never closed\n**bold**</code></pre>");
+  });
+});
+
+describe("line endings", () => {
+  /**
+   * Every block construct, checked against CRLF.
+   *
+   * A CRLF line ended in `\r`, and every pattern here ends in `$` while JS `.`
+   * does not match `\r` — so a CRLF heading matched *nothing* and rendered as the
+   * literal text `# H` plus a stray carriage return. Worse, a CRLF list demoted
+   * its first item out of the list, so the user's own bullet became visible text.
+   * The whole suite was green because every fixture used `\n`.
+   *
+   * Parity against the `\n` form is the assertion, rather than a handful of
+   * expected strings: it holds for constructs added later without anyone
+   * remembering to write a second fixture.
+   */
+  const CONSTRUCTS: [string, string][] = [
+    ["heading", "# Heading\n\nbody"],
+    ["bullet list", "- one\n- two"],
+    ["star list", "* one\n* two"],
+    ["plus list", "+ one\n+ two"],
+    ["ordered list", "1. one\n2. two"],
+    ["ordered, paren", "1) one\n2) two"],
+    ["blockquote", "> quoted"],
+    ["two-line quote", "> one\n> two"],
+    ["fenced code", "```js\ncode\n```"],
+    ["tilde fence", "~~~\ncode\n~~~"],
+    ["mixed", "intro\n\n# H\n\n- a\n- b\n\n> q\n\noutro"],
+    ["plain lines", "one\ntwo\nthree"],
+    ["blank between plain", "one\n\ntwo"],
+  ];
+
+  for (const [name, lf] of CONSTRUCTS) {
+    it(`renders ${name} identically from CRLF`, () => {
+      expect(markdownToHtmlWithBlocks(lf.replace(/\n/g, "\r\n"))).toBe(
+        markdownToHtmlWithBlocks(lf)
+      );
+    });
+  }
+
+  it("renders a CRLF bullet list as a list, not as literal text", () => {
+    // The damaging case, asserted directly: the first item must be inside the
+    // <ul>, or the user's own bullet character reaches their document.
+    const html = markdownToHtmlWithBlocks("- one\r\n- two");
+    expect(html).toBe("<ul><li>one</li><li>two</li></ul>");
+  });
+
+  it("normalises a lone CR", () => {
+    // Old Mac line endings. Rare, but free to handle and the same defect.
+    expect(markdownToHtmlWithBlocks("# H\rbody")).toBe(
+      markdownToHtmlWithBlocks("# H\nbody")
+    );
+  });
+});
+
+describe("block boundaries never take a stray <br>", () => {
+  /**
+   * `isBlockElement` is module-private, so it cannot be tested directly — and its
+   * failure mode is a stray `<br>` in the user's field, which is exactly the kind
+   * of drift nobody notices until a user screenshots it.
+   *
+   * So it is pinned through the public function instead, over *every* construct
+   * the renderer can emit rather than just the heading. Adding a new block type
+   * without adding it to `isBlockElement` fails here.
+   */
+  const WITH_BEFORE: [string, string][] = [
+    ["heading", "# H\nafter"],
+    ["bullet list", "- a\nafter"],
+    ["ordered list", "1. a\nafter"],
+    ["blockquote", "> q\nafter"],
+    ["fenced code", "```\ncode\n```\nafter"],
+  ];
+  const WITH_AFTER: [string, string][] = [
+    ["heading", "before\n# H"],
+    ["bullet list", "before\n- a"],
+    ["ordered list", "before\n1. a"],
+    ["blockquote", "before\n> q"],
+    ["fenced code", "before\n```\ncode\n```"],
+  ];
+
+  for (const [name, input] of WITH_BEFORE) {
+    it(`does not put a <br> after a ${name}`, () => {
+      // Asserted through the whole output rather than by searching for
+      // `</h1><br>`: the block may close with any of five tags, and a check that
+      // only names one of them would pass while the other four drifted.
+      expect(markdownToHtmlWithBlocks(input)).not.toContain("<br>");
+    });
+  }
+
+  for (const [name, input] of WITH_AFTER) {
+    it(`does not put a <br> before a ${name}`, () => {
+      expect(markdownToHtmlWithBlocks(input)).not.toContain("<br>");
+    });
+  }
+
+  it("still breaks between two plain lines", () => {
+    // The control. Without it, "no <br>" would be satisfied by a renderer that
+    // dropped every line break — the opposite defect.
+    expect(markdownToHtmlWithBlocks("one\ntwo")).toBe("one<br>two");
   });
 });

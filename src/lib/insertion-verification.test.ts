@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  imageCountGained,
   insertionTextMatches,
+  isImageOnlyMarkup,
   normaliseForComparison,
   plainTextFromHtml,
 } from "./insertion-verification";
@@ -129,6 +131,37 @@ describe("insertionTextMatches", () => {
     expect(insertionTextMatches("<p>hello world</p>", "hello")).toBe(false);
   });
 
+  it("does not match a host that flattened the list to marker characters", () => {
+    // The limit of the safety property, pinned rather than left implicit.
+    //
+    // On the inserted-HTML side an unmodelled construct can only cause a false
+    // positive. The *field* side has no such guarantee: the argument is whatever
+    // `innerText` returned, from a host this code does not control. A rich editor
+    // that pasted a list as `• one\n• two` as real characters would reproduce
+    // exactly the failure the list-marker bug caused — confetti dead, and Sentry
+    // told a successful insertion had been reverted.
+    //
+    // No such host is known, so this is not a bug. Asserting it means the
+    // behaviour is written down: if a real one turns up, this test is the place
+    // that has to change, and the change is a deliberate one rather than an
+    // accident.
+    expect(
+      insertionTextMatches("<ul><li>one</li><li>two</li></ul>", "• one\n• two")
+    ).toBe(false);
+    expect(
+      insertionTextMatches(
+        "<ol><li>one</li><li>two</li></ol>",
+        "1. one\n2. two"
+      )
+    ).toBe(false);
+    // The same construct with no markers is what every host we know produces,
+    // and it does match — so the failures above are about markers specifically,
+    // not about lists.
+    expect(
+      insertionTextMatches("<ul><li>one</li><li>two</li></ul>", "one\ntwo")
+    ).toBe(true);
+  });
+
   it("returns false for markup with no text, so the caller can check images", () => {
     expect(insertionTextMatches('<img src="a.png">', "anything")).toBe(false);
   });
@@ -138,5 +171,49 @@ describe("insertionTextMatches", () => {
     expect(
       insertionTextMatches("<p>inserted</p>", "existing text inserted more")
     ).toBe(true);
+  });
+});
+
+describe("imageCountGained", () => {
+  it("is true when the field gained an image", () => {
+    expect(imageCountGained(0, 1)).toBe(true);
+  });
+
+  it("is false when the count is unchanged", () => {
+    // The bug. "Does the field contain an image?" — asked *after* the insertion —
+    // answered yes for a draft that already held a logo or a signature, so a host
+    // that reverted the insertion was reported as a success. Confetti firing is
+    // the harmless half; the other half is that `reportInsertionReverted` is the
+    // only signal that a host is fighting the extension, and a check that cannot
+    // fail goes quiet exactly when it is needed.
+    expect(imageCountGained(1, 1)).toBe(false);
+  });
+
+  it("is false when the count went down", () => {
+    // A host that replaced the field rather than inserting into it.
+    expect(imageCountGained(3, 0)).toBe(false);
+  });
+
+  it("is true when it gained more than one", () => {
+    expect(imageCountGained(1, 4)).toBe(true);
+  });
+});
+
+describe("isImageOnlyMarkup", () => {
+  it("recognises an image with no text", () => {
+    expect(isImageOnlyMarkup('<img src="a.png">')).toBe(true);
+    expect(isImageOnlyMarkup('<img src="a.png" alt="ignored">')).toBe(true);
+  });
+
+  it("rejects markup with both text and an image", () => {
+    // Verified by text, not by counting: the caption is the check.
+    expect(isImageOnlyMarkup('<img src="a.png">a caption')).toBe(false);
+  });
+
+  it("rejects markup with neither", () => {
+    // The distinction that matters: no text and no image means there is nothing
+    // to insert, and no count will ever find an insertion that was not made.
+    expect(isImageOnlyMarkup("")).toBe(false);
+    expect(isImageOnlyMarkup("<p></p>")).toBe(false);
   });
 });

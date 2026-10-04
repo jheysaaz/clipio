@@ -51,7 +51,20 @@ const CLOSING_FENCE_RE = /^(`{3,}|~{3,})\s*$/;
 export function markdownToHtmlWithBlocks(content: string): string {
   if (!content) return "";
 
-  const lines = content.split("\n");
+  // ── Normalise line endings ────────────────────────────────────────────────
+  //
+  // Done first, and not optionally. Every pattern below ends in `$`, and JS `.`
+  // does not match `\r`, so a CRLF line did not match *anything*: `# H\r\n` was
+  // not a heading, `- a\r\n` was not a list item. The failure was silent and
+  // destructive rather than merely wrong — `"# H\r\n\r\nbody"` rendered as the
+  // literal text `# H` plus two stray carriage returns, and `"- a\r\n- b"`
+  // demoted the *first* item out of the list, so the user's own bullet became
+  // visible text. Nothing failed; every test was green because every fixture
+  // used `\n`.
+  //
+  // A Windows user, or any importer or HTML export that yields CRLF, hits this on
+  // their first pasted snippet. The spec requires the normalisation too.
+  const lines = content.replace(/\r\n?/g, "\n").split("\n");
   const out: string[] = [];
   let i = 0;
 
@@ -150,6 +163,30 @@ export function markdownToHtmlWithBlocks(content: string): string {
  * after it. `startsWith(marker)` was wrong on both counts: it closed on a body
  * line that merely began with backticks followed by an info string, which
  * truncated the block and let the remainder render as live markdown.
+ *
+ * ── The trade this makes ────────────────────────────────────────────────────
+ *
+ * Requiring a bare marker means a snippet that *annotates* its closing fence —
+ *
+ *     ```js
+ *     code
+ *     ``` // done
+ *
+ *     # Notes
+ *
+ * — no longer closes there. Everything after it is absorbed into the `<pre>` and
+ * renders as literal code, where before it rendered as a heading. That is a real
+ * removal, not a free win, and it is the CommonMark behaviour: GitHub and every
+ * other renderer treat a trailing info string as body text too.
+ *
+ * The alternative is worse in the common case. Inside a code block, a line that
+ * begins with backticks is far more likely to be the code itself than a fence
+ * with a comment on it — ``` ```js… ``` ``` is ordinary JavaScript. Closing
+ * eagerly on it truncates the block and re-renders the remainder as live
+ * markdown, which mangles the user's snippet instead of merely reflowing it.
+ *
+ * `markdown-blocks.test.ts` pins both directions, so this is a recorded choice
+ * rather than an accident waiting to be "fixed" the other way.
  */
 function closesFence(line: string, marker: string): boolean {
   const m = CLOSING_FENCE_RE.exec(line.trim());
@@ -159,6 +196,36 @@ function closesFence(line: string, marker: string): boolean {
 }
 
 function joinWithBreaks(parts: string[]): string {
+  // A whitespace-only line is dropped at a block boundary or at the edge of the
+  // document, and kept between two plain lines.
+  //
+  // Adjacent to a block it is not content. `</h1>` already ends the line, so
+  // keeping it puts a `<br>` — which renders as a visible blank line — after the
+  // heading, plus a stray whitespace text node in the user's document. Away from
+  // a block it *is* content: `one`, blank, `two` is a paragraph break the user
+  // typed, and dropping it collapsed their spacing. The earlier version skipped
+  // every empty part unconditionally, which fixed the first case and broke the
+  // second. Nor is a blank part *exactly* empty in general — a line holding a
+  // space, a tab or a stray `\r` is blank too, and the earlier fix tested
+  // `part === ""`, so the defect it removed was still reachable by the most
+  // likely whitespace a user will actually have.
+  // When the snippet is *entirely* whitespace, keep it. Dropping blank parts is a
+  // rule about spacing between real content; applied to a document with no
+  // content it would silently turn `"   "` into `""`, and the parity suite
+  // against `markdownToHtml` — which preserves it — is what caught that.
+  const hasContent = parts.some((part) => part.trim() !== "");
+  const kept = hasContent
+    ? parts.filter((part, index) => {
+        if (part.trim() !== "") return true;
+        const before = nearestNonBlank(parts, index, -1);
+        const after = nearestNonBlank(parts, index, +1);
+        // An empty `nearestNonBlank` means there is nothing but blank on that
+        // side, so this is document padding rather than a paragraph break.
+        if (before === "" || after === "") return false;
+        return !(isBlockElement(before) || isBlockElement(after));
+      })
+    : parts;
+
   let result = "";
   // The *previous part*, not the accumulated string. Testing the accumulated
   // string looks right for a document that starts with a block and is wrong for
@@ -166,12 +233,7 @@ function joinWithBreaks(parts: string[]): string {
   // "intro", so the heading that just closed was never seen as a block and a
   // `<br>` landed after `</h1>`.
   let previous = "";
-  for (const part of parts) {
-    // A blank source line contributes an empty part. Left in, it is not a block,
-    // so the guard below put a `<br>` next to whichever block bordered it —
-    // `<h1>H</h1><br><p>body</p>`, which renders as a stray blank line. The line
-    // break a blank line means is already implied by the block boundary.
-    if (part === "") continue;
+  for (const part of kept) {
     if (result === "") {
       result = part;
       previous = part;
@@ -185,6 +247,14 @@ function joinWithBreaks(parts: string[]): string {
     previous = part;
   }
   return result;
+}
+
+/** The closest part with something on it, scanning outward from `index`. */
+function nearestNonBlank(parts: string[], index: number, step: number): string {
+  for (let i = index + step; i >= 0 && i < parts.length; i += step) {
+    if (parts[i].trim() !== "") return parts[i];
+  }
+  return "";
 }
 
 function isBlockElement(html: string): boolean {

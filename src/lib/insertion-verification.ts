@@ -35,10 +35,22 @@
  *
  * Deliberately not a spec-complete HTML renderer. It handles the block and line
  * break elements Clipio can emit, and the comparison below is whitespace-
- * normalised, so a construct it does not model can only cause a false
- * *positive* — reporting a reverted insertion as a success, which is the safe
- * direction to fail. Getting one wrong in the other direction is what the list
- * marker above was.
+ * normalised.
+ *
+ * **The scope of the safety property, stated exactly.** For the *inserted HTML*
+ * side, a construct this does not model can only cause a false positive —
+ * reporting a reverted insertion as a success. That is the direction to fail:
+ * confetti fires once on a real revert, and no report goes to Sentry. Getting one
+ * wrong the other way is what the list marker above was.
+ *
+ * The *field* side has no such guarantee, and cannot: the argument is whatever
+ * `innerText` returned, from a host application this code does not control. A
+ * rich editor that flattened a pasted list to `• one\n• two` as literal
+ * characters would produce the same confetti-stops-firing-and-Sentry-hears-a-
+ * phantom-revert failure the marker bug did. No such host is known, and this
+ * cannot be fixed here — but the limit is written down so the next reader does
+ * not inherit the claim as if it were symmetric. `insertion-verification.test.ts`
+ * pins the behaviour on a marker-bearing field value for the same reason.
  */
 const BLOCK_TAGS =
   "p|div|li|ul|ol|h[1-6]|blockquote|pre|table|thead|tbody|tfoot|tr|section|article|figure|hr|dl|dt|dd";
@@ -123,6 +135,39 @@ export function normaliseForComparison(text: string): string {
  * Returns `false` for markup with no text at all — an image-only snippet, which
  * has to be verified by counting `<img>` elements instead.
  */
+/**
+ * Whether an insertion that carries no text actually landed.
+ *
+ * An image-only snippet has no text to look for, so the check falls back to
+ * counting `<img>` elements — and it has to compare a *count before* against a
+ * count after. "Does the field contain an image?" is not the question: a draft
+ * that already held a logo or a signature answers yes before anything is
+ * inserted, so a host that reverted the insertion still looked like a success.
+ * Confetti firing is the harmless half of that. The other half is that
+ * `reportInsertionReverted` is the only signal that a host is fighting the
+ * extension, and a check that cannot fail goes silent exactly when it is needed.
+ *
+ * Separate counts rather than a boolean, because the caller samples the "before"
+ * synchronously *before* inserting and the "after" two frames later — and that
+ * gap is the whole point: a host that reverts on a mutation observer does it in
+ * between.
+ */
+export function imageCountGained(before: number, after: number): boolean {
+  return after > before;
+}
+
+/**
+ * Whether a snippet's markup is an image with no accompanying text.
+ *
+ * The branch in `insertionTextMatches` that returns `false` for empty text has
+ * to be distinguishable from "no text *and* no image": the first is an image-only
+ * snippet, verified by counting; the second is nothing at all, and no amount of
+ * counting will find an insertion that was never made.
+ */
+export function isImageOnlyMarkup(html: string): boolean {
+  return plainTextFromHtml(html) === "" && /<img/i.test(html);
+}
+
 export function insertionTextMatches(
   insertedHtml: string,
   actualFieldText: string
