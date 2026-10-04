@@ -7,6 +7,7 @@ import {
   lazy,
   Suspense,
 } from "react";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { i18n } from "#i18n";
 import {
   Plus,
@@ -53,6 +54,12 @@ import {
 import { captureError } from "@/lib/sentry";
 import { selectNewest } from "@/lib/snippet-utils";
 import { openReleasePage } from "@/lib/update-checker";
+import {
+  LIST_ROUTE,
+  NEW_ROUTE,
+  SNIPPET_ROUTE,
+  viewFromPath,
+} from "@/routes/popup";
 
 const CONTEXT_MENU_DRAFT_SESSION_KEY = "__clipioContextMenuDraft__";
 
@@ -99,8 +106,39 @@ function quotaMessage(error: StorageQuotaError): string {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+
+  // Which snippet is selected, and whether the create form is open, are now the
+  // URL. That is what gives a selection an address: a future "open this specific
+  // snippet" — a context-menu entry, a notification, a keyboard shortcut — builds
+  // a location instead of inventing a side channel.
+  //
+  // `replace`, never `push`. The popup closes on blur, so a history entry is
+  // something the user can never use; growing `history.length` would only make a
+  // stray Back press worse.
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const view = viewFromPath(pathname);
+  const isCreating = view.kind === "new";
+  const selectedSnippetId = view.kind === "snippet" ? view.id : null;
+
+  const selectSnippet = useCallback(
+    (id: string) => {
+      void navigate({
+        to: SNIPPET_ROUTE,
+        params: { snippetId: id },
+        replace: true,
+      });
+    },
+    [navigate]
+  );
+  const showList = useCallback(() => {
+    void navigate({ to: LIST_ROUTE, replace: true });
+  }, [navigate]);
+  const startCreating = useCallback(() => {
+    void navigate({ to: NEW_ROUTE, replace: true });
+  }, [navigate]);
+
   const [searchQuery, setSearchQuery] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
   const [draftSnippet, setDraftSnippet] = useState<SnippetFormData>({
     label: "",
     shortcut: "",
@@ -109,7 +147,19 @@ export default function Dashboard() {
   });
   const [isSaving, setIsSaving] = useState(false);
   const [snippets, setSnippets] = useState<Snippet[]>([]);
-  const [selectedSnippet, setSelectedSnippet] = useState<Snippet | null>(null);
+  /**
+   * The selected snippet, looked up from the list.
+   *
+   * Derived rather than stored: the route holds the *id*, and the object lives in
+   * `snippets`. Storing both meant two sources of truth, and an edit to the
+   * selected snippet had to be written back into a copy or the detail pane would
+   * keep rendering the pre-edit version.
+   */
+  const selectedSnippet: Snippet | null = useMemo(
+    () => snippets.find((s) => s.id === selectedSnippetId) ?? null,
+    [snippets, selectedSnippetId]
+  );
+
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(240);
@@ -193,7 +243,6 @@ export default function Dashboard() {
         setLoading(true);
         const list = await getSnippets();
         setSnippets(list);
-        setSelectedSnippet(selectNewest(list));
 
         // Check if we're already in local-fallback mode
         const status = await getStorageStatus();
@@ -236,8 +285,7 @@ export default function Dashboard() {
             content: draft,
             tags: [],
           });
-          setSelectedSnippet(null);
-          setIsCreating(true);
+          startCreating();
           return;
         }
 
@@ -259,8 +307,7 @@ export default function Dashboard() {
             content: sessionDraft,
             tags: [],
           });
-          setSelectedSnippet(null);
-          setIsCreating(true);
+          startCreating();
         }
       } catch (err) {
         console.error("[Clipio] Failed to read context-menu draft:", err);
@@ -307,20 +354,42 @@ export default function Dashboard() {
     })();
   }, []);
 
+  /**
+   * Land on something when the URL does not already say what to show.
+   *
+   * A deep link like `#/snippet/abc` is a request for *that* snippet.
+   * Auto-selecting the newest regardless would make every deep link open the
+   * same snippet whatever its id — a link that looks right and is wrong, which is
+   * worse than no link.
+   *
+   * Kept separate from loading, and keyed on the live address, because the router
+   * may not have resolved the location by the time snippets arrive: a snapshot
+   * taken during the load effect would still read "no snippet addressed" and
+   * overrule the deep link.
+   */
+  const autoSelected = useRef(false);
+  useEffect(() => {
+    if (selectedSnippetId) return;
+    if (autoSelected.current || snippets.length === 0) return;
+    autoSelected.current = true;
+    const newest = selectNewest(snippets);
+    if (newest) selectSnippet(newest.id);
+  }, [snippets, selectedSnippetId, selectSnippet]);
+
   // -------------------------------------------------------------------------
   // CRUD helpers
   // -------------------------------------------------------------------------
 
   const handleAddSnippet = () => {
     setDraftSnippet({ label: "", shortcut: "/", content: "", tags: [] });
-    setSelectedSnippet(null);
-    setIsCreating(true);
+    startCreating();
   };
 
   const handleCancelCreate = () => {
-    setIsCreating(false);
     setDraftSnippet({ label: "", shortcut: "/", content: "", tags: [] });
-    setSelectedSnippet(selectNewest(snippets));
+    const newest = selectNewest(snippets);
+    if (newest) selectSnippet(newest.id);
+    else showList();
   };
 
   const handleSaveNewSnippet = async () => {
@@ -336,8 +405,9 @@ export default function Dashboard() {
       const newSnippet = createSnippet(draftSnippet);
       await saveSnippet(newSnippet);
       setSnippets((prev) => [...prev, newSnippet]);
-      setSelectedSnippet(newSnippet);
-      setIsCreating(false);
+      // Address the new snippet rather than only showing it: the id is now in the
+      // URL, so "copy link to this snippet" needs no work to start working.
+      selectSnippet(newSnippet.id);
       setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
       toast.success(i18n.t("dashboard.toast.snippetSaved"));
     } catch (err) {
@@ -372,8 +442,12 @@ export default function Dashboard() {
       await deleteSnippet(snippetId);
       const newList = snippets.filter((s) => s.id !== snippetId);
       setSnippets(newList);
-      if (selectedSnippet?.id === snippetId) {
-        setSelectedSnippet(selectNewest(newList));
+      // Deleting the addressed snippet has to move the address too, or the URL
+      // would keep pointing at something that no longer exists.
+      if (selectedSnippetId === snippetId) {
+        const newest = selectNewest(newList);
+        if (newest) selectSnippet(newest.id);
+        else showList();
       }
       toast.success(i18n.t("dashboard.toast.snippetDeleted"));
     } catch (err) {
@@ -389,7 +463,6 @@ export default function Dashboard() {
       setSnippets((prev) =>
         prev.map((s) => (s.id === updated.id ? updated : s))
       );
-      if (selectedSnippet?.id === updated.id) setSelectedSnippet(updated);
       toast.success(i18n.t("dashboard.toast.snippetUpdated"));
     } catch (err) {
       console.error("[Clipio] Failed to update snippet:", err);
@@ -440,7 +513,7 @@ export default function Dashboard() {
       }
 
       if (newIndex !== currentIndex && newIndex >= 0) {
-        setSelectedSnippet(filteredSnippets[newIndex]);
+        selectSnippet(filteredSnippets[newIndex].id);
       }
     },
     [filteredSnippets, selectedSnippet, isCreating]
@@ -485,7 +558,8 @@ export default function Dashboard() {
                 await bulkSaveSnippets(recoverySnippets);
                 const list = await getSnippets();
                 setSnippets(list);
-                setSelectedSnippet(selectNewest(list));
+                const newest = selectNewest(list);
+                if (newest) selectSnippet(newest.id);
                 setShowRecoveryBanner(false);
               } catch (err) {
                 console.error("[Clipio] Recovery failed:", err);
@@ -703,7 +777,6 @@ export default function Dashboard() {
                           return;
                         }
                         if (isCreating) {
-                          setIsCreating(false);
                           setDraftSnippet({
                             label: "",
                             shortcut: "",
@@ -711,7 +784,7 @@ export default function Dashboard() {
                             tags: [],
                           });
                         }
-                        setSelectedSnippet(target);
+                        selectSnippet(target.id);
                       }}
                       onUpdate={handleUpdateSnippet}
                     />
@@ -918,7 +991,7 @@ export default function Dashboard() {
         onConfirm={() => {
           if (pendingSnippet) {
             detailHasChanges.current = false;
-            setSelectedSnippet(pendingSnippet);
+            selectSnippet(pendingSnippet.id);
             setPendingSnippet(null);
           }
         }}

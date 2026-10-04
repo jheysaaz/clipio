@@ -2,11 +2,12 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { ErrorBoundary } from "@sentry/react";
 import "~/app.css";
-import Dashboard from "@/pages/Dashboard";
+import { RouterProvider, createRouter } from "@tanstack/react-router";
 // Importing the settings store for its side effects: it loads the persisted
 // theme and font from storage and paints <html> on import. That replaces the
 // FontProvider + ThemeProvider pair this tree used to be wrapped in — there is no
 // provider to wrap in any more.
+import { popupHistory, popupRouteTree } from "@/routes/popup";
 import "@/state/settings";
 import { initSentry, captureError } from "@/lib/sentry";
 import { Toaster } from "@/components/ui/toaster";
@@ -29,13 +30,18 @@ function ErrorFallback() {
   );
 }
 
+const router = createRouter({
+  routeTree: popupRouteTree,
+  history: popupHistory,
+});
+
 function App() {
   return (
     <ErrorBoundary
       fallback={<ErrorFallback />}
       onError={(error) => captureError(error, { action: "ReactErrorBoundary" })}
     >
-      <Dashboard />
+      <RouterProvider router={router} />
       <Toaster />
     </ErrorBoundary>
   );

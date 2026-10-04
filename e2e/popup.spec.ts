@@ -62,6 +62,98 @@ async function seedAndReload(
 // Tests
 // ---------------------------------------------------------------------------
 
+test.describe("Popup routing", () => {
+  test("deep-linking a snippet id selects that snippet", async ({
+    popupPage,
+    extensionId,
+  }) => {
+    // The case that decided the routing: a selection has an address, so a future
+    // "open this specific snippet" — a context-menu entry, a notification, a
+    // keyboard shortcut — builds a location instead of inventing a side channel.
+    const target = makeSnippet({ label: "Deep link target", shortcut: ";dl" });
+
+    // Navigate first, then seed: the reload inside `seedAndReload` keeps the hash,
+    // so this exercises the path a real deep link takes — a cold open at that URL.
+    await popupPage.goto(
+      `chrome-extension://${extensionId}/popup.html#/snippet/${target.id}`
+    );
+    await seedAndReload(popupPage, [target]);
+
+    // Regex rather than the full URL: the extension id differs per run, and
+    // asserting on it would make this test about the harness.
+    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${target.id}$`));
+
+    // `aria-activedescendant` is the assertion that matters: it names which option
+    // in the list is selected. Not the label input — that lives in the *create*
+    // form, so asserting on it would have passed for a popup showing nothing.
+    await expect(popupPage.getByTestId("snippet-list")).toHaveAttribute(
+      "aria-activedescendant",
+      `snippet-${target.id}`
+    );
+    await expect(popupPage.getByTestId("snippet-copy")).toBeVisible();
+  });
+
+  test("never overrules an explicit address with the newest snippet", async ({
+    popupPage,
+    extensionId,
+  }) => {
+    // Two snippets, addressed the older one. Auto-selecting the newest would make
+    // every deep link open the same snippet whatever its id — a link that looks
+    // right and is wrong.
+    const older = makeSnippet({ label: "Addressed", shortcut: ";a" });
+    const newer = makeSnippet({ label: "Newer", shortcut: ";n" });
+    // `updatedAt` decides which is newest, so make it unambiguous.
+    (newer as { updatedAt: string }).updatedAt = "2999-01-01T00:00:00.000Z";
+
+    await popupPage.goto(
+      `chrome-extension://${extensionId}/popup.html#/snippet/${older.id}`
+    );
+    await seedAndReload(popupPage, [older, newer]);
+
+    await expect(popupPage.getByTestId("snippet-list")).toHaveAttribute(
+      "aria-activedescendant",
+      `snippet-${older.id}`
+    );
+  });
+
+  test("keeps the popup's history from growing as the selection changes", async ({
+    popupPage,
+  }) => {
+    // Navigation is `replace` only. The popup closes on blur, so a history entry
+    // is something the user can never use — and a stray Back press would go
+    // somewhere meaningless.
+    await seedAndReload(popupPage, makeSnippets(3));
+
+    const before = await popupPage.evaluate(() => window.history.length);
+    for (let i = 0; i < 2; i++) {
+      await popupPage
+        .locator('[data-testid="snippet-list"] [role="option"]')
+        .nth(i)
+        .click();
+    }
+    const after = await popupPage.evaluate(() => window.history.length);
+
+    expect(after).toBe(before);
+    // The address did change — otherwise the test above would pass trivially.
+    await expect(popupPage).toHaveURL(/#\/snippet\//);
+  });
+
+  test("addressing a newly created snippet moves the URL to it", async ({
+    popupPage,
+  }) => {
+    // "Copy link to this snippet" needs no work to start working, because the id
+    // is in the URL as soon as the snippet exists.
+    await waitForPopupReady(popupPage);
+    await popupPage.getByTestId("add-snippet").click();
+    await popupPage.getByTestId("snippet-label-input").fill("Addressed");
+    await popupPage.getByTestId("snippet-shortcut-input").fill(";ad");
+    await popupPage.locator('[contenteditable="true"]').first().fill("hello");
+    await popupPage.getByTestId("snippet-create-save").click();
+
+    await expect(popupPage).toHaveURL(/#\/snippet\//);
+  });
+});
+
 test.describe("Popup (Dashboard)", () => {
   test("creates new snippet via form", async ({ popupPage }) => {
     await popupPage.evaluate(async () => {
