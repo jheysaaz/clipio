@@ -90,4 +90,11 @@ Three layers, and each is chosen for what it can actually prove.
 that the content script is actually injected, that `storage.sync` behaves under a
 real extension origin, that data survives a restart, and that messages cross
 genuinely separate JS contexts. Everything else is a unit test — faster, cheaper,
-and they fail more precisely.
+and they fail more precisely. The rule and the 153 → 31 classification behind it
+are in [0006](./decisions/0006-e2e-only-what-needs-a-browser.md).
+
+**There are no spec files.** A test that can fail is the specification; prose
+describing behaviour a test already pins is a second copy that drifts. Reasoning
+that cannot be recovered from a test — a rejected alternative, a non-functional
+invariant — goes to [`decisions/`](./decisions/) instead. See
+[0007](./decisions/0007-tests-are-the-specification.md).
