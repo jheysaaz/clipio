@@ -186,7 +186,6 @@ describe("StorageManager", () => {
   // ── getSnippets ──────────────────────────────────────────────────────────
 
   describe("getSnippets", () => {
-    // spec: reads from SyncBackend when mode is "sync"
     it("reads from SyncBackend in sync mode", async () => {
       const snippets = [makeSnippet()];
       mockSyncBackend.getSnippets.mockResolvedValue(snippets);
@@ -195,7 +194,6 @@ describe("StorageManager", () => {
       expect(result).toEqual(snippets);
     });
 
-    // spec: reads from LocalBackend when mode is "local"
     it("reads from LocalBackend in local mode", async () => {
       mockStorageMode.getValue.mockResolvedValue("local");
       const snippets = [makeSnippet()];
@@ -205,7 +203,7 @@ describe("StorageManager", () => {
       expect(result).toEqual(snippets);
     });
 
-    // spec: catches StorageQuotaError from SyncBackend and falls back to LocalBackend
+    // catches StorageQuotaError from SyncBackend and falls back to LocalBackend
     it("falls back to LocalBackend on StorageQuotaError", async () => {
       mockSyncBackend.getSnippets.mockRejectedValue(new StorageQuotaError());
       const fallbackSnippets = [makeSnippet({ id: "fallback" })];
@@ -215,13 +213,12 @@ describe("StorageManager", () => {
       expect(result).toEqual(fallbackSnippets);
     });
 
-    // spec: re-throws non-quota errors
     it("re-throws non-quota errors from SyncBackend", async () => {
       mockSyncBackend.getSnippets.mockRejectedValue(new Error("Network error"));
       await expect(manager.getSnippets()).rejects.toThrow("Network error");
     });
 
-    // spec: #StorageManager — fallback is keyed on the
+    // #StorageManager — fallback is keyed on the
     // StorageQuotaError TYPE, never on message text: a plain Error that merely
     // mentions quota must NOT switch the manager to local mode.
     it("does not fall back for a plain Error with a quota-like message", async () => {
@@ -335,7 +332,7 @@ describe("StorageManager", () => {
   describe("saveSnippet", () => {
     it("upserts only the new snippet, not the whole list", async () => {
       // Writing the whole list is what clobbered a concurrent write in
-      // another context. spec:
+      // another context.
       const newSnippet = makeSnippet({ id: "new" });
       mockSyncBackend.getSnippets.mockResolvedValue([
         makeSnippet({ id: "existing" }),
@@ -360,13 +357,12 @@ describe("StorageManager", () => {
       expect(mockSyncBackend.removeSnippetsById).not.toHaveBeenCalled();
     });
 
-    // spec: always calls updateContentScriptCache
+    // always calls updateContentScriptCache
     it("updates the content script cache after saving", async () => {
       await manager.saveSnippet(makeSnippet());
       expect(mockUpdateContentScriptCache).toHaveBeenCalled();
     });
 
-    // spec: shadow-writes to IndexedDB
     it("shadow-writes to IndexedDB", async () => {
       await manager.saveSnippet(makeSnippet());
       // Allow micro-tasks to flush
@@ -880,7 +876,7 @@ describe("StorageManager", () => {
   // ── forceSetMode ─────────────────────────────────────────────────────────
 
   describe("forceSetMode", () => {
-    // spec: no-op when already on the requested mode
+    // no-op when already on the requested mode
     it("is a no-op when already on the target mode", async () => {
       mockStorageMode.getValue.mockResolvedValue("sync");
       await manager.forceSetMode("sync");
@@ -889,7 +885,7 @@ describe("StorageManager", () => {
       expect(mockStorageMode.setValue).not.toHaveBeenCalled();
     });
 
-    // spec: migrates snippets from sync → local, sets mode flag, updates cache
+    // migrates snippets from sync → local, sets mode flag, updates cache
     it("migrates snippets from sync to local and switches mode", async () => {
       const snippets = [makeSnippet({ id: "s1" }), makeSnippet({ id: "s2" })];
       mockStorageMode.getValue.mockResolvedValue("sync");
@@ -903,7 +899,7 @@ describe("StorageManager", () => {
       expect(mockUpdateContentScriptCache).toHaveBeenCalledWith(snippets);
     });
 
-    // spec: migrates snippets from local → sync, sets mode flag, updates cache
+    // migrates snippets from local → sync, sets mode flag, updates cache
     it("migrates snippets from local to sync and switches mode", async () => {
       const snippets = [makeSnippet({ id: "s3" })];
       mockStorageMode.getValue.mockResolvedValue("local");
@@ -917,7 +913,7 @@ describe("StorageManager", () => {
       expect(mockUpdateContentScriptCache).toHaveBeenCalledWith(snippets);
     });
 
-    // spec: shadows the migrated data to IDB backup (fire-and-forget)
+    // shadows the migrated data to IDB backup (fire-and-forget)
     it("writes migrated snippets to IDB backup after switch", async () => {
       const snippets = [makeSnippet()];
       mockStorageMode.getValue.mockResolvedValue("sync");
@@ -930,7 +926,7 @@ describe("StorageManager", () => {
       expect(mockIdbBackend.saveSnippets).toHaveBeenCalledWith(snippets);
     });
 
-    // spec: IDB backup failure is swallowed and does not propagate
+    // IDB backup failure is swallowed and does not propagate
     it("does not throw when IDB backup write fails after mode switch", async () => {
       const snippets = [makeSnippet()];
       mockStorageMode.getValue.mockResolvedValue("sync");
@@ -947,7 +943,7 @@ describe("StorageManager", () => {
   // ── clearIDBBackup ────────────────────────────────────────────────────────
 
   describe("clearIDBBackup", () => {
-    // spec: delegates to IndexedDBBackend.clear()
+    // delegates to IndexedDBBackend.clear()
     it("calls idb.clear()", async () => {
       mockIdbBackend.clear.mockResolvedValue(undefined);
       await manager.clearIDBBackup();

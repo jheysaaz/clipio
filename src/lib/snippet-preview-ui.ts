@@ -637,7 +637,7 @@ export class SnippetPreviewUI {
       // and reach onSelect -> insertSnippetIn*, which for a {{clipboard}}
       // snippet forces a clipboard read into a field the page controls.
       // isTrusted is UA-set and unforgeable; element.click() and dispatchEvent()
-      // both produce false. spec:
+      // both produce false.
       item.addEventListener("click", (event: MouseEvent) => {
         if (!event.isTrusted) return;
         if (this.onSelect) {

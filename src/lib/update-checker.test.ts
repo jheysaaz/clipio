@@ -537,7 +537,6 @@ describe("openReleasePage", () => {
 
 /**
  * The update-check throttle.
- * spec: (Wave 4.2)
  *
  * `checkForUpdate()` is called at the top level of the service worker, so it
  * runs on every wake-up, and an MV3 worker is evicted after ~30s idle. Before
@@ -672,7 +671,6 @@ describe("checkForUpdate — throttling", () => {
 
 /**
  * The throttle's own error paths.
- * spec: (Wave 4.2)
  *
  * Each of these is a place where a secondary failure could take down the update
  * check — or, worse, be allowed to escape into the service worker's top level.

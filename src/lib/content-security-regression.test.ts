@@ -1,7 +1,7 @@
 /**
  * Security Regression Tests for Content Expansion
  *
- * spec: +
+ * +
  *
  * Exercises the real production sanitizers:
  *   - sanitizeUrl / escapeHtml / markdownInlineToHtml / markdownToHtml

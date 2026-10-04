@@ -9,7 +9,6 @@ common:
   closeModal: Cerrar
   save: Guardar
   # Generic UI affordances, shared by the dialog, banner and sidebar primitives.
-  # spec: specs/i18n.spec.md
   dismiss: Cerrar
   dismissError: Cerrar aviso
   close: Cerrar

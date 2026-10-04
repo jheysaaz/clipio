@@ -391,7 +391,7 @@ describe("decodeEntities — invalid code points", () => {
 describe("htmlToMarkdownPortable — tables", () => {
   // These used to fall through to the generic text path, which emitted each
   // cell separated by a space, so a two-cell row became "a b 1 2" and the table
-  // structure was gone. spec:
+  // structure was gone.
   it("converts a table with a header row", () => {
     expect(
       htmlToMarkdownPortable(

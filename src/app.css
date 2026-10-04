@@ -143,7 +143,6 @@
  * tail means a glyph OpenDyslexic lacks falls through instead of rendering as
  * tofu.
  *
- * spec: specs/ui-font.spec.md
  */
 :root[data-ui-font="system"] {
   --font-ui:

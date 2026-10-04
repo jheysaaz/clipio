@@ -8,7 +8,7 @@ import { detectFormat } from "./detect";
 describe("detectFormat", () => {
   // ── Clipio versioned envelope ─────────────────────────────────────────────
 
-  // spec: MUST return "clipio" for objects with format === "clipio"
+  // MUST return "clipio" for objects with format === "clipio"
   it('returns "clipio" for versioned envelope with snippets', () => {
     expect(detectFormat({ format: "clipio", version: 1, snippets: [] })).toBe(
       "clipio"
@@ -28,12 +28,12 @@ describe("detectFormat", () => {
 
   // ── Clipio legacy bare array ──────────────────────────────────────────────
 
-  // spec: MUST return "clipio" for empty arrays
+  // MUST return "clipio" for empty arrays
   it('returns "clipio" for empty array', () => {
     expect(detectFormat([])).toBe("clipio");
   });
 
-  // spec: MUST return "clipio" for array whose first element has id, shortcut, content
+  // MUST return "clipio" for array whose first element has id, shortcut, content
   it('returns "clipio" for array with valid snippet shape', () => {
     expect(
       detectFormat([
@@ -42,7 +42,6 @@ describe("detectFormat", () => {
     ).toBe("clipio");
   });
 
-  // spec: MUST return null for array whose first element is missing required fields
   it("returns null for array whose first element is missing id", () => {
     expect(detectFormat([{ shortcut: "hi", content: "Hello" }])).toBeNull();
   });
@@ -63,7 +62,7 @@ describe("detectFormat", () => {
 
   // ── TextBlaze ─────────────────────────────────────────────────────────────
 
-  // spec: MUST return "textblaze" for objects with version (number) AND folders (array)
+  // MUST return "textblaze" for objects with version (number) AND folders (array)
   it('returns "textblaze" for object with version and folders', () => {
     expect(detectFormat({ version: 1, folders: [] })).toBe("textblaze");
   });
@@ -84,7 +83,7 @@ describe("detectFormat", () => {
 
   // ── Power Text ────────────────────────────────────────────────────────────
 
-  // spec: MUST return "powertext" for flat objects where all values are strings
+  // MUST return "powertext" for flat objects where all values are strings
   it('returns "powertext" for flat string-value object', () => {
     expect(detectFormat({ hello: "world", bye: "goodbye" })).toBe("powertext");
   });
@@ -93,17 +92,17 @@ describe("detectFormat", () => {
     expect(detectFormat({ hi: "Hello there!" })).toBe("powertext");
   });
 
-  // spec: MUST return null for empty objects (PowerText requires at least one entry)
+  // MUST return null for empty objects (PowerText requires at least one entry)
   it("returns null for empty object", () => {
     expect(detectFormat({})).toBeNull();
   });
 
-  // spec: MUST return null for objects with mixed value types
+  // MUST return null for objects with mixed value types
   it("returns null when some values are not strings", () => {
     expect(detectFormat({ hi: "Hello", count: 42 })).toBeNull();
   });
 
-  // spec: MUST return null for objects with structural Clipio/TextBlaze keys
+  // MUST return null for objects with structural Clipio/TextBlaze keys
   it("returns null for object with 'format' key", () => {
     expect(detectFormat({ format: "other", hi: "Hello" })).toBeNull();
   });
@@ -119,7 +118,7 @@ describe("detectFormat", () => {
 
   // ── Cross-parser collisions (detection order, ) ─────
 
-  // spec: detection order 1 > 3 — a Clipio envelope marker outranks the
+  // detection order 1 > 3 — a Clipio envelope marker outranks the
   // TextBlaze shape; a TextBlaze-shaped object with format:"clipio" is
   // claimed by Clipio, not TextBlaze.
   it('claims a TextBlaze-shaped object with format:"clipio" as clipio', () => {
@@ -139,7 +138,7 @@ describe("detectFormat", () => {
     ).toBe("clipio");
   });
 
-  // spec: detection order 3 > 1-without-marker — Clipio's envelope requires
+  // detection order 3 > 1-without-marker — Clipio's envelope requires
   // format:"clipio"; a bare version+folders object stays TextBlaze even when
   // it also carries a "snippets" key.
   it('claims version+folders as textblaze even when a "snippets" key is present', () => {
@@ -150,12 +149,11 @@ describe("detectFormat", () => {
 
   // ── Invalid inputs ────────────────────────────────────────────────────────
 
-  // spec: MUST return null for null
   it("returns null for null input", () => {
     expect(detectFormat(null)).toBeNull();
   });
 
-  // spec: MUST return null for non-objects
+  // MUST return null for non-objects
   it("returns null for string input", () => {
     expect(detectFormat("not an object")).toBeNull();
   });

@@ -6,7 +6,7 @@ import { describe, it, expect } from "vitest";
 import { StorageQuotaError } from "./types";
 
 describe("StorageQuotaError", () => {
-  // spec: MUST extend Error
+  // MUST extend Error
   it("is an instance of Error", () => {
     const err = new StorageQuotaError();
     expect(err).toBeInstanceOf(Error);
@@ -17,19 +17,19 @@ describe("StorageQuotaError", () => {
     expect(err).toBeInstanceOf(StorageQuotaError);
   });
 
-  // spec: MUST have name === "StorageQuotaError"
+  // MUST have name === "StorageQuotaError"
   it("has name StorageQuotaError", () => {
     const err = new StorageQuotaError();
     expect(err.name).toBe("StorageQuotaError");
   });
 
-  // spec: MUST have a default message
+  // MUST have a default message
   it("has a default message about quota exceeded", () => {
     const err = new StorageQuotaError();
     expect(err.message).toBe("browser.storage.sync quota exceeded");
   });
 
-  // spec: MUST accept a custom message
+  // MUST accept a custom message
   it("accepts a custom message", () => {
     const err = new StorageQuotaError("Custom quota error message");
     expect(err.message).toBe("Custom quota error message");

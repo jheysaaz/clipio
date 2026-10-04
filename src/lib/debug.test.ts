@@ -58,7 +58,6 @@ describe("debugLog", () => {
     _resetDebugCache();
   });
 
-  // spec: no-op when debug mode is off
   it("does not write to storage when debug mode is off", async () => {
     mockDebugModeItem.getValue.mockResolvedValue(false);
     await callDebugLog();
@@ -66,7 +65,6 @@ describe("debugLog", () => {
     expect(console.warn).not.toHaveBeenCalled();
   });
 
-  // spec: appends an entry when debug mode is on
   it("appends a log entry when debug mode is on", async () => {
     mockDebugModeItem.getValue.mockResolvedValue(true);
     mockDebugLogItem.getValue.mockResolvedValue([]);
@@ -84,7 +82,6 @@ describe("debugLog", () => {
     expect(typeof written[0].ts).toBe("number");
   });
 
-  // spec: echoes to console.warn when debug mode is on
   it("calls console.warn when debug mode is on", async () => {
     mockDebugModeItem.getValue.mockResolvedValue(true);
     mockDebugLogItem.getValue.mockResolvedValue([]);
@@ -97,7 +94,6 @@ describe("debugLog", () => {
     ).toContain("[Clipio:background]");
   });
 
-  // spec: accepts a plain string as detail
   it("stores plain string detail as-is", async () => {
     mockDebugModeItem.getValue.mockResolvedValue(true);
     mockDebugLogItem.getValue.mockResolvedValue([]);
@@ -108,7 +104,7 @@ describe("debugLog", () => {
     expect(written[0].detail).toBe("raw string detail");
   });
 
-  // spec: circular buffer is capped at MAX_DEBUG_ENTRIES
+  // circular buffer is capped at MAX_DEBUG_ENTRIES
   it(`caps the log buffer at ${MAX_DEBUG_ENTRIES} entries`, async () => {
     mockDebugModeItem.getValue.mockResolvedValue(true);
 
@@ -129,7 +125,7 @@ describe("debugLog", () => {
     expect(written[written.length - 1].event).toBe("new:event");
   });
 
-  // spec: silently ignores storage read failure
+  // silently ignores storage read failure
   it("silently returns when storage read fails", async () => {
     mockDebugModeItem.getValue.mockRejectedValue(new Error("storage error"));
     // Should not throw
@@ -137,7 +133,6 @@ describe("debugLog", () => {
     expect(mockDebugLogItem.setValue).not.toHaveBeenCalled();
   });
 
-  // spec: silently ignores storage write failure
   it("silently ignores storage write failure", async () => {
     mockDebugModeItem.getValue.mockResolvedValue(true);
     mockDebugLogItem.getValue.mockResolvedValue([]);
@@ -146,7 +141,7 @@ describe("debugLog", () => {
     await expect(callDebugLog()).resolves.toBeUndefined();
   });
 
-  // spec: privacy — no console output while debug mode is off
+  // privacy — no console output while debug mode is off
   // (folded from preview-privacy.test.ts)
   it("does not console.debug when debug mode is off", async () => {
     const consoleSpy = vi.spyOn(console, "debug");
@@ -159,7 +154,7 @@ describe("debugLog", () => {
     consoleSpy.mockRestore();
   });
 
-  // spec: privacy — detail is exactly what the caller passed (JSON-stringified),
+  // privacy — detail is exactly what the caller passed (JSON-stringified),
   // never silently enriched with ambient user input
   // (folded from preview-privacy.test.ts)
   it("stores exactly the caller-provided detail with no extra fields", async () => {

@@ -9,7 +9,6 @@ common:
   closeModal: Close
   save: Save
   # Generic UI affordances, shared by the dialog, banner and sidebar primitives.
-  # spec: specs/i18n.spec.md
   dismiss: Dismiss
   dismissError: Dismiss error
   close: Close
@@ -127,7 +126,6 @@ confirmDialog:
 
 options:
   # Options page — component copy that was previously hardcoded English.
-  # spec: specs/i18n.spec.md
   copy:
     extensionVersion: Extension Version
     extensionVersionHint: Current installed version and available updates.
@@ -136,7 +134,7 @@ options:
     viewRelease: View release
     upToDate: Up to date
   # Accessible names for controls that carry no visible text. Read by screen
-  # readers, so a Spanish user should hear Spanish. spec: specs/i18n.spec.md
+  # readers, so a Spanish user should hear Spanish.
   # Development-only controls. They render only when MODE !== "production", but
   # they are still user-visible to a developer running a Spanish build, so they
   # are translated like everything else.

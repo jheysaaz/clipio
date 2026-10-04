@@ -50,7 +50,7 @@ describe("LocalBackend", () => {
   // ── getSnippets ──────────────────────────────────────────────────────────
 
   describe("getSnippets", () => {
-    // spec: MUST return the value of localSnippetsItem
+    // MUST return the value of localSnippetsItem
     it("delegates to localSnippetsItem.getValue", async () => {
       const snippets = [makeSnippet()];
       mockLocalSnippets.getValue.mockResolvedValue(snippets);
@@ -65,7 +65,7 @@ describe("LocalBackend", () => {
       expect(result).toEqual([]);
     });
 
-    // spec: #LocalBackend — legacy snippets without
+    // #LocalBackend — legacy snippets without
     // The legacy contentFormat flag is converted away on read.
     it("converts a legacy HTML body to markdown and drops the flag", async () => {
       const legacy = {
@@ -104,7 +104,7 @@ describe("LocalBackend", () => {
   // ── saveSnippets ──────────────────────────────────────────────────────────
 
   describe("saveSnippets", () => {
-    // spec: MUST set localSnippetsItem to the provided array
+    // MUST set localSnippetsItem to the provided array
     it("calls localSnippetsItem.setValue with snippets", async () => {
       mockLocalSnippets.setValue.mockResolvedValue(undefined);
       const snippets = [makeSnippet()];
@@ -215,7 +215,7 @@ describe("LocalBackend", () => {
   });
 
   describe("clear", () => {
-    // spec: MUST call localSnippetsItem.removeValue
+    // MUST call localSnippetsItem.removeValue
     it("calls localSnippetsItem.removeValue", async () => {
       mockLocalSnippets.removeValue.mockResolvedValue(undefined);
       await backend.clear();
@@ -231,7 +231,7 @@ describe("updateContentScriptCache", () => {
     vi.clearAllMocks();
   });
 
-  // spec: MUST set cachedSnippetsItem to the provided array
+  // MUST set cachedSnippetsItem to the provided array
   it("sets cachedSnippetsItem to the provided snippets", async () => {
     mockCachedSnippets.setValue.mockResolvedValue(undefined);
     const snippets = [makeSnippet()];
@@ -239,7 +239,7 @@ describe("updateContentScriptCache", () => {
     expect(mockCachedSnippets.setValue).toHaveBeenCalledWith(snippets);
   });
 
-  // spec: MUST NOT throw — catches and logs errors
+  // MUST NOT throw — catches and logs errors
   it("does not throw when cachedSnippetsItem.setValue throws", async () => {
     mockCachedSnippets.setValue.mockRejectedValue(new Error("Storage error"));
     await expect(updateContentScriptCache([])).resolves.not.toThrow();

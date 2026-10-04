@@ -78,7 +78,7 @@ const gifNode = (giphyId: string, width?: number): TElement =>
 // ---------------------------------------------------------------------------
 
 describe("serializeToMarkdown", () => {
-  // spec: plain text node → text content
+  // plain text node → text content
   it("serializes plain text", () => {
     expect(serializeToMarkdown([p([text("Hello world")])])).toBe("Hello world");
   });
@@ -87,73 +87,70 @@ describe("serializeToMarkdown", () => {
     expect(serializeToMarkdown([p([text("")])])).toBe("");
   });
 
-  // spec: bold mark → **text**
+  // bold mark → **text**
   it("serializes bold text", () => {
     expect(serializeToMarkdown([p([text("bold", { bold: true })])])).toBe(
       "**bold**"
     );
   });
 
-  // spec: italic mark → _text_
+  // italic mark → _text_
   it("serializes italic text", () => {
     expect(serializeToMarkdown([p([text("italic", { italic: true })])])).toBe(
       "_italic_"
     );
   });
 
-  // spec: underline mark → <u>text</u>
+  // underline mark → <u>text</u>
   it("serializes underline text", () => {
     expect(serializeToMarkdown([p([text("under", { underline: true })])])).toBe(
       "<u>under</u>"
     );
   });
 
-  // spec: strikethrough mark → ~~text~~
+  // strikethrough mark → ~~text~~
   it("serializes strikethrough text", () => {
     expect(
       serializeToMarkdown([p([text("strike", { strikethrough: true })])])
     ).toBe("~~strike~~");
   });
 
-  // spec: code mark → `text`
+  // code mark → `text`
   it("serializes code text", () => {
     expect(serializeToMarkdown([p([text("code", { code: true })])])).toBe(
       "`code`"
     );
   });
 
-  // spec: CLIPBOARD_PLACEHOLDER → {{clipboard}}
   it("serializes clipboard placeholder", () => {
     expect(serializeToMarkdown([p([clipboardNode()])])).toBe("{{clipboard}}");
   });
 
-  // spec: DATE_PLACEHOLDER → {{date:format}}
   it("serializes date placeholder with format", () => {
     expect(serializeToMarkdown([p([dateNode("iso")])])).toBe("{{date:iso}}");
     expect(serializeToMarkdown([p([dateNode("us")])])).toBe("{{date:us}}");
     expect(serializeToMarkdown([p([dateNode("long")])])).toBe("{{date:long}}");
   });
 
-  // spec: CURSOR_PLACEHOLDER → {{cursor}}
   it("serializes cursor placeholder", () => {
     expect(serializeToMarkdown([p([cursorNode()])])).toBe("{{cursor}}");
   });
 
-  // spec: DATEPICKER_PLACEHOLDER → {{datepicker:date}}
+  // DATEPICKER_PLACEHOLDER → {{datepicker:date}}
   it("serializes datepicker placeholder", () => {
     expect(serializeToMarkdown([p([datepickerNode("2025-06-15")])])).toBe(
       "{{datepicker:2025-06-15}}"
     );
   });
 
-  // spec: LINK_ELEMENT → [label](url)
+  // LINK_ELEMENT → [label](url)
   it("serializes link element", () => {
     expect(
       serializeToMarkdown([p([linkNode("https://example.com", "Click here")])])
     ).toBe("[Click here](https://example.com)");
   });
 
-  // spec: IMAGE_PLACEHOLDER → {{image:<mediaId>}}
+  // IMAGE_PLACEHOLDER → {{image:<mediaId>}}
   it("serializes image placeholder", () => {
     const mediaId = "550e8400-e29b-41d4-a716-446655440000";
     expect(serializeToMarkdown([p([imageNode(mediaId)])])).toBe(
@@ -161,14 +158,13 @@ describe("serializeToMarkdown", () => {
     );
   });
 
-  // spec: GIF_PLACEHOLDER → {{gif:<giphyId>}}
+  // GIF_PLACEHOLDER → {{gif:<giphyId>}}
   it("serializes gif placeholder", () => {
     expect(serializeToMarkdown([p([gifNode("abc123XYZ")])])).toBe(
       "{{gif:abc123XYZ}}"
     );
   });
 
-  // spec: multiple paragraphs joined with a blank line
   it("joins multiple paragraphs with a blank line", () => {
     // A single \n is enough to *start* a new block in CommonMark, but a
     // paragraph must be preceded by a blank line or it is absorbed into the
@@ -180,7 +176,7 @@ describe("serializeToMarkdown", () => {
     expect(result).toBe("First line\n\nSecond line");
   });
 
-  // spec: mixed content in same paragraph
+  // mixed content in same paragraph
   it("serializes mixed text and placeholders", () => {
     const result = serializeToMarkdown([
       p([text("Hello "), clipboardNode(), text(" world")]),
@@ -194,7 +190,7 @@ describe("serializeToMarkdown", () => {
 // ---------------------------------------------------------------------------
 
 describe("deserializeContent", () => {
-  // spec: empty input → single empty paragraph
+  // empty input → single empty paragraph
   it("returns empty paragraph for empty string", () => {
     const result = deserializeContent("");
     expect(result).toHaveLength(1);
@@ -206,20 +202,19 @@ describe("deserializeContent", () => {
     expect(result).toHaveLength(1);
   });
 
-  // spec: delegates to markdown deserializer for plain text
+  // delegates to markdown deserializer for plain text
   it("deserializes plain markdown", () => {
     const result = deserializeContent("Hello world");
     expect(result[0].children[0]).toMatchObject({ text: "Hello world" });
   });
 
-  // spec: delegates to HTML deserializer when content has HTML tags
+  // delegates to HTML deserializer when content has HTML tags
   it("delegates to HTML deserializer for HTML content", () => {
     const result = deserializeHtmlToNodes("<p>Hello</p>");
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe("p");
   });
 
-  // spec: HTML <a> tags → LINK_ELEMENT
   it("deserializes HTML <a> tags as link elements", () => {
     const result = deserializeHtmlToNodes(
       '<p><a href="https://example.com">Click</a></p>'
@@ -230,7 +225,7 @@ describe("deserializeContent", () => {
     expect(link.url).toBe("https://example.com");
   });
 
-  // spec: HTML <a> with empty content → uses textContent fallback
+  // HTML <a> with empty content → uses textContent fallback
   it("deserializes HTML <a> with no children", () => {
     const result = deserializeHtmlToNodes(
       '<p><a href="https://example.com"></a></p>'
@@ -240,7 +235,6 @@ describe("deserializeContent", () => {
     expect(link.type).toBe(LINK_ELEMENT);
   });
 
-  // spec: HTML <br> → newline text node
   it("deserializes HTML <br> as newline text", () => {
     const result = deserializeHtmlToNodes("<p>Line one<br>Line two</p>");
     expect(result).toHaveLength(1);
@@ -250,7 +244,6 @@ describe("deserializeContent", () => {
     expect(texts).toContain("\n");
   });
 
-  // spec: HTML <span> → recurse into children
   it("deserializes HTML <span> by recursing into children", () => {
     const result = deserializeHtmlToNodes("<p><span>wrapped text</span></p>");
     expect(result).toHaveLength(1);
@@ -258,7 +251,7 @@ describe("deserializeContent", () => {
     expect(text.text).toBe("wrapped text");
   });
 
-  // spec: HTML inline formatting elements: <strong>, <em>, <code>, etc.
+  // HTML inline formatting elements: <strong>, <em>, <code>, etc.
   it("deserializes HTML <strong> as bold mark", () => {
     const result = deserializeHtmlToNodes("<p><strong>bold</strong></p>");
     expect(result[0].children[0]).toMatchObject({ text: "bold", bold: true });
@@ -285,7 +278,7 @@ describe("deserializeContent", () => {
     });
   });
 
-  // spec: HTML nested inline marks: <strong><em>text</em></strong>
+  // HTML nested inline marks: <strong><em>text</em></strong>
   it("deserializes nested HTML inline marks", () => {
     const result = deserializeHtmlToNodes(
       "<p><strong><em>bold italic</em></strong></p>"
@@ -297,7 +290,6 @@ describe("deserializeContent", () => {
     });
   });
 
-  // spec: HTML <del> as strikethrough
   it("deserializes HTML <del> as strikethrough mark", () => {
     const result = deserializeHtmlToNodes("<p><del>deleted</del></p>");
     expect(result[0].children[0]).toMatchObject({
@@ -306,13 +298,13 @@ describe("deserializeContent", () => {
     });
   });
 
-  // spec: HTML <b> as bold (alias for <strong>)
+  // HTML <b> as bold (alias for <strong>)
   it("deserializes HTML <b> as bold mark", () => {
     const result = deserializeHtmlToNodes("<p><b>bold</b></p>");
     expect(result[0].children[0]).toMatchObject({ text: "bold", bold: true });
   });
 
-  // spec: HTML <i> as italic (alias for <em>)
+  // HTML <i> as italic (alias for <em>)
   it("deserializes HTML <i> as italic mark", () => {
     const result = deserializeHtmlToNodes("<p><i>italic</i></p>");
     expect(result[0].children[0]).toMatchObject({
@@ -321,7 +313,6 @@ describe("deserializeContent", () => {
     });
   });
 
-  // spec: HTML <u> as underline
   it("deserializes HTML <u> inside a paragraph as underline mark", () => {
     const result = deserializeHtmlToNodes("<p><u>underlined</u></p>");
     expect(result[0].children[0]).toMatchObject({
@@ -330,7 +321,6 @@ describe("deserializeContent", () => {
     });
   });
 
-  // spec: HTML unknown elements → recurse into children
   it("deserializes unknown HTML elements by recursing into children", () => {
     const result = deserializeHtmlToNodes("<p><section>content</section></p>");
     // The content should still appear
@@ -342,14 +332,13 @@ describe("deserializeContent", () => {
     expect(allText).toContain("content");
   });
 
-  // spec: HTML <div> → paragraph
   it("deserializes HTML <div> as paragraph", () => {
     const result = deserializeHtmlToNodes("<div>div content</div>");
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe("p");
   });
 
-  // spec: returns non-empty array always
+  // returns non-empty array always
   it("always returns at least one element", () => {
     expect(deserializeContent("")).toHaveLength(1);
     expect(deserializeContent("text")).toHaveLength(1);
@@ -361,14 +350,14 @@ describe("deserializeContent", () => {
 // ---------------------------------------------------------------------------
 
 describe("deserializeContent (markdown path)", () => {
-  // spec: MUST create CLIPBOARD_PLACEHOLDER for {{clipboard}}
+  // MUST create CLIPBOARD_PLACEHOLDER for {{clipboard}}
   it("deserializes {{clipboard}} placeholder", () => {
     const result = deserializeContent("{{clipboard}}");
     const firstChild = result[0].children[0] as TElement;
     expect(firstChild.type).toBe(CLIPBOARD_PLACEHOLDER);
   });
 
-  // spec: MUST create DATE_PLACEHOLDER with format prop for {{date:X}}
+  // MUST create DATE_PLACEHOLDER with format prop for {{date:X}}
   it("deserializes {{date:iso}} placeholder", () => {
     const result = deserializeContent("{{date:iso}}");
     const firstChild = result[0].children[0] as TElement & { format: string };
@@ -382,14 +371,14 @@ describe("deserializeContent (markdown path)", () => {
     expect(firstChild.format).toBe("long");
   });
 
-  // spec: MUST create CURSOR_PLACEHOLDER for {{cursor}}
+  // MUST create CURSOR_PLACEHOLDER for {{cursor}}
   it("deserializes {{cursor}} placeholder", () => {
     const result = deserializeContent("{{cursor}}");
     const firstChild = result[0].children[0] as TElement;
     expect(firstChild.type).toBe(CURSOR_PLACEHOLDER);
   });
 
-  // spec: MUST create DATEPICKER_PLACEHOLDER with date prop
+  // MUST create DATEPICKER_PLACEHOLDER with date prop
   it("deserializes {{datepicker:YYYY-MM-DD}} placeholder", () => {
     const result = deserializeContent("{{datepicker:2025-06-15}}");
     const firstChild = result[0].children[0] as TElement & { date: string };
@@ -397,7 +386,7 @@ describe("deserializeContent (markdown path)", () => {
     expect(firstChild.date).toBe("2025-06-15");
   });
 
-  // spec: MUST create IMAGE_PLACEHOLDER with mediaId prop
+  // MUST create IMAGE_PLACEHOLDER with mediaId prop
   it("deserializes {{image:<uuid>}} placeholder", () => {
     const mediaId = "550e8400-e29b-41d4-a716-446655440000";
     const result = deserializeContent(`{{image:${mediaId}}}`);
@@ -406,7 +395,7 @@ describe("deserializeContent (markdown path)", () => {
     expect(firstChild.mediaId).toBe(mediaId);
   });
 
-  // spec: MUST create GIF_PLACEHOLDER with giphyId prop
+  // MUST create GIF_PLACEHOLDER with giphyId prop
   it("deserializes {{gif:<giphyId>}} placeholder", () => {
     const result = deserializeContent("{{gif:abc123XYZ}}");
     const firstChild = result[0].children[0] as TElement & { giphyId: string };
@@ -414,7 +403,6 @@ describe("deserializeContent (markdown path)", () => {
     expect(firstChild.giphyId).toBe("abc123XYZ");
   });
 
-  // spec: MUST create LINK_ELEMENT for [label](url)
   it("deserializes [label](url) as link element", () => {
     const result = deserializeContent("[Click here](https://example.com)");
     const firstChild = result[0].children[0] as TElement & { url: string };
@@ -422,13 +410,11 @@ describe("deserializeContent (markdown path)", () => {
     expect(firstChild.url).toBe("https://example.com");
   });
 
-  // spec: MUST create bold text node for **text**
   it("deserializes **bold** as bold text node", () => {
     const result = deserializeContent("**bold**");
     expect(result[0].children[0]).toMatchObject({ text: "bold", bold: true });
   });
 
-  // spec: italic
   it("deserializes _italic_ as italic text node", () => {
     const result = deserializeContent("_italic_");
     expect(result[0].children[0]).toMatchObject({
@@ -437,7 +423,6 @@ describe("deserializeContent (markdown path)", () => {
     });
   });
 
-  // spec: strikethrough
   it("deserializes ~~strike~~ as strikethrough text node", () => {
     const result = deserializeContent("~~strike~~");
     expect(result[0].children[0]).toMatchObject({
@@ -446,13 +431,12 @@ describe("deserializeContent (markdown path)", () => {
     });
   });
 
-  // spec: code
+  // code
   it("deserializes `code` as code text node", () => {
     const result = deserializeContent("`code`");
     expect(result[0].children[0]).toMatchObject({ text: "code", code: true });
   });
 
-  // spec: underline
   it("deserializes <u>text</u> as underline text node", () => {
     const result = deserializeHtmlToNodes("<u>underlined</u>");
     expect(result[0].children[0]).toMatchObject({
@@ -461,7 +445,7 @@ describe("deserializeContent (markdown path)", () => {
     });
   });
 
-  // spec: a single newline is a soft break, not a paragraph boundary
+  // a single newline is a soft break, not a paragraph boundary
   it("keeps a soft-wrapped line in one paragraph", () => {
     // This used to produce two paragraphs, one per line, which is wrong: in
     // markdown a lone newline inside a paragraph is a soft break. It also made
@@ -641,7 +625,7 @@ describe("image/gif width suffix", () => {
 // ---------------------------------------------------------------------------
 
 describe("markdownToHtml", () => {
-  // spec: MUST return "" for empty/falsy input
+  // MUST return "" for empty/falsy input
   it("returns empty string for empty input", () => {
     expect(markdownToHtml("")).toBe("");
   });
@@ -650,32 +634,32 @@ describe("markdownToHtml", () => {
     expect(markdownToHtml(null as any)).toBe("");
   });
 
-  // spec: MUST convert **text** → <strong>text</strong>
+  // MUST convert **text** → <strong>text</strong>
   it("converts bold markdown to strong tag", () => {
     expect(markdownToHtml("**bold**")).toBe("<strong>bold</strong>");
   });
 
-  // spec: MUST convert _text_ → <em>text</em>
+  // MUST convert _text_ → <em>text</em>
   it("converts italic markdown to em tag", () => {
     expect(markdownToHtml("_italic_")).toBe("<em>italic</em>");
   });
 
-  // spec: MUST convert ~~text~~ → <s>text</s>
+  // MUST convert ~~text~~ → <s>text</s>
   it("converts strikethrough to s tag", () => {
     expect(markdownToHtml("~~strike~~")).toBe("<s>strike</s>");
   });
 
-  // spec: MUST convert `text` → <code>text</code>
+  // MUST convert `text` → <code>text</code>
   it("converts code to code tag", () => {
     expect(markdownToHtml("`code`")).toBe("<code>code</code>");
   });
 
-  // spec: MUST convert <u>text</u> → <u>text</u>
+  // MUST convert <u>text</u> → <u>text</u>
   it("passes through underline tag", () => {
     expect(markdownToHtml("<u>underline</u>")).toBe("<u>underline</u>");
   });
 
-  // spec: MUST convert [label](url) → <a> tag with target="_blank"
+  // MUST convert [label](url) → <a> tag with target="_blank"
   it("converts links to anchor tags", () => {
     const result = markdownToHtml("[Click](https://example.com)");
     expect(result).toBe(
@@ -683,14 +667,13 @@ describe("markdownToHtml", () => {
     );
   });
 
-  // spec: MUST escape HTML special characters in plain text
   it("escapes HTML special characters in plain text", () => {
     expect(markdownToHtml('Hello <world> & "friends"')).toBe(
       "Hello &lt;world&gt; &amp; &quot;friends&quot;"
     );
   });
 
-  // spec: MUST sanitize link URLs — block javascript:
+  // MUST sanitize link URLs — block javascript:
   it("blocks javascript: URLs in links", () => {
     const result = markdownToHtml("[Click](javascript:alert(1))");
     expect(result).not.toContain("javascript:");
@@ -698,19 +681,18 @@ describe("markdownToHtml", () => {
     expect(result).toContain("Click");
   });
 
-  // spec: MUST join lines with <br>
+  // MUST join lines with <br>
   it("joins multiple lines with <br>", () => {
     const result = markdownToHtml("Line one\nLine two");
     expect(result).toBe("Line one<br>Line two");
   });
 
-  // spec: bare domain → prepend https://
+  // bare domain → prepend https://
   it("prepends https:// to bare domains in links", () => {
     const result = markdownToHtml("[Click](example.com)");
     expect(result).toContain('href="https://example.com"');
   });
 
-  // spec: {{image:<id>}} → <img data-clipio-media="<id>" ...>
   it("converts image placeholder to img tag with data-clipio-media", () => {
     const mediaId = "550e8400-e29b-41d4-a716-446655440000";
     const result = markdownToHtml(`{{image:${mediaId}}}`);
@@ -719,7 +701,7 @@ describe("markdownToHtml", () => {
     expect(result).toContain('alt="image"');
   });
 
-  // spec: {{gif:<id>}} → <img src="https://media.giphy.com/media/<id>/giphy.gif" ...>
+  // {{gif:<id>}} → <img src="https://media.giphy.com/media/<id>/giphy.gif" ...>
   it("converts gif placeholder to img tag with giphy URL", () => {
     const result = markdownToHtml("{{gif:abc123XYZ}}");
     expect(result).toContain(
@@ -735,44 +717,44 @@ describe("markdownToHtml", () => {
 // ---------------------------------------------------------------------------
 
 describe("markdownToPlainText", () => {
-  // spec: MUST return "" for empty/falsy input
+  // MUST return "" for empty/falsy input
   it("returns empty string for empty input", () => {
     expect(markdownToPlainText("")).toBe("");
   });
 
-  // spec: MUST strip **text** → text
+  // MUST strip **text** → text
   it("strips bold marks", () => {
     expect(markdownToPlainText("**bold**")).toBe("bold");
   });
 
-  // spec: MUST strip _text_ → text
+  // MUST strip _text_ → text
   it("strips italic marks", () => {
     expect(markdownToPlainText("_italic_")).toBe("italic");
   });
 
-  // spec: MUST strip ~~text~~ → text
+  // MUST strip ~~text~~ → text
   it("strips strikethrough marks", () => {
     expect(markdownToPlainText("~~strike~~")).toBe("strike");
   });
 
-  // spec: MUST strip `text` → text
+  // MUST strip `text` → text
   it("strips code marks", () => {
     expect(markdownToPlainText("`code`")).toBe("code");
   });
 
-  // spec: MUST strip <u>text</u> → text
+  // MUST strip <u>text</u> → text
   it("strips underline tags", () => {
     expect(markdownToPlainText("<u>underlined</u>")).toBe("underlined");
   });
 
-  // spec: MUST convert [label](url) → url
+  // MUST convert [label](url) → url
   it("converts links to URL only", () => {
     expect(markdownToPlainText("[Click here](https://example.com)")).toBe(
       "https://example.com"
     );
   });
 
-  // spec: MUST pass {{placeholder}} through unchanged
+  // MUST pass {{placeholder}} through unchanged
   it("passes clipboard placeholder through", () => {
     expect(markdownToPlainText("{{clipboard}}")).toBe("{{clipboard}}");
   });
@@ -791,13 +773,13 @@ describe("markdownToPlainText", () => {
     expect(result).toBe("Hello world and everyone!");
   });
 
-  // spec: MUST convert {{image:<id>}} → [image]
+  // MUST convert {{image:<id>}} → [image]
   it("converts image placeholder to [image]", () => {
     const mediaId = "550e8400-e29b-41d4-a716-446655440000";
     expect(markdownToPlainText(`{{image:${mediaId}}}`)).toBe("[image]");
   });
 
-  // spec: MUST convert {{gif:<id>}} → [GIF]
+  // MUST convert {{gif:<id>}} → [GIF]
   it("converts gif placeholder to [GIF]", () => {
     expect(markdownToPlainText("{{gif:abc123XYZ}}")).toBe("[GIF]");
   });

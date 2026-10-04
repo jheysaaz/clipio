@@ -155,7 +155,7 @@ export const test = base.extend<ClipioFixtures>({
     // dropped — no keydown listener means no debounce timer means no expansion —
     // so a sleep that is too short produces a test that passes for the wrong
     // reason, and one that is too long just makes the suite slower.
-    // spec: e2e/helpers/content-script.ts documents the failure mode.
+    // e2e/helpers/content-script.ts documents the failure mode.
     await waitForContentScriptReady(page);
     await use(page);
     await page.close();

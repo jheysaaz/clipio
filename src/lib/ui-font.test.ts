@@ -15,12 +15,12 @@ import {
 } from "@/lib/ui-font";
 
 describe("UI_FONT_OPTIONS", () => {
-  // spec: the option set is exactly Inter, System, OpenDyslexic, in that order.
+  // the option set is exactly Inter, System, OpenDyslexic, in that order.
   it("is the closed set the Appearance panel offers", () => {
     expect([...UI_FONT_OPTIONS]).toEqual(["inter", "system", "dyslexic"]);
   });
 
-  // spec: inter is the default, so the setting is a no-op for existing users.
+  // inter is the default, so the setting is a no-op for existing users.
   it("defaults to inter", () => {
     expect(DEFAULT_UI_FONT).toBe("inter");
     expect(UI_FONT_OPTIONS).toContain(DEFAULT_UI_FONT);
@@ -37,14 +37,14 @@ describe("UI_FONT_OPTIONS", () => {
 });
 
 describe("UI_FONT_STACKS", () => {
-  // spec: each option leads with its own family, so the choice is observable.
+  // each option leads with its own family, so the choice is observable.
   it("leads with the family the option names", () => {
     expect(UI_FONT_STACKS.inter.split(",")[0].trim()).toBe("InterVariable");
     expect(UI_FONT_STACKS.system.split(",")[0].trim()).toBe("system-ui");
     expect(UI_FONT_STACKS.dyslexic.split(",")[0].trim()).toBe("OpenDyslexic");
   });
 
-  // spec: every stack falls through to the system stack so a missing glyph or
+  // every stack falls through to the system stack so a missing glyph or
   // weight renders in something that has it rather than as tofu.
   it("falls through to the system stack in every option", () => {
     const tail = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI"';
@@ -62,7 +62,7 @@ describe("UI_FONT_STACKS", () => {
     expect(UI_FONT_STACKS.system).not.toContain("OpenDyslexic");
   });
 
-  // spec: the stacks are also written into the preview palette's inline styles,
+  // the stacks are also written into the preview palette's inline styles,
   // so a stray newline or unterminated quote would break that page.
   it("is safe to inline into a style attribute", () => {
     for (const option of UI_FONT_OPTIONS) {
@@ -80,7 +80,7 @@ describe("isUiFont", () => {
     }
   });
 
-  // spec: negative cases. A near-miss string is the realistic failure — a stale
+  // negative cases. A near-miss string is the realistic failure — a stale
   // value, a typo, or a value from a build that had different options.
   const rejected: Array<[unknown, string]> = [
     ["Inter", "wrong case"],
@@ -103,12 +103,12 @@ describe("isUiFont", () => {
 });
 
 describe("normalizeUiFont", () => {
-  // spec: the migration path — a recognised value survives untouched.
+  // the migration path — a recognised value survives untouched.
   it.each(UI_FONT_OPTIONS)("returns %j unchanged", (option) => {
     expect(normalizeUiFont(option)).toBe(option);
   });
 
-  // spec: anything unrecognised becomes the default rather than rendering a
+  // anything unrecognised becomes the default rather than rendering a
   // select with no selection or a font-family that resolves to nothing.
   const unrecognised: Array<[unknown, string]> = [
     ["Inter", "wrong case"],
@@ -127,7 +127,7 @@ describe("normalizeUiFont", () => {
     expect(normalizeUiFont(value)).toBe(DEFAULT_UI_FONT);
   });
 
-  // spec: total. Storage can hand back anything, and a throw here would take
+  // total. Storage can hand back anything, and a throw here would take
   // down the popup render rather than just the setting.
   it("never throws", () => {
     const hostile = [
@@ -152,7 +152,7 @@ describe("normalizeUiFont", () => {
 });
 
 describe("DOM contract", () => {
-  // spec: FontContext writes this attribute and app.css selects on it. If the
+  // FontContext writes this attribute and app.css selects on it. If the
   // two drift, the page silently keeps the default and the setting looks broken
   // with no error anywhere.
   it("names the attribute the stylesheet matches", () => {

@@ -52,7 +52,7 @@ export function SettingControl({ entry }: { entry: SettingEntry }) {
   // Theme is the one setting whose effect is not storage: ThemeContext owns the
   // `dark` class on <html> and persists on its own. Writing the item directly
   // leaves the page visually unchanged until the next reload, so the change is
-  // routed through the context instead. spec:
+  // routed through the context instead.
   const { setThemeMode } = useTheme();
 
   // Guard against a slow initial read overwriting a value the user has already

@@ -124,7 +124,7 @@ function serializeNode(node: Descendant): string {
   // --- block elements ---------------------------------------------------
   //
   // These previously fell through to `return children`, which is what erased
-  // every block marker on save. spec:
+  // every block marker on save.
   const heading = element.type.match(/^h([1-6])$/);
   if (heading) {
     // No trailing space for an empty heading, so `#` round-trips as `#`.

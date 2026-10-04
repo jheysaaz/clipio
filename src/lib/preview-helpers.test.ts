@@ -182,7 +182,7 @@ describe("fuzzyMatchSnippets", () => {
     makeSnippet({ id: "3", shortcut: "/help", label: "Help Command" }),
   ];
 
-  // spec: empty array → empty map and empty lengths
+  // empty array → empty map and empty lengths
   it("returns empty array for empty query", () => {
     const result = fuzzyMatchSnippets("", snippets);
     expect(result).toEqual([]);
@@ -193,7 +193,7 @@ describe("fuzzyMatchSnippets", () => {
     expect(result).toEqual([]);
   });
 
-  // spec: exact prefix match on shortcut gets highest score (1000)
+  // exact prefix match on shortcut gets highest score (1000)
   it("prioritizes exact prefix matches on shortcut", () => {
     const result = fuzzyMatchSnippets("/hel", snippets); // Query with prefix
     expect(result).toHaveLength(2);
@@ -204,7 +204,7 @@ describe("fuzzyMatchSnippets", () => {
     ]);
   });
 
-  // spec: fuzzy match scoring and sorting
+  // fuzzy match scoring and sorting
   it("scores fuzzy matches correctly", () => {
     const result = fuzzyMatchSnippets("/hi", snippets);
     expect(result).toHaveLength(1); // Only "/hi" matches, not "Hi" in label
@@ -214,19 +214,16 @@ describe("fuzzyMatchSnippets", () => {
     expect(result[0].relevanceScore).toBe(1000);
   });
 
-  // spec: case-insensitive matching
   it("performs case-insensitive matching", () => {
     const result = fuzzyMatchSnippets("HELLO", snippets); // Match against label
     expect(result).toHaveLength(1);
     expect(result[0].snippet.id).toBe("1");
   });
 
-  // spec: handles special regex characters
   it("handles special regex characters without throwing", () => {
     expect(() => fuzzyMatchSnippets(".*+?^${}()|[]\\", snippets)).not.toThrow();
   });
 
-  // spec: query longer than any snippet field returns empty
   it("returns empty array when query is longer than any field", () => {
     const result = fuzzyMatchSnippets(
       "superlongquerythatdoesntmatchanything",
@@ -235,7 +232,6 @@ describe("fuzzyMatchSnippets", () => {
     expect(result).toEqual([]);
   });
 
-  // spec: maintains original order for identical scores
   it("maintains snippet order for identical scores", () => {
     const identicalSnippets = [
       makeSnippet({ id: "1", shortcut: "/test", label: "Test" }),
@@ -281,7 +277,7 @@ describe("calculatePreviewPosition", () => {
     document.body.innerHTML = "";
   });
 
-  // spec: a real input with a caret offset is anchored to the caret, not to
+  // a real input with a caret offset is anchored to the caret, not to
   // the element's bottom edge.
   it("anchors to the caret rather than the element bottom for a real input", () => {
     const input = document.createElement("input");
@@ -304,7 +300,7 @@ describe("calculatePreviewPosition", () => {
     expect(result.y).toBeLessThan(elRect.bottom);
   });
 
-  // spec: a scrolled textarea reports the caret at its *visible* line.
+  // a scrolled textarea reports the caret at its *visible* line.
   it("offsets the caret by scrollTop and scrollLeft of a scrolled field", () => {
     const textarea = document.createElement("textarea");
     textarea.value = "first line\n/second line\nthird";
@@ -321,7 +317,7 @@ describe("calculatePreviewPosition", () => {
     expect(result.y).toBe(elRect.top + 20 + 14 - 40 + 5);
   });
 
-  // spec: preview-anchor — the mirror reproduces the control's metrics, so a
+  // preview-anchor — the mirror reproduces the control's metrics, so a
   // caret measured in the mirror lands in the same place as in the real field.
   it("reproduces the control's text metrics and box on the mirror", () => {
     const textarea = document.createElement("textarea");
@@ -378,7 +374,7 @@ describe("calculatePreviewPosition", () => {
     expect(css.left).toBe("0px");
   });
 
-  // spec: preview-anchor — the mirror holds only the text up to the caret, and
+  // preview-anchor — the mirror holds only the text up to the caret, and
   // the caret itself is marked by a zero-width character. A visible "|" glyph
   // has a non-zero advance and would wrap at the wrap column, reporting the
   // caret a whole line too low; laying out the whole value would make the
@@ -398,7 +394,7 @@ describe("calculatePreviewPosition", () => {
     expect(captured.markerText).toBe("\u200b");
   });
 
-  // spec: element-bounds fallback still applies when no caret offset is given.
+  // element-bounds fallback still applies when no caret offset is given.
   it("falls back to element bounds when cursorPos is omitted", () => {
     const input = document.createElement("input");
     input.value = "/hel";
@@ -413,7 +409,7 @@ describe("calculatePreviewPosition", () => {
     expect(result.y).toBe(elRect.bottom + 5);
   });
 
-  // spec: positions above cursor when insufficient space below
+  // positions above cursor when insufficient space below
   //
   // Uses a real <textarea> on purpose. The previous version of this test passed
   // a plain object literal, which is neither an input nor contenteditable, so
@@ -441,7 +437,7 @@ describe("calculatePreviewPosition", () => {
     expect(result.y).toBeLessThan(caretY);
   });
 
-  // spec: clamps horizontal position to viewport bounds (with 10px margin)
+  // clamps horizontal position to viewport bounds (with 10px margin)
   it("clamps horizontal position to viewport bounds", () => {
     const textarea = document.createElement("textarea");
     textarea.value = "/hel";
@@ -468,14 +464,12 @@ describe("calculatePreviewPosition", () => {
     expect(calculatePreviewPosition(textarea, 4).x).toBe(10);
   });
 
-  // spec: returns safe fallback for invalid elements
   it("returns safe fallback position for invalid elements", () => {
     const invalidElement = {} as HTMLElement;
     const result = calculatePreviewPosition(invalidElement, 5);
     expect(result).toEqual({ x: 10, y: 10, maxHeight: 300 });
   });
 
-  // spec: handles contenteditable elements
   it("handles contenteditable elements", () => {
     const editableElement = {
       ...mockElement,
@@ -509,14 +503,13 @@ describe("calculatePreviewPosition", () => {
 describe("detectPreviewTrigger", () => {
   const settings = makeSettings();
 
-  // spec: returns null when preview is disabled
   it("returns null when preview is disabled", () => {
     const disabledSettings = makeSettings({ enabled: false });
     const result = detectPreviewTrigger("Hello /wor", 9, disabledSettings);
     expect(result).toBeNull();
   });
 
-  // spec: detects prefix at start of text (no word boundary required)
+  // detects prefix at start of text (no word boundary required)
   it("matches shortcut at start of text", () => {
     const result = detectPreviewTrigger("/hello", 6, settings);
     expect(result).not.toBeNull();
@@ -525,13 +518,12 @@ describe("detectPreviewTrigger", () => {
     expect(result!.query).toBe("hello");
   });
 
-  // spec: requires word boundary before prefix
   it("requires word boundary before prefix", () => {
     const result = detectPreviewTrigger("email/test", 10, settings);
     expect(result).toBeNull(); // No word boundary before "/"
   });
 
-  // spec: — the caret in a pre-filled
+  // — the caret in a pre-filled
   // contenteditable sits at the end of existing prose, so the prefix is
   // preceded by punctuation rather than whitespace. The palette must open
   // there or insertion is unreachable in exactly the fields that hold
@@ -546,7 +538,7 @@ describe("detectPreviewTrigger", () => {
     }
   );
 
-  // spec: — widening the boundary must not pop
+  // — widening the boundary must not pop
   // the palette open while a URL or path is being typed.
   //
   // Every case contains a "/" so it reaches the boundary predicate. A case
@@ -570,7 +562,7 @@ describe("detectPreviewTrigger", () => {
     expect(result!.query).toBe("wor");
   });
 
-  // spec: matches prefix after newline (word boundary)
+  // matches prefix after newline (word boundary)
   it("matches prefix after newline", () => {
     const result = detectPreviewTrigger("Hello\n/test", 11, settings);
     expect(result).not.toBeNull();
@@ -578,7 +570,6 @@ describe("detectPreviewTrigger", () => {
     expect(result!.query).toBe("test");
   });
 
-  // spec: returns rightmost prefix when multiple exist
   it("returns rightmost prefix when multiple exist", () => {
     const result = detectPreviewTrigger("/first /second", 14, settings);
     expect(result).not.toBeNull();
@@ -586,13 +577,12 @@ describe("detectPreviewTrigger", () => {
     expect(result!.query).toBe("second");
   });
 
-  // spec: returns null when cursor is at position 0
   it("returns null when cursor is at position 0", () => {
     const result = detectPreviewTrigger("/hello", 0, settings);
     expect(result).toBeNull();
   });
 
-  // spec: handles empty prefix (always triggers when enabled)
+  // handles empty prefix (always triggers when enabled)
   it("handles empty prefix by always triggering", () => {
     const emptyPrefixSettings = makeSettings({ triggerPrefix: "" });
     const result = detectPreviewTrigger("hello world", 5, emptyPrefixSettings);
@@ -602,7 +592,6 @@ describe("detectPreviewTrigger", () => {
     expect(result!.query).toBe("hello");
   });
 
-  // spec: returns null for empty text
   it("returns null for empty text", () => {
     const result = detectPreviewTrigger("", 0, settings);
     expect(result).toBeNull();
@@ -614,7 +603,7 @@ describe("detectPreviewTrigger", () => {
 // ---------------------------------------------------------------------------
 
 describe("createPreviewTooltip", () => {
-  // spec: truncates content to ~100 characters at word boundary
+  // truncates content to ~100 characters at word boundary
   it("truncates long content at word boundary", () => {
     const longContent =
       "This is a very long snippet content that should be truncated properly at a word boundary near 100 characters to provide a good preview experience.";
@@ -625,7 +614,6 @@ describe("createPreviewTooltip", () => {
     expect(result.lastIndexOf(" ")).toBeGreaterThan(50); // Truncated at word boundary
   });
 
-  // spec: removes placeholder tokens from display
   it("removes placeholder tokens", () => {
     const content =
       "Hello {{clipboard}} - today is {{date:iso}} and {{cursor}} here!";
@@ -633,7 +621,6 @@ describe("createPreviewTooltip", () => {
     expect(result).toBe("Hello - today is and here!");
   });
 
-  // spec: strips markdown formatting
   it("strips markdown formatting", () => {
     // Expectations are the real renderer's, not a stand-in's. This test used to
     // run against a hand-rolled `markdownToPlainText` mock that also stripped
@@ -651,14 +638,13 @@ describe("createPreviewTooltip", () => {
     expect(result).toBe("a *b* c");
   });
 
-  // spec: normalizes whitespace
   it("normalizes whitespace", () => {
     const content = "Hello    world\n\n\nwith   lots\tof\r\nwhitespace!";
     const result = createPreviewTooltip(content);
     expect(result).toBe("Hello world with lots of whitespace!");
   });
 
-  // spec: returns "(empty snippet)" for empty or whitespace-only content
+  // returns "(empty snippet)" for empty or whitespace-only content
   it('returns "(empty snippet)" for empty content', () => {
     expect(createPreviewTooltip("")).toBe("(empty snippet)");
     expect(createPreviewTooltip("   ")).toBe("(empty snippet)");
@@ -672,7 +658,7 @@ describe("createPreviewTooltip", () => {
     expect(result).toBe("(empty snippet)");
   });
 
-  // spec: content under 100 chars returns as-is (no ellipsis)
+  // content under 100 chars returns as-is (no ellipsis)
   it("returns short content without ellipsis", () => {
     const shortContent = "This is a short snippet.";
     const result = createPreviewTooltip(shortContent);
@@ -680,7 +666,7 @@ describe("createPreviewTooltip", () => {
     expect(result.endsWith("...")).toBe(false);
   });
 
-  // spec: handles very long first word by truncating at character boundary
+  // handles very long first word by truncating at character boundary
   it("handles very long first word", () => {
     const content =
       "Supercalifragilisticexpialidocioussuperlongwordthatcannotbetruncatedatwordboundaryverylongwordindeed and more text that will definitely exceed the 100 character limit";

@@ -1,5 +1,5 @@
 /**
- * Tests for src/components/editor/components/placeholders/media-resize.ts
+ * Tests for src/components/editor/placeholders/media-resize.ts
  *
  * This replaces a test file that imported only `vitest`. It re-implemented the
  * clamp arithmetic inline and copied `MIN_WIDTH = 40` by hand with a comment

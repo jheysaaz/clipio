@@ -61,7 +61,7 @@ export type SectionId =
  * `i18n.t` is typed against the keys WXT generates from en.yml, so it rejects a
  * bare `string`. Spelling these out makes a renamed or deleted key a **compile
  * error** rather than a silently untranslated row — the same technique
- * `app-sidebar.tsx` uses for its nav labels. spec:
+ * `app-sidebar.tsx` uses for its nav labels.
  */
 export type SettingTitleKey =
   | "options.setting.previewEnabled.title"

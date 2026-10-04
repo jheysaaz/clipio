@@ -50,21 +50,20 @@ describe("getUsageCounts", () => {
     vi.clearAllMocks();
   });
 
-  // spec: MUST return the full usage count map
   it("returns the usage count map from storage", async () => {
     mockUsageCounts.getValue.mockResolvedValue({ "snip-1": 3, "snip-2": 7 });
     const result = await getUsageCounts();
     expect(result).toEqual({ "snip-1": 3, "snip-2": 7 });
   });
 
-  // spec: MUST return {} when storage is empty
+  // MUST return {} when storage is empty
   it("returns empty object when no usage data", async () => {
     mockUsageCounts.getValue.mockResolvedValue({});
     const result = await getUsageCounts();
     expect(result).toEqual({});
   });
 
-  // spec: MUST return {} when reading from storage throws (graceful degradation)
+  // MUST return {} when reading from storage throws (graceful degradation)
   it("returns {} when storage throws", async () => {
     mockUsageCounts.getValue.mockRejectedValue(new Error("Storage error"));
     const result = await getUsageCounts();
@@ -77,21 +76,20 @@ describe("getSnippetUsageCount", () => {
     vi.clearAllMocks();
   });
 
-  // spec: MUST return the count for the given snippetId
+  // MUST return the count for the given snippetId
   it("returns the count for a specific snippet", async () => {
     mockUsageCounts.getValue.mockResolvedValue({ "snip-1": 5 });
     const result = await getSnippetUsageCount("snip-1");
     expect(result).toBe(5);
   });
 
-  // spec: MUST return 0 when snippet has no recorded usage
   it("returns 0 when snippet has no usage", async () => {
     mockUsageCounts.getValue.mockResolvedValue({});
     const result = await getSnippetUsageCount("unknown-id");
     expect(result).toBe(0);
   });
 
-  // spec: MUST return 0 when storage is unavailable
+  // MUST return 0 when storage is unavailable
   it("returns 0 when storage throws", async () => {
     mockUsageCounts.getValue.mockRejectedValue(new Error("Error"));
     const result = await getSnippetUsageCount("snip-1");
@@ -104,7 +102,7 @@ describe("incrementSnippetUsage", () => {
     vi.clearAllMocks();
   });
 
-  // spec: MUST increment the count by 1
+  // MUST increment the count by 1
   it("increments existing count by 1", async () => {
     mockUsageCounts.getValue.mockResolvedValue({ "snip-1": 4 });
     mockUsageCounts.setValue.mockResolvedValue(undefined);
@@ -113,7 +111,7 @@ describe("incrementSnippetUsage", () => {
     expect(mockUsageCounts.setValue).toHaveBeenCalledWith({ "snip-1": 5 });
   });
 
-  // spec: MUST start from 0 if not present
+  // MUST start from 0 if not present
   it("starts from 0 for new snippet (returns 1)", async () => {
     mockUsageCounts.getValue.mockResolvedValue({});
     mockUsageCounts.setValue.mockResolvedValue(undefined);
@@ -121,7 +119,7 @@ describe("incrementSnippetUsage", () => {
     expect(result).toBe(1);
   });
 
-  // spec: MUST persist the updated counts
+  // MUST persist the updated counts
   it("persists updated counts to storage", async () => {
     mockUsageCounts.getValue.mockResolvedValue({ "snip-1": 2 });
     mockUsageCounts.setValue.mockResolvedValue(undefined);
@@ -129,7 +127,7 @@ describe("incrementSnippetUsage", () => {
     expect(mockUsageCounts.setValue).toHaveBeenCalledWith({ "snip-1": 3 });
   });
 
-  // spec: MUST return 0 and log on error (graceful degradation)
+  // MUST return 0 and log on error (graceful degradation)
   it("returns 0 when both getValue and setValue throw", async () => {
     mockUsageCounts.getValue.mockRejectedValue(new Error("Error"));
     mockUsageCounts.setValue.mockRejectedValue(new Error("Write error"));
@@ -146,7 +144,7 @@ describe("incrementSnippetUsage", () => {
     expect(result).toBe(1);
   });
 
-  // spec: does not affect other snippets
+  // does not affect other snippets
   it("only increments the specified snippet", async () => {
     mockUsageCounts.getValue.mockResolvedValue({ "snip-1": 1, "snip-2": 5 });
     mockUsageCounts.setValue.mockResolvedValue(undefined);
@@ -164,7 +162,7 @@ describe("resetSnippetUsage", () => {
     vi.clearAllMocks();
   });
 
-  // spec: MUST delete the entry for snippetId
+  // MUST delete the entry for snippetId
   it("removes the usage entry for the given snippet", async () => {
     mockUsageCounts.getValue.mockResolvedValue({ "snip-1": 3, "snip-2": 7 });
     mockUsageCounts.setValue.mockResolvedValue(undefined);
@@ -177,14 +175,14 @@ describe("resetSnippetUsage", () => {
     expect(saved["snip-2"]).toBe(7);
   });
 
-  // spec: MUST handle snippetId not in map (no-op, no error)
+  // MUST handle snippetId not in map (no-op, no error)
   it("is a no-op when snippetId is not in the map", async () => {
     mockUsageCounts.getValue.mockResolvedValue({});
     mockUsageCounts.setValue.mockResolvedValue(undefined);
     await expect(resetSnippetUsage("nonexistent")).resolves.not.toThrow();
   });
 
-  // spec: MUST log errors silently
+  // MUST log errors silently
   it("does not throw when storage throws", async () => {
     mockUsageCounts.getValue.mockRejectedValue(new Error("Error"));
     await expect(resetSnippetUsage("snip-1")).resolves.not.toThrow();
@@ -196,14 +194,14 @@ describe("clearAllUsageCounts", () => {
     vi.clearAllMocks();
   });
 
-  // spec: MUST call usageCountsItem.removeValue
+  // MUST call usageCountsItem.removeValue
   it("calls removeValue on the usage counts item", async () => {
     mockUsageCounts.removeValue.mockResolvedValue(undefined);
     await clearAllUsageCounts();
     expect(mockUsageCounts.removeValue).toHaveBeenCalled();
   });
 
-  // spec: MUST log errors silently
+  // MUST log errors silently
   it("does not throw when storage throws", async () => {
     mockUsageCounts.removeValue.mockRejectedValue(new Error("Error"));
     await expect(clearAllUsageCounts()).resolves.not.toThrow();
@@ -215,7 +213,7 @@ describe("incrementTotalInsertions", () => {
     vi.clearAllMocks();
   });
 
-  // spec: MUST increment totalSnippetInsertionsItem by 1
+  // MUST increment totalSnippetInsertionsItem by 1
   it("reads current value and writes incremented value", async () => {
     mockTotalInsertions.getValue.mockResolvedValue(5);
     mockTotalInsertions.setValue.mockResolvedValue(undefined);
@@ -223,7 +221,7 @@ describe("incrementTotalInsertions", () => {
     expect(mockTotalInsertions.setValue).toHaveBeenCalledWith(6);
   });
 
-  // spec: MUST start from 0 when storage returns 0
+  // MUST start from 0 when storage returns 0
   it("increments from 0 to 1", async () => {
     mockTotalInsertions.getValue.mockResolvedValue(0);
     mockTotalInsertions.setValue.mockResolvedValue(undefined);
@@ -231,13 +229,13 @@ describe("incrementTotalInsertions", () => {
     expect(mockTotalInsertions.setValue).toHaveBeenCalledWith(1);
   });
 
-  // spec: MUST swallow errors silently (fire-and-forget safety)
+  // MUST swallow errors silently (fire-and-forget safety)
   it("does not throw when getValue rejects", async () => {
     mockTotalInsertions.getValue.mockRejectedValue(new Error("read error"));
     await expect(incrementTotalInsertions()).resolves.not.toThrow();
   });
 
-  // spec: MUST swallow errors silently (fire-and-forget safety)
+  // MUST swallow errors silently (fire-and-forget safety)
   it("does not throw when setValue rejects", async () => {
     mockTotalInsertions.getValue.mockResolvedValue(3);
     mockTotalInsertions.setValue.mockRejectedValue(new Error("write error"));

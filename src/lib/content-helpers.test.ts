@@ -34,21 +34,20 @@ const noClipboard = () => "";
 // ---------------------------------------------------------------------------
 
 describe("buildShortcutIndex", () => {
-  // spec: empty array → empty map and empty lengths
   it("returns empty map and lengths for empty snippets", () => {
     const index = buildShortcutIndex([]);
     expect(index.map.size).toBe(0);
     expect(index.lengths).toEqual([]);
   });
 
-  // spec: returns correct map keyed by shortcut
+  // returns correct map keyed by shortcut
   it("maps shortcuts to snippets", () => {
     const s = makeSnippet({ shortcut: "hi" });
     const index = buildShortcutIndex([s]);
     expect(index.map.get("hi")).toBe(s);
   });
 
-  // spec: lengths are sorted descending
+  // lengths are sorted descending
   it("sorts lengths descending", () => {
     const snippets = [
       makeSnippet({ id: "1", shortcut: "a" }),
@@ -59,7 +58,7 @@ describe("buildShortcutIndex", () => {
     expect(index.lengths).toEqual([3, 2, 1]);
   });
 
-  // spec: duplicate lengths are deduplicated
+  // duplicate lengths are deduplicated
   it("deduplicates lengths", () => {
     const snippets = [
       makeSnippet({ id: "1", shortcut: "hi" }),
@@ -69,7 +68,6 @@ describe("buildShortcutIndex", () => {
     expect(index.lengths).toEqual([2]); // both have length 2
   });
 
-  // spec: last-write-wins for duplicate shortcuts
   it("last-write-wins for duplicate shortcuts", () => {
     const s1 = makeSnippet({ id: "first", shortcut: "hi" });
     const s2 = makeSnippet({ id: "second", shortcut: "hi" });
@@ -86,18 +84,16 @@ describe("findSnippetMatch", () => {
   const snippet = makeSnippet({ shortcut: "hi" });
   const index = buildShortcutIndex([snippet]);
 
-  // spec: returns null for empty text
   it("returns null for empty text", () => {
     expect(findSnippetMatch("", 0, index)).toBeNull();
   });
 
-  // spec: returns null for empty index
   it("returns null for empty index", () => {
     const emptyIndex = buildShortcutIndex([]);
     expect(findSnippetMatch("hi", 2, emptyIndex)).toBeNull();
   });
 
-  // spec: matches shortcut at start of text (no preceding char required)
+  // matches shortcut at start of text (no preceding char required)
   it("matches shortcut at start of text", () => {
     const result = findSnippetMatch("hi", 2, index);
     expect(result).not.toBeNull();
@@ -106,26 +102,26 @@ describe("findSnippetMatch", () => {
     expect(result!.endPos).toBe(2);
   });
 
-  // spec: matches shortcut after a space (word boundary)
+  // matches shortcut after a space (word boundary)
   it("matches shortcut after a space", () => {
     const result = findSnippetMatch("say hi", 6, index);
     expect(result).not.toBeNull();
     expect(result!.startPos).toBe(4);
   });
 
-  // spec: matches shortcut after a newline (word boundary)
+  // matches shortcut after a newline (word boundary)
   it("matches shortcut after a newline", () => {
     const result = findSnippetMatch("say\nhi", 6, index);
     expect(result).not.toBeNull();
   });
 
-  // spec: does NOT match when shortcut is suffix of another word (no word boundary)
+  // does NOT match when shortcut is suffix of another word (no word boundary)
   it("does not match when shortcut is inside a word", () => {
     const result = findSnippetMatch("ohhi", 4, index);
     expect(result).toBeNull();
   });
 
-  // spec: — a shortcut typed at the end of
+  // — a shortcut typed at the end of
   // pre-filled prose is preceded by a full stop, not a space. That is the
   // caret position every rich editor puts you in when you edit existing
   // content, so it must still expand.
@@ -139,7 +135,7 @@ describe("findSnippetMatch", () => {
     }
   );
 
-  // spec: — the boundary widening must not
+  // — the boundary widening must not
   // reopen the cases the original rule existed for. Every one of these is a
   // character that occurs inside a URL, a path or a file name.
   it.each([
@@ -161,18 +157,17 @@ describe("findSnippetMatch", () => {
     expect(isShortcutBoundary("/")).toBe(false);
   });
 
-  // spec: skips shortcuts longer than cursorPosition
+  // skips shortcuts longer than cursorPosition
   it("returns null when cursorPosition is less than shortcut length", () => {
     const result = findSnippetMatch("h", 1, index);
     expect(result).toBeNull();
   });
 
-  // spec: returns null when cursor is at position 0
   it("returns null when cursor is at position 0", () => {
     expect(findSnippetMatch("hi", 0, index)).toBeNull();
   });
 
-  // spec: longer shortcuts match first (priority order)
+  // longer shortcuts match first (priority order)
   it("matches longer shortcut first", () => {
     const short = makeSnippet({ id: "short", shortcut: "hi" });
     const long = makeSnippet({ id: "long", shortcut: "hiho" });
@@ -182,7 +177,7 @@ describe("findSnippetMatch", () => {
     expect(result!.snippet.id).toBe("long");
   });
 
-  // spec: exact match only
+  // exact match only
   it("does not partially match a longer shortcut", () => {
     const result = findSnippetMatch("hi there", 2, index);
     // cursor at 2, text before cursor is "hi" → matches
@@ -197,27 +192,27 @@ describe("findSnippetMatch", () => {
 describe("formatDate", () => {
   const FIXED_DATE = "2025-06-15";
 
-  // spec: "iso" format → YYYY-MM-DD
+  // "iso" format → YYYY-MM-DD
   it("formats iso date", () => {
     expect(formatDate("iso", FIXED_DATE)).toBe("2025-06-15");
   });
 
-  // spec: "us" format → M/D/YYYY
+  // "us" format → M/D/YYYY
   it("formats us date", () => {
     expect(formatDate("us", FIXED_DATE)).toBe("6/15/2025");
   });
 
-  // spec: "eu" format → DD/MM/YYYY
+  // "eu" format → DD/MM/YYYY
   it("formats eu date", () => {
     expect(formatDate("eu", FIXED_DATE)).toBe("15/06/2025");
   });
 
-  // spec: "long" format → full locale date
+  // "long" format → full locale date
   it("formats long date", () => {
     expect(formatDate("long", FIXED_DATE)).toBe("June 15, 2025");
   });
 
-  // spec: "short" format → abbreviated locale date
+  // "short" format → abbreviated locale date
   it("formats short date (abbreviated)", () => {
     const result = formatDate("short", FIXED_DATE);
     // Locale-formatted; just check it contains recognizable parts
@@ -225,7 +220,6 @@ describe("formatDate", () => {
     expect(result).toMatch(/15/);
   });
 
-  // spec: unknown format → "iso" default
   it("defaults to iso format for unknown format string", () => {
     expect(formatDate("unknown", FIXED_DATE)).toBe("2025-06-15");
   });
@@ -234,7 +228,6 @@ describe("formatDate", () => {
     expect(formatDate("", FIXED_DATE)).toBe("2025-06-15");
   });
 
-  // spec: zero-pads month and day
   it("zero-pads single-digit month in iso format", () => {
     expect(formatDate("iso", "2025-01-05")).toBe("2025-01-05");
   });
@@ -243,7 +236,7 @@ describe("formatDate", () => {
     expect(formatDate("us", "2025-01-05")).toBe("1/5/2025");
   });
 
-  // spec: uses today's date when dateStr is omitted
+  // uses today's date when dateStr is omitted
   it("uses today when no dateStr provided", () => {
     const result = formatDate("iso");
     expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -257,14 +250,14 @@ describe("formatDate", () => {
 describe("processSnippetContent", () => {
   // ── Plain text mode (asHtml = false) ──────────────────────────────────────
 
-  // spec: passes plain text through markdownToPlainText
+  // passes plain text through markdownToPlainText
   it("strips markdown from plain text content", () => {
     const result = processSnippetContent("**Hello** world", false, noClipboard);
     expect(result.content).toBe("Hello world");
     expect(result.cursorOffset).toBeNull();
   });
 
-  // spec: MUST replace {{clipboard}} with readClipboard() result
+  // MUST replace {{clipboard}} with readClipboard() result
   it("replaces {{clipboard}} with clipboard text", () => {
     const result = processSnippetContent(
       "Paste: {{clipboard}}",
@@ -283,7 +276,7 @@ describe("processSnippetContent", () => {
     expect(result.content).toBe("X and X");
   });
 
-  // spec: MUST replace {{date:format}} with formatDate result
+  // MUST replace {{date:format}} with formatDate result
   it("replaces {{date:iso}} with formatted date", () => {
     const result = processSnippetContent(
       "Today: {{date:iso}}",
@@ -304,7 +297,7 @@ describe("processSnippetContent", () => {
     );
   });
 
-  // spec: MUST replace {{datepicker:YYYY-MM-DD}} with formatDate("long", date)
+  // MUST replace {{datepicker:YYYY-MM-DD}} with formatDate("long", date)
   it("replaces {{datepicker:YYYY-MM-DD}} with long date", () => {
     const result = processSnippetContent(
       "{{datepicker:2025-01-15}}",
@@ -314,7 +307,7 @@ describe("processSnippetContent", () => {
     expect(result.content).toBe("January 15, 2025");
   });
 
-  // spec: MUST detect {{cursor}} and compute cursorOffset
+  // MUST detect {{cursor}} and compute cursorOffset
   it("detects cursor placeholder and computes offset", () => {
     const result = processSnippetContent(
       "Hello {{cursor}} world",
@@ -331,13 +324,12 @@ describe("processSnippetContent", () => {
     expect(result.cursorOffset).toBeNull();
   });
 
-  // spec: cursor at start → offset = 0
   it("computes offset = 0 when cursor is at start", () => {
     const result = processSnippetContent("{{cursor}}Hello", false, noClipboard);
     expect(result.cursorOffset).toBe(0);
   });
 
-  // spec: empty content → empty output
+  // empty content → empty output
   it("handles empty content", () => {
     const result = processSnippetContent("", false, noClipboard);
     expect(result.content).toBe("");
@@ -346,13 +338,11 @@ describe("processSnippetContent", () => {
 
   // ── HTML mode (asHtml = true) ──────────────────────────────────────────────
 
-  // spec: converts markdown to HTML when asHtml = true
   it("converts markdown to HTML in asHtml mode", () => {
     const result = processSnippetContent("**Hello**", true, noClipboard);
     expect(result.content).toBe("<strong>Hello</strong>");
   });
 
-  // spec: replaces first {{cursor}} with marker span in HTML mode
   it("replaces first {{cursor}} with cursor marker span in HTML mode", () => {
     const result = processSnippetContent(
       "Hello {{cursor}} world",
@@ -363,7 +353,7 @@ describe("processSnippetContent", () => {
     expect(result.content).not.toContain("{{cursor}}");
   });
 
-  // spec: removes remaining {{cursor}} occurrences in HTML mode
+  // removes remaining {{cursor}} occurrences in HTML mode
   it("removes all cursor placeholders after the first in HTML mode", () => {
     const result = processSnippetContent(
       "{{cursor}} and {{cursor}}",
@@ -376,13 +366,12 @@ describe("processSnippetContent", () => {
     expect(result.content).not.toContain("{{cursor}}");
   });
 
-  // spec: cursorOffset is null in HTML mode
   it("returns cursorOffset null in HTML mode", () => {
     const result = processSnippetContent("{{cursor}}", true, noClipboard);
     expect(result.cursorOffset).toBeNull();
   });
 
-  // spec: clipboard still replaced in HTML mode
+  // clipboard still replaced in HTML mode
   it("replaces {{clipboard}} in HTML mode", () => {
     const result = processSnippetContent(
       "Paste: {{clipboard}}",
@@ -545,7 +534,7 @@ describe("processSnippetContent — image & gif placeholders", () => {
     expect(result.content).toContain(`src="${dataUrl}"`);
   });
 
-  // spec: width suffix in placeholder is preserved in the resolved <img> style
+  // width suffix in placeholder is preserved in the resolved <img> style
   it("preserves image width in HTML mode when placeholder has a width suffix", () => {
     const result = processSnippetContent(
       "{{image:abc123de-fa01-4567-89ab-cdef01234567:320}}",
@@ -557,7 +546,7 @@ describe("processSnippetContent — image & gif placeholders", () => {
     expect(result.content).toContain('src="blob:http://localhost/fake-url"');
   });
 
-  // spec: image without width suffix still gets max-width:100% fallback style
+  // image without width suffix still gets max-width:100% fallback style
   it("applies default max-width style when image placeholder has no width suffix", () => {
     const result = processSnippetContent(
       "{{image:abc123de-fa01-4567-89ab-cdef01234567}}",
@@ -569,7 +558,7 @@ describe("processSnippetContent — image & gif placeholders", () => {
     expect(result.content).not.toContain("width:undefinedpx");
   });
 
-  // spec: alt text from media metadata is injected into <img alt="...">
+  // alt text from media metadata is injected into <img alt="...">
   it("injects alt text into resolved <img> tag", () => {
     const result = processSnippetContent(
       "{{image:abc123de-fa01-4567-89ab-cdef01234567}}",
@@ -580,7 +569,6 @@ describe("processSnippetContent — image & gif placeholders", () => {
     expect(result.content).toContain('alt="My screenshot"');
   });
 
-  // spec: double-quotes in alt text are escaped
   it("escapes double quotes in alt text", () => {
     const result = processSnippetContent(
       "{{image:abc123de-fa01-4567-89ab-cdef01234567}}",
@@ -591,7 +579,7 @@ describe("processSnippetContent — image & gif placeholders", () => {
     expect(result.content).toContain("Say &quot;hello&quot;");
   });
 
-  // spec: no alt attribute emitted when alt is absent
+  // no alt attribute emitted when alt is absent
   it("omits alt attribute when media has no alt", () => {
     const result = processSnippetContent(
       "{{image:abc123de-fa01-4567-89ab-cdef01234567}}",
@@ -602,7 +590,7 @@ describe("processSnippetContent — image & gif placeholders", () => {
     expect(result.content).not.toContain('alt="');
   });
 
-  // spec: single-quotes in alt are escaped to prevent attribute injection
+  // single-quotes in alt are escaped to prevent attribute injection
   it("escapes single quotes in alt text", () => {
     const result = processSnippetContent(
       "{{image:abc123de-fa01-4567-89ab-cdef01234567}}",
@@ -614,7 +602,7 @@ describe("processSnippetContent — image & gif placeholders", () => {
     expect(result.content).not.toContain("it's here");
   });
 
-  // spec: < and > in alt are escaped to prevent HTML injection
+  // < and > in alt are escaped to prevent HTML injection
   it("escapes angle brackets in alt text", () => {
     const result = processSnippetContent(
       "{{image:abc123de-fa01-4567-89ab-cdef01234567}}",

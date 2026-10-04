@@ -1,5 +1,5 @@
 /**
- * spec: src/lib/uninstall-url.ts
+ * src/lib/uninstall-url.ts
  *
  * Replaces an e2e test that could not fail: it called
  * `runtime.setUninstallURL` itself and asserted its own call did not throw. The

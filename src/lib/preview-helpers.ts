@@ -224,7 +224,7 @@ function mergeRanges(
  *
  * `cursorPos` is the caret offset for input/textarea. Without it there is nothing to
  * measure, and the palette falls back to the element's own bounds — which is why every
- * caller must pass it. spec:
+ * caller must pass it.
  */
 export function calculatePreviewPosition(
   targetElement: HTMLElement,

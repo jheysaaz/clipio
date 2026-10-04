@@ -12,7 +12,7 @@ import type { Breadcrumb } from "@sentry/core";
 // ---------------------------------------------------------------------------
 
 describe("scrubEvent", () => {
-  // spec: MUST scrub event.extra by running redactObject on it
+  // MUST scrub event.extra by running redactObject on it
   it("redacts sensitive keys in event.extra", () => {
     const event: Event = {
       extra: { content: "my snippet body", snippetId: "abc123" },
@@ -50,7 +50,7 @@ describe("scrubEvent", () => {
     }
   });
 
-  // spec: MUST recurse into nested plain objects
+  // MUST recurse into nested plain objects
   it("redacts nested sensitive keys", () => {
     const event: Event = {
       extra: { nested: { text: "sensitive", id: "safe" } } as Record<
@@ -64,7 +64,7 @@ describe("scrubEvent", () => {
     expect(nested.id).toBe("safe");
   });
 
-  // spec: MUST NOT recurse into arrays (arrays are redacted at the key level)
+  // MUST NOT recurse into arrays (arrays are redacted at the key level)
   it("redacts array values at key level without recursing", () => {
     const event: Event = {
       extra: { items: ["a", "b"] } as Record<string, unknown>,
@@ -73,13 +73,13 @@ describe("scrubEvent", () => {
     expect(event.extra!.items).toBe("[REDACTED]"); // items is a sensitive key
   });
 
-  // spec: MUST handle event.extra === undefined gracefully
+  // MUST handle event.extra === undefined gracefully
   it("handles missing event.extra gracefully", () => {
     const event: Event = {};
     expect(() => scrubEvent(event)).not.toThrow();
   });
 
-  // spec: MUST scrub event.contexts
+  // MUST scrub event.contexts
   it("redacts sensitive keys in event.contexts", () => {
     const event: Event = {
       contexts: {
@@ -92,20 +92,19 @@ describe("scrubEvent", () => {
     expect(ctx.source).toBe("user"); // non-sensitive — preserved
   });
 
-  // spec: MUST handle event.contexts === undefined gracefully
+  // MUST handle event.contexts === undefined gracefully
   it("handles missing event.contexts gracefully", () => {
     const event: Event = {};
     expect(() => scrubEvent(event)).not.toThrow();
   });
 
-  // spec: MUST return the same event object (mutated in-place)
+  // MUST return the same event object (mutated in-place)
   it("returns the same event object", () => {
     const event: Event = { extra: { content: "sensitive" } };
     const returned = scrubEvent(event);
     expect(returned).toBe(event);
   });
 
-  // spec: non-sensitive keys in extra are NOT modified
   it("preserves non-sensitive keys in extra", () => {
     const event: Event = {
       extra: { action: "loadSnippets", snippetId: "abc", count: 5 } as Record<
@@ -125,7 +124,7 @@ describe("scrubEvent", () => {
 // ---------------------------------------------------------------------------
 
 describe("scrubBreadcrumb", () => {
-  // spec: MUST scrub breadcrumb.data
+  // MUST scrub breadcrumb.data
   it("redacts sensitive keys in breadcrumb.data", () => {
     const crumb: Breadcrumb = {
       category: "fetch",
@@ -150,13 +149,11 @@ describe("scrubBreadcrumb", () => {
     expect(crumb.data!.method).toBe("GET");
   });
 
-  // spec: MUST handle missing breadcrumb.data gracefully
   it("handles missing breadcrumb.data gracefully", () => {
     const crumb: Breadcrumb = { category: "fetch" };
     expect(() => scrubBreadcrumb(crumb)).not.toThrow();
   });
 
-  // spec: MUST truncate console breadcrumb messages > 200 chars
   it("truncates console breadcrumb messages longer than 200 chars", () => {
     const longMessage = "a".repeat(201);
     const crumb: Breadcrumb = {
@@ -180,7 +177,6 @@ describe("scrubBreadcrumb", () => {
     expect(crumb.message!.startsWith("a".repeat(200))).toBe(true);
   });
 
-  // spec: MUST NOT truncate messages ≤ 200 chars
   it("does not truncate console messages of exactly 200 chars", () => {
     const message = "b".repeat(200);
     const crumb: Breadcrumb = {
@@ -200,7 +196,6 @@ describe("scrubBreadcrumb", () => {
     expect(crumb.message).toBe("Short message");
   });
 
-  // spec: MUST NOT truncate messages for non-console breadcrumbs
   it("does not truncate long messages for non-console categories", () => {
     const longMessage = "a".repeat(201);
     const crumb: Breadcrumb = {
@@ -211,7 +206,6 @@ describe("scrubBreadcrumb", () => {
     expect(crumb.message).toBe(longMessage); // not truncated
   });
 
-  // spec: MUST return the same breadcrumb object
   it("returns the same breadcrumb object", () => {
     const crumb: Breadcrumb = { category: "console", data: { text: "hi" } };
     const returned = scrubBreadcrumb(crumb);

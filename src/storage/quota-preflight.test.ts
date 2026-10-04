@@ -302,7 +302,7 @@ describe("checkQuota", () => {
   });
 
   // What this function CANNOT do, stated as a test so the gap is visible rather
-  // than implied. See the spec: the projection is given snippets, so keys the
+  // than implied. The projection is given snippets, so keys the
   // same code path writes outside that set — the `_pendingWrite` journal (up to
   // JOURNAL_MAX_BYTES) and any `corrupt:` quarantine records — are invisible to
   // it while still counting against the browser's real limits. So a write can

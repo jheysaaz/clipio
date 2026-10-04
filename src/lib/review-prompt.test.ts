@@ -105,7 +105,6 @@ describe("shouldShowReviewPrompt — Condition 1: state", () => {
   });
 
   it("does not read further storage items when state is non-pending", async () => {
-    // spec: (early return)
     mockReviewPromptStateItem.getValue.mockResolvedValue("dismissed");
     await shouldShowReviewPrompt();
     expect(mockReviewPromptSnoozedUntilItem.getValue).not.toHaveBeenCalled();
@@ -368,7 +367,7 @@ describe("snoozeReviewPrompt", () => {
 
 // ---------------------------------------------------------------------------
 // isChromiumBrowser
-// spec: — gates the About "leave a review"
+// — gates the About "leave a review"
 // action, which points at the Chrome Web Store and does not exist on Firefox.
 // ---------------------------------------------------------------------------
 

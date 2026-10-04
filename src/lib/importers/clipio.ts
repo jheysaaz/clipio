@@ -45,7 +45,7 @@ function snippetToParsed(raw: Snippet): ParsedSnippet {
   // is treated as markdown for good and inserts as visible escaped text.
   //
   // Both Clipio entry points (the JSON file and the v2 ZIP) funnel through
-  // here, so one call covers both. spec:
+  // here, so one call covers both.
   const snippet = migrateContentFormat(raw);
   return {
     suggestedId: snippet.id,

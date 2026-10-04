@@ -37,13 +37,13 @@ describe("SyncBackend", () => {
   // ── getSnippets ──────────────────────────────────────────────────────────
 
   describe("getSnippets", () => {
-    // spec: returns empty array when no snip: keys exist
+    // returns empty array when no snip: keys exist
     it("returns empty array when storage is empty", async () => {
       const snippets = await backend.getSnippets();
       expect(snippets).toEqual([]);
     });
 
-    // spec: reads all snip: keys
+    // reads all snip: keys
     it("reads snippets stored under snip: prefix", async () => {
       const snippet = makeSnippet({ id: "abc123" });
       seedSyncStore({ "snip:abc123": snippet });
@@ -62,14 +62,13 @@ describe("SyncBackend", () => {
       expect(snippets).toHaveLength(2);
     });
 
-    // spec: ignores non-snip: keys
     it("ignores non-snip: keys", async () => {
       seedSyncStore({ storageMode: "sync", "not-a-snippet": {} });
       const snippets = await backend.getSnippets();
       expect(snippets).toEqual([]);
     });
 
-    // spec: migrates legacy "snippets" key to per-key layout
+    // migrates legacy "snippets" key to per-key layout
     it("migrates legacy snippets key", async () => {
       const snippet = makeSnippet({ id: "migrated" });
       seedSyncStore({ snippets: [snippet] });
@@ -80,7 +79,6 @@ describe("SyncBackend", () => {
       expect(mockStorageSync.remove).toHaveBeenCalledWith("snippets");
     });
 
-    // spec: handles JSON string values
     it("parses JSON string values", async () => {
       const snippet = makeSnippet({ id: "json-id" });
       seedSyncStore({ "snip:json-id": JSON.stringify(snippet) });
@@ -92,7 +90,7 @@ describe("SyncBackend", () => {
   // ── saveSnippets ──────────────────────────────────────────────────────────
 
   describe("saveSnippets", () => {
-    // spec: saves snippets under snip: keys
+    // saves snippets under snip: keys
     it("stores each snippet under snip:<id> key", async () => {
       const snippet = makeSnippet({ id: "s1" });
       await backend.saveSnippets([snippet]);
@@ -101,7 +99,7 @@ describe("SyncBackend", () => {
       );
     });
 
-    // spec: removes stale snip: keys not in the new list
+    // removes stale snip: keys not in the new list
     it("removes keys not in the new snippets list", async () => {
       seedSyncStore({ "snip:old": makeSnippet({ id: "old" }) });
       const newSnippet = makeSnippet({ id: "new" });
@@ -111,7 +109,7 @@ describe("SyncBackend", () => {
       );
     });
 
-    // spec: skips writing snippets with identical stored values
+    // skips writing snippets with identical stored values
     it("skips write for already-identical snippets", async () => {
       const snippet = makeSnippet({ id: "same" });
       seedSyncStore({ "snip:same": snippet });
@@ -120,7 +118,6 @@ describe("SyncBackend", () => {
       expect(mockStorageSync.set).not.toHaveBeenCalled();
     });
 
-    // spec: throws StorageQuotaError on quota errors
     it("throws StorageQuotaError when quota is exceeded", async () => {
       // Sustained, because a real quota failure fails every subsequent write,
       // and the journal write is now the first call.
@@ -145,7 +142,6 @@ describe("SyncBackend", () => {
       }
     });
 
-    // spec: re-throws non-quota errors
     it("re-throws non-quota errors", async () => {
       simulateSyncQuotaErrorSustained("Network failure");
       try {

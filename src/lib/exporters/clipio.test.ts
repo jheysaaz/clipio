@@ -37,19 +37,19 @@ const makeMeta = (overrides: Partial<MediaMetadata> = {}): MediaMetadata => ({
 });
 
 describe("buildClipioExport", () => {
-  // spec: MUST return an object with version set to the literal 1
+  // MUST return an object with version set to the literal 1
   it("sets version to 1", () => {
     const result = buildClipioExport([]);
     expect(result.version).toBe(1);
   });
 
-  // spec: MUST return an object with format set to the literal "clipio"
+  // MUST return an object with format set to the literal "clipio"
   it('sets format to "clipio"', () => {
     const result = buildClipioExport([]);
     expect(result.format).toBe("clipio");
   });
 
-  // spec: MUST set exportedAt to a valid ISO 8601 timestamp close to now
+  // MUST set exportedAt to a valid ISO 8601 timestamp close to now
   it("sets exportedAt to a valid ISO timestamp close to the current time", () => {
     const before = Date.now();
     const result = buildClipioExport([]);
@@ -64,20 +64,19 @@ describe("buildClipioExport", () => {
     expect(parsed.getTime()).toBeLessThanOrEqual(after);
   });
 
-  // spec: MUST pass the snippets array through unchanged
+  // MUST pass the snippets array through unchanged
   it("passes the snippets array through", () => {
     const snippets = [makeSnippet({ id: "a" }), makeSnippet({ id: "b" })];
     const result = buildClipioExport(snippets);
     expect(result.snippets).toEqual(snippets);
   });
 
-  // spec: MUST work correctly with an empty snippets array
+  // MUST work correctly with an empty snippets array
   it("works with an empty snippets array", () => {
     const result = buildClipioExport([]);
     expect(result.snippets).toEqual([]);
   });
 
-  // spec: MUST NOT mutate the input snippets array
   it("does not mutate the input array", () => {
     const snippets = [makeSnippet()];
     const originalLength = snippets.length;
@@ -85,7 +84,7 @@ describe("buildClipioExport", () => {
     expect(snippets.length).toBe(originalLength);
   });
 
-  // spec: result is a valid ClipioExport shape
+  // result is a valid ClipioExport shape
   it("returns the correct envelope shape", () => {
     const snippets = [makeSnippet()];
     const result = buildClipioExport(snippets);

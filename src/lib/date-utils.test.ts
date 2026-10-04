@@ -30,7 +30,7 @@ describe("getRelativeTime", () => {
     vi.useRealTimers();
   });
 
-  // spec: getRelativeTime — MUST return "just now" when < 60 seconds
+  // getRelativeTime — MUST return "just now" when < 60 seconds
   it('returns "just now" for 0 seconds ago', () => {
     expect(getRelativeTime(secsAgo(0))).toBe("just now");
   });
@@ -43,7 +43,7 @@ describe("getRelativeTime", () => {
     expect(getRelativeTime(secsAgo(59))).toBe("just now");
   });
 
-  // spec: MUST return "1 minute ago" at exactly 60 seconds
+  // MUST return "1 minute ago" at exactly 60 seconds
   it('returns "1 minute ago" for exactly 60 seconds', () => {
     expect(getRelativeTime(secsAgo(60))).toBe("1 minute ago");
   });
@@ -52,7 +52,7 @@ describe("getRelativeTime", () => {
     expect(getRelativeTime(secsAgo(89))).toBe("1 minute ago");
   });
 
-  // spec: MUST return "N minutes ago" for 2–59 minutes
+  // MUST return "N minutes ago" for 2–59 minutes
   it('returns "2 minutes ago" for 120 seconds', () => {
     expect(getRelativeTime(secsAgo(120))).toBe("2 minutes ago");
   });
@@ -61,12 +61,12 @@ describe("getRelativeTime", () => {
     expect(getRelativeTime(secsAgo(59 * 60))).toBe("59 minutes ago");
   });
 
-  // spec: MUST return "1 hour ago" at exactly 60 minutes
+  // MUST return "1 hour ago" at exactly 60 minutes
   it('returns "1 hour ago" for exactly 60 minutes', () => {
     expect(getRelativeTime(secsAgo(60 * 60))).toBe("1 hour ago");
   });
 
-  // spec: MUST return "N hours ago" for 2–23 hours
+  // MUST return "N hours ago" for 2–23 hours
   it('returns "2 hours ago" for 2 hours', () => {
     expect(getRelativeTime(secsAgo(2 * 3600))).toBe("2 hours ago");
   });
@@ -75,12 +75,12 @@ describe("getRelativeTime", () => {
     expect(getRelativeTime(secsAgo(23 * 3600))).toBe("23 hours ago");
   });
 
-  // spec: MUST return "1 day ago" at exactly 24 hours
+  // MUST return "1 day ago" at exactly 24 hours
   it('returns "1 day ago" for exactly 24 hours', () => {
     expect(getRelativeTime(secsAgo(24 * 3600))).toBe("1 day ago");
   });
 
-  // spec: MUST return "N days ago" for 2–6 days
+  // MUST return "N days ago" for 2–6 days
   it('returns "2 days ago" for 2 days', () => {
     expect(getRelativeTime(secsAgo(2 * 86400))).toBe("2 days ago");
   });
@@ -89,12 +89,12 @@ describe("getRelativeTime", () => {
     expect(getRelativeTime(secsAgo(6 * 86400))).toBe("6 days ago");
   });
 
-  // spec: MUST return "1 week ago" at exactly 7 days
+  // MUST return "1 week ago" at exactly 7 days
   it('returns "1 week ago" for exactly 7 days', () => {
     expect(getRelativeTime(secsAgo(7 * 86400))).toBe("1 week ago");
   });
 
-  // spec: MUST return "N weeks ago" for 2–3 weeks
+  // MUST return "N weeks ago" for 2–3 weeks
   it('returns "2 weeks ago" for 14 days', () => {
     expect(getRelativeTime(secsAgo(14 * 86400))).toBe("2 weeks ago");
   });
@@ -103,12 +103,12 @@ describe("getRelativeTime", () => {
     expect(getRelativeTime(secsAgo(21 * 86400))).toBe("3 weeks ago");
   });
 
-  // spec: MUST return "1 month ago" around 28-30 days
+  // MUST return "1 month ago" around 28-30 days
   it('returns "1 month ago" for 30 days', () => {
     expect(getRelativeTime(secsAgo(30 * 86400))).toBe("1 month ago");
   });
 
-  // spec: MUST return "N months ago" for 2–11 months
+  // MUST return "N months ago" for 2–11 months
   it('returns "2 months ago" for 60 days', () => {
     expect(getRelativeTime(secsAgo(60 * 86400))).toBe("2 months ago");
   });
@@ -117,12 +117,12 @@ describe("getRelativeTime", () => {
     expect(getRelativeTime(secsAgo(330 * 86400))).toBe("11 months ago");
   });
 
-  // spec: MUST return "1 year ago" at exactly 365 days
+  // MUST return "1 year ago" at exactly 365 days
   it('returns "1 year ago" for 365 days', () => {
     expect(getRelativeTime(secsAgo(365 * 86400))).toBe("1 year ago");
   });
 
-  // spec: MUST return "N years ago" for 2+ years
+  // MUST return "N years ago" for 2+ years
   it('returns "2 years ago" for 730 days', () => {
     expect(getRelativeTime(secsAgo(730 * 86400))).toBe("2 years ago");
   });
@@ -131,13 +131,13 @@ describe("getRelativeTime", () => {
     expect(getRelativeTime(secsAgo(5 * 365 * 86400))).toBe("5 years ago");
   });
 
-  // spec: MUST accept ISO string input
+  // MUST accept ISO string input
   it("accepts an ISO date string", () => {
     const isoString = new Date(NOW.getTime() - 90 * 1000).toISOString();
     expect(getRelativeTime(isoString)).toBe("1 minute ago");
   });
 
-  // spec: future dates treated as 0 seconds → "just now"
+  // future dates treated as 0 seconds → "just now"
   it('returns "just now" for a future date', () => {
     const futureDate = new Date(NOW.getTime() + 10_000);
     expect(getRelativeTime(futureDate)).toBe("just now");
@@ -149,7 +149,7 @@ describe("getRelativeTime", () => {
 // ---------------------------------------------------------------------------
 
 describe("formatShortDate", () => {
-  // spec: MUST return "Mon DD" format with en-US locale, no year
+  // MUST return "Mon DD" format with en-US locale, no year
   // Note: Use UTC noon to avoid timezone shifts when passing ISO strings
   it("formats a known date as short date string", () => {
     expect(formatShortDate(new Date(2025, 10, 11))).toBe("Nov 11"); // months 0-indexed
@@ -163,12 +163,11 @@ describe("formatShortDate", () => {
     expect(formatShortDate(new Date(2025, 5, 15))).toBe("Jun 15");
   });
 
-  // spec: MUST accept Date objects
+  // MUST accept Date objects
   it("accepts a Date object", () => {
     expect(formatShortDate(new Date(2025, 11, 25))).toBe("Dec 25");
   });
 
-  // spec: output MUST NOT include the year
   it("does not include the year in output", () => {
     const result = formatShortDate(new Date(2025, 5, 15));
     expect(result).not.toMatch(/2025/);
@@ -180,7 +179,7 @@ describe("formatShortDate", () => {
 // ---------------------------------------------------------------------------
 
 describe("formatFullDate", () => {
-  // spec: MUST return "Month DD, YYYY" format with en-US locale
+  // MUST return "Month DD, YYYY" format with en-US locale
   it("formats a known date as full date string", () => {
     expect(formatFullDate(new Date(2025, 10, 11))).toBe("November 11, 2025");
   });
@@ -193,18 +192,18 @@ describe("formatFullDate", () => {
     expect(formatFullDate(new Date(2025, 5, 15))).toBe("June 15, 2025");
   });
 
-  // spec: MUST accept Date objects
+  // MUST accept Date objects
   it("accepts a Date object", () => {
     expect(formatFullDate(new Date(2025, 11, 25))).toBe("December 25, 2025");
   });
 
-  // spec: output MUST include the year
+  // output MUST include the year
   it("includes the year in output", () => {
     const result = formatFullDate(new Date(2025, 5, 15));
     expect(result).toMatch(/2025/);
   });
 
-  // spec: output MUST include the full month name
+  // output MUST include the full month name
   it("uses the full month name", () => {
     const result = formatFullDate(new Date(2025, 5, 15));
     expect(result).toBe("June 15, 2025");
