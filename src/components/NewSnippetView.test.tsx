@@ -10,7 +10,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import NewSnippetView from "./NewSnippetView";
@@ -20,6 +20,36 @@ const onDraftChange = vi.fn();
 const onSave = vi.fn();
 const onCancel = vi.fn();
 const onClearCreateError = vi.fn();
+const onToggleSidebar = vi.fn();
+
+/**
+ * The editor is replaced with a plain textarea.
+ *
+ * RichTextEditor.tsx is excluded from coverage — it is Plate/Slate presentation,
+ * exercised by the editor e2e specs — so what this file is responsible for is
+ * the *wiring*: that a content edit calls onDraftChange with the existing draft
+ * spread forward. Plate's own behaviour cannot be driven from happy-dom at all
+ * (`user.keyboard` into a contenteditable never reaches its onChange, because
+ * the mutation observer never flushes), so testing the wiring against the real
+ * component is not possible — only faking it would be.
+ */
+vi.mock("@/components/editor", () => ({
+  RichTextEditor: ({
+    value,
+    onChange,
+    ariaLabel,
+  }: {
+    value: string;
+    onChange: (next: string) => void;
+    ariaLabel: string;
+  }) => (
+    <textarea
+      aria-label={ariaLabel}
+      defaultValue={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  ),
+}));
 
 const emptyDraft: SnippetFormData = {
   label: "",
@@ -237,6 +267,95 @@ describe("NewSnippetView", () => {
   it("shows no error when there is none", () => {
     renderView({ createError: null });
     expect(screen.queryByText("Storage is full")).not.toBeInTheDocument();
+  });
+
+  it("clears the error when its dismiss button is pressed", async () => {
+    const user = userEvent.setup();
+    renderView({ createError: "Storage is full" });
+
+    await user.click(screen.getByRole("button", { name: "Dismiss error" }));
+
+    expect(onClearCreateError).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not require onClearCreateError to dismiss an error", async () => {
+    // `onDismiss={() => onClearCreateError?.()}` — the optional call is the
+    // point. A parent that renders the form without a clear handler is a
+    // legitimate configuration, and the auto-dismiss timer fires on its own
+    // after 8s, so throwing here would crash a form that was working.
+    const user = userEvent.setup();
+    renderView({
+      createError: "Storage is full",
+      onClearCreateError: undefined,
+    });
+
+    await expect(
+      user.click(screen.getByRole("button", { name: "Dismiss error" }))
+    ).resolves.not.toThrow();
+  });
+
+  // --- sidebar ----------------------------------------------------------
+
+  it("offers to show the sidebar when it is collapsed", () => {
+    // Both the label and the icon flip on `sidebarOpen`. Getting this wrong is
+    // not cosmetic: the button's accessible name is the only thing telling a
+    // screen-reader user whether pressing it opens or closes the panel.
+    renderView({ sidebarOpen: false });
+
+    const toggle = screen.getByRole("button", { name: "Show sidebar" });
+    expect(toggle).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Hide sidebar" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers to hide the sidebar when it is open", () => {
+    renderView({ sidebarOpen: true });
+
+    expect(
+      screen.getByRole("button", { name: "Hide sidebar" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Show sidebar" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("calls onToggleSidebar from either state", async () => {
+    const user = userEvent.setup();
+    renderView({ sidebarOpen: false, onToggleSidebar });
+
+    await user.click(screen.getByRole("button", { name: "Show sidebar" }));
+
+    expect(onToggleSidebar).toHaveBeenCalledTimes(1);
+  });
+
+  // --- editor -----------------------------------------------------------
+
+  it("propagates editor content changes into the draft", async () => {
+    // The editor is the only required field with no data-testid, and its
+    // onChange is the one path that builds a *complete* draft: it spreads the
+    // existing draft, so a regression here silently drops the label and
+    // shortcut the user already typed.
+    const user = userEvent.setup();
+    renderView({
+      initial: {
+        label: "Address",
+        shortcut: "/addr",
+        content: "",
+        tags: [],
+      },
+    });
+
+    await user.click(screen.getByRole("textbox", { name: "Content" }));
+    await user.keyboard("123 Fake Street");
+    await waitFor(() => expect(onDraftChange).toHaveBeenCalled());
+
+    expect(onDraftChange).toHaveBeenCalled();
+    const last = onDraftChange.mock.calls.at(-1)?.[0] as SnippetFormData;
+    // The spread is the assertion: label and shortcut must survive the edit.
+    expect(last.label).toBe("Address");
+    expect(last.shortcut).toBe("/addr");
+    expect(last.content).toContain("Fake Street");
   });
 
   // --- cancel -----------------------------------------------------------
