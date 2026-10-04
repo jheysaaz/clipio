@@ -148,8 +148,8 @@ describe("every glob shape actually present in vitest.config.ts", () => {
     ["src/entrypoints/**", "src/entrypoints/background.ts", true],
     ["src/components/ui/**", "src/components/ui/button.tsx", true],
     [
-      "src/components/editor/components/**",
-      "src/components/editor/components/a/b.tsx",
+      "src/components/editor/placeholders/**",
+      "src/components/editor/placeholders/a/b.tsx",
       true,
     ],
     ["src/assets/**", "src/assets/styles/fonts.css", true],
@@ -160,7 +160,6 @@ describe("every glob shape actually present in vitest.config.ts", () => {
     ["src/components/options/**", "src/components/options/a/b/c.tsx", true],
     ["src/config/**", "src/config/constants.ts", true],
     ["src/lib/sentry.ts", "src/lib/sentry.ts", true],
-    ["src/lib/manifest.ts", "src/lib/manifest.ts", true],
     ["src/lib/utils.ts", "src/lib/utils.ts", true],
     ["src/storage/index.ts", "src/storage/index.ts", true],
     // A file that is NOT excluded by any of the above.

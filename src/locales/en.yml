@@ -12,7 +12,6 @@ common:
   # spec: specs/i18n.spec.md
   dismiss: Dismiss
   dismissError: Dismiss error
-  toggleSidebar: Toggle sidebar
   close: Close
   reload: Reload
   # Error-boundary copy. The two fallbacks differ only in what the user should
