@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "format": "clipio",
+  "exportedAt": "2026-10-04T12:00:00.000Z",
+  "snippets": [
+    {
+      "id": "sample-signoff-0001",
+      "label": "Email sign-off",
+      "shortcut": ";so",
+      "content": "Kind regards,\n{{cursor}}\n\nSent from Clipio",
+      "tags": ["email", "writing"],
+      "usageCount": 12,
+      "createdAt": "2026-09-01T09:00:00.000Z",
+      "updatedAt": "2026-10-01T09:00:00.000Z"
+    },
+    {
+      "id": "sample-ticket-0002",
+      "label": "Ticket reference",
+      "shortcut": ";ticket",
+      "content": "**Ticket:** {{clipboard}}\n**Reported by:** {{cursor}}",
+      "tags": ["support"],
+      "usageCount": 3,
+      "createdAt": "2026-09-02T09:00:00.000Z",
+      "updatedAt": "2026-10-02T09:00:00.000Z"
+    },
+    {
+      "id": "sample-today-0003",
+      "label": "Today's date",
+      "shortcut": ";today",
+      "content": "Date: {{date:iso}}",
+      "tags": [],
+      "usageCount": 41,
+      "createdAt": "2026-09-03T09:00:00.000Z",
+      "updatedAt": "2026-10-03T09:00:00.000Z"
+    },
+    {
+      "id": "sample-markdown-0004",
+      "label": "Markdown kitchen sink",
+      "shortcut": ";md",
+      "content": "# Heading\n\nSome **bold**, some _italic_, and `inline code`.\n\n- first item\n- second item\n\n> a blockquote\n\n1. one\n2. two\n\n[Clipio](https://clipio.xyz)",
+      "tags": ["markdown", "reference"],
+      "usageCount": 7,
+      "createdAt": "2026-09-04T09:00:00.000Z",
+      "updatedAt": "2026-10-04T09:00:00.000Z"
+    },
+    {
+      "id": "sample-clipboard-0005",
+      "label": "Paste and prefix",
+      "shortcut": ";pp",
+      "content": "```\n{{clipboard}}\n```",
+      "tags": [],
+      "usageCount": 0,
+      "createdAt": "2026-09-05T09:00:00.000Z",
+      "updatedAt": "2026-09-05T09:00:00.000Z"
+    }
+  ]
+}

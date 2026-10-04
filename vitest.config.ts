@@ -17,6 +17,12 @@ export default defineConfig({
       "src/**/*.test.tsx",
       "tests/**/*.test.ts",
       "scripts/**/*.test.ts",
+      // Included because `samples/` holds the import fixtures a human is told to
+      // try by hand, and a fixture that no longer imports is worse than none: it
+      // reads as a broken importer. The test drives them through the real detect /
+      // parse / validate path, so it fails the moment a parser or the schema
+      // changes shape.
+      "samples/**/*.test.ts",
     ],
 
     // Global setup file for browser API mocks

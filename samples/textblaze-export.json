@@ -1,0 +1,68 @@
+{
+  "version": 12,
+  "folders": [
+    {
+      "name": "Email",
+      "snippets": [
+        {
+          "name": "Sign-off",
+          "shortcut": ";tso",
+          "type": "text",
+          "text": "Kind regards,\n{cursor}"
+        },
+        {
+          "name": "Meeting request",
+          "shortcut": ";tmr",
+          "type": "text",
+          "text": "Hi {cursor},\n\nCould we find 30 minutes next week to discuss {cursor}?\n\nThanks!"
+        },
+        {
+          "name": "Out of office",
+          "shortcut": ";too",
+          "type": "text",
+          "text": "I'm away until {cursor} and will reply then."
+        }
+      ]
+    },
+    {
+      "name": "Development",
+      "snippets": [
+        {
+          "name": "Commit message",
+          "shortcut": ";tcm",
+          "type": "text",
+          "text": "feat(scope): {cursor}"
+        },
+        {
+          "name": "Bug report",
+          "shortcut": ";tbr",
+          "type": "html",
+          "html": "<h2>Summary</h2><p>{cursor}</p><h2>Steps</h2><ol><li>{cursor}</li></ol>"
+        },
+        {
+          "name": "Console log",
+          "shortcut": ";tcl",
+          "type": "text",
+          "text": "console.log(\"{cursor}\");"
+        }
+      ]
+    },
+    {
+      "name": "Reusable",
+      "snippets": [
+        {
+          "name": "Paste clipboard",
+          "shortcut": ";tpc",
+          "type": "text",
+          "text": "{clipboard}"
+        },
+        {
+          "name": "Unknown placeholder",
+          "shortcut": ";tup",
+          "type": "text",
+          "text": "Account: {accountNumber} — Ref: {ref}"
+        }
+      ]
+    }
+  ]
+}
