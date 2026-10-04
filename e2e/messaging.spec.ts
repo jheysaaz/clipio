@@ -85,43 +85,52 @@ test.describe("Cross-Context Communication", () => {
     await page.close();
   });
 
-  test("sends test message from options page to content script", async ({
+  test("options page reaches the content script in a tab", async ({
     context,
     extensionId,
   }) => {
-    // Open a test page (content script context)
+    // An extension page talking to a content script, across contexts, with a
+    // real answer — the direction the options page's content-script health check
+    // depends on.
+    //
+    // This was previously a test of the dev-only `dev:sentry-test` message, and
+    // it asserted only that `tabs.sendMessage` did not throw. That handler is
+    // compiled out of a production build, so *nothing* listens for it in CI and
+    // the assertion could not distinguish "delivered" from "posted into the
+    // void". `content:ping` is registered in every build and answers, so the
+    // round trip is now actually observed.
     const contentPage = await context.newPage();
     await contentPage.goto(TEST_PAGE_URL);
     await contentPage.waitForLoadState("domcontentloaded");
     await waitForContentScriptReady(contentPage);
 
-    // Open the options page and send a Sentry test message
     const optionsPage = await context.newPage();
     await optionsPage.goto(`chrome-extension://${extensionId}/options.html`);
     await optionsPage.waitForLoadState("domcontentloaded");
     await waitForExtensionStorageApi(optionsPage);
 
-    // Send the SENTRY_TEST_MESSAGE_TYPE message via the options page
-    const sendResult = await optionsPage.evaluate(async () => {
+    const result = await optionsPage.evaluate(async () => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      try {
-        const tabs = await ext.tabs.query({});
-        await Promise.all(
-          tabs.map((tab: { id?: number }) =>
-            tab.id
-              ? ext.tabs
-                  .sendMessage(tab.id, { type: "clipio-test-sentry" })
-                  .catch(() => null)
-              : Promise.resolve()
-          )
+      const tabWithScript = (await ext.tabs.query({})).find(
+        (tab: { url?: string }) =>
+          tab.url?.startsWith("http://localhost:7777/") === true
+      );
+      if (!tabWithScript?.id) return { pong: false, reason: "no test tab" };
+
+      return new Promise<{ pong: boolean; reason?: string }>((resolve) => {
+        ext.tabs.sendMessage(
+          tabWithScript.id,
+          { id: 1, type: "content:ping", timestamp: Date.now() },
+          (resp: unknown) => {
+            const envelope = resp as
+              { res?: { pong?: boolean }; err?: unknown } | undefined;
+            resolve({ pong: envelope?.res?.pong === true });
+          }
         );
-        return { sent: true };
-      } catch {
-        return { sent: false };
-      }
+      });
     });
 
-    expect(sendResult.sent).toBe(true);
+    expect(result.pong).toBe(true);
 
     await contentPage.close();
     await optionsPage.close();

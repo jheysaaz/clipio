@@ -25,43 +25,34 @@ then re-plumbing every component through route params in one PR is unreviewable.
 
 ---
 
-## Phase 0 — Firefox smoke harness
+## Phase 0 — Firefox smoke harness — DROPPED
 
-**Why this is Phase 0.** The messaging phase is the one change that touches a
-Gecko-specific surface, and Playwright cannot verify it.
+**Decision (2026-10-04): not doing it. Chromium e2e stays the only browser gate.**
 
-**Playwright cannot load extensions into Firefox.** Its docs guide is titled
-"Chrome extensions"; extension loading is a Chromium launch flag
-(`--load-extension`) exposed only through `chromium.launchPersistentContext()`.
-`playwright.config.ts` has one project hardcoded to
-`.output/chrome-mv3` for exactly this reason. There is no Firefox project to
-add.
+Two reasons, and the second is the one that decides it:
 
-So Firefox verification needs its own harness. `web-ext` is **already a
-devDependency**, and geckodriver exposes `POST /session/{id}/moz/addon/install`
-with `temporary: true` — which is all we need to load a built
-`.output/firefox-mv2` as a temporary add-on.
+1. Playwright cannot load extensions into Firefox. Its docs guide is titled
+   "Chrome extensions"; extension loading is a Chromium launch flag
+   (`--load-extension`) reachable only through
+   `chromium.launchPersistentContext()`. `playwright.config.ts` has one project
+   hardcoded to `.output/chrome-mv3` for exactly this reason. There is no Firefox
+   project to add.
+2. The only route would be geckodriver's `moz/addon/install` driven over raw HTTP
+   by a hand-written script — a new harness, in a language this repo does not
+   otherwise use, that cannot be run or debugged on the development machine.
+   **Shipping a gate that has never been executed is worse than having no gate**,
+   because it reads as coverage that does not exist. `docs/decisions/0007` is
+   explicit that the tests are the specification, and an unrun script is not a
+   test.
 
-**Shape:** `scripts/firefox-smoke.mjs`, driving geckodriver over its HTTP API
-with `fetch`. No new npm dependency; geckodriver is a binary CI installs.
+CI still builds and zips the Firefox target (`.github/workflows/ci.yml`,
+`build-validation`), so a Gecko-only *compile* breakage is caught. What is not
+caught is Gecko-only *runtime* behaviour in the messaging layer. Recorded here so
+it is a known hole rather than a surprise.
 
-**Scope: four assertions, and only the ones messaging can break.**
-
-1. The background script registers and the context menu appears.
-2. `"content:ping"` round-trips options → content script → response.
-3. `"media:get"` round-trips a stored blob → data URL.
-4. A snippet expands on a real page via the content script.
-
-Nothing else. This is not a Firefox port of the e2e suite — it is the narrowest
-harness that would catch a Gecko-only messaging regression, which is exactly the
-class of bug the Chromium gate cannot see.
-
-**Wired into** `scripts/verify.mjs` as a `--firefox` flag and a CI job that also
-runs `pnpm build:firefox`. `retries: 0` like everything else.
-
-**Honest limitation, to be written into the PR description:** this covers the
-protocol layer only. Every other Firefox behaviour stays unverified by
-automation, as it is today.
+**Consequence for Phase 2:** `@webext-core/messaging` reads `chrome.runtime`
+through the callback form, which Firefox implements identically, so the risk is
+low but not zero.
 
 ---
 

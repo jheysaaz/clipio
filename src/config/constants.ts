@@ -66,11 +66,10 @@ export const TIMING = {
   DOUBLE_CLICK_MS: 250,
 } as const;
 
-/** Runtime message type for dev-only Sentry test (content script). */
-export const SENTRY_TEST_MESSAGE_TYPE = "clipio-test-sentry" as const;
-
-/** Runtime message type for content-script ping/health-check (always-on). */
-export const CONTENT_SCRIPT_PING_MESSAGE_TYPE = "clipio-ping" as const;
+// Runtime message types used to live here as bare string constants. They are now
+// in src/lib/protocol/index.ts, declared in one typed map with their payloads and
+// responses, so a mismatched message is a compile error rather than an undefined
+// arriving at runtime.
 
 /** Alarm name for the periodic update check (fires every 6 hours). */
 export const UPDATE_CHECK_ALARM_NAME = "clipio-update-check" as const;

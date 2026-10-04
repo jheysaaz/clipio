@@ -19,11 +19,7 @@ import { initSentry, captureError, captureMessage } from "@/lib/sentry";
 import { registerSentryRelayListener } from "@/lib/sentry-relay";
 import { i18n } from "#i18n";
 import { buildUninstallUrl } from "@/lib/uninstall-url";
-import {
-  MEDIA_GET_DATA_URL,
-  type MediaGetDataUrlRequest,
-  type MediaGetDataUrlResponse,
-} from "@/lib/messages";
+import { MESSAGE, MediaNotFoundError, onMessageFromSelf } from "@/lib/protocol";
 import { getMedia } from "@/storage/backends/media";
 import { updateContentScriptCache } from "@/storage/backends/local";
 import { storageManager } from "@/storage";
@@ -40,6 +36,23 @@ const SNIPPET_PREFIX = "snip:";
 const DEV_QA_OPENED_KEY = "__clipioDevQaOpened__";
 const DEV_QA_URL = "http://localhost:7777/manual-qa.html";
 const CONTEXT_MENU_DRAFT_SESSION_KEY = "__clipioContextMenuDraft__";
+
+/**
+ * Read a blob as a data URL.
+ *
+ * Promisified from `FileReader` because the protocol handler is `async`. Rejects
+ * on a read error rather than resolving with a null, so the failure is visible to
+ * the caller instead of arriving as an empty image.
+ */
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("FileReader failed to read the blob"));
+    reader.readAsDataURL(blob);
+  });
+}
 
 async function setupBackgroundAlarms(): Promise<void> {
   try {
@@ -244,60 +257,37 @@ export default defineBackground(() => {
   // ---------------------------------------------------------------------------
   // Media blob → data URL bridge
   // ---------------------------------------------------------------------------
-  // Content scripts in the isolated world see the PAGE's origin IndexedDB,
-  // not the extension's. All media blobs are stored at the extension origin.
-  // Content scripts send this message to retrieve a blob as a data URL.
-  browser.runtime.onMessage.addListener(
-    (
-      message: unknown,
-      sender,
-      sendResponse: (response: MediaGetDataUrlResponse) => void
-    ): true | void => {
-      if (
-        typeof message !== "object" ||
-        message === null ||
-        (message as MediaGetDataUrlRequest).type !== MEDIA_GET_DATA_URL
-      ) {
-        return;
-      }
-      debugLog("background", "message:received", {
-        type: (message as MediaGetDataUrlRequest).type,
-      }).catch(() => {});
-      // Only accept messages from our own extension (content scripts or popup).
-      // Reject requests from external web pages that may know the extension ID.
-      if (sender.id !== browser.runtime.id) {
-        return;
-      }
-      const { mediaId } = message as MediaGetDataUrlRequest;
-      getMedia(mediaId)
-        .then((entry) => {
-          if (!entry) {
-            sendResponse({ dataUrl: null, alt: null });
-            return;
-          }
-          const reader = new FileReader();
-          reader.onload = () =>
-            sendResponse({
-              dataUrl: reader.result as string,
-              alt: entry.alt ?? null,
-            });
-          reader.onerror = () => {
-            captureError(reader.error, {
-              action: "mediaGetDataUrl",
-              mediaId,
-            });
-            sendResponse({ dataUrl: null, alt: null });
-          };
-          reader.readAsDataURL(entry.blob);
-        })
-        .catch((err: unknown) => {
-          captureError(err, { action: "mediaGetDataUrl", mediaId });
-          sendResponse({ dataUrl: null, alt: null });
-        });
-      // Return true to keep the message channel open for the async sendResponse
-      return true;
+  // Content scripts in the isolated world see the PAGE's origin IndexedDB, not
+  // the extension's. All media blobs are stored at the extension origin, so
+  // every blob read crosses to here first.
+  //
+  // A missing entry throws `MediaNotFoundError` rather than answering with a null
+  // data URL. The old response type had `dataUrl: string | null`, so "no such
+  // media" and "the blob was unreadable" looked identical to the caller and
+  // every reader had to branch on a sentinel. The content script now gets a
+  // rejection it can name.
+  onMessageFromSelf(MESSAGE.MEDIA_GET, async ({ data }) => {
+    debugLog("background", "message:received", {
+      type: MESSAGE.MEDIA_GET,
+    }).catch(() => {});
+
+    const { mediaId } = data;
+    const entry = await getMedia(mediaId);
+    if (!entry) throw new MediaNotFoundError(mediaId);
+
+    try {
+      return {
+        dataUrl: await blobToDataUrl(entry.blob),
+        alt: entry.alt ?? null,
+      };
+    } catch (err) {
+      // An unreadable blob is our problem, not the caller's: it means the entry
+      // in IndexedDB is corrupt. Report it and let the caller retry rather than
+      // surfacing "no such image" to the user.
+      captureError(err, { action: "mediaGetDataUrl", mediaId });
+      throw err;
     }
-  );
+  });
 
   // ---------------------------------------------------------------------------
   // On install / update

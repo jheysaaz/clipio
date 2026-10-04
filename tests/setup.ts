@@ -8,7 +8,7 @@
  */
 
 import { vi, beforeEach, afterAll } from "vitest";
-import { mockBrowser } from "./mocks/browser";
+import { mockBrowser, mockChrome } from "./mocks/browser";
 
 // jest-dom matchers (toBeInTheDocument, toHaveValue, …) are available in every
 // test file. Imported here rather than per-file because a component test that
@@ -30,6 +30,13 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 (globalThis as any).browser = mockBrowser;
+
+// `chrome.*` is the callback-flavoured dialect of the same APIs, and
+// `@webext-core/messaging` speaks it directly. Both globals are installed
+// because extension code uses `browser.*` while the messaging library uses
+// `chrome.*`; they are separate mocks on purpose — see the comment on
+// `mockChrome` in tests/mocks/browser.ts.
+(globalThis as any).chrome = mockChrome;
 
 // ---------------------------------------------------------------------------
 // wxt/utils/storage mock — storage items use WXT's typed storage API.

@@ -12,7 +12,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { CONTENT_SCRIPT_PING_MESSAGE_TYPE } from "@/config/constants";
+import { MESSAGE, sendMessage } from "@/lib/protocol";
 import { i18n } from "#i18n";
 
 export function DiagnosticsPanel() {
@@ -39,11 +39,18 @@ export function DiagnosticsPanel() {
         );
         return;
       }
-      const response = await browser.tabs
-        .sendMessage(tab.id, { type: CONTENT_SCRIPT_PING_MESSAGE_TYPE })
-        .catch(() => null);
+      // Rejects when the tab has no content script listening — which is the
+      // normal case on a chrome:// page, on a tab that loaded before the
+      // extension did, or on any page the user has excluded. That is the answer
+      // the user wants, not an error worth surfacing differently.
+      // `undefined` before the tabId is not redundant: the protocol types a
+      // payload-less message as `(data?: undefined, ...args)`, so the placeholder
+      // is what tells the overload the next argument is the tab.
+      const alive = await sendMessage(MESSAGE.CONTENT_PING, undefined, tab.id)
+        .then(() => true)
+        .catch(() => false);
       setPinging(false);
-      if (response && (response as { pong?: boolean }).pong) {
+      if (alive) {
         toast.success(i18n.t("options.developers.contentScriptHealth.pong"));
       } else {
         toast.error(

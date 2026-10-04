@@ -1,9 +1,5 @@
 import { hasImagePlaceholder, extractImageIds } from "@/lib/media-placeholders";
-import {
-  TIMING,
-  SENTRY_TEST_MESSAGE_TYPE,
-  CONTENT_SCRIPT_PING_MESSAGE_TYPE,
-} from "@/config/constants";
+import { TIMING } from "@/config/constants";
 import {
   cachedSnippetsItem,
   confettiEnabledItem,
@@ -46,9 +42,12 @@ import {
   type ShortcutIndex,
 } from "@/lib/content-helpers";
 import {
-  MEDIA_GET_DATA_URL,
-  type MediaGetDataUrlResponse,
-} from "@/lib/messages";
+  MESSAGE,
+  MediaNotFoundError,
+  isProtocolError,
+  onMessageFromSelf,
+  sendMessage,
+} from "@/lib/protocol";
 import { buildGifUrl } from "@/lib/giphy";
 import {
   fuzzyMatchSnippets,
@@ -82,40 +81,15 @@ export default defineContentScript({
     // Responds to health-check pings from the options page / background.
     // This is NOT dev-only so the Developers > Content Script Health card works
     // in production.
-    browser.runtime.onMessage.addListener(
-      (
-        message: unknown,
-        _sender: unknown,
-        sendResponse: (r: unknown) => void
-      ): boolean | undefined => {
-        if (
-          typeof message === "object" &&
-          message !== null &&
-          (message as { type?: string }).type ===
-            CONTENT_SCRIPT_PING_MESSAGE_TYPE
-        ) {
-          sendResponse({ pong: true });
-          return true;
-        }
-        return undefined;
-      }
-    );
+    onMessageFromSelf(MESSAGE.CONTENT_PING, () => ({ pong: true }));
 
     // Dev only: test Sentry capture (message from options or keyboard shortcut)
     if ((import.meta.env.MODE as string) !== "production") {
-      browser.runtime.onMessage.addListener((message: unknown): boolean => {
-        if (
-          typeof message === "object" &&
-          message !== null &&
-          (message as { type?: string }).type === SENTRY_TEST_MESSAGE_TYPE
-        ) {
-          captureError(
-            new Error("Clipio Sentry test exception (content script)")
-          );
-          captureMessage("Clipio Sentry test message (content script)", "info");
-          return false;
-        }
-        return false;
+      onMessageFromSelf(MESSAGE.SENTRY_TEST, () => {
+        captureError(
+          new Error("Clipio Sentry test exception (content script)")
+        );
+        captureMessage("Clipio Sentry test message (content script)", "info");
       });
       document.addEventListener(
         "keydown",
@@ -394,21 +368,31 @@ export default defineContentScript({
         await Promise.all(
           uniqueIds.map(async (id) => {
             try {
-              const response = (await browser.runtime.sendMessage({
-                type: MEDIA_GET_DATA_URL,
+              const response = await sendMessage(MESSAGE.MEDIA_GET, {
                 mediaId: id,
-              })) as MediaGetDataUrlResponse;
-              if (response?.dataUrl) {
-                blobMap.set(id, { src: response.dataUrl, alt: response.alt });
-              } else {
+              });
+              blobMap.set(id, { src: response.dataUrl, alt: response.alt });
+            } catch (err) {
+              // The two failures are now distinguishable, which they were not
+              // when the response was `{ dataUrl: string | null }`:
+              //
+              //  - `MediaNotFoundError` means the snippet references media that
+              //    is not in the store. That is expected after a partial import
+              //    or an uninstall/reinstall cycle, and it is worth a warning
+              //    breadcrumb naming the id so it can be traced.
+              //  - anything else is our fault, and goes to Sentry. Previously
+              //    both landed in the same `captureError` call, so a routine
+              //    missing image reported as an error and a genuinely corrupt
+              //    blob was indistinguishable from it in the issue tracker.
+              if (isProtocolError(err, MediaNotFoundError)) {
                 captureMessage(
                   "Media blob not found during content expansion",
                   "warning",
                   { mediaId: id }
                 );
+              } else {
+                captureError(err, { action: "resolveMedia", mediaId: id });
               }
-            } catch (err) {
-              captureError(err, { action: "resolveMedia", mediaId: id });
             }
           })
         );

@@ -21,65 +21,45 @@ import type {
   Envelope,
 } from "@sentry/core";
 
-export const SENTRY_RELAY_MESSAGE_TYPE = "sentry-relay" as const;
-
-export interface SentryRelayMessage {
-  type: typeof SENTRY_RELAY_MESSAGE_TYPE;
-  /** Serialized Sentry envelope as a plain string */
-  envelope: string;
-}
+import { MESSAGE, onMessageFromSelf, sendMessage } from "@/lib/protocol";
 
 /**
  * Register the relay listener in the background service worker.
  * Call this inside defineBackground() after Sentry has been initialized.
  *
- * Validates that messages come from the extension itself (content scripts, popup, options page)
- * to prevent malicious web pages from abusing the Sentry relay.
+ * The sender check is not written here: `onMessageFromSelf` performs it for
+ * every handler in the extension and throws `UntrustedSenderError` when it
+ * fails. That matters more here than anywhere else — this handler POSTs to
+ * whatever endpoint the extension's DSN names, so a page able to reach it could
+ * exfiltrate through the user's browser. See docs/decisions/0009.
  */
 export function registerSentryRelayListener(): void {
-  browser.runtime.onMessage.addListener(
-    (message: unknown, sender, sendResponse) => {
-      if (
-        typeof message === "object" &&
-        message !== null &&
-        (message as SentryRelayMessage).type === SENTRY_RELAY_MESSAGE_TYPE
-      ) {
-        // Validate sender to prevent external websites from using our relay
-        if (sender.id !== browser.runtime.id) {
-          sendResponse({ ok: false });
-          return false;
-        }
+  onMessageFromSelf(MESSAGE.SENTRY_RELAY, async ({ data }) => {
+    const { envelope } = data;
+    const dsn = import.meta.env.WXT_SENTRY_DSN as string | undefined;
+    if (!dsn || !envelope) return { ok: false };
 
-        const { envelope } = message as SentryRelayMessage;
-        const dsn = import.meta.env.WXT_SENTRY_DSN as string | undefined;
-        if (!dsn || !envelope) {
-          sendResponse({ ok: false });
-          return false;
-        }
-
-        // Parse the DSN to build the Sentry store endpoint URL
-        try {
-          const url = new URL(dsn);
-          const projectId = url.pathname.replace("/", "");
-          const ingestUrl = `${url.protocol}//${url.host}/api/${projectId}/envelope/`;
-
-          fetch(ingestUrl, {
-            method: "POST",
-            body: envelope,
-            headers: { "Content-Type": "application/x-sentry-envelope" },
-          })
-            .then(() => sendResponse({ ok: true }))
-            .catch(() => sendResponse({ ok: false }));
-        } catch {
-          sendResponse({ ok: false });
-        }
-
-        // Return true to indicate we will respond asynchronously
-        return true;
-      }
-      return false;
+    // Parse the DSN to build the Sentry store endpoint URL
+    let ingestUrl: string;
+    try {
+      const url = new URL(dsn);
+      const projectId = url.pathname.replace("/", "");
+      ingestUrl = `${url.protocol}//${url.host}/api/${projectId}/envelope/`;
+    } catch {
+      return { ok: false };
     }
-  );
+
+    try {
+      await fetch(ingestUrl, {
+        method: "POST",
+        body: envelope,
+        headers: { "Content-Type": "application/x-sentry-envelope" },
+      });
+      return { ok: true };
+    } catch {
+      return { ok: false };
+    }
+  });
 }
 
 /**
@@ -117,14 +97,12 @@ export function makeRelayTransport(options: BaseTransportOptions): Transport {
         // Direct fetch was blocked — relay via background service worker
         try {
           const serialized = serializeEnvelope(envelope);
-          const message: SentryRelayMessage = {
-            type: SENTRY_RELAY_MESSAGE_TYPE,
+          await sendMessage(MESSAGE.SENTRY_RELAY, {
             envelope:
               typeof serialized === "string"
                 ? serialized
                 : new TextDecoder().decode(serialized),
-          };
-          await browser.runtime.sendMessage(message);
+          });
           return { statusCode: 200 };
         } catch {
           // Both direct and relay failed — swallow silently to never
