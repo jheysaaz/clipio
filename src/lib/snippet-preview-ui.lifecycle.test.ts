@@ -190,7 +190,7 @@ describe("SnippetPreviewUI lifecycle", () => {
 
   it("consumes Escape even with no cancel handler installed", () => {
     ui.init();
-    ui.show(POSITION, [makeFiltered("A", "/a", "x", "x", "1")]);
+    ui.show(POSITION, [makeFiltered("A", "/a", "x", "1")]);
 
     expect(
       ui.handleKeyDown(new KeyboardEvent("keydown", { key: "Escape" }))

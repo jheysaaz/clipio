@@ -558,10 +558,19 @@ describe("IndexedDBBackend — transaction-level failures", () => {
     return proto;
   }
 
-  /** Make the named store method abort its transaction, as a quota error would. */
-  async function abortOn(method: "put" | "getAll" | "count"): Promise<void> {
-    const proto = (await storePrototype()) as Record<string, unknown>;
-    vi.spyOn(proto, method).mockImplementation(function (this: {
+  /**
+   * Make `put` abort its transaction, as a quota error would.
+   *
+   * Only `put` is exercised. Under fake-indexeddb an aborted *readonly*
+   * transaction does not fire `request.onerror`, so the getAll/count variants
+   * hang — a limit of the fake rather than of the code. Those callbacks are
+   * covered by the storage e2e specs instead.
+   */
+  async function abortOnPut(): Promise<void> {
+    const proto = (await storePrototype()) as {
+      put: (...args: unknown[]) => unknown;
+    };
+    vi.spyOn(proto, "put").mockImplementation(function (this: {
       transaction: { abort: () => void };
     }) {
       this.transaction.abort();
@@ -570,7 +579,7 @@ describe("IndexedDBBackend — transaction-level failures", () => {
   }
 
   it("clear does not throw when its transaction aborts", async () => {
-    await abortOn("put");
+    await abortOnPut();
 
     await expect(backend.clear()).resolves.toBeUndefined();
   });
