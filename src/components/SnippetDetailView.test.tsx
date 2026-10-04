@@ -31,6 +31,56 @@ vi.mock("@/storage/usage-tracking", () => ({
   incrementSnippetUsage: (...args: unknown[]) => incrementSnippetUsage(...args),
 }));
 
+const editorCalls = vi.hoisted(() => ({
+  openCommandMenu: vi.fn(),
+}));
+
+/**
+ * The editor is replaced with a textarea plus a ref and a copy-error trigger.
+ *
+ * RichTextEditor.tsx is excluded from coverage — it is Plate/Slate presentation,
+ * exercised by the editor e2e specs. What this file owns is the wiring into it:
+ * that content edits reach the draft, that the insert-command button reaches the
+ * editor's imperative handle, and that a copy failure inside the editor surfaces
+ * as an inline error. All three are unreachable against the real component,
+ * because contenteditable does not drive Plate from happy-dom and the ref is
+ * internal to it.
+ *
+ * The textarea carries the same aria-label the real editor does, so the existing
+ * queries in this file are unaffected.
+ */
+vi.mock("@/components/editor", async () => {
+  const React = await import("react");
+  type Props = {
+    value: string;
+    onChange: (next: string) => void;
+    onCopyError?: () => void;
+    ariaLabel?: string;
+    placeholder?: string;
+  };
+  const RichTextEditor = React.forwardRef(function RichTextEditor(
+    { value, onChange, onCopyError, ariaLabel }: Props,
+    ref: React.Ref<{ openCommandMenu: () => void }>
+  ) {
+    React.useImperativeHandle(ref, () => ({
+      openCommandMenu: editorCalls.openCommandMenu,
+    }));
+    return (
+      <div>
+        <textarea
+          aria-label={ariaLabel ?? "Content"}
+          defaultValue={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <button type="button" onClick={() => onCopyError?.()}>
+          simulate editor copy failure
+        </button>
+      </div>
+    );
+  });
+  return { RichTextEditor };
+});
+
 const onDelete = vi.fn();
 const onUpdate = vi.fn();
 const onHasChanges = vi.fn();
@@ -517,5 +567,185 @@ describe("SnippetDetailView", () => {
     expect(
       await screen.findByText("Failed to copy to clipboard")
     ).toBeInTheDocument();
+  });
+
+  it("surfaces a copy failure that happens inside the editor", async () => {
+    // A different path from the toolbar copy button: the editor can fail to
+    // copy on its own, and it reports through onCopyError rather than by
+    // throwing. Nothing else routes that into the same inline error.
+    const user = userEvent.setup();
+    renderView();
+
+    await user.click(
+      screen.getByRole("button", { name: /simulate editor copy failure/i })
+    );
+
+    expect(
+      await screen.findByText("Failed to copy to clipboard")
+    ).toBeInTheDocument();
+  });
+
+  it("clears the inline error when it is dismissed", async () => {
+    const user = userEvent.setup();
+    copyMarkdownAsRichText.mockRejectedValue(new Error("clipboard blocked"));
+    renderView();
+    await user.click(screen.getByTestId("snippet-copy"));
+    await screen.findByText("Failed to copy to clipboard");
+
+    await user.click(screen.getByRole("button", { name: "Dismiss error" }));
+
+    expect(
+      screen.queryByText("Failed to copy to clipboard")
+    ).not.toBeInTheDocument();
+  });
+
+  it("reverts the copied indicator after two seconds", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderView();
+
+      await user.click(screen.getByTestId("snippet-copy"));
+      // "Copied!" is the button's accessible name, not text — the icon swaps
+      // for a tick. Asserted by role+name so the test pins what a screen-reader
+      // user is told, which is the only version of this state they perceive.
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Copied!" })
+        ).toBeInTheDocument()
+      );
+
+      // The timer callback is what puts the UI back. Without this the button
+      // would claim "Copied!" forever, which is a small lie the user acts on.
+      await vi.advanceTimersByTimeAsync(2000);
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: "Copied!" })
+        ).not.toBeInTheDocument()
+      );
+      expect(
+        screen.getByRole("button", { name: "Copy to clipboard" })
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reverts the saved indicator after two seconds", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderView();
+      await user.click(
+        screen.getByRole("button", { name: /remove "personal"/i })
+      );
+      await user.click(screen.getByTestId("snippet-save"));
+
+      await waitFor(() =>
+        expect(screen.getByText("Saved", { exact: true })).toBeInTheDocument()
+      );
+
+      await vi.advanceTimersByTimeAsync(2000);
+      await waitFor(() =>
+        expect(
+          screen.queryByText("Saved", { exact: true })
+        ).not.toBeInTheDocument()
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // --- editor wiring ----------------------------------------------------
+
+  it("reaches the editor's command menu from the insert button", async () => {
+    const user = userEvent.setup();
+    renderView();
+
+    await user.click(screen.getByRole("button", { name: /insert command/i }));
+
+    // The button is wired to editorRef.current?.openCommandMenu(). Asserting the
+    // editor was called is what proves the ref is attached — clicking with a
+    // null ref would silently no-op, which is the bug this guards.
+    expect(editorCalls.openCommandMenu).toHaveBeenCalledTimes(1);
+  });
+
+  it("turns an editor content edit into a dirty draft", async () => {
+    const user = userEvent.setup();
+    renderView();
+
+    await user.click(screen.getByRole("textbox", { name: /content/i }));
+    await user.keyboard("!");
+    await waitFor(() => expect(onHasChanges).toHaveBeenCalledWith(true));
+
+    expect(screen.getByTestId("snippet-save")).toBeEnabled();
+  });
+
+  // --- tag input on blur ------------------------------------------------
+
+  it("adds the typed tag when the tag input loses focus", async () => {
+    // Blur is a real commit path, not a duplicate of Enter: a user who types a
+    // tag and clicks straight into the body never presses Enter, and losing the
+    // tag there would look like the field ignoring them.
+    const user = userEvent.setup();
+    renderView();
+
+    await user.click(screen.getByRole("button", { name: /add tag/i }));
+    const input = screen.getByPlaceholderText(/tag/i);
+    await user.type(input, "Work");
+    await user.tab();
+
+    expect(await screen.findByText("work")).toBeInTheDocument();
+  });
+
+  it("closes the tag input on blur without adding an empty tag", async () => {
+    const user = userEvent.setup();
+    renderView();
+
+    await user.click(screen.getByRole("button", { name: /add tag/i }));
+    // Whitespace only: trim() empties it, so nothing may be added.
+    await user.type(screen.getByPlaceholderText(/tag/i), "   ");
+    await user.tab();
+
+    expect(
+      screen.getByRole("button", { name: /add tag/i })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "" })).not.toBeInTheDocument();
+  });
+
+  it("does not duplicate an existing tag when the input blurs", async () => {
+    const user = userEvent.setup();
+    renderView();
+
+    await user.click(screen.getByRole("button", { name: /add tag/i }));
+    await user.type(screen.getByPlaceholderText(/tag/i), "personal");
+    await user.tab();
+
+    // "personal" is already on the snippet. Case-insensitively, so "Personal"
+    // must not slip past as a second tag.
+    expect(screen.getAllByText("personal")).toHaveLength(1);
+  });
+
+  // --- snippet with no tags ---------------------------------------------
+
+  it("renders a snippet whose tags are missing entirely", () => {
+    // `snippet.tags || []` appears twice in this component. Legacy snippets and
+    // anything hand-edited in storage can arrive without the field, and the
+    // fallback is the only thing standing between that and a crash on render.
+    renderView({ snippet: { ...snippet, tags: undefined } as Snippet });
+
+    expect(
+      screen.getByRole("button", { name: /delete snippet/i })
+    ).toBeEnabled();
+  });
+
+  it("still adds the first tag to a snippet that arrived with none", async () => {
+    const user = userEvent.setup();
+    renderView({ snippet: { ...snippet, tags: undefined } as Snippet });
+
+    await user.click(screen.getByRole("button", { name: /add tag/i }));
+    await user.type(screen.getByPlaceholderText(/tag/i), "Work{Enter}");
+
+    expect(await screen.findByText("work")).toBeInTheDocument();
   });
 });
