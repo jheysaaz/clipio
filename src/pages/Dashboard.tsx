@@ -853,9 +853,12 @@ export default function Dashboard() {
                     className="w-full h-7 text-xs gap-1.5"
                     onClick={() =>
                       browser.tabs.create({
+                        // The import panel's own route, rather than the
+                        // `#import-export` hash this used to build — which named
+                        // no section and so fell through to Library by accident.
                         url:
                           browser.runtime.getURL("/options.html") +
-                          "#import-export",
+                          "#/library/import",
                       })
                     }
                   >

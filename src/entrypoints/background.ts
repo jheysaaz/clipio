@@ -428,9 +428,13 @@ export default defineBackground(() => {
 
       case CONTEXT_MENU.GIVE_FEEDBACK: {
         const optionsUrl = browser.runtime.getURL("/options.html");
+        // A real route, not a legacy hash. `#feedback` was never a section id,
+        // so the options page rejected it and the user landed on Library — the
+        // link worked and arrived somewhere else. `legacyHashRedirect` still
+        // handles the old string for bookmarks; this stops producing new ones.
         browser.tabs
           .create({
-            url: optionsUrl + "#feedback",
+            url: optionsUrl + "#/about/feedback",
           })
           .catch((err: unknown) => {
             captureError(err, { action: "giveFeedback" });

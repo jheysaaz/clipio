@@ -94,6 +94,78 @@ test.describe("Options Page", () => {
     await expect(libraryNav).not.toHaveAttribute("aria-current", "page");
   });
 
+  test("deep-links to a sub-route inside a section", async ({
+    context,
+    extensionId,
+  }) => {
+    // `/about/feedback` is what `background.ts` has always meant by
+    // `options.html#feedback`. That hash was never a section id, so the old
+    // hash validator rejected it and the user landed on Library: the link
+    // worked and arrived somewhere else.
+    const page = await context.newPage();
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html#/about/feedback`
+    );
+    await waitForOptionsReady(page);
+
+    // The feedback form is open, so its dialog role is present — not merely a
+    // page that did not 404.
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.close();
+  });
+
+  test("deep-links to the import panel inside Library", async ({
+    context,
+    extensionId,
+  }) => {
+    // Reached from the popup's empty state, which has always linked
+    // `#import-export`.
+    const page = await context.newPage();
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html#/library/import`
+    );
+    await waitForOptionsReady(page);
+
+    // The Library section renders, and its import card is the focused element —
+    // the route adds an address and a destination, not a second copy of the card.
+    await expect(page.getByTestId("import-open")).toBeVisible();
+    await expect(page.locator("#import-export-panel")).toBeFocused();
+    await page.close();
+  });
+
+  test("shows a not-found page for an unknown hash instead of landing on Library", async ({
+    context,
+    extensionId,
+  }) => {
+    // The behaviour change most likely to surprise an old bookmark. Previously
+    // an unrecognised hash fell back to Library, so a stale link looked exactly
+    // like a working one.
+    const page = await context.newPage();
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html#/not-a-section`
+    );
+    await waitForOptionsReady(page);
+
+    await expect(page.getByTestId("options-not-found")).toBeVisible();
+    await page.close();
+  });
+
+  test("rewrites the legacy #feedback hash to its route", async ({
+    context,
+    extensionId,
+  }) => {
+    // The bookmark must keep working *and* the address bar must end up showing
+    // the canonical route, or the back button and any copied link disagree with
+    // what the user can see.
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html#feedback`);
+    await waitForOptionsReady(page);
+
+    await expect(page.getByRole("dialog")).toBeVisible();
+    expect(new URL(page.url()).hash).toBe("#/about/feedback");
+    await page.close();
+  });
+
   test("searching a rendered option label finds the setting that offers it", async ({
     optionsPage,
   }) => {

@@ -138,6 +138,10 @@ options:
   # Development-only controls. They render only when MODE !== "production", but
   # they are still user-visible to a developer running a Spanish build, so they
   # are translated like everything else.
+  notFound:
+    title: That page does not exist
+    body: This link points at a settings page Clipio no longer has. It may be from an older version.
+    action: Go to Library
   a11y:
     optionsNav: Options navigation
     optionsSidebar: Options sidebar

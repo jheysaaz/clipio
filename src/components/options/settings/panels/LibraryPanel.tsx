@@ -17,6 +17,7 @@ import { snippetsContainMedia } from "@/lib/exporters/clipio";
 import { usageCountsItem } from "@/storage/items";
 import { captureError } from "@/lib/sentry";
 import { IMPORT_PARSERS } from "@/lib/importers/registry";
+import { IMPORT_PANEL_ANCHOR } from "@/pages/options/LibraryImportPanel";
 import { i18n } from "#i18n";
 import { toast } from "sonner";
 
@@ -155,7 +156,14 @@ export function LibraryPanel() {
         </div>
       </section>
 
-      <section className="space-y-2">
+      {/* The anchor `/library/import` scrolls to and focuses. `tabIndex={-1}`
+          makes it programmatically focusable without adding a tab stop, since
+          the card's own controls are already reachable. */}
+      <section
+        id={IMPORT_PANEL_ANCHOR}
+        tabIndex={-1}
+        className="space-y-2 scroll-mt-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+      >
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <h2 className="text-sm font-medium text-foreground">

@@ -115,7 +115,7 @@ export function SettingControl({
           });
       }
     },
-    [entry, setThemeMode]
+    [entry]
   );
 
   const handleReset = useCallback(() => {
@@ -142,7 +142,7 @@ export function SettingControl({
         captureError(err, { action: "setting.reset", settingId: entry.id });
         setStatus("error");
       });
-  }, [entry, setThemeMode]);
+  }, [entry]);
 
   const canReset = !!entry.reset && loaded && !isDefaultValue(entry, value);
 

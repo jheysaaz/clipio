@@ -130,6 +130,10 @@ options:
     topUsageEmpty: Todavía no hay datos de uso.
     viewRelease: Ver la publicación
     upToDate: Actualizado
+  notFound:
+    title: Esa página no existe
+    body: Este enlace apunta a una sección de preferencias que Clipio ya no tiene. Puede que sea de una versión anterior.
+    action: Ir a Biblioteca
   # Nombres accesibles de controles sin texto visible. Los lee un lector de
   # pantalla, así que un usuario en español debe oír español.
   a11y:
