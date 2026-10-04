@@ -74,8 +74,14 @@ export default defineConfig({
         "src/**/*.d.ts",
         // Test scaffolding
         "src/**/__mocks__/**",
-        // React glue — covered indirectly through components and e2e
-        "src/hooks/**",
+        // NOTE: `src/hooks/**` was excluded here while ThemeContext and
+        // FontContext lived there. Both were replaced by `src/state/settings.ts`
+        // in Phase 4a and the directory no longer exists. The entry was removed
+        // rather than left to rot, because this file's own comment on the editor
+        // exclusion calls a glob that quietly stops matching "worse than a longer
+        // list" — an exclusion that excludes nothing still reads as enforcement.
+        // `check-coverage-integrity.mjs` checks configured files against the
+        // report but not excludes against the tree, so nothing else would notice.
         // Page composition — covered by e2e specs
         "src/pages/**",
         // Options UI — covered by e2e options/image-gif specs

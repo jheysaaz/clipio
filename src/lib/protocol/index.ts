@@ -192,6 +192,19 @@ const SILENT_LOGGER: Logger = {
   error: () => {},
 };
 
+/**
+ * The raw messenger.
+ *
+ * Exported only so tests can drive it. **Handlers must be registered through
+ * `onMessageFromSelf`**, which performs the sender check — using this directly
+ * would register a handler with no boundary, and it would compile and run
+ * cleanly. Decision 0009 previously claimed no unwrapped registration path was
+ * reachable; that was not true, and this export is why.
+ *
+ * An earlier version of that claim is corrected in the record rather than
+ * quietly dropped, because the guarantee is enforced by convention and a
+ * convention that is stated as a mechanism gets believed in.
+ */
 export const messenger = defineExtensionMessaging<ClipioProtocol>({
   logger: SILENT_LOGGER,
   throwOnUnknownMessageFormat: false,

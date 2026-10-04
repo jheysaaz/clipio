@@ -147,9 +147,24 @@ function expandInclude(pattern) {
  * comment lines, so anchor on the key and read until the closing bracket.
  */
 const excludeMatch = coverageBlock[1].match(/exclude:\s*\[([\s\S]*?)\n {6}\]/);
-const excludePatterns = excludeMatch
-  ? [...excludeMatch[1].matchAll(/["'`]([^"'`]+)["'`]/g)].map((m) => m[1])
-  : [];
+// Strip `//` comments before extracting paths.
+//
+// The pattern matcher below is a naive quote-delimited regex, and it cannot tell
+// prose from code. A comment inside the exclude block containing a straight
+// double quote — `"worse than a longer list"` — therefore opened a "string" that
+// swallowed every real exclude after it, and the reconstructed set silently lost
+// them. That made 31 excluded files look configured-and-missing, so the gate went
+// red for a reason unrelated to coverage.
+//
+// Existing comments happened to avoid the character, which is why this lay
+// undiscovered. Stripping comments is the fix: prose belongs in these comments,
+// and a gate that cannot carry a sentence is a gate that gets worked around.
+const excludeBody = excludeMatch
+  ? excludeMatch[1].replace(/^\s*\/\/.*$/gm, "")
+  : "";
+const excludePatterns = [...excludeBody.matchAll(/["'`]([^"'`]+)["'`]/g)].map(
+  (m) => m[1]
+);
 
 if (includeGlobs.length === 0) {
   fail(["No `src/` include globs found in the coverage config."]);

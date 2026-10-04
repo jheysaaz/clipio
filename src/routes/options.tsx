@@ -64,7 +64,7 @@ const indexRoute = createRoute({
     // `redirect()` rather than a thrown literal: the helper attaches the marker
     // the router looks for. A plain `{ redirect: … }` object is just an error to
     // it, so `/` would render the not-found view instead of landing on Library.
-    throw redirect({ to: "/library" });
+    throw redirect({ to: "/library", replace: true });
   },
 });
 

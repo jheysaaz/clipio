@@ -60,7 +60,7 @@ const indexRoute = createRoute({
   beforeLoad: () => {
     // `redirect()` rather than a thrown literal: the helper attaches the marker
     // the router looks for, and a plain `{ redirect: … }` is just an error to it.
-    throw redirect({ to: LIST_ROUTE });
+    throw redirect({ to: LIST_ROUTE, replace: true });
   },
 });
 

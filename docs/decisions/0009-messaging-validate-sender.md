@@ -29,15 +29,36 @@ instead of being a second parameter you can forget — but it is not enforcement
 
 ## Decision
 
-**`onMessageFromSelf` is the only way to register a handler, and it rejects any
-message whose `sender.id` is not this extension's.**
+**`onMessageFromSelf` is how handlers are registered, and it rejects any message
+whose `sender.id` is not this extension's.**
 
-The unwrapped `messenger.onMessage` is deliberately not re-exported from
-`src/lib/protocol`. A new message therefore cannot forget the check, because
-there is no unwrapped way to register one. `UntrustedSenderError` is a distinct
-class so a caller can tell "you may not ask that" from "the request failed" —
-which the media reader depends on, since it reports a missing blob as a warning
-and everything else to Sentry.
+`UntrustedSenderError` is a distinct class so a caller can tell "you may not ask
+that" from "the request failed" — which the media reader depends on, since it
+reports a missing blob as a warning and everything else to Sentry.
+
+### Correction, 2026-10-04
+
+This record originally claimed the guarantee was *structural*:
+
+> The unwrapped `messenger.onMessage` is deliberately not re-exported from
+> `src/lib/protocol`. A new message therefore cannot forget the check, because
+> there is no unwrapped way to register one.
+
+**That was false.** `messenger` is exported, so `messenger.onMessage` is
+reachable from any module that imports it — and the tests already did exactly
+that. An independent review caught it.
+
+The honest position: the check is **enforced by convention and backed by a
+review rule, not by the type system.** Every handler in the codebase goes
+through `onMessageFromSelf`, and `docs/REVIEWER.md` now lists a bare
+`messenger.onMessage` in new code as a finding. That is weaker than a mechanism,
+and saying so is the point — a record that overstates its own guarantee is worse
+than one that admits a convention, because the next author trusts it.
+
+Closing the gap properly would mean not exporting `messenger` at all, which
+needs the test suite refactored to drive handlers through a registered protocol
+rather than the raw messenger. Not done here; recorded as a known gap rather than
+claimed as solved.
 
 **It throws rather than returning nothing.** Returning `undefined` would type as
 a valid response — `undefined` is not a `MediaGetResponse` — so every caller

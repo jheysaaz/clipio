@@ -14,10 +14,9 @@ import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Alert, AlertDescription, AlertAction } from "@/components/ui/alert";
 import { Icon } from "@/components/ui/icon";
 import { i18n } from "#i18n";
-import {
-  SECTIONS,
-  type SectionId,
-  type SettingEntry,
+import type {
+  SectionId,
+  SettingEntry,
 } from "@/components/options/settings/registry";
 import { searchRegistryEntries } from "@/components/options/settings/search";
 import { SettingControl } from "@/components/options/settings/SettingControl";
@@ -26,6 +25,7 @@ import {
   readSidebarWidth,
   SIDEBAR_WIDTH_KEY,
 } from "@/components/options/settings/SidebarResizer";
+import { sectionIdFromPath } from "@/routes/options";
 import {
   getStoreReviewUrl,
   setReviewPromptState,
@@ -43,11 +43,10 @@ export function OptionsShell() {
   // from the address bar — which is exactly what the old `useState<SectionId>`
   // alongside a `hashchange` listener could do.
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const activeSection: SectionId = SECTIONS.some(
-    (s) => s.id === pathname.split("/").filter(Boolean)[0]
-  )
-    ? (pathname.split("/").filter(Boolean)[0] as SectionId)
-    : "library";
+  // `sectionIdFromPath` rather than the test inlined: this file and
+  // `SectionView.tsx` both need it, and re-deriving it here is the "two sources
+  // of truth for what sections exist" that decision 0011 exists to remove.
+  const activeSection: SectionId = sectionIdFromPath(pathname) ?? "library";
 
   const [query, setQuery] = useState("");
   const [showReviewBanner, setShowReviewBanner] = useState(false);

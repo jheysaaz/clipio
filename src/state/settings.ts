@@ -115,8 +115,25 @@ async function readThemeMode(): Promise<ThemeMode> {
   return legacy === "light" || legacy === "dark" ? legacy : "system";
 }
 
-/** The key `themeModeItem` is declared against, restated for the raw read. */
-const THEME_MODE_KEY = "local:themeMode";
+/**
+ * The raw `storage.local` key `themeModeItem` writes to.
+ *
+ * **Not** `"local:themeMode"`. WXT splits the key on the first colon: the prefix
+ * selects the storage *area*, and the remainder is the key inside it. Probed
+ * against the installed `@wxt-dev/storage`:
+ *
+ *     storage.defineItem("local:themeMode").setValue("dark")
+ *     // → storage.local.set({ themeMode: "dark" })
+ *
+ * Reading `"local:themeMode"` back returns `{}` every time, so the presence probe
+ * below was permanently false and the store silently resolved `"system"` for
+ * everyone — the select would read "Dark" while the page rendered light.
+ *
+ * Deriving the key rather than restating it here would be better if WXT exposed
+ * it. It does not, so this string is the price of the presence check, and
+ * `settings.test.ts` pins it against a key-aware mock.
+ */
+const THEME_MODE_KEY = "themeMode";
 
 /**
  * Whether a key exists in local storage.

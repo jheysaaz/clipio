@@ -138,6 +138,35 @@ test.describe("Popup routing", () => {
     await expect(popupPage).toHaveURL(/#\/snippet\//);
   });
 
+  test("keeps the create form open when a context-menu draft arrives", async ({
+    popupPage,
+  }) => {
+    // The regression: right-click → "Save selection" → the form opens with the
+    // pasted text, then the snippet load resolves and auto-select navigated to
+    // `#/snippet/<id>`, closing the form and taking the draft with it.
+    //
+    // The existing background e2e missed this because it opens the popup against
+    // an *empty* library, where auto-select returns early regardless. So the
+    // draft is seeded alongside real snippets — the condition that exposes it.
+    await seedAndReload(popupPage, makeSnippets(2));
+
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.local.set({
+        contextMenuDraft: "text the user selected",
+      });
+    });
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+
+    // The form is showing, and it is showing *their* text.
+    await expect(popupPage.getByTestId("snippet-label-input")).toBeVisible();
+    await expect(popupPage).toHaveURL(/#\/new/);
+    await expect(
+      popupPage.locator('[contenteditable="true"]').first()
+    ).toContainText("text the user selected");
+  });
+
   test("addressing a newly created snippet moves the URL to it", async ({
     popupPage,
   }) => {

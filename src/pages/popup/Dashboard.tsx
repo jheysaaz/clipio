@@ -369,12 +369,21 @@ export default function Dashboard() {
    */
   const autoSelected = useRef(false);
   useEffect(() => {
+    // `#/new` is a destination in its own right, so it must be left alone for the
+    // same reason a deep-linked snippet is. Without this guard the effect fired
+    // on the way in — the draft read resolves, `startCreating()` runs, then
+    // `getSnippets()` resolves and this replaced the route with the newest
+    // snippet. The create form closed itself and took the pasted text with it:
+    // right-click → "Save selection" → the form appears → a moment later it is
+    // gone. The `e2e/background.spec.ts` test missed it because it runs against
+    // an empty library, where `snippets.length === 0` returns early anyway.
     if (selectedSnippetId) return;
+    if (isCreating) return;
     if (autoSelected.current || snippets.length === 0) return;
     autoSelected.current = true;
     const newest = selectNewest(snippets);
     if (newest) selectSnippet(newest.id);
-  }, [snippets, selectedSnippetId, selectSnippet]);
+  }, [snippets, selectedSnippetId, isCreating, selectSnippet]);
 
   // -------------------------------------------------------------------------
   // CRUD helpers

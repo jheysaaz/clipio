@@ -172,3 +172,119 @@ describe("every glob shape actually present in vitest.config.ts", () => {
     expect(excluded(pattern, path)).toBe(expected);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Exclude extraction
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract the exclude patterns from a config body, using the shipped logic.
+ *
+ * The same source-slicing approach as `loadIsExcluded`: the point is to test the
+ * code that runs in the gate, not a re-implementation of it.
+ */
+function extractExcludes(configBody: string): string[] {
+  const source = readFileSync(SCRIPT, "utf-8");
+  const start = source.indexOf("const excludeMatch");
+  const end = source.indexOf("if (includeGlobs.length");
+  expect(start, "exclude extraction not found in the script").toBeGreaterThan(
+    -1
+  );
+  expect(end).toBeGreaterThan(start);
+  const body = source.slice(start, end);
+  // Shaped like a `String.match` result — `[fullMatch, firstCaptureGroup]` — so
+  // `coverageBlock[1]` is the coverage block's body, which is what the script
+  // reads. An object at index 0 would leave `[1]` undefined.
+  const coverageBlock = [configBody, configBody];
+  return new Function("coverageBlock", `${body}\nreturn excludePatterns;`)(
+    coverageBlock
+  ) as string[];
+}
+
+describe("exclude extraction — comments", () => {
+  it("ignores a comment containing a straight double quote", () => {
+    // The bug this guards. The extractor is a naive quote-delimited regex, so a
+    // `"` in prose inside the exclude block opened a string that swallowed every
+    // real exclude after it. The gate then reported 31 excluded files as
+    // configured-and-missing — red for a reason unrelated to coverage.
+    //
+    // Found because an ordinary explanatory comment used a quoted phrase. The
+    // existing comments had simply avoided the character, which is why it lay
+    // undiscovered.
+    const patterns = extractExcludes(`
+      exclude: [
+        // A comment with a quoted phrase: "worse than a longer list".
+        "src/hooks/**",
+        // Another comment.
+        "src/pages/**",
+      ]
+    `);
+
+    expect(patterns).toEqual(["src/hooks/**", "src/pages/**"]);
+  });
+
+  it("ignores comment lines that mention exclude paths", () => {
+    const patterns = extractExcludes(`
+      exclude: [
+        // NOTE: src/hooks/** used to be excluded here; the directory is gone.
+        "src/config/**",
+      ]
+    `);
+
+    expect(patterns).toEqual(["src/config/**"]);
+  });
+
+  it("still reads backtick and single-quoted patterns", () => {
+    const patterns = extractExcludes(`
+      exclude: [
+        \`src/a/**\`,
+        'src/b/**',
+      ]
+    `);
+
+    expect(patterns).toEqual(["src/a/**", "src/b/**"]);
+  });
+});
+
+describe("exclude extraction — the real config", () => {
+  it("recovers every exclude the repo actually intends", () => {
+    // Direct guard on the live file: a comment carrying a quote must never be
+    // able to swallow these again.
+    const config = readFileSync(
+      resolve(process.cwd(), "vitest.config.ts"),
+      "utf-8"
+    );
+    const coverageBlock = config.match(/coverage:\s*\{([\s\S]*?)\n {4}\}/);
+    expect(coverageBlock, "coverage block not found").not.toBeNull();
+
+    const patterns = extractExcludes(coverageBlock![1]);
+
+    for (const expected of [
+      "src/entrypoints/**",
+      "src/components/ui/**",
+      "src/components/options/**",
+      "src/pages/**",
+      "src/config/**",
+      "src/storage/backends/indexeddb.ts",
+    ]) {
+      expect(patterns, expected).toContain(expected);
+    }
+  });
+
+  it("yields no path that came from a comment", () => {
+    // Every extracted pattern is either a real glob or an exact source path. A
+    // multi-line blob spanning comment prose is the signature of the old bug.
+    const config = readFileSync(
+      resolve(process.cwd(), "vitest.config.ts"),
+      "utf-8"
+    );
+    const coverageBlock = config.match(/coverage:\s*\{([\s\S]*?)\n {4}\}/);
+    const patterns = extractExcludes(coverageBlock![1]);
+
+    for (const pattern of patterns) {
+      expect(pattern, pattern).not.toContain("//");
+      expect(pattern, pattern).not.toContain("\n");
+      expect(pattern, pattern).not.toContain("  ");
+    }
+  });
+});

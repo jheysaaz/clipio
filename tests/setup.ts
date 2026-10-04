@@ -47,26 +47,57 @@ afterEach(() => {
 
 vi.mock("wxt/utils/storage", () => ({
   storage: {
+    /**
+     * Key-aware, and backed by the real storage area rather than a closure.
+     *
+     * Both properties are load-bearing, and both were learned the hard way.
+     *
+     * **Key-aware.** This used to ignore the key entirely, which hid a real bug:
+     * `settings.ts` reads `storage.local` directly to tell an absent theme key
+     * from one set to its default, and looked up `"local:themeMode"` where WXT
+     * had written `"themeMode"`. No test could tell the two apart, so the store
+     * silently resolved `"system"` for every user while the Appearance select
+     * read "Dark". WXT splits the key on the first colon — the prefix selects the
+     * storage *area*, the remainder is the key inside it — so the mock does the
+     * same.
+     *
+     * **Area-backed.** It used to hold the value in a closure. Real WXT storage
+     * holds nothing: every read goes to `browser.storage.local`. A closure loses
+     * its value when `vi.resetModules()` discards the module registry, which
+     * meant a test could seed through one module instance and read through
+     * another and see a default — a divergence that looks exactly like the bug
+     * it was hiding. Watchers are still tracked here, because the area does not.
+     */
     defineItem: vi.fn(<T>(_key: string, options?: { defaultValue?: T }) => {
       const defaultValue = options?.defaultValue as T;
-      let value = defaultValue;
-      // Watchers are real, and fire on write.
-      //
-      // This used to be `watch: vi.fn(() => () => {})` — a stub that registered
-      // nothing and so could never notify a subscriber. That made any behaviour
-      // depending on a watch untestable: the settings store adopts a font written
-      // in another extension page *through* a watcher, so with this stub the
-      // cross-context path could not be exercised at all, and a test asserting
-      // it failed in a way that looked like a bug in the store.
+      const driverKey = _key.split(":").slice(1).join(":") || _key;
       const watchers = new Set<(v: T) => void>();
+
+      type LocalArea = {
+        get: (key: string) => Promise<Record<string, unknown>>;
+        set: (items: Record<string, unknown>) => Promise<void>;
+        remove: (key: string) => Promise<void>;
+      };
+      const local = () =>
+        (
+          globalThis as unknown as {
+            browser: { storage: { local: LocalArea } };
+          }
+        ).browser.storage.local;
+
       return {
-        getValue: vi.fn(async () => value),
+        getValue: vi.fn(async (): Promise<T> => {
+          const raw = (await local().get(driverKey))[driverKey];
+          return (raw === undefined ? defaultValue : raw) as T;
+        }),
         setValue: vi.fn(async (v: T) => {
-          value = v;
+          await local().set({ [driverKey]: v });
           for (const watcher of watchers) watcher(v);
         }),
+        // A real remove leaves the key absent rather than writing the default
+        // back — which is what the presence probe in settings.ts relies on.
         removeValue: vi.fn(async () => {
-          value = defaultValue;
+          await local().remove(driverKey);
           for (const watcher of watchers) watcher(defaultValue);
         }),
         watch: vi.fn((cb: (v: T) => void) => {

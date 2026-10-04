@@ -32,18 +32,19 @@ import { resetBrowserMocks } from "../../tests/mocks/browser";
  * ── A note on storage in this file ──────────────────────────────────────────
  *
  * `tests/setup.ts` replaces `wxt/utils/storage` globally, and a file-level
- * `vi.mock` for the same path does not reliably take precedence over it. So this
- * suite does not try to replace that mock. Instead `setup()` writes each value
- * twice:
+ * `vi.mock` for the same path does not reliably take precedence over it — so this
+ * suite seeds through the typed items and lets that mock mirror the write to
+ * `storage.local`, exactly as the real one does.
  *
- *  - through the typed item, which is what the store reads for its value
- *  - through `browser.storage.local`, which is what the store's *presence probe*
- *    reads
+ * An earlier version of this file *also* hand-wrote the raw key:
  *
- * That is not a workaround for a broken harness so much as a reflection of
- * production, where a typed item and `storage.local` are the same store: the
- * probe exists only because the typed item cannot tell an absent key from one
- * holding its default.
+ *     await browser.storage.local.set({ "local:themeMode": preset.theme })
+ *
+ * That was papering over a real bug. WXT strips the area prefix, so the item
+ * writes `themeMode`, not `local:themeMode` — the store's presence probe looked
+ * up the wrong key, always missed, and silently resolved `"system"` for every
+ * user. The mock now mirrors writes with the correct driver key, and no test here
+ * writes a raw storage key by hand, so that class of mistake cannot hide again.
  */
 
 /** Listeners the store registered via `matchMedia`. */
@@ -89,21 +90,20 @@ async function setup(preset: Preset = {}) {
   vi.resetModules();
   const items = await import("@/storage/items");
 
+  // Only ever through the typed items. The mirror to `storage.local` is the
+  // mock's job, exactly as it is WXT's — a test that writes a raw key is
+  // asserting the mock rather than the code.
   if (preset.theme !== undefined) {
     // `preset.theme` is a `string` because one case seeds an invalid value.
     await writeUntyped(items.themeModeItem, preset.theme);
-    await browser.storage.local.set({ "local:themeMode": preset.theme });
   } else {
     await items.themeModeItem.removeValue();
-    await browser.storage.local.remove("local:themeMode");
   }
   if (preset.legacy !== undefined) {
     await items.legacyThemeItem.setValue(preset.legacy);
-    await browser.storage.local.set({ "local:theme": preset.legacy });
   }
   if (preset.font !== undefined) {
     await writeUntyped(items.uiFontItem, preset.font);
-    await browser.storage.local.set({ "local:uiFont": preset.font });
   }
 
   if (preset.breakStorage) {
@@ -276,6 +276,29 @@ describe("loading persisted settings", () => {
     );
   });
 
+  it("reads a theme saved under the driver's key, not the item's full key", async () => {
+    // The regression this file exists to prevent. WXT splits `local:themeMode`
+    // into area + driver key, so the stored key is `themeMode`. Reading back
+    // `"local:themeMode"` returned nothing, the presence probe missed, and the
+    // store resolved "system" for every user — the Appearance select would read
+    // "Dark" while the page rendered light.
+    const { items, store } = await setup();
+    await items.themeModeItem.setValue("dark");
+
+    expect(await browser.storage.local.get("themeMode")).toEqual({
+      themeMode: "dark",
+    });
+    expect(await browser.storage.local.get("local:themeMode")).toEqual({});
+
+    vi.resetModules();
+    const reloaded = await import("./settings");
+    await vi.waitFor(() =>
+      expect(reloaded.settingsStore.state.isLoaded).toBe(true)
+    );
+    expect(reloaded.settingsStore.state.themeMode).toBe("dark");
+    void store;
+  });
+
   it("paints the stored font onto the document", async () => {
     const { store } = await setup({ font: "dyslexic" });
     await loaded(store);
@@ -385,7 +408,6 @@ describe("font changed in another context", () => {
     await loaded(store);
 
     await items.uiFontItem.setValue("dyslexic");
-    await browser.storage.local.set({ "local:uiFont": "dyslexic" });
     await vi.waitFor(() => expect(store.state.uiFont).toBe("dyslexic"));
   });
 
