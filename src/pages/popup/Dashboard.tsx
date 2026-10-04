@@ -28,25 +28,26 @@ import { InlineError } from "@/components/ui/inline-error";
 import { toast } from "sonner";
 
 import type { Snippet, SnippetFormData } from "@/types";
-import { createSnippet } from "@/types";
 import { fuzzyMatchSnippets } from "@/lib/preview-helpers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  getSnippets,
-  saveSnippet,
-  updateSnippet,
-  deleteSnippet,
-  getStorageStatus,
-  bulkSaveSnippets,
-  tryRecoverFromBackup,
-  clearSyncDataLostFlag,
-  StorageQuotaError,
-} from "@/storage";
+  initialiseSnippets,
+  addSnippet,
+  editSnippet,
+  removeSnippet,
+  restoreRecoveredSnippets,
+  dismissRecoveryBanner,
+  dismissRecoveryError,
+  dismissQuotaWarning,
+  dismissSyncPausedWarning,
+  dismissLoadError,
+  findSnippet,
+  useSnippets,
+} from "@/state/snippets";
 import { WarningBanner } from "@/components/ui/warning-banner";
 import {
-  syncDataLostItem,
   contextMenuDraftItem,
   latestVersionItem,
   dismissedUpdateVersionItem,
@@ -62,48 +63,6 @@ import {
 } from "@/routes/popup";
 
 const CONTEXT_MENU_DRAFT_SESSION_KEY = "__clipioContextMenuDraft__";
-
-/**
- * Turn a `StorageQuotaError` into something the user can act on.
- *
- * `checkQuota` says which limit broke and by how much, so the message can name
- * it instead of saying "quota exceeded". Falls back to the generic copy when
- * the error came from the browser rather than the preflight, which is the one
- * case where we have no breakdown — and the case we want to hear about, so it is
- * also reported.
- */
-/** Bytes as KB, for the quota message. The limits are small enough that one
- *  decimal is enough to be useful and never enough to be misleading. */
-function formatBytes(bytes: number): string {
-  return `${(bytes / 1024).toFixed(1)} KB`;
-}
-
-function quotaMessage(error: StorageQuotaError): string {
-  const reasons = error.reasons;
-  if (!reasons || reasons.length === 0) {
-    captureError(error, { action: "quotaError.noReasons" });
-    return i18n.t("dashboard.errors.quotaExceeded");
-  }
-  const parts = reasons.map((reason) => {
-    if (reason.kind === "per-item") {
-      return i18n.t("dashboard.errors.quotaPerItem", [
-        formatBytes(reason.actual),
-        formatBytes(reason.limit),
-      ]);
-    }
-    if (reason.kind === "count") {
-      return i18n.t("dashboard.errors.quotaCount", [
-        String(reason.actual),
-        String(reason.limit),
-      ]);
-    }
-    return i18n.t("dashboard.errors.quotaTotal", [
-      formatBytes(reason.actual),
-      formatBytes(reason.limit),
-    ]);
-  });
-  return parts.join(" ");
-}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -146,31 +105,37 @@ export default function Dashboard() {
     tags: [],
   });
   const [isSaving, setIsSaving] = useState(false);
-  const [snippets, setSnippets] = useState<Snippet[]>([]);
+
+  // The library, its load state, the storage warnings and the recovery banner all
+  // live in `src/state/snippets.ts`. They used to be eight `useState` calls here,
+  // set from five separate effects — and nothing listened for changes made in
+  // another context, so a snippet deleted in the options page stayed in this list
+  // with a delete button that would fail. One store, one owner, one event.
+  const snippets = useSnippets((s) => s.snippets);
+  const loading = useSnippets((s) => !s.isLoaded);
+  const quotaWarning = useSnippets((s) => s.quotaWarning);
+  const syncPausedWarning = useSnippets((s) => s.syncPausedWarning);
+  const recoverySnippets = useSnippets((s) => s.recoverySnippets);
+  const showRecoveryBanner = useSnippets((s) => s.showRecoveryBanner);
+  const loadError = useSnippets((s) => s.loadError);
+  const recoveryError = useSnippets((s) => s.recoveryError);
+
   /**
    * The selected snippet, looked up from the list.
    *
    * Derived rather than stored: the route holds the *id*, and the object lives in
-   * `snippets`. Storing both meant two sources of truth, and an edit to the
+   * the store. Storing both meant two sources of truth, and an edit to the
    * selected snippet had to be written back into a copy or the detail pane would
    * keep rendering the pre-edit version.
    */
   const selectedSnippet: Snippet | null = useMemo(
-    () => snippets.find((s) => s.id === selectedSnippetId) ?? null,
+    () => findSnippet(snippets, selectedSnippetId),
     [snippets, selectedSnippetId]
   );
 
-  const [loading, setLoading] = useState(true);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(240);
-  const [quotaWarning, setQuotaWarning] = useState(false);
-  const [syncPausedWarning, setSyncPausedWarning] = useState(false);
-
-  const [recoverySnippets, setRecoverySnippets] = useState<Snippet[]>([]);
-  const [showRecoveryBanner, setShowRecoveryBanner] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [updateRelease, setUpdateRelease] = useState<{
     version: string;
     htmlUrl: string;
@@ -238,27 +203,7 @@ export default function Dashboard() {
   // -------------------------------------------------------------------------
 
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const list = await getSnippets();
-        setSnippets(list);
-
-        // Check if we're already in local-fallback mode
-        const status = await getStorageStatus();
-        if (status.quotaExceeded) {
-          setQuotaWarning(true);
-        } else if (status.mode === "local" && status.localReason === "manual") {
-          setSyncPausedWarning(true);
-        }
-      } catch (err) {
-        console.error("[Clipio] Failed to load snippets:", err);
-        captureError(err, { action: "loadSnippets" });
-        setLoadError(i18n.t("dashboard.errors.failedToLoad"));
-      } finally {
-        setLoading(false);
-      }
-    })();
+    void initialiseSnippets();
   }, []);
 
   // Check if the popup was opened via the "Save selection" context-menu action.
@@ -312,26 +257,6 @@ export default function Dashboard() {
       } catch (err) {
         console.error("[Clipio] Failed to read context-menu draft:", err);
         captureError(err, { action: "loadContextMenuDraft" });
-      }
-    })();
-  }, []);
-
-  // Check uninstall-warning flag + sign-out recovery on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const dataLost = await syncDataLostItem.getValue();
-        if (dataLost) {
-          const backup = await tryRecoverFromBackup();
-          if (backup.length > 0) {
-            setRecoverySnippets(backup);
-            setShowRecoveryBanner(true);
-          }
-          await clearSyncDataLostFlag();
-        }
-      } catch (err) {
-        console.error("[Clipio] Flag check failed:", err);
-        captureError(err, { action: "flagCheck" });
       }
     })();
   }, []);
@@ -411,73 +336,48 @@ export default function Dashboard() {
 
     setIsSaving(true);
     try {
-      const newSnippet = createSnippet(draftSnippet);
-      await saveSnippet(newSnippet);
-      setSnippets((prev) => [...prev, newSnippet]);
+      const result = await addSnippet(draftSnippet);
+      if (!result.ok) {
+        // The quota banner is already up — `addSnippet` raised it, because it is
+        // a fact about the backend rather than about this one operation. What is
+        // left for the page is the sentence explaining this save.
+        //
+        // The create view stays OPEN. Closing it here unmounted
+        // `NewSnippetView`, which is the component that renders `createError`, so
+        // the explanation was set and then immediately made invisible and the user
+        // watched their snippet silently not save. Keeping the form open also lets
+        // them shorten the snippet and retry without starting over.
+        setCreateError(result.error);
+        return;
+      }
       // Address the new snippet rather than only showing it: the id is now in the
       // URL, so "copy link to this snippet" needs no work to start working.
-      selectSnippet(newSnippet.id);
+      selectSnippet(result.value.id);
       setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
       toast.success(i18n.t("dashboard.toast.snippetSaved"));
-    } catch (err) {
-      if (err instanceof StorageQuotaError) {
-        // Show the banner, and explain rather than silently retrying.
-        //
-        // This used to retry the save "after manager has switched to local
-        // mode". The manager no longer switches: Wave 9 replaced the silent
-        // fallback with a refusal (), so
-        // the retry ran the identical, stateless preflight and could not
-        // succeed. The snippet is now simply not saved, which is a real
-        // behaviour change — the user is told and can switch storage mode from
-        // the options page.
-        setQuotaWarning(true);
-        setCreateError(quotaMessage(err));
-        // The create view is deliberately left OPEN. Closing it here unmounted
-        // `NewSnippetView`, which is the component that renders `createError` —
-        // so the explanation was set and then immediately made invisible, and
-        // the user saw their snippet silently not save. Keeping the form open
-        // also lets them shorten the snippet and retry without starting over.
-      } else {
-        captureError(err, { action: "saveSnippet" });
-        setCreateError(i18n.t("dashboard.errors.failedToCreate"));
-      }
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDeleteSnippet = async (snippetId: string) => {
-    try {
-      await deleteSnippet(snippetId);
-      const newList = snippets.filter((s) => s.id !== snippetId);
-      setSnippets(newList);
-      // Deleting the addressed snippet has to move the address too, or the URL
-      // would keep pointing at something that no longer exists.
-      if (selectedSnippetId === snippetId) {
-        const newest = selectNewest(newList);
-        if (newest) selectSnippet(newest.id);
-        else showList();
-      }
-      toast.success(i18n.t("dashboard.toast.snippetDeleted"));
-    } catch (err) {
-      console.error("[Clipio] Failed to delete snippet:", err);
-      captureError(err, { action: "deleteSnippet" });
-      throw err;
+    // `removeSnippet` reports and rethrows; this rethrow is for its own callers,
+    // which show a delete failure rather than pretending it worked.
+    const { remaining } = await removeSnippet(snippetId);
+    // Deleting the addressed snippet has to move the address too, or the URL
+    // would keep pointing at something that no longer exists.
+    if (selectedSnippetId === snippetId) {
+      const newest = selectNewest(remaining);
+      if (newest) selectSnippet(newest.id);
+      else showList();
     }
+    toast.success(i18n.t("dashboard.toast.snippetDeleted"));
   };
 
   const handleUpdateSnippet = async (updated: Snippet) => {
-    try {
-      await updateSnippet(updated);
-      setSnippets((prev) =>
-        prev.map((s) => (s.id === updated.id ? updated : s))
-      );
-      toast.success(i18n.t("dashboard.toast.snippetUpdated"));
-    } catch (err) {
-      console.error("[Clipio] Failed to update snippet:", err);
-      captureError(err, { action: "updateSnippet" });
-      throw err;
-    }
+    const result = await editSnippet(updated);
+    if (!result.ok) throw new Error(result.error);
+    toast.success(i18n.t("dashboard.toast.snippetUpdated"));
   };
 
   // -------------------------------------------------------------------------
@@ -563,29 +463,18 @@ export default function Dashboard() {
               recoverySnippets.length
             ),
             onClick: async () => {
-              try {
-                await bulkSaveSnippets(recoverySnippets);
-                const list = await getSnippets();
-                setSnippets(list);
-                const newest = selectNewest(list);
-                if (newest) selectSnippet(newest.id);
-                setShowRecoveryBanner(false);
-              } catch (err) {
-                console.error("[Clipio] Recovery failed:", err);
-                captureError(err, { action: "recoverSnippets" });
-                setRecoveryError(i18n.t("dashboard.errors.failedToRestore"));
-              }
+              const result = await restoreRecoveredSnippets();
+              if (!result.ok) return;
+              const newest = selectNewest(result.value);
+              if (newest) selectSnippet(newest.id);
             },
           }}
-          onDismiss={() => setShowRecoveryBanner(false)}
+          onDismiss={dismissRecoveryBanner}
         >
           {i18n.t("dashboard.warnings.recovery.body", recoverySnippets.length)}
         </WarningBanner>
       )}
-      <InlineError
-        message={recoveryError}
-        onDismiss={() => setRecoveryError(null)}
-      />
+      <InlineError message={recoveryError} onDismiss={dismissRecoveryError} />
 
       {/* Quota warning banner — only shown when sync quota was actually exceeded */}
       {quotaWarning && (
@@ -595,7 +484,7 @@ export default function Dashboard() {
             label: i18n.t("dashboard.warnings.quotaFull.action"),
             onClick: () => browser.runtime.openOptionsPage(),
           }}
-          onDismiss={() => setQuotaWarning(false)}
+          onDismiss={dismissQuotaWarning}
         >
           {i18n.t("dashboard.warnings.quotaFull.body")}
         </WarningBanner>
@@ -609,7 +498,7 @@ export default function Dashboard() {
             label: i18n.t("dashboard.warnings.syncPaused.action"),
             onClick: () => browser.runtime.openOptionsPage(),
           }}
-          onDismiss={() => setSyncPausedWarning(false)}
+          onDismiss={dismissSyncPausedWarning}
         >
           {i18n.t("dashboard.warnings.syncPaused.body")}
         </WarningBanner>
@@ -712,7 +601,7 @@ export default function Dashboard() {
               ) : loadError ? (
                 <InlineError
                   message={loadError}
-                  onDismiss={() => setLoadError(null)}
+                  onDismiss={dismissLoadError}
                   className="border border-red-200 dark:border-red-800 rounded-lg"
                 />
               ) : filteredSnippets.length === 0 ? (

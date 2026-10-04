@@ -64,6 +64,7 @@ dashboard:
     failedToLoad: Error al cargar los fragmentos.
     failedToCreate: Error al crear el fragmento. Por favor, inténtalo de nuevo.
     failedToRestore: Error al restaurar los fragmentos.
+    failedToUpdate: Error al actualizar el fragmento. Inténtalo de nuevo.
     quotaExceeded: El almacenamiento de sincronización está lleno, así que este fragmento no se guardó.
     quotaPerItem: Este fragmento ocupa $1 y la sincronización permite $2 por fragmento.
     quotaTotal: Tus fragmentos ocupan $1 y la sincronización permite $2.

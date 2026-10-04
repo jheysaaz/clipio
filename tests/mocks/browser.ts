@@ -23,6 +23,70 @@ let syncStore: Record<string, unknown> = {};
 let localStore: Record<string, unknown> = {};
 
 // ---------------------------------------------------------------------------
+// storage.onChanged mock
+// ---------------------------------------------------------------------------
+//
+// WHY THIS EXISTS
+//
+// `src/state/snippets.ts` subscribes to `browser.storage.onChanged` so a
+// snippet added or deleted in another context reaches an open popup. Without an
+// event here, that whole subscription is unreachable from a test — the mock
+// would accept the `addListener` call and never fire, and the listener would be
+// as untested as the code that had been replaced.
+//
+// It fires from the area's own `set`/`remove`, because that is what real storage
+// does, and from `emitStorageChange` for changes made by *another* context,
+// which is the case this exists to model.
+
+type StorageChanges = Record<
+  string,
+  { oldValue?: unknown; newValue?: unknown }
+>;
+type StorageChangeListener = (
+  changes: StorageChanges,
+  areaName: string
+) => void;
+
+const storageChangeListeners = new Set<StorageChangeListener>();
+
+/**
+ * Publish a storage change to the registered listeners.
+ *
+ * `set`/`remove` below route here, so writing through the mock behaves like
+ * writing through the browser. Tests call this directly to stand in for a *other*
+ * extension context writing — the popup cannot see its own writes as "changed",
+ * but it must react to the options page's, and this is how a test says so.
+ */
+export function emitStorageChange(changes: StorageChanges, areaName: string) {
+  for (const listener of [...storageChangeListeners]) {
+    try {
+      listener(changes, areaName);
+    } catch (error) {
+      // Real storage does not let a listener's throw break the writer. Neither
+      // does this: a subscriber that throws must not fail the `set` that
+      // triggered it, or one bad listener would look like a storage failure.
+      console.error("[browser mock] storage.onChanged listener threw", error);
+    }
+  }
+}
+
+/** Keys whose value actually differs — the change set Chrome reports. */
+function diffKeys(
+  before: Record<string, unknown>,
+  keys: string[]
+): StorageChanges {
+  const changes: StorageChanges = {};
+  for (const key of keys) {
+    const oldValue = before[key];
+    const newValue = syncStore[key] ?? localStore[key];
+    if (oldValue === newValue) continue;
+    changes[key] =
+      newValue === undefined ? { oldValue } : { oldValue, newValue };
+  }
+  return changes;
+}
+
+// ---------------------------------------------------------------------------
 // browser.storage.sync mock
 // ---------------------------------------------------------------------------
 
@@ -52,14 +116,18 @@ export const mockStorageSync = {
   ),
 
   set: vi.fn(async (items: Record<string, unknown>) => {
+    const before = { ...syncStore };
     Object.assign(syncStore, items);
+    emitStorageChange(diffKeys(before, Object.keys(items)), "sync");
   }),
 
   remove: vi.fn(async (keys: string | string[]) => {
     const toRemove = typeof keys === "string" ? [keys] : keys;
+    const before = { ...syncStore };
     for (const k of toRemove) {
       delete syncStore[k];
     }
+    emitStorageChange(diffKeys(before, toRemove), "sync");
   }),
 
   getBytesInUse: vi.fn(async () => 0),
@@ -102,17 +170,33 @@ export const mockStorageLocal = {
   ),
 
   set: vi.fn(async (items: Record<string, unknown>) => {
+    const before = { ...localStore };
     Object.assign(localStore, items);
+    emitStorageChange(diffKeys(before, Object.keys(items)), "local");
   }),
 
   remove: vi.fn(async (keys: string | string[]) => {
     const toRemove = typeof keys === "string" ? [keys] : keys;
+    const before = { ...localStore };
     for (const k of toRemove) {
       delete localStore[k];
     }
+    emitStorageChange(diffKeys(before, toRemove), "local");
   }),
 
   getBytesInUse: vi.fn(async () => 0),
+};
+
+export const mockStorageOnChanged = {
+  addListener: vi.fn((fn: StorageChangeListener) => {
+    storageChangeListeners.add(fn);
+  }),
+  removeListener: vi.fn((fn: StorageChangeListener) => {
+    storageChangeListeners.delete(fn);
+  }),
+  hasListener: vi.fn((fn: StorageChangeListener) =>
+    storageChangeListeners.has(fn)
+  ),
 };
 
 // ---------------------------------------------------------------------------
@@ -277,6 +361,7 @@ export const mockBrowser = {
   storage: {
     sync: mockStorageSync,
     local: mockStorageLocal,
+    onChanged: mockStorageOnChanged,
   },
   runtime: mockRuntime,
   tabs: mockTabs,
@@ -340,6 +425,12 @@ export function resetBrowserMocks() {
   mockStorageLocal.set.mockClear();
   mockStorageLocal.remove.mockClear();
   mockStorageLocal.getBytesInUse.mockClear();
+
+  // `storage.onChanged` listeners are deliberately NOT cleared, for the same
+  // reason the `chrome` list is not. A store subscribes once at module scope; a
+  // reset that emptied the list behind its back would leave it believing it is
+  // listening while reacting to nothing — a silently dead subscription in every
+  // later test in the file. Use `emitStorageChange` to drive it.
 
   mockRuntime.sendMessage.mockClear();
   mockRuntime.getManifest.mockClear();
