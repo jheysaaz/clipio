@@ -35,9 +35,8 @@ import { bulkSaveSnippets } from "@/storage";
 import type { Snippet } from "@/types";
 
 import { detectFormat } from "@/lib/importers/detect";
-import { TextBlazeParser } from "@/lib/importers/textblaze";
-import { ClipioParser, importClipioZip } from "@/lib/importers/clipio";
-import { PowerTextParser } from "@/lib/importers/powertext";
+import { IMPORT_PARSERS, getParser } from "@/lib/importers/registry";
+import { importClipioZip } from "@/lib/importers/clipio";
 import type {
   FormatId,
   ParsedSnippet,
@@ -68,16 +67,6 @@ interface ImportWizardProps {
   onClose: () => void;
   onImportComplete: (count: number) => void;
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const PARSERS = {
-  clipio: ClipioParser,
-  textblaze: TextBlazeParser,
-  powertext: PowerTextParser,
-} as const;
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -273,7 +262,12 @@ export default function ImportWizard({
 
   function tryParse(json: unknown, format: FormatId) {
     try {
-      const parser = PARSERS[format];
+      const parser = getParser(format);
+      // Unreachable from the UI: `format` is a `FormatId` and every one is
+      // registered. Guarded anyway so a format added to the union without a
+      // parser surfaces as a parse error instead of a TypeError.
+      if (!parser)
+        throw new Error(`No parser registered for format "${format}"`);
       const snippets = parser.parse(json);
       setParsedSnippets(snippets);
       setParseError(null);
@@ -424,6 +418,17 @@ export default function ImportWizard({
   // Computed values for step 4
   // ---------------------------------------------------------------------------
 
+  /**
+   * Resolved once rather than indexed three times in the detection chip below.
+   *
+   * `getParser` is a lookup and can miss, where the old `PARSERS[format]` map
+   * was exhaustive-checked against `FormatId` by the compiler. Missing and
+   * detected-but-unregistered are the same situation to this UI — there is no
+   * parser to name — so the chip falls back to the "unknown format" state
+   * rather than rendering an undefined.
+   */
+  const detectedParser = detectedFormat ? getParser(detectedFormat) : undefined;
+
   const finalSnippetPreview = buildFinalSnippets(
     existingSnippets,
     parsedSnippets,
@@ -530,11 +535,11 @@ export default function ImportWizard({
             <p className="text-sm text-muted-foreground">
               {i18n.t("importWizard.upload.detectedFormat")}
             </p>
-            {detectedFormat ? (
+            {detectedParser ? (
               <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground">
-                {PARSERS[detectedFormat].iconUrl && (
+                {detectedParser.iconUrl && (
                   <img
-                    src={PARSERS[detectedFormat].iconUrl}
+                    src={detectedParser.iconUrl}
                     alt=""
                     className="w-3.5 h-3.5 rounded-sm object-contain"
                     onError={(e) =>
@@ -542,7 +547,7 @@ export default function ImportWizard({
                     }
                   />
                 )}
-                {PARSERS[detectedFormat].displayName}
+                {detectedParser.displayName}
               </span>
             ) : (
               <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">
@@ -560,11 +565,7 @@ export default function ImportWizard({
               onValueChange={(v) => handleFormatChange(v as FormatId)}
               className="flex gap-4"
             >
-              {(
-                Object.values(
-                  PARSERS
-                ) as (typeof PARSERS)[keyof typeof PARSERS][]
-              ).map((parser) => (
+              {IMPORT_PARSERS.map((parser) => (
                 <div key={parser.id} className="flex items-center gap-2">
                   <RadioGroupItem value={parser.id} id={`fmt-${parser.id}`} />
                   <Label

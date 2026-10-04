@@ -16,6 +16,7 @@ import { exportSnippets, getSnippets } from "@/storage";
 import { snippetsContainMedia } from "@/lib/exporters/clipio";
 import { usageCountsItem } from "@/storage/items";
 import { captureError } from "@/lib/sentry";
+import { IMPORT_PARSERS } from "@/lib/importers/registry";
 import { i18n } from "#i18n";
 import { toast } from "sonner";
 
@@ -175,21 +176,28 @@ export function LibraryPanel() {
           </Button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+        <div
+          data-testid="import-formats"
+          className="flex flex-wrap items-center gap-1.5 pt-1"
+        >
           <span className="self-center text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             {i18n.t("options.importExport.importCard.supported")}
           </span>
-          {[
-            { label: "Clipio", icon: "/icon/128.png" },
-            { label: "TextBlaze", icon: "/icon/textblaze.png" },
-            { label: "PowerText", icon: "/icon/powertext.png" },
-          ].map(({ label, icon }) => (
+          {IMPORT_PARSERS.map((parser) => (
             <span
-              key={label}
+              key={parser.id}
               className="flex items-center gap-1.5 rounded-full bg-secondary px-2 py-0.5 text-xs text-secondary-foreground"
             >
-              <img src={icon} alt="" className="h-3.5 w-3.5 rounded-sm" />
-              {label}
+              {/* Decorative: the format name is already the adjacent text, so
+                  the mark carries no meaning on its own for a screen reader. */}
+              {parser.iconUrl && (
+                <img
+                  src={parser.iconUrl}
+                  alt=""
+                  className="h-3.5 w-3.5 rounded-sm"
+                />
+              )}
+              {parser.displayName}
             </span>
           ))}
         </div>

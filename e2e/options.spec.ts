@@ -94,6 +94,42 @@ test.describe("Options Page", () => {
     await expect(libraryNav).not.toHaveAttribute("aria-current", "page");
   });
 
+  test("every advertised import format renders a decoded brand mark", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+
+    // The format chips render each mark with alt="" because the adjacent text
+    // already names the format. That is right for a screen reader and it makes
+    // a broken image completely invisible: no alt text to surface, no layout
+    // shift, and the axe scan below has nothing to object to. Two of these
+    // marks are bundled from src/assets/brands/ rather than served from public/,
+    // so this is the only check that the bundler actually resolved them.
+    const formats = optionsPage.getByTestId("import-formats");
+    await expect(formats).toBeVisible();
+
+    const marks = formats.locator("img");
+    await expect(marks).toHaveCount(3);
+
+    // naturalWidth is 0 for an image that failed to decode, whatever the src
+    // said — including a data URL whose payload is corrupt, which a `src`
+    // assertion alone would pass. The exact sizes are also a tripwire: the two
+    // bundled marks are 48px while Clipio's own icon is 128px, so a chip that
+    // silently picked up the wrong asset fails here instead of rendering a
+    // plausible-looking square.
+    const decoded = await marks.evaluateAll((imgs) =>
+      imgs.map((img) => ({
+        width: (img as HTMLImageElement).naturalWidth,
+        height: (img as HTMLImageElement).naturalHeight,
+      }))
+    );
+    expect(decoded).toEqual([
+      { width: 128, height: 128 }, // Clipio   — public/icon/128.png
+      { width: 48, height: 48 }, //   TextBlaze — src/assets/brands/
+      { width: 48, height: 48 }, //   PowerText — src/assets/brands/
+    ]);
+  });
+
   test("storage backend select persists a real mode switch", async ({
     optionsPage,
   }) => {
