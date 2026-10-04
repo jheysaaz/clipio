@@ -482,36 +482,63 @@ Features we actually use, not decoration:
   `validateSearch`d URL state. Shareable, back-button-correct. Per Finding 3 it
   serialises as `options.html?q=preview#appearance`.
 
-**Popup — deliberately less**
+**Snippet selection lives in the URL — and so do sub-sections**
 
-The popup is 680×460 and dies on blur. History entries there are a liability,
-not a feature: the user presses Back and the popup is already gone.
+**Decision (2026-10-04): yes, `/#/snippet/$id` is the selection route, and the
+options page gets sub-routes as well as section routes.**
 
-So the popup gets the router with `replace`-only navigation:
+The deciding argument is forward-looking: if Clipio grows "open this specific
+snippet" — a context-menu entry, a notification, a keyboard shortcut, a link
+from elsewhere — a selection held in component state has no address. The caller
+would have to invent a side channel, and every such feature would invent its own.
+A route is the address; the feature then just builds a location.
 
-- `#/list` and `#/new` for create mode.
-- `#/snippet/$id` for selection — this is the one genuine gain, because the
-  context menu's "save selection" flow can open the popup *already routed* to
-  the create form with the draft in hand, instead of the popup booting and then
-  discovering the draft in a mount effect.
-- `validateSearch` for `?q=` so the search box survives the create-form
-  round-trip.
-- No back button, no push. `history` never grows.
+The same reasoning applies to the options page, and it is the larger half:
+
+- `#/library/import` — the import/export panel, not merely the Library section
+  that happens to contain it.
+- `#/appearance` — Appearance, as today.
+
+**Why a path segment rather than a query parameter.** Finding 3, and it is
+load-bearing here. With hash history TanStack reads search params from
+`window.location.search` — *before* the hash — so `?modal=import` would have to
+be written `options.html?modal=import#library`: unreadable, and it puts state
+somewhere unrelated to the thing it describes. A path segment keeps it in one
+place: `#/library/import`.
+
+**Consequence for the registry.** `SectionId` stops being the only routing
+vocabulary. `SECTIONS` remains the source of truth for the *nav*; the router
+gains sub-routes beneath those sections. `sectionFromHash` and its
+`SECTIONS.some(...)` validation disappear — the route tree does that now, with
+`notFoundComponent` for a bad id.
+
+**Popup — replace-only, but genuinely addressed**
+
+The popup is 680×460 and dies on blur, so history entries there are a liability:
+the user presses Back and the popup is already gone. But the selection route is
+still worth having, because it is an *address*, not a history entry.
+
+- `#/list` — the default.
+- `#/snippet/$id` — a specific snippet selected.
+- `#/new` — the create form.
+
+The context menu's "save selection" draft keeps travelling as it does today,
+through `contextMenuDraftItem`; the route only decides *which view* to boot into.
+So the popup navigates to `#/new` on open when it finds a draft, rather than
+discovering it in a mount effect and flipping a boolean.
+
+`replace` only, so `history.length` never grows while the popup is open.
 
 **Context menu / deep links**
 
-`background.ts` changes from string concatenation to a route builder:
+`background.ts` stops concatenating strings, and the two existing hand-built
+links become real routes rather than query params:
 
-```ts
-// before
-browser.tabs.create({ url: optionsUrl + "#feedback" })
-// after
-router.buildLocation({ to: "/about", search: { modal: "feedback" } })
-```
+- `options.html#feedback` → `#/about/feedback`
+- `options.html#import-export` (Dashboard empty state) → `#/library/import`
 
-Both `#feedback` and `#/about?modal=feedback` are accepted (Finding 3), and a
-small `notFoundComponent` fallback covers `#feedback` explicitly so the existing
-link does not 404.
+Both keep working as bare hashes (Finding 3), and each gets an explicit route so
+the old string is not a redirect nobody remembers to maintain.
 
 **Devtools** — `@tanstack/react-router-devtools`, gated behind
 `import.meta.env.DEV`. Not shipped.
@@ -520,6 +547,13 @@ link does not 404.
 `data-testid` (`options-nav-library`, `add-snippet`, `snippet-list`, …). Per
 AGENTS rule 10, every `data-testid` the router changes ownership of gets updated
 in the same PR. None are renamed — only their position in the DOM moves.
+
+New e2e, and these are the ones that matter:
+
+- deep-linking `#/library/import` lands on the import panel
+- deep-linking an unknown section renders the 404 rather than silently landing on
+  Library — the behaviour change most likely to bite an existing link
+- deep-linking `#/snippet/<id>` selects that snippet
 
 ---
 
@@ -535,12 +569,9 @@ New decision records needed:
   not enforce the origin check; we do, per 0001.
 - `0010-search-indexes-resolved-copy.md` — why the index is a derived artefact
   and not fields on the registry.
-- `0011-router-in-the-popup-is-replace-only.md` — why the popup deliberately has
-  no history entries.
+- `0011-router-in-the-popup-is-replace-only.md` — why the popup has an address
+  for its selection but no history entries.
 - `0012-assets-own-vs-bundled.md` — the `public/icon/` vs `src/assets/` rule.
-- `0013-firefox-verified-by-geckodriver-not-playwright.md` — Playwright cannot
-  load extensions into Firefox, so Phase 0 exists. Also records exactly what the
-  four assertions do *not* cover.
 
 ---
 
@@ -562,26 +593,53 @@ the reasoning survives.
 5. **Store depth — RESOLVED.** Full sweep, split into 4a–4d.
 6. **Router depth — RESOLVED.** Full: typed route tree, `useBlocker`, lazy
    routes, `notFoundComponent`.
-7. **Firefox — RESOLVED.** Phase 0 harness, four assertions, messaging paths
-   only.
-8. **Coverage for `editor.ts` — OPEN.** See "The coverage trap in 4d". Options
-   (a) write the tests, split into two files, or (b) exclude with a written
-   reason. Recommendation: (a) with (b) as fallback. Needs a decision before 4d.
-9. **Popup URL surface — OPEN.** Are you happy with `#/snippet/$id` living in
-   the URL, or should snippet selection stay out of the URL entirely? The
-   context-menu "save selection" flow is the only caller that needs it, and it
-   could equally be driven by a store flag set at popup open.
-10. **Command palette — OPEN.** Optional extra: one `⌘K` palette across
+7. **Firefox — RESOLVED (dropped).** Chromium e2e is the only browser gate; see
+   "Resolved during implementation" below for why.
+8. **Coverage for `editor.ts` — RESOLVED.** Option (a): write the tests, split
+   into `editor-selection.ts` and `editor-media.ts`. Relevant to 4d, and the
+   reason it is tractable.
+9. **Router depth — RESOLVED.** Full: typed route tree, `useBlocker`, lazy
+   routes, `notFoundComponent`.
+10. **Popup URL surface — RESOLVED.** Snippet selection *does* live in the URL,
+    as `#/snippet/$id`, so a future "open this specific snippet" feature has an
+    address to build. That generalises: the options page gets sub-routes too, so
+    `#/library/import` reaches the import/export panel rather than the Library
+    section that happens to contain it. Path segments, not query params — see
+    Finding 3.
+11. **Command palette — OPEN.** Optional extra: one `⌘K` palette across
     snippets, settings and navigation, built on Router + Store. It falls out of
     Phases 4+5 almost for free, but it is new product surface, not a migration.
-11. **Settings search: panel-owned content — OPEN.** The index covers registry
+12. **Settings search: panel-owned content — OPEN.** The index covers registry
     entries. Panel *prose* (the import/export card text in Library, the
     diagnostics card headings) is not indexed today either. Include it, or keep
     the index to settings rows?
 
-## Decisions still needed before I start
+## Resolved during implementation
 
-Two, and both are small:
+Recorded because each contradicts something this plan asserted.
 
-- **#8**, the `editor.ts` coverage route.
-- **#9**, whether snippet selection goes in the popup URL.
+- **`@tanstack/store@0.11.2` ships no `Effect` and no `Derived`.** Both were
+  assumed above. The real surface is `Store` (`setState` / `get` / `subscribe`),
+  `createAtom`, and the React bindings. `src/state/effect.ts` implements the
+  run-once-then-on-change contract on `subscribe` — the primitive `Effect` was
+  built on — with the same signature, so swapping the real one in later is a
+  one-line change. Derived values need `createAtom`.
+- **`setState` takes the full next state, not a patch.** Every call site spreads
+  `prev`.
+- **Errors lose their prototype across a context boundary** under
+  `@webext-core/messaging`. `name` and `message` survive, the prototype does
+  not, so `instanceof` is silently false in the receiving context. See
+  `docs/decisions/0009`.
+
+## Bugs found and fixed on the way
+
+- **The legacy-theme migration had never run.** `themeModeItem` is declared with
+  `defaultValue: "system"`, so an absent key resolves to `"system"` rather than
+  to anything the guard rejected — making the fallback dead code. A user
+  upgrading from a build that only wrote `local:theme` silently lost their saved
+  dark preference. Fixed with a raw storage presence check, because a typed item
+  cannot distinguish absent from default.
+- **The settings test harness could not observe a watcher.**
+  `wxt/utils/storage`'s `watch` was `() => () => {}`, registering nothing, so
+  cross-context font adoption was untestable — and a test asserting it failed as
+  though the store were at fault. Watchers now fire on write.
