@@ -116,6 +116,58 @@ export function resolveContextMenuAction(
  */
 export const FEEDBACK_ROUTE = "#/about/feedback";
 
+/**
+ * The popup route "Create new snippet" opens: `#/new`.
+ *
+ * `NEW_ROUTE` cannot be imported here. `routes/popup.tsx` imports `Dashboard`,
+ * and with it the whole component tree, so pulling the constant in from the
+ * service worker would bundle React and every snippet view into the background
+ * worker for the sake of one string. Written out here instead and pinned against
+ * the real router in `context-menu.test.ts`, which can afford the import — the
+ * same arrangement `FEEDBACK_ROUTE` uses, and for the same reason: a test that
+ * checks the constant against the router is what stops the two drifting into a
+ * link that resolves to nowhere.
+ */
+export const POPUP_NEW_ROUTE = "#/new";
+
+/**
+ * The popup route an action asks the popup to boot into, or `null` for none.
+ *
+ * ── Why this exists ──────────────────────────────────────────────────────────
+ *
+ * `browser.action.openPopup()` takes no URL, and the popup reopens at whatever
+ * route it was last showing. So "Create new snippet" — the one menu item whose
+ * entire meaning is *which* page to open — could not name it: right-click →
+ * "Create new snippet" landed on whichever snippet the popup happened to be
+ * showing, and every layer reported success. The address existed and nothing
+ * could set it.
+ *
+ * It is a function and not a field on the action because only one action has a
+ * route, and putting `route: string | null` on all six would put `null` in five
+ * places that a reader then has to interpret.
+ */
+export function popupRouteForAction(action: ContextMenuAction): string | null {
+  switch (action.kind) {
+    case "create-snippet":
+      return POPUP_NEW_ROUTE;
+
+    case "save-selection":
+      // Deliberately null. The draft already carries the instruction — the popup
+      // consumes it and boots the form itself — so naming a route here too would
+      // be two channels for one decision, free to disagree: a draft that booted
+      // the detail view while the route said `/new`, with no way to tell which
+      // one won.
+      return null;
+
+    case "open-dashboard":
+    case "open-feedback":
+    case "hide-on-site":
+    case "none":
+      // These open no popup: two open a tab, one blocks a host, one does nothing.
+      return null;
+  }
+}
+
 /** Every clickable menu id, so a new one cannot be added without a test. */
 export const CLICKABLE_MENU_IDS: readonly string[] = [
   CONTEXT_MENU.SAVE_SELECTION,

@@ -5,6 +5,7 @@ import {
   REVIEW_CHECK_ALARM_NAME,
   REVIEW_CHECK_DELAY_HOURS,
   ONBOARDING_SUPPORTED_LOCALES,
+  POPUP_VIEW_SESSION_KEY,
   TIMING,
 } from "@/config/constants";
 import {
@@ -27,6 +28,7 @@ import { checkForUpdate, openReleasePage } from "@/lib/update-checker";
 import { addBlockedSite } from "@/lib/blocked-sites";
 import {
   FEEDBACK_ROUTE,
+  popupRouteForAction,
   resolveContextMenuAction,
   type ContextMenuAction,
 } from "@/lib/context-menu";
@@ -134,17 +136,55 @@ async function registerContextMenus(): Promise<void> {
   }
 }
 
-async function openPopupOrFallback(action: string): Promise<void> {
+/**
+ * Open the popup, on a route the API cannot be given.
+ *
+ * `openPopup()` takes no URL, so the route is passed separately and used where it
+ * *is* under this code's control: the tab fallback, which is an ordinary URL. The
+ * popup surface gets the route a different way — see `requestPopupView`.
+ */
+async function openPopupOrFallback(action: string, route = ""): Promise<void> {
   try {
     await (browser.action ?? browser.browserAction).openPopup();
   } catch {
     captureMessage("openPopup failed — falling back to tab", "warning", {
       action,
     });
-    const popupUrl = browser.runtime.getURL("/popup.html");
+    const popupUrl = browser.runtime.getURL("/popup.html") + route;
     browser.tabs.create({ url: popupUrl }).catch((err: unknown) => {
       captureError(err, { action: `${action}.popupFallback` });
     });
+  }
+}
+
+/**
+ * Leave the route a popup should boot into, for the popup to read.
+ *
+ * ── Why the route has to travel ──────────────────────────────────────────────
+ *
+ * The popup reopens at whatever route it was last showing, and no API lets the
+ * service worker address it. So "Create new snippet" landed on whichever snippet
+ * the popup happened to be showing: the one menu item whose whole meaning is
+ * *which* page to open, opening the page the user did not ask for. The route is
+ * the fix, and `storage.session` is how it reaches the popup — the same channel
+ * the context-menu draft already uses, and for the same reason.
+ *
+ * ── What the popup has to do with it ──────────────────────────────────────────
+ *
+ * Read `POPUP_VIEW_SESSION_KEY` on mount, navigate to it with `replace`, and
+ * remove it — consuming it, so a pending request cannot fire on a later open.
+ * `Dashboard.tsx` does the same for the draft in its mount effect. Without that
+ * reader the write here is inert and the popup keeps restoring its last route, so
+ * the two belong in one change.
+ *
+ * A failure is reported rather than swallowed: the menu item would otherwise
+ * quietly open the wrong page, which is exactly the bug this replaced.
+ */
+async function requestPopupView(route: string): Promise<void> {
+  try {
+    await browser.storage.session.set({ [POPUP_VIEW_SESSION_KEY]: route });
+  } catch (err) {
+    captureError(err, { action: "contextMenu.requestPopupView" });
   }
 }
 
@@ -448,9 +488,29 @@ export default defineBackground(() => {
         return;
       }
 
-      case "create-snippet":
-        await openPopupOrFallback("createSnippet");
+      case "create-snippet": {
+        const route = popupRouteForAction(action);
+        if (route === null) {
+          // Unreachable while the table maps this action to a route, and the
+          // point of reporting it is that a table edit which lost the mapping
+          // would otherwise ship as a menu item that opens the last route the
+          // popup happened to be showing — silent, and wrong.
+          captureMessage(
+            "create-snippet resolved to no popup route",
+            "warning",
+            {
+              action: "createSnippet",
+            }
+          );
+          return;
+        }
+        // Two paths, because this code controls one of them and not the other:
+        // the popup surface is addressed through storage, the tab fallback
+        // carries the route in its own URL.
+        await requestPopupView(route);
+        await openPopupOrFallback("createSnippet", route);
         return;
+      }
 
       case "open-dashboard": {
         const optionsUrl = browser.runtime.getURL("/options.html");

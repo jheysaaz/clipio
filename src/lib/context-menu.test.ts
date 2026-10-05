@@ -1,12 +1,21 @@
 import { describe, it, expect } from "vitest";
+import { createMemoryHistory, createRouter } from "@tanstack/react-router";
 
 import {
   CLICKABLE_MENU_IDS,
   FEEDBACK_ROUTE,
+  POPUP_NEW_ROUTE,
+  popupRouteForAction,
   resolveContextMenuAction,
   type ContextMenuAction,
 } from "./context-menu";
 import { CONTEXT_MENU } from "@/config/constants";
+// Imported here, and not in `context-menu.ts`, because `routes/popup.tsx` pulls in
+// `Dashboard` and the whole component tree: pulling `NEW_ROUTE` in for the string
+// would bundle React into the service worker. The test can afford the import, and
+// being able to afford it is the whole point — the route the menu names is checked
+// against the router that has to answer for it.
+import { NEW_ROUTE, popupRouteTree, viewFromPath } from "@/routes/popup";
 
 /**
  * The bug this table exists to make unreachable.
@@ -22,6 +31,11 @@ import { CONTEXT_MENU } from "@/config/constants";
 
 const SELECTION = "some selected text";
 const PAGE = "https://example.com/some/page";
+
+/** A route as it appears in a URL. `#/new` addresses the path `/new`. */
+function pathFromHash(hash: string): string {
+  return hash.replace(/^#/, "");
+}
 
 describe("resolveContextMenuAction", () => {
   it("maps every clickable id to a distinct action", () => {
@@ -163,6 +177,91 @@ describe("resolveContextMenuAction", () => {
       expect(
         resolveContextMenuAction({ menuItemId: CONTEXT_MENU.CREATE_SNIPPET })
       ).toEqual({ kind: "create-snippet" });
+    });
+  });
+
+  // ── The bug this file's route table exists to make unreachable ────────────────
+  //
+  // "Create new snippet" called `openPopup()` with no URL, and the popup reopens
+  // at whatever route it was last showing. So the one menu item whose entire
+  // meaning is *which* page to open opened whichever snippet the popup happened
+  // to be showing — and nothing failed, which is what made it survive.
+  describe("popupRouteForAction", () => {
+    it("sends create-snippet to the popup's create route", () => {
+      expect(popupRouteForAction({ kind: "create-snippet" })).toBe(
+        POPUP_NEW_ROUTE
+      );
+    });
+
+    it("names the route the popup's router actually has", () => {
+      // Not `#/new` asserted against itself — the router decides. If `NEW_ROUTE`
+      // moved, this fails rather than the menu item silently opening a 404.
+      expect(POPUP_NEW_ROUTE).toBe(`#${NEW_ROUTE}`);
+      expect(POPUP_NEW_ROUTE).toBe("#/new");
+    });
+
+    it("produces a URL the popup reads as the create form", async () => {
+      // The two halves the popup relies on: `viewFromPath` is what `Dashboard`
+      // reads to decide which view to render, and the router is what resolves the
+      // address. A route that satisfies the first and not the second is a link
+      // that looks right and lands on nothing.
+      expect(viewFromPath(pathFromHash(POPUP_NEW_ROUTE))).toEqual({
+        kind: "new",
+      });
+
+      const router = createRouter({
+        routeTree: popupRouteTree,
+        history: createMemoryHistory({
+          initialEntries: [pathFromHash(POPUP_NEW_ROUTE)],
+        }),
+      });
+      await router.load();
+
+      expect(router.state.location.pathname).toBe(NEW_ROUTE);
+      expect(router.state.matches.map((m) => m.routeId)).toContain(NEW_ROUTE);
+    });
+
+    it("leaves the draft's own route decision alone", () => {
+      // The negative case, and the one that matters for correctness rather than
+      // coverage: "Save selection" also ends on the create form, but the draft
+      // decides that — it carries the text too. A route here would be a second
+      // channel for one decision, free to disagree with the first.
+      expect(
+        popupRouteForAction({ kind: "save-selection", text: SELECTION })
+      ).toBe(null);
+    });
+
+    it("asks for no route from an action that opens no popup", () => {
+      // Two open a tab, one blocks a host, one does nothing. A route for any of
+      // them would be a request the popup never reads.
+      const actions: ContextMenuAction[] = [
+        { kind: "open-dashboard" },
+        { kind: "open-feedback" },
+        { kind: "hide-on-site", hostname: "example.com" },
+        { kind: "none" },
+      ];
+
+      for (const action of actions) {
+        expect(popupRouteForAction(action), action.kind).toBe(null);
+      }
+    });
+
+    it("never returns a route for a click that did nothing", () => {
+      // The end-to-end version of the two tests above, driven through the real
+      // resolver rather than a hand-built action — so a `none` reached from an
+      // unknown id, a separator, or a missing page url is covered too.
+      const clicks = [
+        { menuItemId: CONTEXT_MENU.PARENT },
+        { menuItemId: CONTEXT_MENU.SEPARATOR_HIDE },
+        { menuItemId: CONTEXT_MENU.HIDE_ON_SITE },
+        { menuItemId: "clipio-from-the-future" },
+      ];
+
+      for (const click of clicks) {
+        const action = resolveContextMenuAction(click);
+        expect(action.kind, click.menuItemId).toBe("none");
+        expect(popupRouteForAction(action), click.menuItemId).toBe(null);
+      }
     });
   });
 

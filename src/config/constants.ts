@@ -170,3 +170,24 @@ export const CONTEXT_MENU = {
   SEPARATOR_HIDE: "clipio-separator-hide",
   HIDE_ON_SITE: "clipio-hide-on-site",
 } as const;
+
+/**
+ * The popup route the background asks a popup to boot into.
+ *
+ * ── Why a key at all ──────────────────────────────────────────────────────────
+ *
+ * `browser.action.openPopup()` takes no URL, and the popup reopens at whatever
+ * route it was last showing. There is no API for the service worker to address an
+ * extension popup, so the only way for a menu item to name the page it wants is
+ * to leave the name somewhere the popup will read — and `storage.session` is
+ * already the channel the context-menu draft uses, for the same reason.
+ *
+ * `session`, not `local`: a stale request must not survive the browser closing. A
+ * pending "open the create form" from yesterday evening is not something the user
+ * asked for today.
+ *
+ * The value is a popup route (`#/…`), and the popup navigates to it with
+ * `replace` — see docs/decisions/0011: the popup is addressed but keeps no
+ * history, so `history.length` never grows while it is open.
+ */
+export const POPUP_VIEW_SESSION_KEY = "__clipioPopupView__";
