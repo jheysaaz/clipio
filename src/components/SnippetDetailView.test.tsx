@@ -20,11 +20,31 @@ import type { Snippet } from "@/types";
 const copyMarkdownAsRichText = vi.fn();
 const getSnippetUsageCount = vi.fn();
 const incrementSnippetUsage = vi.fn();
+const editSnippet = vi.fn();
 
 vi.mock("@/lib/sentry", () => ({ captureError: vi.fn() }));
 
 import { captureError } from "@/lib/sentry";
 import { SnippetWriteRefused } from "@/store/snippets";
+
+/**
+ * `editSnippet` is the store's own writer and is what the tag autosave calls.
+ *
+ * Only that one function is replaced: `isWriteRefusal` and `SnippetWriteRefused`
+ * are the component's error contract and have to stay real, so a test cannot
+ * pass by both sides of the branch agreeing on a fabricated type.
+ *
+ * The real one reaches the storage manager, and the manager's IndexedDB refresh
+ * fails in this environment — every autosave would log a stack trace and the
+ * write would be a side effect of a rendering test.
+ */
+vi.mock("@/store/snippets", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/store/snippets")>();
+  return {
+    ...actual,
+    editSnippet: (...args: unknown[]) => editSnippet(...args),
+  };
+});
 
 vi.mock("@/lib/copy-markdown-as-rich-text", () => ({
   copyMarkdownAsRichText: (...args: unknown[]) =>
@@ -116,12 +136,30 @@ function renderView(
   );
 }
 
+/** The autosave window, as `autosave.ts` defines it. */
+const AUTOSAVE_DELAY = 600;
+
+/** A snippet with enough tags that two can be removed inside one window. */
+const tagged: Snippet = {
+  ...snippet,
+  tags: ["personal", "work", "urgent"],
+} as Snippet;
+
+function deferredSnippet() {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { gate, release };
+}
+
 describe("SnippetDetailView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getSnippetUsageCount.mockResolvedValue(3);
     incrementSnippetUsage.mockResolvedValue(4);
     copyMarkdownAsRichText.mockResolvedValue(undefined);
+    editSnippet.mockResolvedValue(undefined);
     onDelete.mockResolvedValue(undefined);
     onUpdate.mockResolvedValue(undefined);
     vi.mocked(captureError).mockClear();
@@ -790,5 +828,336 @@ describe("SnippetDetailView", () => {
     await user.type(screen.getByPlaceholderText(/tag/i), "Work{Enter}");
 
     expect(await screen.findByText("work")).toBeInTheDocument();
+  });
+
+  // --- tag autosave -----------------------------------------------------
+  //
+  // Tags are written without the user pressing Save. Everything below is about
+  // that write being the right shape: one write per burst, the newest value,
+  // visible failure, and no fight with the Save button that shares the record.
+
+  it("writes a removed tag without being asked, once the burst settles", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderView({ snippet: tagged });
+
+      await user.click(
+        screen.getByRole("button", { name: /remove "urgent"/i })
+      );
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY - 100);
+      await user.click(screen.getByRole("button", { name: /remove "work"/i }));
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
+
+      // Two edits inside one window must be one write. A write per edit is the
+      // instability this debounce exists to prevent.
+      expect(editSnippet).toHaveBeenCalledTimes(1);
+      // And it must carry the state after both edits, not after the first.
+      expect(editSnippet.mock.calls[0]![0]).toMatchObject({
+        id: tagged.id,
+        tags: ["personal"],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("writes nothing when the tags were not touched", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderView({ snippet: tagged });
+
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY * 5);
+
+      // The negative case: an autosave that fires on mount rewrites the record
+      // the user did not change, bumping its updatedAt for no reason.
+      expect(editSnippet).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("writes the tag as soon as the tag input closes", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderView();
+
+      await user.click(screen.getByRole("button", { name: /add tag/i }));
+      await user.type(screen.getByPlaceholderText(/tag/i), "Work{Enter}");
+
+      // No timer advanced: leaving the field is itself the commit point, and the
+      // popup can close in the middle of a debounce window.
+      expect(editSnippet).toHaveBeenCalledTimes(1);
+      expect(editSnippet.mock.calls[0]![0]).toMatchObject({
+        id: snippet.id,
+        tags: ["personal", "work"],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("writes a tag committed by blurring the input away", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderView();
+
+      await user.click(screen.getByRole("button", { name: /add tag/i }));
+      await user.type(screen.getByPlaceholderText(/tag/i), "Work");
+      await user.tab();
+
+      expect(editSnippet).toHaveBeenCalledTimes(1);
+      expect(editSnippet.mock.calls[0]![0]).toMatchObject({
+        tags: ["personal", "work"],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("writes a tag committed in the moment before the pane goes away", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const { unmount } = renderView();
+
+      await user.click(
+        screen.getByRole("button", { name: /remove "personal"/i })
+      );
+      // Closed with the debounce still armed. The popup closes on every window
+      // blur, so an un-flushed tag is a tag the user was shown and then lost.
+      expect(editSnippet).not.toHaveBeenCalled();
+
+      unmount();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(editSnippet).toHaveBeenCalledTimes(1);
+      expect(editSnippet.mock.calls[0]![0]).toMatchObject({ tags: [] });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows the store's explanation when an autosave is refused", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      editSnippet.mockRejectedValue(
+        new SnippetWriteRefused(
+          "This snippet is 210.5 KB and sync allows 100.0 KB."
+        )
+      );
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderView();
+
+      await user.click(
+        screen.getByRole("button", { name: /remove "personal"/i })
+      );
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
+
+      // The badge is gone from the screen, so nothing else tells the user their
+      // tag was not stored. Silence here reads as success.
+      expect(
+        await screen.findByText(
+          "This snippet is 210.5 KB and sync allows 100.0 KB."
+        )
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows a generic error when an autosave fails outright", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      editSnippet.mockRejectedValue(new Error("context invalidated"));
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderView();
+
+      await user.click(
+        screen.getByRole("button", { name: /remove "personal"/i })
+      );
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
+
+      expect(
+        await screen.findByText("Failed to save snippet. Please try again.")
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves Save available to retry an autosave that failed", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      editSnippet.mockRejectedValue(new Error("context invalidated"));
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderView();
+
+      await user.click(
+        screen.getByRole("button", { name: /remove "personal"/i })
+      );
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
+      await screen.findByText("Failed to save snippet. Please try again.");
+
+      // The stored tags never changed, so the pane is still dirty and the
+      // explicit Save is the user's way to try again. Disabling it would strand
+      // the edit behind a background write that has already failed once.
+      expect(screen.getByTestId("snippet-save")).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // --- autosave vs the explicit Save ------------------------------------
+  //
+  // Both write the same whole record, so the question is not "does each work" but
+  // "what happens when both run". Three answers are pinned below: Save absorbs
+  // the pending tag write, Save waits out an in-flight one, and Save's own
+  // payload is the newest tags either way.
+
+  it("lets Save carry the pending tag change instead of writing it twice", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderView({ snippet: tagged });
+
+      await user.click(
+        screen.getByRole("button", { name: /remove "urgent"/i })
+      );
+      await user.click(screen.getByTestId("snippet-save"));
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
+
+      // Exactly one write happened, and it went through Save.
+      expect(editSnippet).not.toHaveBeenCalled();
+      expect(onUpdate).toHaveBeenCalledTimes(1);
+      expect(onUpdate.mock.calls[0]![0]).toMatchObject({
+        id: tagged.id,
+        tags: ["personal", "work"],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("makes Save wait for an autosave already in flight", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { gate, release } = deferredSnippet();
+      const order: string[] = [];
+      editSnippet.mockImplementation(async () => {
+        order.push("autosave");
+        await gate;
+      });
+      onUpdate.mockImplementation(async () => {
+        order.push("save");
+      });
+
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderView({ snippet: tagged });
+
+      await user.click(
+        screen.getByRole("button", { name: /remove "urgent"/i })
+      );
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
+      await user.click(screen.getByRole("textbox", { name: /content/i }));
+      await user.keyboard("!");
+      await user.click(screen.getByTestId("snippet-save"));
+
+      // The autosave was built from the record as it stood before the body edit.
+      // Letting Save land first would mean that stale record overwriting the
+      // body — a lost edit with no error anywhere.
+      expect(order).toEqual(["autosave"]);
+      expect(onUpdate).not.toHaveBeenCalled();
+
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(order).toEqual(["autosave", "save"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("has Save write the tags even when the autosave already stored them", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const { rerender } = renderView({ snippet: tagged });
+
+      await user.click(
+        screen.getByRole("button", { name: /remove "urgent"/i })
+      );
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
+      expect(editSnippet).toHaveBeenCalledTimes(1);
+
+      // The parent echoes the stored tags back, as Dashboard does.
+      const echoed = {
+        ...tagged,
+        tags: ["personal", "work"],
+        updatedAt: "2026-01-02T00:00:00.000Z",
+      } as Snippet;
+      rerender(
+        <SnippetDetailView
+          snippet={echoed}
+          onDelete={onDelete}
+          onUpdate={onUpdate}
+          onHasChanges={onHasChanges}
+          onToggleSidebar={onToggleSidebar}
+        />
+      );
+
+      // A body edit makes the pane dirty again; the tags are unchanged.
+      await user.click(screen.getByRole("textbox", { name: /content/i }));
+      await user.keyboard("!");
+      await user.click(screen.getByTestId("snippet-save"));
+
+      // The echoed record is the base, not the pre-autosave one — otherwise the
+      // body edit would be saved on top of tags that no longer include "urgent".
+      expect(onUpdate.mock.calls[0]![0]).toMatchObject({
+        tags: ["personal", "work"],
+        content: "123 Fake Street!",
+      });
+      // And the echo must not have armed a second write of the same tags.
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY * 2);
+      expect(editSnippet).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not carry a pending tag onto the snippet selected next", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const other = {
+        ...snippet,
+        id: "other-id",
+        label: "Email",
+        tags: ["work"],
+      } as Snippet;
+      const { rerender } = renderView({ snippet: tagged });
+
+      await user.click(
+        screen.getByRole("button", { name: /remove "urgent"/i })
+      );
+      rerender(
+        <SnippetDetailView
+          snippet={other}
+          onDelete={onDelete}
+          onUpdate={onUpdate}
+          onHasChanges={onHasChanges}
+          onToggleSidebar={onToggleSidebar}
+        />
+      );
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY * 2);
+
+      // The tag edit belonged to the snippet that was open. Writing it after the
+      // switch would tag the *next* snippet with the previous one's edit.
+      expect(editSnippet).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
