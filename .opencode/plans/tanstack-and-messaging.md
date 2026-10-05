@@ -354,10 +354,15 @@ per cluster group, so review stays tractable and a regression is bisectable:
   it proves the storage-bridge pattern. `src/hooks/**` is already
   coverage-excluded, so this one is nearly free on the gate.
 - **4b** `snippets.ts` + `search.ts` — the Dashboard sweep, plus the derived
-  `filteredSnippets` replacing the `useMemo` at `Dashboard.tsx:405`.
-- **4c** `media.ts` + `import.ts` — images and the import wizard.
-- **4d** `editor.ts` — the Plate editor, last, because it is the one with real
-  risk. See the coverage warning below.
+  `filteredSnippets` replacing the `useMemo` at `Dashboard.tsx:405`. **Done.**
+- **4c** `media.ts` + `import.ts` — images and the import wizard. **Done.**
+- **4d** `editor-selection.ts` + `editor-media.ts` — the Plate editor, split in two
+  as decided below. **Done.** See the coverage warning.
+
+**Phase 4 is complete.** Nine store modules in `src/state/`, every one above the
+flat-80 ratchet on all four metrics. `ImagesSection.tsx` and `RichTextEditor.tsx`
+hold no `useState` at all; `Dashboard.tsx` holds two and `ImportWizard.tsx` two,
+all four deliberately local (see "Deliberately left as component state").
 
 ### The coverage trap in 4d
 
@@ -387,14 +392,39 @@ this pass.**
 ### The rest of the shape
 
 ```
-src/state/settings.ts    theme, uiFont, sidebar widths (replaces both contexts)
-src/state/snippets.ts    snippets, selection, CRUD, quota + sync warnings
-src/state/search.ts      popup query, settings query, derived results
-src/state/media.ts       media library, alt text, picker state
-src/state/import.ts      parsed manifest, conflict strategy, step progress
-src/state/editor.ts      selection, blocks, link + media node state
-src/state/index.ts       wiring to storage, to the protocol, and to derived stores
+src/state/settings.ts         theme, uiFont (replaces both contexts)
+src/state/sidebar.ts          popup sidebar width, persisted and clamped
+src/state/snippets.ts         library, selection, CRUD, quota + sync warnings,
+                              create form, recovery, live cross-context sync
+src/state/search.ts           popup query and the visible list
+src/state/media.ts            media library, alt text, delete confirmation
+src/state/import.ts           the wizard's step machine and its decisions
+src/state/editor-selection.ts overlay state, caret context, slash-menu handoff
+src/state/editor-media.ts     picker ranges and the upload error
+src/state/effect.ts           the effect primitive the above are built on
 ```
+
+No `index.ts`: the wiring proved unnecessary. Each store loads its own dependencies,
+and a barrel would have made importing one store pull in all of them.
+
+### Deliberately left as component state
+
+Four slices, none of which is wizard or library meaning:
+
+- `Dashboard`: `sidebarOpen` — a collapsed sidebar is not worth remembering.
+- `Dashboard`: `updateRelease` / `showUpdateBanner` — an update-check concern with
+  no other state, and it needs its own module rather than a home in `snippets.ts`.
+- `ImportWizard`: the two bulk-resolution radio selections — which button is
+  pressed, and what is typed into a rename field. Neither survives a step change
+  and neither is read by a decision.
+
+### The coverage trap, resolved
+
+`RichTextEditor.tsx` is on the exclusion list, so lifting its state out promoted it
+into the denominator. It happened: `editor-selection.ts` first came in at 66% on
+branches. **The threshold was not lowered** — the missing branches were the
+`useOverlayFlag` adapter's, and they now have tests. `editor-media.ts`,
+`search.ts` and `sidebar.ts` are at 100% across all four metrics.
 
 **Where Store earns its keep beyond tidiness**
 
