@@ -456,6 +456,34 @@ function quotaMessage(error: StorageQuotaError): string {
 }
 
 /**
+ * Put one snippet into the list, replacing any row already holding its id.
+ *
+ * The list is a set of rows keyed by id — the sidebar renders it with
+ * `key={snippet.id}` and the detail pane addresses it by id — so appending is
+ * only correct when the row is genuinely new.
+ *
+ * It often is not. `addSnippet`'s own write fires `browser.storage.onChanged`,
+ * which drives `refreshSnippets`, and that replaces the whole list with what
+ * storage holds. If the re-read is applied before the optimistic append, the list
+ * *already* holds the snippet and a plain append put a second row for it on top:
+ * the sidebar showed the snippet the user had just created twice, while storage
+ * held exactly one. Which order wins is not the store's to decide — the re-read
+ * takes a read ticket and both paths are asynchronous — so the merge has to be
+ * correct whichever way it falls.
+ *
+ * Replacing rather than skipping matters for the same reason: the re-read returns
+ * a normalised object, so the row it installed and the one in hand are equal in
+ * identity but not necessarily in content. Taking the freshest wins.
+ */
+function upsertRow(list: readonly Snippet[], snippet: Snippet): Snippet[] {
+  const index = list.findIndex((s) => s.id === snippet.id);
+  if (index === -1) return [...list, snippet];
+  const next = list.slice();
+  next[index] = snippet;
+  return next;
+}
+
+/**
  * Create a snippet from form data and add it to the list.
  *
  * Returns the created snippet on success because the caller needs its id to
@@ -481,7 +509,7 @@ export async function addSnippet(
     await saveSnippetToStorage(snippet);
     snippetsStore.setState((prev) => ({
       ...prev,
-      snippets: [...prev.snippets, snippet],
+      snippets: upsertRow(prev.snippets, snippet),
       isSaving: false,
       // Cleared on success only. On failure the draft is deliberately left alone
       // so the user can shorten the snippet and retry without retyping it.

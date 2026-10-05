@@ -231,8 +231,17 @@ test.describe("Popup (Dashboard)", () => {
           }),
         { timeout: 5_000, message: "snippet never reached sync storage" }
       )
-      .toBeGreaterThanOrEqual(1);
+      // Exactly one. This was `toBeGreaterThanOrEqual(1)`, which is why a create
+      // that produced two snippets passed: one is "at least one".
+      .toBe(1);
     await expect(popupPage.getByTestId("snippet-list")).toBeVisible();
+
+    // Rows, not keys. Storage holding exactly one `snip:` key is not the same
+    // claim as the sidebar showing the snippet once, and the difference was the
+    // whole bug: `addSnippet` appended optimistically *and* the change event its
+    // own write fired drove a re-read, so one snippet in storage became two rows
+    // on screen. Asserting only on storage is what let it through.
+    await expect(popupPage.getByTestId("snippet-list-item")).toHaveCount(1);
   });
 
   test("copies snippet to clipboard", async ({ popupPage }) => {

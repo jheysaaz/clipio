@@ -789,3 +789,154 @@ describe("the create form", () => {
     expect(state().pendingSnippet).toBeNull();
   });
 });
+
+/**
+ * The reported bug: creating a snippet in the popup created it twice.
+ *
+ * `addSnippet` appends optimistically after its write resolves. Its own write also
+ * fires `browser.storage.onChanged`, which drives `refreshSnippets` — and that
+ * replaces the whole list with what storage holds. So the same snippet is added
+ * once by the append and once by the refresh, and whichever lands last decides
+ * whether the sidebar shows it once or twice.
+ *
+ * The refresh is asynchronous and takes a read ticket, so the ordering is not
+ * something the code controls — it has to be correct whichever way it falls. Both
+ * orders are tested below, and the one that matters is the *first*: it is also the
+ * order production takes. `manager.saveSnippet` fires the change event at the
+ * `storage.set` and then still has to refresh its derived stores before it
+ * resolves, while the listener's re-read is one read away.
+ *
+ * Note what is asserted: the *store's* list, not storage. Storage held exactly one
+ * snippet throughout — the bug was never a double write, it was one write showing
+ * up as two rows.
+ */
+describe("creating a snippet", () => {
+  /**
+   * Storage that reports what has been written to it and fires the change event the
+   * way the browser does: from the write itself, before that write resolves.
+   *
+   * `afterWrite` models the tail of `manager.saveSnippet` — the derived stores it
+   * refreshes after the `storage.set` — which is why the write outlives its own
+   * change event.
+   */
+  function wireStorageThatFiresItsOwnChange(afterWrite?: () => Promise<void>) {
+    const written: Snippet[] = [];
+    storage.saveSnippet.mockImplementation(async (snippet: Snippet) => {
+      written.push(snippet);
+      emitStorageChange(
+        { [`snip:${snippet.id}`]: { newValue: snippet } },
+        "sync"
+      );
+      await afterWrite?.();
+    });
+    storage.getSnippets.mockImplementation(async () =>
+      written.map((s) => ({ ...s }))
+    );
+    return written;
+  }
+
+  /** How many rows the sidebar would render for this snippet. */
+  function rowsFor(id: string): number {
+    return state().snippets.filter((s) => s.id === id).length;
+  }
+
+  it("holds one row when the write's own refresh is applied before the append", async () => {
+    // The order that duplicates. The re-read driven by this very write is applied
+    // first, so `snippets` already holds the new snippet by the time the optimistic
+    // append runs — and the append must recognise it rather than pile a second row
+    // on top of the same snippet.
+    let releaseWrite!: () => void;
+    const writeSettled = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    wireStorageThatFiresItsOwnChange(() => writeSettled);
+
+    const pending = addSnippet({
+      label: "Once",
+      shortcut: "/one",
+      content: "body",
+      tags: [],
+    });
+
+    // The re-read has landed — so the list already has the row, and the write that
+    // will trigger the append is still in flight.
+    await vi.waitFor(() => expect(state().snippets).toHaveLength(1));
+    const id = state().snippets[0].id;
+
+    releaseWrite();
+    const result = await pending;
+    expect(result.ok).toBe(true);
+
+    expect(rowsFor(id)).toBe(1);
+    expect(state().snippets).toHaveLength(1);
+  });
+
+  it("holds one row when the append lands before the refresh", async () => {
+    // The other order: the append adds the row first, and the re-read replaces the
+    // list with what storage holds afterwards. Already correct, and asserted so the
+    // fix above cannot pass by breaking it.
+    const written: Snippet[] = [];
+    let releaseRead!: () => void;
+    const readInFlight = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+
+    storage.saveSnippet.mockImplementation(async (snippet: Snippet) => {
+      written.push(snippet);
+      emitStorageChange(
+        { [`snip:${snippet.id}`]: { newValue: snippet } },
+        "sync"
+      );
+    });
+    storage.getSnippets.mockImplementation(async () => {
+      // Held open so the append is applied to a list that does not yet know about
+      // the snippet. Once released the re-read reports it, and it lands last.
+      if (written.length > 0) await readInFlight;
+      return written.map((s) => ({ ...s }));
+    });
+
+    const result = await addSnippet({
+      label: "Once",
+      shortcut: "/one",
+      content: "body",
+      tags: [],
+    });
+    expect(result.ok).toBe(true);
+    const id = result.ok ? result.value.id : "";
+    expect(rowsFor(id)).toBe(1);
+
+    releaseRead();
+    await vi.waitFor(() => expect(storage.getSnippets).toHaveBeenCalled());
+    expect(rowsFor(id)).toBe(1);
+    expect(state().snippets).toHaveLength(1);
+  });
+
+  it("holds one row when the editor saves and its own change event re-reads", async () => {
+    // The same two writers, on a snippet that already exists. `editSnippet` writes
+    // and the listener re-reads, and the sidebar is keyed on a React `key`, so a
+    // second row for the same id would render two editors for one snippet.
+    const existing = makeSnippet({ id: "e1", label: "Before" });
+    const written = [existing];
+    storage.updateSnippet.mockImplementation(async (snippet: Snippet) => {
+      written.splice(0, 1, snippet);
+      emitStorageChange(
+        { [`snip:${snippet.id}`]: { newValue: snippet } },
+        "sync"
+      );
+    });
+    storage.getSnippets.mockImplementation(async () =>
+      written.map((s) => ({ ...s }))
+    );
+    snippetsStore.setState((prev) => ({
+      ...prev,
+      snippets: [existing],
+      isLoaded: true,
+    }));
+
+    await editSnippet({ ...existing, label: "After" });
+    await vi.waitFor(() => expect(storage.getSnippets).toHaveBeenCalled());
+
+    expect(rowsFor("e1")).toBe(1);
+    expect(state().snippets[0].label).toBe("After");
+  });
+});
