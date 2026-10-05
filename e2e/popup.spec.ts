@@ -263,6 +263,80 @@ test.describe("Popup — a context-menu route request is honoured", () => {
   });
 });
 
+test.describe("Popup — a new snippet's shortcut follows the trigger prefix", () => {
+  /**
+   * The setting is a free-text field, so a user can set it to anything. The default
+   * shortcut used to be a hardcoded "/" in four places, so someone who had set their
+   * trigger to ";" got a form prefilled with a character their preview would never
+   * fire on.
+   *
+   * `readTriggerPrefix` reads storage on every call rather than capturing it at
+   * module load: the popup document outlives a settings change made in another tab,
+   * and "change it in Options, reopen the popup" is exactly the case.
+   */
+  test("prefills from the configured prefix", async ({ popupPage }) => {
+    await seedAndReload(popupPage, []);
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.local.set({ snippetPreviewPrefix: ";" });
+    });
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+
+    await popupPage.getByTestId("add-snippet").click();
+
+    await expect(popupPage.getByTestId("snippet-shortcut-input")).toHaveValue(
+      ";"
+    );
+  });
+
+  test("falls back to / when the prefix is blank", async ({ popupPage }) => {
+    // Blank is a legitimate *trigger* configuration — it means "always trigger" —
+    // but a shortcut that begins with nothing is not a shortcut.
+    await seedAndReload(popupPage, []);
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.local.set({ snippetPreviewPrefix: "   " });
+    });
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+
+    await popupPage.getByTestId("add-snippet").click();
+
+    await expect(popupPage.getByTestId("snippet-shortcut-input")).toHaveValue(
+      "/"
+    );
+  });
+
+  test("reads the prefix again on the next open", async ({ popupPage }) => {
+    // Not captured at module load. The value is read per draft, so a change made
+    // while the popup was open is picked up without a reload.
+    await seedAndReload(popupPage, []);
+    await popupPage.getByTestId("add-snippet").click();
+    await expect(popupPage.getByTestId("snippet-shortcut-input")).toHaveValue(
+      "/"
+    );
+
+    // Role + name, per the e2e selector rule — the cancel button carries an
+    // aria-label rather than a testid, and adding one here would mean this test
+    // dictated the component's markup.
+    await popupPage
+      .getByRole("button", { name: /cancel/i })
+      .first()
+      .click();
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.local.set({ snippetPreviewPrefix: "," });
+    });
+
+    await popupPage.getByTestId("add-snippet").click();
+
+    await expect(popupPage.getByTestId("snippet-shortcut-input")).toHaveValue(
+      ","
+    );
+  });
+});
+
 test.describe("Popup (Dashboard)", () => {
   test("creates new snippet via form", async ({ popupPage }) => {
     await popupPage.evaluate(async () => {

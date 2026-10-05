@@ -77,7 +77,7 @@ newSnippet:
   name: Nombre
   namePlaceholder: "Ej: Firma de correo"
   shortcut: Atajo
-  shortcutPlaceholder: "Ej: /firma"
+  shortcutPlaceholder: "Ej: $1firma"
   shortcutError: El atajo no puede contener espacios
   shortcutErrorDuplicate: 'El atajo "$1" ya está en uso por "$2". Elige un atajo diferente.'
   shortcutErrorPrefix: 'El atajo "$1" entra en conflicto con "$2" — uno puede impedir que el otro se expanda.'

@@ -66,6 +66,7 @@ import {
   SIDEBAR_MIN_WIDTH,
 } from "@/config/constants";
 import { selectNewest } from "@/lib/snippet-utils";
+import { blankSnippetDraft } from "@/lib/trigger-prefix";
 import {
   nudgeSidebarWidth,
   setSidebarWidth,
@@ -330,12 +331,10 @@ export default function Dashboard() {
                 action: "loadContextMenuDraft.clearSession",
               });
             });
-          setDraftSnippet({
-            label: "",
-            shortcut: "/",
-            content: draft,
-            tags: [],
-          });
+          // Prefilled from the configured trigger prefix, read fresh: a value
+          // captured at module load is stale for the life of the popup, and
+          // "change it in Options, reopen the popup" is exactly the case.
+          setDraftSnippet(await blankSnippetDraft(draft));
           startCreating();
           return;
         }
@@ -352,12 +351,7 @@ export default function Dashboard() {
                 action: "loadContextMenuDraft.clearSession",
               });
             });
-          setDraftSnippet({
-            label: "",
-            shortcut: "/",
-            content: sessionDraft,
-            tags: [],
-          });
+          setDraftSnippet(await blankSnippetDraft(sessionDraft));
           startCreating();
         }
       } catch (err) {
@@ -461,13 +455,18 @@ export default function Dashboard() {
   // CRUD helpers
   // -------------------------------------------------------------------------
 
-  const handleAddSnippet = () => {
-    setDraftSnippet({ label: "", shortcut: "/", content: "", tags: [] });
+  // Async because the shortcut default comes from storage. Not pre-filled in
+  // `NewSnippetView` on mount instead: this sets the draft *before* navigating, so
+  // the form mounts with a non-empty shortcut and a mount-time prefill would be
+  // skipped — and if it were not, it would be a second writer racing the draft it
+  // was handed.
+  const handleAddSnippet = async () => {
+    setDraftSnippet(await blankSnippetDraft());
     startCreating();
   };
 
-  const handleCancelCreate = () => {
-    setDraftSnippet({ label: "", shortcut: "/", content: "", tags: [] });
+  const handleCancelCreate = async () => {
+    setDraftSnippet(await blankSnippetDraft());
     const newest = selectNewest(snippets);
     if (newest) selectSnippet(newest.id);
     else showList();

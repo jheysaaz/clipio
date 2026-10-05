@@ -80,7 +80,7 @@ newSnippet:
   name: Name
   namePlaceholder: "e.g., Email Signature"
   shortcut: Shortcut
-  shortcutPlaceholder: "e.g., /sig"
+  shortcutPlaceholder: "e.g., $1sig"
   shortcutError: Shortcut cannot contain spaces
   shortcutErrorDuplicate: 'Shortcut "$1" is already used by "$2". Choose a different shortcut.'
   shortcutErrorPrefix: 'Shortcut "$1" conflicts with "$2" — one may prevent the other from expanding.'
