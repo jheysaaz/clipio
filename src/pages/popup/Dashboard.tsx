@@ -7,7 +7,12 @@ import {
   lazy,
   Suspense,
 } from "react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import {
+  useNavigate,
+  useRouterState,
+  useBlocker,
+  type ShouldBlockFn,
+} from "@tanstack/react-router";
 import { i18n } from "#i18n";
 import {
   Plus,
@@ -37,7 +42,6 @@ import {
   editSnippet,
   removeSnippet,
   restoreRecoveredSnippets,
-  requestSnippetDelete,
   dismissRecoveryBanner,
   dismissRecoveryError,
   dismissQuotaWarning,
@@ -117,8 +121,6 @@ export default function Dashboard() {
   const draftSnippet = useSnippets((s) => s.draft);
   const setDraftSnippet = setDraft;
   const isSaving = useSnippets((s) => s.isSaving);
-  const pendingSnippet = useSnippets((s) => s.pendingSnippet);
-  const setPendingSnippet = requestSnippetDelete;
 
   // The library, its load state, the storage warnings and the recovery banner all
   // live in `src/store/snippets.ts`. They used to be eight `useState` calls here,
@@ -163,7 +165,66 @@ export default function Dashboard() {
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const draggingRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // -------------------------------------------------------------------------
+  // The unsaved-changes guard
+  // -------------------------------------------------------------------------
+  //
+  // `useBlocker` is the router's own mechanism, so one code path guards every way
+  // out of a dirty editor: a sidebar click, an arrow key, "Add snippet", the
+  // browser's Back and Forward. It was a `pendingSnippet` store field consulted by
+  // the sidebar row alone, which left Back — the one a popup user actually reaches
+  // for — walking straight past it and dropping the edit.
+  //
+  // The popup's own navigation stays `replace`-only (ADR 0011). Blocking does not
+  // change that: a blocked navigation simply does not happen, so `history.length`
+  // still never grows.
+
   const detailHasChanges = useRef(false);
+
+  /**
+   * Whether this navigation would throw away an edit.
+   *
+   * A ref, not state: it is written from the editor's own effect on every
+   * keystroke, and `useBlocker` re-registers its listener whenever this function's
+   * identity changes — so state here would tear the blocker down and rebuild it
+   * per character.
+   *
+   * `useCallback` for the same reason, and with no dependencies on purpose: the ref
+   * it reads is stable for the life of the popup.
+   *
+   * Only a *different* address is guarded. Re-selecting the snippet already open
+   * replaces the location with the one the router is already at, and a dialog
+   * warning about edits that are not going anywhere would be a lie.
+   */
+  const shouldBlockNavigation: ShouldBlockFn = useCallback(
+    ({ current, next }) =>
+      detailHasChanges.current && current.pathname !== next.pathname,
+    []
+  );
+
+  const blocker = useBlocker({
+    shouldBlockFn: shouldBlockNavigation,
+    // No `beforeunload`: the popup is torn down on blur, so there is no document
+    // unload for a prompt to be *about* — only one the user cannot answer.
+    enableBeforeUnload: false,
+    withResolver: true,
+  });
+
+  /**
+   * Let a blocked navigation happen.
+   *
+   * The dirty flag is cleared first, and it has to be. The editor is about to
+   * unmount without ever reporting `false` — `SnippetDetailView` only reports on a
+   * *change* — so leaving the flag set would re-arm the blocker against the very
+   * navigation being permitted, and against every one after it: navigating to
+   * `#/list` mounts no editor to correct it, and the next selection would raise the
+   * dialog again, about nothing.
+   */
+  const confirmBlockedNavigation = useCallback(() => {
+    detailHasChanges.current = false;
+    blocker.proceed?.();
+  }, [blocker]);
 
   // ---------------------------------------------------------------------------
   // Sidebar resize
@@ -397,6 +458,11 @@ export default function Dashboard() {
     // `removeSnippet` throws on failure; this propagates to the delete dialog,
     // which shows a message rather than pretending it worked.
     const { remaining } = await removeSnippet(snippetId);
+    // The snippet is gone, so there is nothing left for the unsaved-changes guard
+    // to protect — and the navigation below would otherwise be blocked by edits to
+    // a snippet that no longer exists, raising the dialog *after* the delete had
+    // already succeeded.
+    detailHasChanges.current = false;
     // Deleting the addressed snippet has to move the address too, or the URL
     // would keep pointing at something that no longer exists.
     if (selectedSnippetId === snippetId) {
@@ -695,11 +761,11 @@ export default function Dashboard() {
                         selectedSnippet?.id === snippet.id && !isCreating
                       }
                       onClick={() => {
-                        const target = snippet;
-                        if (detailHasChanges.current) {
-                          setPendingSnippet(target);
-                          return;
-                        }
+                        // No dirty check here on purpose. `selectSnippet` goes
+                        // through the router, so `useBlocker` already intercepted
+                        // this if the editor had unsaved changes — a second guard
+                        // would be a second answer to the same question, and the
+                        // two could disagree.
                         if (isCreating) {
                           setDraftSnippet({
                             label: "",
@@ -708,7 +774,7 @@ export default function Dashboard() {
                             tags: [],
                           });
                         }
-                        selectSnippet(target.id);
+                        selectSnippet(snippet.id);
                       }}
                       onUpdate={handleUpdateSnippet}
                     />
@@ -908,17 +974,19 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Unsaved changes guard */}
+      {/*
+        Unsaved changes guard. Driven entirely by the router's blocker, so it opens
+        for a sidebar click, an arrow key, "Add snippet" or the browser's Back
+        alike — one dialog for one question, asked by the thing that actually knows
+        whether the navigation is going to happen.
+      */}
       <ConfirmDialog
-        isOpen={pendingSnippet !== null}
-        onClose={() => setPendingSnippet(null)}
-        onConfirm={() => {
-          if (pendingSnippet) {
-            detailHasChanges.current = false;
-            selectSnippet(pendingSnippet.id);
-            setPendingSnippet(null);
-          }
-        }}
+        isOpen={blocker.status === "blocked"}
+        // `reset` keeps the user where they are, which is what "Keep editing"
+        // means. It is also what the alert dialog calls on Escape or an outside
+        // click, so every way out of this dialog other than Discard is a cancel.
+        onClose={() => blocker.reset?.()}
+        onConfirm={confirmBlockedNavigation}
         title={i18n.t("snippetDetail.unsavedChanges.title")}
         message={i18n.t("snippetDetail.unsavedChanges.message")}
         confirmText={i18n.t("snippetDetail.unsavedChanges.discard")}

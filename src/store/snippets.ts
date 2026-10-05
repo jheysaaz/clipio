@@ -67,13 +67,6 @@ export type SnippetsState = {
   /** Why the last create failed, or `null`. Rendered inside the create form. */
   createError: string | null;
   /**
-   * The snippet a delete is waiting on, or `null`.
-   *
-   * Only the id is needed, but the object is kept so the dialog can show the label
-   * the user recognises without a lookup that could go stale.
-   */
-  pendingSnippet: Snippet | null;
-  /**
    * The library.
    *
    * Empty until the first load resolves. `isLoaded` is what says whether empty
@@ -120,7 +113,6 @@ export const snippetsStore = createStore<SnippetsState>({
   draft: { ...EMPTY_DRAFT },
   isSaving: false,
   createError: null,
-  pendingSnippet: null,
   snippets: [],
   isLoaded: false,
   loadError: null,
@@ -676,15 +668,6 @@ export function dismissCreateError(): void {
   snippetsStore.setState((prev) => ({ ...prev, createError: null }));
 }
 
-/** Ask for a snippet to be deleted, and show the dialog. */
-export function requestSnippetDelete(snippet: Snippet | null): void {
-  snippetsStore.setState((prev) => ({ ...prev, pendingSnippet: snippet }));
-}
-
-export function cancelSnippetDelete(): void {
-  snippetsStore.setState((prev) => ({ ...prev, pendingSnippet: null }));
-}
-
 // ---------------------------------------------------------------------------
 // Dismissals
 // ---------------------------------------------------------------------------
@@ -762,7 +745,6 @@ export function resetSnippetsStoreForTests(): void {
     draft: { ...EMPTY_DRAFT },
     isSaving: false,
     createError: null,
-    pendingSnippet: null,
     snippets: [],
     isLoaded: false,
     loadError: null,

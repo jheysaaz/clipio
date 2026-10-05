@@ -13,12 +13,10 @@ import {
   dismissSyncPausedWarning,
   dismissLoadError,
   dismissRecoveryError,
-  cancelSnippetDelete,
   clearDraft,
   dismissCreateError,
   findSnippet,
   isWriteRefusal,
-  requestSnippetDelete,
   setDraft,
   refreshSnippets,
   resetSnippetsStoreForTests,
@@ -779,14 +777,6 @@ describe("the create form", () => {
     dismissCreateError();
 
     expect(state().createError).toBeNull();
-  });
-
-  it("tracks the snippet a delete is waiting on", () => {
-    requestSnippetDelete(makeSnippet({ id: "s1" }));
-    expect(state().pendingSnippet?.id).toBe("s1");
-
-    cancelSnippetDelete();
-    expect(state().pendingSnippet).toBeNull();
   });
 });
 
