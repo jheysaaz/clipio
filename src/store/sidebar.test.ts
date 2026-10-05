@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 
 import {
@@ -34,6 +34,11 @@ const items = vi.hoisted(() => ({
     setValue: vi.fn(async (_v: number) => {}),
     watch: vi.fn((_cb: (v: number) => void) => () => {}),
   },
+  sidebarOpenItem: {
+    getValue: vi.fn(async () => true),
+    setValue: vi.fn(async (_v: boolean) => {}),
+    watch: vi.fn((_cb: (v: boolean) => void) => () => {}),
+  },
 }));
 
 vi.mock("@/storage/items", () => items);
@@ -52,6 +57,9 @@ async function load(
   items.sidebarWidthItem.getValue.mockReset();
   items.sidebarWidthItem.setValue.mockReset();
   items.sidebarWidthItem.getValue.mockResolvedValue(stored);
+  items.sidebarOpenItem.getValue.mockReset();
+  items.sidebarOpenItem.setValue.mockClear();
+  items.sidebarOpenItem.getValue.mockResolvedValue(true);
   mod = await import("./sidebar");
   // The load is fire-and-forget at module scope. Settle it before asserting, so no
   // test depends on how many microtasks the import happened to leave.
@@ -68,6 +76,14 @@ async function load(
  * subscription path — including its no-op guard — instead of calling the store
  * directly and proving nothing about it.
  */
+/** The callback registered on the open/closed item. */
+function lastOpenWatchCallback(): (value: boolean) => void {
+  const calls = items.sidebarOpenItem.watch.mock.calls;
+  const callback = calls[calls.length - 1]?.[0];
+  if (!callback) throw new Error("the store never subscribed to the open item");
+  return callback;
+}
+
 function lastWatchCallback(): (value: number) => void {
   const calls = items.sidebarWidthItem.watch.mock.calls;
   const callback = calls[calls.length - 1]?.[0];
@@ -241,43 +257,56 @@ describe("persistence", () => {
    * a watcher and no writer reads as persistence and is not.
    */
   it("writes a width the user dragged", async () => {
+    vi.useFakeTimers();
     await load(200);
     items.sidebarWidthItem.setValue.mockClear();
 
     mod.setSidebarWidth(180);
+    await vi.advanceTimersByTimeAsync(400);
 
     expect(items.sidebarWidthItem.setValue).toHaveBeenCalledWith(180);
+    vi.useRealTimers();
   });
 
   it("writes a width the user nudged with the keyboard", async () => {
+    vi.useFakeTimers();
     await load(180);
     items.sidebarWidthItem.setValue.mockClear();
 
     mod.nudgeSidebarWidth(20);
+    await vi.advanceTimersByTimeAsync(400);
 
     expect(items.sidebarWidthItem.setValue).toHaveBeenCalledWith(200);
+    vi.useRealTimers();
   });
 
   it("writes the clamped value, not the raw one", async () => {
     // Stored at 180 so the clamped result differs from both the stored value and
     // the default — otherwise "was it written?" and "was it skipped?" are
     // indistinguishable.
+    vi.useFakeTimers();
     await load(180);
     items.sidebarWidthItem.setValue.mockClear();
 
     mod.setSidebarWidth(9000);
+    await vi.advanceTimersByTimeAsync(400);
 
     expect(items.sidebarWidthItem.setValue).toHaveBeenCalledWith(
       SIDEBAR_MAX_WIDTH
     );
     expect(mod.sidebarStore.state.width).toBe(SIDEBAR_MAX_WIDTH);
+    vi.useRealTimers();
   });
 
   it("opens at the width the last session left", async () => {
     // The user-visible property, end to end: drag the divider, close the popup,
-    // reopen it.
+    // reopen it. Real timers here, because the point is that the write happened.
     await load(DEFAULT_SIDEBAR_WIDTH);
     mod.setSidebarWidth(200);
+
+    await vi.waitFor(() =>
+      expect(items.sidebarWidthItem.setValue).toHaveBeenCalledWith(200)
+    );
 
     const next = await load(200);
 
@@ -339,5 +368,196 @@ describe("React bindings", () => {
     // Measured rather than merely present: a binding wired to the wrong store
     // fails silently, returning a valid undefined-shaped value.
     expect(result.current).toBe(190);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("growing", () => {
+  /**
+   * The user could only ever make the sidebar smaller.
+   *
+   * `SIDEBAR_MAX_WIDTH` was 240, which is also `DEFAULT_SIDEBAR_WIDTH` — so the
+   * clamp left no headroom in either direction and dragging right did nothing at
+   * all. A setting with one working direction is a setting most people assume is
+   * broken.
+   */
+  it("has room above the default to grow into", async () => {
+    expect(SIDEBAR_MAX_WIDTH).toBeGreaterThan(DEFAULT_SIDEBAR_WIDTH);
+  });
+
+  it("grows past the default", async () => {
+    const m = await load(DEFAULT_SIDEBAR_WIDTH);
+
+    m.setSidebarWidth(DEFAULT_SIDEBAR_WIDTH + 60);
+
+    expect(m.sidebarStore.state.width).toBeGreaterThan(DEFAULT_SIDEBAR_WIDTH);
+    expect(m.sidebarStore.state.width).toBe(DEFAULT_SIDEBAR_WIDTH + 60);
+  });
+
+  it("nudges upward as well as downward", async () => {
+    const m = await load(DEFAULT_SIDEBAR_WIDTH);
+
+    m.nudgeSidebarWidth(20);
+
+    expect(m.sidebarStore.state.width).toBe(DEFAULT_SIDEBAR_WIDTH + 20);
+  });
+
+  it("still stops at the ceiling", async () => {
+    const m = await load(DEFAULT_SIDEBAR_WIDTH);
+
+    m.setSidebarWidth(99_999);
+
+    expect(m.sidebarStore.state.width).toBe(SIDEBAR_MAX_WIDTH);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("the persist debounce", () => {
+  /**
+   * Why the resize looked unstable.
+   *
+   * The first version wrote on every change. A drag emits a pointer move per
+   * pixel, so that was a `storage.local` round trip per pixel — hundreds of writes
+   * while the user dragged, and the sidebar visibly stuttered under it.
+   *
+   * The store still updates on every move; only the write is deferred. So these
+   * assert the write is deferred, not that the width is.
+   */
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("does not write on every move of a drag", async () => {
+    vi.resetModules();
+    items.sidebarWidthItem.getValue.mockResolvedValue(DEFAULT_SIDEBAR_WIDTH);
+    items.sidebarWidthItem.setValue.mockClear();
+    const m = await import("./sidebar");
+    await vi.waitFor(() => expect(m.sidebarStore.state.isLoaded).toBe(true));
+    items.sidebarWidthItem.setValue.mockClear();
+
+    // A drag across 60 pixels.
+    for (let i = 0; i < 60; i++) m.setSidebarWidth(200 + i);
+
+    // One write, not sixty.
+    expect(items.sidebarWidthItem.setValue).not.toHaveBeenCalled();
+    // And the sidebar has already tracked the pointer, which is what makes the
+    // resize feel immediate rather than laggy.
+    expect(m.sidebarStore.state.width).toBe(259);
+  });
+
+  it("writes once the drag settles", async () => {
+    vi.resetModules();
+    items.sidebarWidthItem.getValue.mockResolvedValue(DEFAULT_SIDEBAR_WIDTH);
+    items.sidebarWidthItem.setValue.mockClear();
+    const m = await import("./sidebar");
+    await vi.waitFor(() => expect(m.sidebarStore.state.isLoaded).toBe(true));
+    items.sidebarWidthItem.setValue.mockClear();
+
+    m.setSidebarWidth(210);
+    await vi.advanceTimersByTimeAsync(400);
+
+    // The final width, not an intermediate one.
+    expect(items.sidebarWidthItem.setValue).toHaveBeenCalledTimes(1);
+    expect(items.sidebarWidthItem.setValue).toHaveBeenCalledWith(210);
+  });
+
+  it("keeps resetting the timer while the drag continues", async () => {
+    vi.resetModules();
+    items.sidebarWidthItem.getValue.mockResolvedValue(DEFAULT_SIDEBAR_WIDTH);
+    items.sidebarWidthItem.setValue.mockClear();
+    const m = await import("./sidebar");
+    await vi.waitFor(() => expect(m.sidebarStore.state.isLoaded).toBe(true));
+    items.sidebarWidthItem.setValue.mockClear();
+
+    for (let i = 0; i < 5; i++) {
+      m.setSidebarWidth(200 + i);
+      await vi.advanceTimersByTimeAsync(100);
+    }
+
+    // 500ms of dragging with a 250ms window: the write must not have landed yet.
+    expect(items.sidebarWidthItem.setValue).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(400);
+    expect(items.sidebarWidthItem.setValue).toHaveBeenCalledTimes(1);
+    expect(items.sidebarWidthItem.setValue).toHaveBeenCalledWith(204);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("collapsed state", () => {
+  /**
+   * It was `useState` in the component, so it reset to expanded on every popup
+   * open — and a user who had collapsed the sidebar to give the detail pane room
+   * had to collapse it again every single time. It looks like it works, right up
+   * until you close the popup.
+   */
+  it("opens expanded by default", async () => {
+    expect(mod.sidebarStore.state.isOpen).toBe(true);
+  });
+
+  it("remembers a collapse across popup opens", async () => {
+    vi.resetModules();
+    items.sidebarOpenItem.getValue.mockResolvedValue(false);
+    const m = await import("./sidebar");
+    await vi.waitFor(() => expect(m.sidebarStore.state.isLoaded).toBe(true));
+
+    expect(m.sidebarStore.state.isOpen).toBe(false);
+  });
+
+  it("writes the collapse straight through, not debounced", async () => {
+    await load(DEFAULT_SIDEBAR_WIDTH);
+    items.sidebarOpenItem.setValue.mockClear();
+
+    mod.setSidebarOpen(false);
+
+    // A quarter-second delay on a button press reads as lag, so the boolean is
+    // deliberately not on the width's timer — a drag must not swallow a toggle.
+    expect(items.sidebarOpenItem.setValue).toHaveBeenCalledWith(false);
+    expect(mod.sidebarStore.state.isOpen).toBe(false);
+  });
+
+  it("toggles", async () => {
+    await load(DEFAULT_SIDEBAR_WIDTH);
+
+    mod.toggleSidebar();
+    expect(mod.sidebarStore.state.isOpen).toBe(false);
+
+    mod.toggleSidebar();
+    expect(mod.sidebarStore.state.isOpen).toBe(true);
+  });
+
+  it("applies a collapse made in another context", async () => {
+    await load(DEFAULT_SIDEBAR_WIDTH);
+
+    act(() => lastOpenWatchCallback()(false));
+
+    expect(mod.sidebarStore.state.isOpen).toBe(false);
+  });
+
+  it("ignores a no-op write from another context", async () => {
+    await load(DEFAULT_SIDEBAR_WIDTH);
+
+    act(() => lastOpenWatchCallback()(true));
+
+    expect(mod.sidebarStore.state.isOpen).toBe(true);
+  });
+
+  it("keeps the width when collapsing", async () => {
+    // Collapsing and narrowing are different intentions: someone who collapsed it
+    // wants the detail pane, not a sliver of list. So collapsing must not discard
+    // the width they set.
+    await load(DEFAULT_SIDEBAR_WIDTH);
+    mod.setSidebarWidth(300);
+
+    mod.setSidebarOpen(false);
+
+    expect(mod.sidebarStore.state.width).toBe(300);
   });
 });

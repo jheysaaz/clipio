@@ -149,8 +149,17 @@ export const ONBOARDING_SUPPORTED_LOCALES = ["en", "es"] as const;
  * lives next to them — see `src/store/sidebar.ts`.
  */
 export const SIDEBAR_MIN_WIDTH = 120;
-export const SIDEBAR_MAX_WIDTH = 240;
-export const DEFAULT_SIDEBAR_WIDTH = SIDEBAR_MAX_WIDTH;
+/**
+ * The popup's sidebar can grow well past its default.
+ *
+ * It could not before: `SIDEBAR_MAX_WIDTH` was 240, which is also
+ * `DEFAULT_SIDEBAR_WIDTH`, so the clamp left no headroom in either direction and
+ * dragging right did nothing at all. The user could only ever make the sidebar
+ * smaller. The popup sizes itself to its content, so the ceiling here is about
+ * leaving the detail pane usable rather than about the window.
+ */
+export const SIDEBAR_MAX_WIDTH = 380;
+export const DEFAULT_SIDEBAR_WIDTH = 240;
 
 export const CONTEXT_MENU = {
   PARENT: "clipio-parent",

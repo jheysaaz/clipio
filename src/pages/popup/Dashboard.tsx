@@ -64,6 +64,7 @@ import {
   setSidebarWidthToMax,
   setSidebarWidthToMin,
   useSidebarWidth,
+  setSidebarOpen as storeSetSidebarOpen,
 } from "@/store/sidebar";
 import { openReleasePage } from "@/lib/update-checker";
 import {
@@ -148,9 +149,8 @@ export default function Dashboard() {
   );
 
   const createError = useSnippets((s) => s.createError);
-  // The sidebar's *open* state is local to this popup — a collapsed sidebar is not
-  // worth remembering, and it should start expanded every time.
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const sidebarOpen = useSidebarWidth((s) => s.isOpen);
+  const setSidebarOpen = (open: boolean) => storeSetSidebarOpen(open);
   // The width is persisted, because a popup closes on every blur: as component
   // state it reset constantly, so dragging the divider and clicking back into the
   // page lost the size.
@@ -161,35 +161,61 @@ export default function Dashboard() {
     publishedAt: string;
   } | null>(null);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
-  const isResizing = useRef(false);
+  const draggingRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const detailHasChanges = useRef(false);
 
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // Sidebar resize
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  //
+  // Pointer capture, not a document-level `mousemove` listener, and this is the
+  // difference between the popup sidebar feeling solid and feeling like it fights
+  // you:
+  //
+  //  - a document listener keeps firing when the pointer leaves the window, so
+  //    dragging past the edge kept resizing from nowhere
+  //  - `mousemove` coalesces differently across devices than `pointermove` does
+  //  - capture means the handle keeps receiving moves even when the cursor is
+  //    faster than the page, which is what stops the sidebar lagging behind the
+  //    pointer mid-drag
+  //
+  // The options page resizer has done this all along, and it feels right there.
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isResizing.current) return;
-    // The clamp lives in the store, so a drag cannot leave the divider somewhere
-    // the keyboard resize cannot reach.
-    setSidebarWidth(e.clientX);
-  }, []);
+  const handleResizePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      draggingRef.current = true;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      document.body.style.cursor = "col-resize";
+      // Stop the browser selecting the snippet labels mid-drag.
+      document.body.style.userSelect = "none";
+    },
+    []
+  );
 
-  const handleMouseUp = useCallback(() => {
-    isResizing.current = false;
-    document.body.style.cursor = "";
-    document.body.style.userSelect = "";
-  }, []);
+  const handleResizePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!draggingRef.current) return;
+      // The clamp lives in the store, so a drag cannot leave the divider somewhere
+      // the keyboard resize cannot reach.
+      setSidebarWidth(e.clientX);
+    },
+    []
+  );
 
-  useEffect(() => {
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [handleMouseMove, handleMouseUp]);
+  const handleResizePointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    },
+    []
+  );
 
   const handleResizeKeyDown = useCallback((e: React.KeyboardEvent) => {
     const step = 20;
@@ -538,6 +564,10 @@ export default function Dashboard() {
           {/* Resize Handle */}
           <div
             role="separator"
+            onPointerDown={handleResizePointerDown}
+            onPointerMove={handleResizePointerMove}
+            onPointerUp={handleResizePointerUp}
+            onPointerCancel={handleResizePointerUp}
             aria-orientation="vertical"
             aria-valuenow={sidebarWidth}
             aria-valuemin={SIDEBAR_MIN_WIDTH}
@@ -545,11 +575,6 @@ export default function Dashboard() {
             aria-label={i18n.t("common.resizeSidebar")}
             tabIndex={0}
             className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-muted-foreground/20 transition-colors z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            onMouseDown={() => {
-              isResizing.current = true;
-              document.body.style.cursor = "col-resize";
-              document.body.style.userSelect = "none";
-            }}
             onKeyDown={handleResizeKeyDown}
           />
 

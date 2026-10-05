@@ -121,6 +121,24 @@ export const sidebarWidthItem = storage.defineItem<number>(
   }
 );
 
+/**
+ * Whether the popup sidebar is expanded.
+ *
+ * Persisted, which it was not before: the collapsed state was component state, so
+ * it reset to expanded on every popup open and a user who had deliberately made
+ * room by collapsing the sidebar had to do it again every single time.
+ *
+ * Separate from the width rather than encoded in it, because "collapsed" and
+ * "narrow" are different intentions — someone who collapsed it wants the detail
+ * pane, not a sliver of list.
+ */
+export const sidebarOpenItem = storage.defineItem<boolean>(
+  "local:sidebarOpen",
+  {
+    defaultValue: true,
+  }
+);
+
 // ---------------------------------------------------------------------------
 // Usage tracking
 // ---------------------------------------------------------------------------
