@@ -439,7 +439,7 @@ editor:
 contextMenu:
   saveSelection: Guardar selección como fragmento
   createSnippet: Crear nuevo fragmento
-  openDashboard: Abrir Clipio
+  openOptions: Abrir opciones
   giveFeedback: Enviar comentarios
   hideOnThisSite: Ocultar en este sitio
 

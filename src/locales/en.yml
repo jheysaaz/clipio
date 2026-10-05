@@ -445,7 +445,7 @@ editor:
 contextMenu:
   saveSelection: Save selection as snippet
   createSnippet: Create new snippet
-  openDashboard: Open Clipio
+  openOptions: Open options
   giveFeedback: Give feedback
   hideOnThisSite: Hide on this site
 

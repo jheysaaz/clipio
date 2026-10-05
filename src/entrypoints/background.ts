@@ -28,6 +28,7 @@ import { checkForUpdate, openReleasePage } from "@/lib/update-checker";
 import { addBlockedSite } from "@/lib/blocked-sites";
 import {
   FEEDBACK_ROUTE,
+  OPTIONS_HOME_ROUTE,
   popupRouteForAction,
   resolveContextMenuAction,
   type ContextMenuAction,
@@ -107,9 +108,9 @@ async function registerContextMenus(): Promise<void> {
         contexts: ["page", "editable"],
       }),
       browser.contextMenus.create({
-        id: CONTEXT_MENU.OPEN_DASHBOARD,
+        id: CONTEXT_MENU.OPEN_OPTIONS,
         parentId: CONTEXT_MENU.PARENT,
-        title: i18n.t("contextMenu.openDashboard"),
+        title: i18n.t("contextMenu.openOptions"),
         contexts: ["page", "selection", "editable"],
       }),
       browser.contextMenus.create({
@@ -512,11 +513,17 @@ export default defineBackground(() => {
         return;
       }
 
-      case "open-dashboard": {
+      case "open-options": {
+        // The route is named rather than left to the page's own redirect, so the
+        // link says where it goes and the test can check it. `options.html` with no
+        // hash was not a destination — it was a decision made somewhere this link
+        // could not be checked, which is the same class of bug as `#feedback`.
         const optionsUrl = browser.runtime.getURL("/options.html");
-        browser.tabs.create({ url: optionsUrl }).catch((err: unknown) => {
-          captureError(err, { action: "openDashboard" });
-        });
+        browser.tabs
+          .create({ url: optionsUrl + OPTIONS_HOME_ROUTE })
+          .catch((err: unknown) => {
+            captureError(err, { action: "openOptions" });
+          });
         return;
       }
 

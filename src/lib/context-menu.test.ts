@@ -4,18 +4,26 @@ import { createMemoryHistory, createRouter } from "@tanstack/react-router";
 import {
   CLICKABLE_MENU_IDS,
   FEEDBACK_ROUTE,
+  OPTIONS_HOME_ROUTE,
   POPUP_NEW_ROUTE,
   popupRouteForAction,
   resolveContextMenuAction,
   type ContextMenuAction,
 } from "./context-menu";
 import { CONTEXT_MENU } from "@/config/constants";
+import { i18n } from "#i18n";
 // Imported here, and not in `context-menu.ts`, because `routes/popup.tsx` pulls in
 // `Dashboard` and the whole component tree: pulling `NEW_ROUTE` in for the string
 // would bundle React into the service worker. The test can afford the import, and
 // being able to afford it is the whole point — the route the menu names is checked
 // against the router that has to answer for it.
 import { NEW_ROUTE, popupRouteTree, viewFromPath } from "@/routes/popup";
+// The same arrangement for the options routes, which pull in the options shell.
+import {
+  legacyHashRedirect,
+  routeTree as optionsRouteTree,
+  sectionIdFromPath,
+} from "@/routes/options";
 
 /**
  * The bug this table exists to make unreachable.
@@ -53,7 +61,7 @@ describe("resolveContextMenuAction", () => {
     expect(actions).toEqual([
       "save-selection",
       "create-snippet",
-      "open-dashboard",
+      "open-options",
       "open-feedback",
       "hide-on-site",
     ]);
@@ -69,7 +77,7 @@ describe("resolveContextMenuAction", () => {
       [
         CONTEXT_MENU.SAVE_SELECTION,
         CONTEXT_MENU.CREATE_SNIPPET,
-        CONTEXT_MENU.OPEN_DASHBOARD,
+        CONTEXT_MENU.OPEN_OPTIONS,
         CONTEXT_MENU.GIVE_FEEDBACK,
         CONTEXT_MENU.HIDE_ON_SITE,
       ].sort()
@@ -168,15 +176,85 @@ describe("resolveContextMenuAction", () => {
       expect(FEEDBACK_ROUTE).not.toBe("#feedback");
     });
 
-    it("routes the dashboard and the create form with no input needed", () => {
+    it("routes the options page and the create form with no input needed", () => {
       // Neither depends on the page or the selection, so a click that arrives
       // without either must still work.
       expect(
-        resolveContextMenuAction({ menuItemId: CONTEXT_MENU.OPEN_DASHBOARD })
-      ).toEqual({ kind: "open-dashboard" });
+        resolveContextMenuAction({ menuItemId: CONTEXT_MENU.OPEN_OPTIONS })
+      ).toEqual({ kind: "open-options" });
       expect(
         resolveContextMenuAction({ menuItemId: CONTEXT_MENU.CREATE_SNIPPET })
       ).toEqual({ kind: "create-snippet" });
+    });
+
+    // ── "Open Clipio" opened the options page ──────────────────────────────────
+    //
+    // The item was labelled for the extension and behaved like a settings screen,
+    // so a user clicking it got something they had not asked for and no signal that
+    // they had been sent elsewhere. The label now says what it does — and a rename
+    // that only touches copy can be reverted by the next person who thinks "Open
+    // Clipio" reads better, so what is pinned here is the *destination*, checked
+    // against the router, rather than the string a user happens to see.
+    describe("the options landing", () => {
+      /**
+       * Where a bare `options.html` actually resolves, read from the router rather
+       * than from a constant — so the pin cannot rot when `routes/options.tsx` is
+       * edited.
+       */
+      async function optionsBarePathRedirectsTo(): Promise<string> {
+        const router = createRouter({
+          routeTree: optionsRouteTree,
+          history: createMemoryHistory({ initialEntries: ["/"] }),
+        });
+        await router.load();
+        return router.state.location.pathname;
+      }
+
+      it("is the same page a bare options.html lands on", async () => {
+        // Deliberate rather than inherited: the menu item names the destination, and
+        // the test states that the destination is the page's own default. If the
+        // default moves, this fails and the two are updated together.
+        expect(OPTIONS_HOME_ROUTE).toBe(
+          `#${await optionsBarePathRedirectsTo()}`
+        );
+      });
+
+      it("resolves to a real section, not the not-found view", async () => {
+        // The failure this file exists for: a hash that names nothing still opens a
+        // working page. `#feedback` was never a section id, so "Give feedback" had
+        // always landed on Library with the link reporting success.
+        const router = createRouter({
+          routeTree: optionsRouteTree,
+          history: createMemoryHistory({
+            initialEntries: [pathFromHash(OPTIONS_HOME_ROUTE)],
+          }),
+        });
+        await router.load();
+
+        expect(router.state.matches.map((m) => m.routeId)).toContain(
+          pathFromHash(OPTIONS_HOME_ROUTE)
+        );
+        expect(sectionIdFromPath(pathFromHash(OPTIONS_HOME_ROUTE))).toBe(
+          pathFromHash(OPTIONS_HOME_ROUTE).replace(/^\//, "")
+        );
+      });
+
+      it("is not a legacy hash the page has to rewrite", () => {
+        // A pre-router hash would work through `legacyHashRedirect` and be
+        // rewritten in the address bar — which would mean this link and the page
+        // disagreed about where the user is.
+        expect(legacyHashRedirect(OPTIONS_HOME_ROUTE)).toBe(null);
+      });
+
+      it("is not described to the user as opening the extension", () => {
+        // The label was "Open Clipio" for an item that opens a settings screen, so
+        // a user clicking it got something they had not asked for. Asserted on the
+        // real `en.yml` string rather than the key, and only on the claim that was
+        // wrong — not on the wording, which is free to improve.
+        const label = i18n.t("contextMenu.openOptions");
+        expect(label).not.toBe("contextMenu.openOptions"); // resolved, not echoed
+        expect(label.toLowerCase()).not.toContain("clipio");
+      });
     });
   });
 
@@ -235,7 +313,7 @@ describe("resolveContextMenuAction", () => {
       // Two open a tab, one blocks a host, one does nothing. A route for any of
       // them would be a request the popup never reads.
       const actions: ContextMenuAction[] = [
-        { kind: "open-dashboard" },
+        { kind: "open-options" },
         { kind: "open-feedback" },
         { kind: "hide-on-site", hostname: "example.com" },
         { kind: "none" },

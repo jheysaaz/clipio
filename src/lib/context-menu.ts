@@ -17,6 +17,14 @@
  * The split is deliberate: this module decides, `background.ts` does. So the
  * routing table can be asserted exhaustively — every id, every absent input — and
  * the side effects stay where the browser APIs are.
+ *
+ * ── Why the destinations live here too ───────────────────────────────────────
+ *
+ * A click means two things: an action, and a page. Both are decisions, so both
+ * are here — `FEEDBACK_ROUTE`, `OPTIONS_HOME_ROUTE`, `POPUP_NEW_ROUTE` and
+ * `popupRouteForAction`. Every one of them is pinned in the test against the
+ * router that has to resolve it, because the bug this module was extracted for was
+ * not a wrong action; it was a right action pointed at a URL that named nothing.
  */
 
 import { CONTEXT_MENU } from "@/config/constants";
@@ -36,7 +44,7 @@ export type ContextMenuAction =
   /** Open the popup on a blank create form. */
   | { kind: "create-snippet" }
   /** Open the options page at its library section. */
-  | { kind: "open-dashboard" }
+  | { kind: "open-options" }
   /** Open the options page at its feedback section. */
   | { kind: "open-feedback" }
   /** Add this host to the blocked-sites list. */
@@ -78,8 +86,8 @@ export function resolveContextMenuAction(
     case CONTEXT_MENU.CREATE_SNIPPET:
       return { kind: "create-snippet" };
 
-    case CONTEXT_MENU.OPEN_DASHBOARD:
-      return { kind: "open-dashboard" };
+    case CONTEXT_MENU.OPEN_OPTIONS:
+      return { kind: "open-options" };
 
     case CONTEXT_MENU.GIVE_FEEDBACK:
       return { kind: "open-feedback" };
@@ -115,6 +123,25 @@ export function resolveContextMenuAction(
  * of its menu ids, is what let the wrong hash survive.
  */
 export const FEEDBACK_ROUTE = "#/about/feedback";
+
+/**
+ * The options-page route "Open options" opens: `#/library`.
+ *
+ * The item used to open `options.html` with no hash at all, which is not a
+ * destination — it is a redirect, and a redirect is a decision made somewhere the
+ * link cannot be checked. The link and the page then had to agree about where a
+ * bare `options.html` goes, and if either moved the menu item would arrive
+ * somewhere plausible and say nothing, which is the failure mode this file exists
+ * to prevent: `#feedback` was never a section id, so "Give feedback" had always
+ * landed on Library while every layer reported success.
+ *
+ * So the destination is named here and pinned in the test against the router's own
+ * redirect — the assertion reads where `/` *actually* resolves, so a change to
+ * `routes/options.tsx` fails here instead of quietly redirecting this link
+ * somewhere else. Deliberate, in the sense that it is written down and checked,
+ * rather than inherited from a default.
+ */
+export const OPTIONS_HOME_ROUTE = "#/library";
 
 /**
  * The popup route "Create new snippet" opens: `#/new`.
@@ -159,7 +186,7 @@ export function popupRouteForAction(action: ContextMenuAction): string | null {
       // one won.
       return null;
 
-    case "open-dashboard":
+    case "open-options":
     case "open-feedback":
     case "hide-on-site":
     case "none":
@@ -172,7 +199,7 @@ export function popupRouteForAction(action: ContextMenuAction): string | null {
 export const CLICKABLE_MENU_IDS: readonly string[] = [
   CONTEXT_MENU.SAVE_SELECTION,
   CONTEXT_MENU.CREATE_SNIPPET,
-  CONTEXT_MENU.OPEN_DASHBOARD,
+  CONTEXT_MENU.OPEN_OPTIONS,
   CONTEXT_MENU.GIVE_FEEDBACK,
   CONTEXT_MENU.HIDE_ON_SITE,
 ];

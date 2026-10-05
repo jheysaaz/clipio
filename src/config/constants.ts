@@ -165,7 +165,17 @@ export const CONTEXT_MENU = {
   PARENT: "clipio-parent",
   SAVE_SELECTION: "clipio-save-selection",
   CREATE_SNIPPET: "clipio-create-snippet",
-  OPEN_DASHBOARD: "clipio-open-dashboard",
+  /**
+   * Opens the **options page** — the key says so, the id string does not.
+   *
+   * The key was `OPEN_DASHBOARD` because there was no popup routing when it was
+   * written, so "the Clipio page" could only mean the options page; the menu label
+   * is now "Open options", which is what the item does. The id string stays: it is
+   * a stored identifier in the user's own context-menu registry, and renaming it
+   * would orphan every existing item for no gain — `registerContextMenus` calls
+   * `removeAll()` before re-creating them anyway.
+   */
+  OPEN_OPTIONS: "clipio-open-dashboard",
   GIVE_FEEDBACK: "clipio-give-feedback",
   SEPARATOR_HIDE: "clipio-separator-hide",
   HIDE_ON_SITE: "clipio-hide-on-site",
