@@ -53,6 +53,27 @@ import { i18n } from "#i18n";
 
 export type SnippetsState = {
   /**
+   * The create form's contents.
+   *
+   * In the store rather than in the component because it is not really the
+   * component's: the form is filled from a context-menu selection *before* the
+   * component mounts the create view, and the pasted text has to survive the route
+   * moving to `#/new`. Component state started empty every time, which is how
+   * "Save selection" could open a form with nothing in it.
+   */
+  draft: SnippetFormData;
+  /** Whether a create is in flight, so the button can disable itself. */
+  isSaving: boolean;
+  /** Why the last create failed, or `null`. Rendered inside the create form. */
+  createError: string | null;
+  /**
+   * The snippet a delete is waiting on, or `null`.
+   *
+   * Only the id is needed, but the object is kept so the dialog can show the label
+   * the user recognises without a lookup that could go stale.
+   */
+  pendingSnippet: Snippet | null;
+  /**
    * The library.
    *
    * Empty until the first load resolves. `isLoaded` is what says whether empty
@@ -87,7 +108,19 @@ export type SnippetsState = {
   recoveryError: string | null;
 };
 
+/** A blank create form. Shared so "reset to blank" is one definition. */
+export const EMPTY_DRAFT: SnippetsState["draft"] = {
+  label: "",
+  shortcut: "",
+  content: "",
+  tags: [],
+};
+
 export const snippetsStore = createStore<SnippetsState>({
+  draft: { ...EMPTY_DRAFT },
+  isSaving: false,
+  createError: null,
+  pendingSnippet: null,
   snippets: [],
   isLoaded: false,
   loadError: null,
@@ -439,25 +472,41 @@ export async function addSnippet(
   draft: SnippetFormData
 ): Promise<WriteOutcome<Snippet>> {
   const snippet = createSnippet(draft);
+  snippetsStore.setState((prev) => ({
+    ...prev,
+    isSaving: true,
+    createError: null,
+  }));
   try {
     await saveSnippetToStorage(snippet);
     snippetsStore.setState((prev) => ({
       ...prev,
       snippets: [...prev.snippets, snippet],
+      isSaving: false,
+      // Cleared on success only. On failure the draft is deliberately left alone
+      // so the user can shorten the snippet and retry without retyping it.
+      draft: { ...EMPTY_DRAFT },
     }));
     return { ok: true, value: snippet };
   } catch (error) {
+    let message: string;
     if (error instanceof StorageQuotaError) {
-      // The banner is raised here rather than at the call site so it stays up:
-      // the caller only has to render what it is told.
-      snippetsStore.setState((prev) => ({
-        ...prev,
-        quotaWarning: true,
-      }));
-      return { ok: false, error: quotaMessage(error) };
+      // The banner is raised here rather than at the call site so it stays up: the
+      // caller only has to render what it is told.
+      snippetsStore.setState((prev) => ({ ...prev, quotaWarning: true }));
+      message = quotaMessage(error);
+    } else {
+      captureError(error, { action: "saveSnippet" });
+      message = i18n.t("dashboard.errors.failedToCreate");
     }
-    captureError(error, { action: "saveSnippet" });
-    return { ok: false, error: i18n.t("dashboard.errors.failedToCreate") };
+    // The draft is deliberately left alone here, so the user can shorten the
+    // snippet and retry without retyping it.
+    snippetsStore.setState((prev) => ({
+      ...prev,
+      isSaving: false,
+      createError: message,
+    }));
+    return { ok: false, error: message };
   }
 }
 
@@ -566,6 +615,49 @@ export async function restoreRecoveredSnippets(): Promise<
 }
 
 // ---------------------------------------------------------------------------
+// The create form
+// ---------------------------------------------------------------------------
+
+/**
+ * Put a draft on screen.
+ *
+ * A context-menu selection arrives with a shortcut of `/` rather than empty: the
+ * field is required, and pre-filling it means the user can type a name and press
+ * save instead of filling everything in from scratch. An empty default would make
+ * the form look broken next to a filled-in label.
+ */
+export function setDraft(draft: SnippetFormData): void {
+  snippetsStore.setState((prev) => ({
+    ...prev,
+    draft,
+    // A new draft clears the previous attempt's error, or the user sees a stale
+    // "quota exceeded" against text they have not typed yet.
+    createError: null,
+  }));
+}
+
+export function clearDraft(): void {
+  setDraft({ ...EMPTY_DRAFT });
+}
+
+export function setIsSaving(isSaving: boolean): void {
+  snippetsStore.setState((prev) => ({ ...prev, isSaving }));
+}
+
+export function dismissCreateError(): void {
+  snippetsStore.setState((prev) => ({ ...prev, createError: null }));
+}
+
+/** Ask for a snippet to be deleted, and show the dialog. */
+export function requestSnippetDelete(snippet: Snippet | null): void {
+  snippetsStore.setState((prev) => ({ ...prev, pendingSnippet: snippet }));
+}
+
+export function cancelSnippetDelete(): void {
+  snippetsStore.setState((prev) => ({ ...prev, pendingSnippet: null }));
+}
+
+// ---------------------------------------------------------------------------
 // Dismissals
 // ---------------------------------------------------------------------------
 
@@ -639,6 +731,10 @@ export function findSnippet(
 export function resetSnippetsStoreForTests(): void {
   readTicket++;
   snippetsStore.setState(() => ({
+    draft: { ...EMPTY_DRAFT },
+    isSaving: false,
+    createError: null,
+    pendingSnippet: null,
     snippets: [],
     isLoaded: false,
     loadError: null,

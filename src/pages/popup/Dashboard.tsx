@@ -27,7 +27,7 @@ const NewSnippetView = lazy(() => import("~/components/NewSnippetView"));
 import { InlineError } from "@/components/ui/inline-error";
 import { toast } from "sonner";
 
-import type { Snippet, SnippetFormData } from "@/types";
+import type { Snippet } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -37,12 +37,15 @@ import {
   editSnippet,
   removeSnippet,
   restoreRecoveredSnippets,
+  requestSnippetDelete,
   dismissRecoveryBanner,
   dismissRecoveryError,
   dismissQuotaWarning,
   dismissSyncPausedWarning,
   dismissLoadError,
+  dismissCreateError,
   findSnippet,
+  setDraft,
   useSnippets,
 } from "@/state/snippets";
 import { setSearchQuery, useSearch, useVisibleSnippets } from "@/state/search";
@@ -97,13 +100,16 @@ export default function Dashboard() {
     void navigate({ to: NEW_ROUTE, replace: true });
   }, [navigate]);
 
-  const [draftSnippet, setDraftSnippet] = useState<SnippetFormData>({
-    label: "",
-    shortcut: "",
-    content: "",
-    tags: [],
-  });
-  const [isSaving, setIsSaving] = useState(false);
+  // The create form and the delete confirmation live in `@/state/snippets`. The
+  // draft in particular is not really the component's: it is filled from a
+  // context-menu selection *before* the create view mounts, and the pasted text has
+  // to survive the route moving to `#/new`. Component state started empty every
+  // time, which is how "Save selection" could open a form with nothing in it.
+  const draftSnippet = useSnippets((s) => s.draft);
+  const setDraftSnippet = setDraft;
+  const isSaving = useSnippets((s) => s.isSaving);
+  const pendingSnippet = useSnippets((s) => s.pendingSnippet);
+  const setPendingSnippet = requestSnippetDelete;
 
   // The library, its load state, the storage warnings and the recovery banner all
   // live in `src/state/snippets.ts`. They used to be eight `useState` calls here,
@@ -133,7 +139,7 @@ export default function Dashboard() {
     [snippets, selectedSnippetId]
   );
 
-  const [createError, setCreateError] = useState<string | null>(null);
+  const createError = useSnippets((s) => s.createError);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const [updateRelease, setUpdateRelease] = useState<{
@@ -145,7 +151,6 @@ export default function Dashboard() {
   const isResizing = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const detailHasChanges = useRef(false);
-  const [pendingSnippet, setPendingSnippet] = useState<Snippet | null>(null);
 
   // -------------------------------------------------------------------------
   // Sidebar resize
@@ -334,30 +339,22 @@ export default function Dashboard() {
     )
       return;
 
-    setIsSaving(true);
-    try {
-      const result = await addSnippet(draftSnippet);
-      if (!result.ok) {
-        // The quota banner is already up — `addSnippet` raised it, because it is
-        // a fact about the backend rather than about this one operation. What is
-        // left for the page is the sentence explaining this save.
-        //
-        // The create view stays OPEN. Closing it here unmounted
-        // `NewSnippetView`, which is the component that renders `createError`, so
-        // the explanation was set and then immediately made invisible and the user
-        // watched their snippet silently not save. Keeping the form open also lets
-        // them shorten the snippet and retry without starting over.
-        setCreateError(result.error);
-        return;
-      }
-      // Address the new snippet rather than only showing it: the id is now in the
-      // URL, so "copy link to this snippet" needs no work to start working.
-      selectSnippet(result.value.id);
-      setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
-      toast.success(i18n.t("dashboard.toast.snippetSaved"));
-    } finally {
-      setIsSaving(false);
+    // `addSnippet` owns the saving flag, the error and the draft reset, so the
+    // button cannot stay disabled after a refusal and the message cannot be shown
+    // against a draft that has already been cleared.
+    const result = await addSnippet(draftSnippet);
+    if (!result.ok) {
+      // The create view stays OPEN. Closing it here unmounts `NewSnippetView`,
+      // which is the component that renders `createError` — so the explanation was
+      // set and then immediately made invisible and the user watched their snippet
+      // silently not save. Keeping the form open also lets them shorten the
+      // snippet and retry without starting over.
+      return;
     }
+    // Address the new snippet rather than only showing it: the id is now in the
+    // URL, so "copy link to this snippet" needs no work to start working.
+    selectSnippet(result.value.id);
+    toast.success(i18n.t("dashboard.toast.snippetSaved"));
   };
 
   const handleDeleteSnippet = async (snippetId: string) => {
@@ -731,7 +728,7 @@ export default function Dashboard() {
                 onCancel={handleCancelCreate}
                 isSaving={isSaving}
                 createError={createError}
-                onClearCreateError={() => setCreateError(null)}
+                onClearCreateError={dismissCreateError}
                 sidebarOpen={sidebarOpen}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
                 existingSnippets={snippets}

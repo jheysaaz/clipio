@@ -13,8 +13,13 @@ import {
   dismissSyncPausedWarning,
   dismissLoadError,
   dismissRecoveryError,
+  cancelSnippetDelete,
+  clearDraft,
+  dismissCreateError,
   findSnippet,
   isWriteRefusal,
+  requestSnippetDelete,
+  setDraft,
   refreshSnippets,
   resetSnippetsStoreForTests,
   snippetsStore,
@@ -707,5 +712,80 @@ describe("dismissals", () => {
     dismissRecoveryBanner();
     expect(state().recoveryError).toBeNull();
     expect(state().showRecoveryBanner).toBe(false);
+  });
+});
+
+describe("the create form", () => {
+  it("starts blank", () => {
+    expect(state().draft).toEqual({
+      label: "",
+      shortcut: "",
+      content: "",
+      tags: [],
+    });
+    expect(state().createError).toBeNull();
+    expect(state().isSaving).toBe(false);
+  });
+
+  it("records a draft", () => {
+    setDraft({ label: "Address", shortcut: "/addr", content: "x", tags: [] });
+    expect(state().draft.label).toBe("Address");
+  });
+
+  it("clears a stale error when a new draft arrives", () => {
+    // Otherwise the user sees a quota message against text they have not typed
+    // yet, and blames it for the failure they are about to have.
+    snippetsStore.setState((prev) => ({ ...prev, createError: "Too big." }));
+    setDraft({ label: "New", shortcut: "/n", content: "c", tags: [] });
+    expect(state().createError).toBeNull();
+  });
+
+  it("clears back to blank", () => {
+    setDraft({ label: "Address", shortcut: "/addr", content: "x", tags: [] });
+    clearDraft();
+    expect(state().draft.label).toBe("");
+  });
+
+  it("clears the saving flag and the draft after a successful create", async () => {
+    setDraft({ label: "Address", shortcut: "/addr", content: "x", tags: [] });
+
+    const result = await addSnippet(state().draft);
+
+    expect(result.ok).toBe(true);
+    expect(state().isSaving).toBe(false);
+    expect(state().draft.label).toBe("");
+  });
+
+  it("keeps the draft after a refused create, so the user can retry", async () => {
+    // The create form stays open on failure — closing it unmounts the component
+    // that renders the error. Keeping the text means they can shorten it and press
+    // save again rather than starting over.
+    storage.saveSnippet.mockRejectedValue(new Error("quota"));
+    setDraft({ label: "Address", shortcut: "/addr", content: "x", tags: [] });
+
+    const result = await addSnippet(state().draft);
+
+    expect(result.ok).toBe(false);
+    expect(state().draft.content).toBe("x");
+    expect(state().isSaving).toBe(false);
+    expect(state().createError).not.toBeNull();
+  });
+
+  it("dismisses the create error", async () => {
+    storage.saveSnippet.mockRejectedValue(new Error("quota"));
+    setDraft({ label: "A", shortcut: "/a", content: "c", tags: [] });
+    await addSnippet(state().draft);
+
+    dismissCreateError();
+
+    expect(state().createError).toBeNull();
+  });
+
+  it("tracks the snippet a delete is waiting on", () => {
+    requestSnippetDelete(makeSnippet({ id: "s1" }));
+    expect(state().pendingSnippet?.id).toBe("s1");
+
+    cancelSnippetDelete();
+    expect(state().pendingSnippet).toBeNull();
   });
 });
