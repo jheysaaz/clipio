@@ -6,6 +6,7 @@ import {
   FEEDBACK_ROUTE,
   OPTIONS_HOME_ROUTE,
   POPUP_NEW_ROUTE,
+  popupHashRoute,
   popupRouteForAction,
   resolveContextMenuAction,
   type ContextMenuAction,
@@ -271,11 +272,22 @@ describe("resolveContextMenuAction", () => {
       );
     });
 
-    it("names the route the popup's router actually has", () => {
-      // Not `#/new` asserted against itself — the router decides. If `NEW_ROUTE`
-      // moved, this fails rather than the menu item silently opening a 404.
-      expect(POPUP_NEW_ROUTE).toBe(`#${NEW_ROUTE}`);
-      expect(POPUP_NEW_ROUTE).toBe("#/new");
+    it("is the router's own path, not a URL fragment", () => {
+      // The bug this caught: the constant was `"#/new"`, which is right for a tab
+      // URL and wrong for `navigate({ to })`. Handing it to the router type-checks
+      // and lands on the not-found view — the address bar reads `#/new` while the
+      // popup renders nothing. A "works and arrives somewhere else" defect, the
+      // exact class this module was extracted for.
+      expect(POPUP_NEW_ROUTE).toBe(NEW_ROUTE);
+      expect(POPUP_NEW_ROUTE).toBe("/new");
+      expect(POPUP_NEW_ROUTE.startsWith("#")).toBe(false);
+    });
+
+    it("derives the hash form for the tab fallback", () => {
+      // Two consumers, two needs, one source: the router wants a path, a URL wants
+      // a fragment. Deriving rather than storing both means they cannot disagree.
+      expect(popupHashRoute(POPUP_NEW_ROUTE)).toBe(`#${NEW_ROUTE}`);
+      expect(popupHashRoute(POPUP_NEW_ROUTE)).toBe("#/new");
     });
 
     it("produces a URL the popup reads as the create form", async () => {
@@ -283,14 +295,16 @@ describe("resolveContextMenuAction", () => {
       // reads to decide which view to render, and the router is what resolves the
       // address. A route that satisfies the first and not the second is a link
       // that looks right and lands on nothing.
-      expect(viewFromPath(pathFromHash(POPUP_NEW_ROUTE))).toEqual({
+      const hash = popupHashRoute(POPUP_NEW_ROUTE);
+
+      expect(viewFromPath(pathFromHash(hash))).toEqual({
         kind: "new",
       });
 
       const router = createRouter({
         routeTree: popupRouteTree,
         history: createMemoryHistory({
-          initialEntries: [pathFromHash(POPUP_NEW_ROUTE)],
+          initialEntries: [pathFromHash(hash)],
         }),
       });
       await router.load();

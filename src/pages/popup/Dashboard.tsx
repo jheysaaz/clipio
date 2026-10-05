@@ -60,7 +60,11 @@ import {
   dismissedUpdateVersionItem,
 } from "@/storage/items";
 import { captureError } from "@/lib/sentry";
-import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "@/config/constants";
+import {
+  POPUP_VIEW_SESSION_KEY,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+} from "@/config/constants";
 import { selectNewest } from "@/lib/snippet-utils";
 import {
   nudgeSidebarWidth,
@@ -362,6 +366,47 @@ export default function Dashboard() {
       }
     })();
   }, []);
+
+  /**
+   * Honour the route a context-menu action asked for.
+   *
+   * `browser.action.openPopup()` takes no URL, so when the background opens the
+   * popup there is nothing it can address — the popup comes up at whatever route it
+   * last held. The background therefore leaves the requested route in session
+   * storage and this reads it.
+   *
+   * Separate from the draft effect above, and deliberately *not* an else-branch of
+   * it: "Save selection" carries text and implies the create route, while "Create
+   * snippet" carries only the route. One is a draft, the other is a destination, and
+   * merging them would mean two channels for one decision free to disagree.
+   *
+   * Consumed on read. Left in place it would drag the popup back to `#/new` on the
+   * next open, long after the user had navigated somewhere else.
+   *
+   * `replace`, never `push` — ADR 0011. The popup closes on blur, so a history
+   * entry is something the user can never use.
+   */
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await browser.storage.session.get(
+          POPUP_VIEW_SESSION_KEY
+        );
+        const requested = stored[POPUP_VIEW_SESSION_KEY];
+        if (typeof requested !== "string" || !requested) return;
+        // Removed before navigating, so a failure here cannot leave a stale route
+        // that yanks the user back on a later open.
+        await browser.storage.session
+          .remove(POPUP_VIEW_SESSION_KEY)
+          .catch((err: unknown) => {
+            captureError(err, { action: "popupView.clearSession" });
+          });
+        navigate({ to: requested, replace: true });
+      } catch (err) {
+        captureError(err, { action: "popupView" });
+      }
+    })();
+  }, [navigate]);
 
   // Check for available update banner
   useEffect(() => {

@@ -184,6 +184,85 @@ test.describe("Popup routing", () => {
   });
 });
 
+test.describe("Popup — a context-menu route request is honoured", () => {
+  /**
+   * The background cannot address an extension popup: `openPopup()` takes no URL,
+   * so the popup comes up at whatever route it last held. The background therefore
+   * leaves the requested route in session storage, and the popup reads it on mount.
+   *
+   * Both halves are asserted here, because either one alone passes while the
+   * feature is broken: a background that writes a key nobody reads leaves "Create
+   * snippet" landing on whatever the popup last showed — a link that works and
+   * arrives somewhere else.
+   */
+  test("opens the create page when a route was requested", async ({
+    popupPage,
+  }) => {
+    await seedAndReload(popupPage, [makeSnippet({ label: "Existing" })]);
+
+    // Stand in for what `requestPopupView` writes.
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      // The stored value is a router *path*, not a URL fragment. Handing the
+      // fragment to the router type-checks and lands on the not-found view.
+      await ext.storage.session.set({ __clipioPopupView__: "/new" });
+    });
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+
+    // The create form, not the previously-shown snippet.
+    await expect(popupPage).toHaveURL(/#\/new$/);
+    await expect(popupPage.getByTestId("snippet-label-input")).toBeVisible();
+  });
+
+  test("does not drag the popup back on the next open", async ({
+    popupPage,
+    extensionId,
+  }) => {
+    // The key is consumed on read. Left in place it would yank the user back to
+    // `#/new` every time they opened the popup afterwards.
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      // The stored value is a router *path*, not a URL fragment. Handing the
+      // fragment to the router type-checks and lands on the not-found view.
+      await ext.storage.session.set({ __clipioPopupView__: "/new" });
+    });
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+    await expect(popupPage).toHaveURL(/#\/new$/);
+
+    // Clear the request, as the background would have, then open cold *without* the
+    // hash. A reload would not do: it preserves the address, so it would still be
+    // `#/new` for reasons that have nothing to do with the key.
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.session.remove("__clipioPopupView__");
+    });
+    await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+    await waitForPopupReady(popupPage);
+
+    await expect(popupPage).not.toHaveURL(/#\/new$/);
+  });
+
+  test("ignores a request it cannot resolve rather than showing nothing", async ({
+    popupPage,
+  }) => {
+    // The key is session storage and therefore writable by anything with extension
+    // access. A stale or hand-edited value must not leave the popup on a blank view.
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.session.set({
+        __clipioPopupView__: "#/not-a-real-route",
+      });
+    });
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+
+    // Whatever it lands on, it renders the dashboard rather than nothing.
+    await expect(popupPage.getByTestId("add-snippet")).toBeVisible();
+  });
+});
+
 test.describe("Popup (Dashboard)", () => {
   test("creates new snippet via form", async ({ popupPage }) => {
     await popupPage.evaluate(async () => {

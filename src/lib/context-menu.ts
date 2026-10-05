@@ -155,7 +155,22 @@ export const OPTIONS_HOME_ROUTE = "#/library";
  * checks the constant against the router is what stops the two drifting into a
  * link that resolves to nowhere.
  */
-export const POPUP_NEW_ROUTE = "#/new";
+/**
+ * The popup's create route, as a **router path**.
+ *
+ * Not `"#/new"`. Two consumers need this value and they want different things: the
+ * tab fallback needs a URL fragment, and the popup needs something it can pass to
+ * the router's `to`. Storing the fragment and handing it to `navigate` type-checks
+ * and lands on the not-found view — the URL becomes `#/new` while nothing renders,
+ * which is the same class of bug as the one this module was extracted for. One
+ * value, one meaning; `popupHashRoute` derives the fragment.
+ */
+export const POPUP_NEW_ROUTE = "/new";
+
+/** The hash-history form of a popup route, for building a URL. */
+export function popupHashRoute(path: string): string {
+  return `#${path}`;
+}
 
 /**
  * The popup route an action asks the popup to boot into, or `null` for none.

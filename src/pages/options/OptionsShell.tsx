@@ -23,6 +23,7 @@ import { SettingControl } from "@/components/options/settings/SettingControl";
 import { SettingsSidebar } from "@/components/options/settings/SettingsSidebar";
 import {
   readSidebarWidth,
+  SIDEBAR_PERSIST_DEBOUNCE_MS,
   SIDEBAR_WIDTH_KEY,
 } from "@/components/options/settings/SidebarResizer";
 import { sectionIdFromPath } from "@/routes/options";
@@ -57,12 +58,24 @@ export function OptionsShell() {
 
   // Persist the rail width. Best-effort: a storage failure must not stop the
   // resize from working for the rest of the session.
+  //
+  // Debounced, because a drag emits a pointermove per pixel and this wrote on every
+  // one. `localStorage.setItem` is synchronous and on the main thread, so that was
+  // a write per pixel competing with the drag's own re-renders — the same defect the
+  // popup sidebar had, fixed there in bc54f1b, and left unfixed here. The rail still
+  // tracks the pointer immediately; only the write waits.
   useEffect(() => {
-    try {
-      globalThis.localStorage?.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
-    } catch {
-      /* non-fatal */
-    }
+    const timer = setTimeout(() => {
+      try {
+        globalThis.localStorage?.setItem(
+          SIDEBAR_WIDTH_KEY,
+          String(sidebarWidth)
+        );
+      } catch {
+        /* non-fatal */
+      }
+    }, SIDEBAR_PERSIST_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
   }, [sidebarWidth]);
 
   useEffect(() => {

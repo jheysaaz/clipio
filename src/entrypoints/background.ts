@@ -29,6 +29,7 @@ import { addBlockedSite } from "@/lib/blocked-sites";
 import {
   FEEDBACK_ROUTE,
   OPTIONS_HOME_ROUTE,
+  popupHashRoute,
   popupRouteForAction,
   resolveContextMenuAction,
   type ContextMenuAction,
@@ -174,6 +175,9 @@ async function openPopupOrFallback(action: string, route = ""): Promise<void> {
  *
  * Read `POPUP_VIEW_SESSION_KEY` on mount, navigate to it with `replace`, and
  * remove it — consuming it, so a pending request cannot fire on a later open.
+ * The stored value is a router **path** (`/new`), not a URL fragment: handing
+ * `"#/new"` to `navigate` lands on the not-found view, so the URL reads `#/new`
+ * while nothing renders.
  * `Dashboard.tsx` does the same for the draft in its mount effect. Without that
  * reader the write here is inert and the popup keeps restoring its last route, so
  * the two belong in one change.
@@ -509,7 +513,7 @@ export default defineBackground(() => {
         // the popup surface is addressed through storage, the tab fallback
         // carries the route in its own URL.
         await requestPopupView(route);
-        await openPopupOrFallback("createSnippet", route);
+        await openPopupOrFallback("createSnippet", popupHashRoute(route));
         return;
       }
 
