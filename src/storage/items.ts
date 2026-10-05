@@ -139,6 +139,24 @@ export const sidebarOpenItem = storage.defineItem<boolean>(
   }
 );
 
+/**
+ * The snippet the user last had open in the popup.
+ *
+ * Not derivable from `usageCountsItem`, which counts *insertions* rather than
+ * views: someone reading a snippet they have never inserted is the common case, and
+ * the one where a usage-derived "recent" is wrong.
+ *
+ * `null` means "nothing remembered yet", which is also what a cleared library and a
+ * never-opened popup both look like — so the reader treats a missing or stale id as
+ * "fall back", not as an error.
+ */
+export const lastViewedSnippetIdItem = storage.defineItem<string | null>(
+  "local:lastViewedSnippetId",
+  {
+    defaultValue: null,
+  }
+);
+
 // ---------------------------------------------------------------------------
 // Usage tracking
 // ---------------------------------------------------------------------------

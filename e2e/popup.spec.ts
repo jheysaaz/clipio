@@ -52,7 +52,17 @@ async function seedAndReload(
       syncEntries[`snip:${s.id}`] = s;
     }
     await ext.storage.sync.set(syncEntries);
-    await ext.storage.local.set({ cachedSnippets: snips, storageMode: "sync" });
+    // `lastViewedSnippetId` cleared as part of the seed, because it survives a popup
+    // close by design and this fixture's storage outlives a single test. Snippet ids
+    // are generated per call, so an id left by an earlier test can collide with one
+    // in this one — and the leftover memory then "passes" a fallback assertion for
+    // the wrong reason. A seed that does not clear it is a seed from an unknown
+    // starting state.
+    await ext.storage.local.set({
+      cachedSnippets: snips,
+      storageMode: "sync",
+      lastViewedSnippetId: null,
+    });
   }, snippets);
   await page.reload();
   await page.waitForLoadState("domcontentloaded");
@@ -263,6 +273,179 @@ test.describe("Popup — a context-menu route request is honoured", () => {
   });
 });
 
+async function reopenPopup(page: import("@playwright/test").Page) {
+  /**
+   * Open the popup the way the toolbar does — a bare URL, no hash.
+   *
+   * A `reload()` is NOT a reopen. It preserves the address, so the popup comes up
+   * already addressed at whatever was showing, `autoSelect` returns early because
+   * the URL says which snippet, and the resume logic is never reached. Every test
+   * in this group passed against a build with the feature removed, because of it.
+   */
+  // Split rather than `new URL(...).origin`: the `chrome-extension:` scheme has a
+  // null origin, so building the URL that way produces "Cannot navigate to invalid
+  // URL".
+  await page.goto(page.url().split("#")[0]);
+  await page.waitForLoadState("domcontentloaded");
+  await waitForPopupReady(page);
+}
+
+test.describe("Popup — reopening resumes the last viewed snippet", () => {
+  /**
+   * Opening the popup used to land on the *newest* snippet every time. For a snippet
+   * manager that is rarely what you want: you open the popup to go back to the thing
+   * you were working on.
+   *
+   * The fallback to newest is load-bearing, not a nicety. The remembered id can stop
+   * resolving — deleted from the options page, deleted on another device and synced
+   * down, or replaced by an import — and a stale id must not leave the popup on a
+   * blank pane.
+   *
+   * The delete test below looks like it covers that fallback, and it does not:
+   * deleting re-records the survivor through `selectSnippet`, so by the time the
+   * popup reopens the remembered id is already the right one and the fallback never
+   * runs. Verified by mutating the fallback away — the test still passed. The
+   * fallback is covered by `resolveInitialSnippet`'s unit tests, which is where a
+   * caller can hand it a stale id; no user path reaches that state without first
+   * re-recording.
+   */
+  test("opens the snippet you last looked at, not the newest", async ({
+    popupPage,
+  }) => {
+    const older = makeSnippet({
+      label: "Older",
+      shortcut: "/o",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const newer = makeSnippet({
+      label: "Newer",
+      shortcut: "/n",
+      updatedAt: "2026-12-01T00:00:00.000Z",
+    });
+    await seedAndReload(popupPage, [newer, older]);
+
+    // Cold open: nothing remembered, so newest — the pre-existing behaviour.
+    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${newer.id}`));
+
+    // Go back to the older one.
+    await popupPage.getByTestId("snippet-list-item").nth(1).click();
+    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}`));
+
+    // Reopen. A popup closes on every blur, so this is the next real open.
+    await reopenPopup(popupPage);
+
+    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}`));
+    // The list reports it selected, which is the assertion that matters: the URL
+    // could match while the pane showed something else.
+    await expect(popupPage.getByTestId("snippet-list")).toHaveAttribute(
+      "aria-activedescendant",
+      new RegExp(older.id)
+    );
+  });
+
+  test("falls back to the newest when the remembered snippet is deleted", async ({
+    popupPage,
+  }) => {
+    const older = makeSnippet({
+      label: "Older",
+      shortcut: "/o",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const newer = makeSnippet({
+      label: "Newer",
+      shortcut: "/n",
+      updatedAt: "2026-12-01T00:00:00.000Z",
+    });
+    await seedAndReload(popupPage, [newer, older]);
+
+    // Look at the older one, then delete it through the UI.
+    //
+    // Deleted through the app rather than by writing to `storage.sync` directly: the
+    // direct write did not take effect before the reload, so the snippet was still
+    // in the library and the test passed for the wrong reason. The UI is also the
+    // path a user actually takes to get here.
+    await popupPage.getByTestId("snippet-list-item").nth(1).click();
+    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}`));
+
+    // The same testid and confirm pattern as the existing delete test, rather than
+    // a broader regex: `/^(delete|confirm)/i` with `.last()` matched a control that
+    // closed the popup, and the failure surfaced as "target page has been closed".
+    await popupPage.getByTestId("snippet-delete").click();
+    const confirmButton = popupPage
+      .getByRole("button", { name: /delete|confirm|yes/i })
+      .first();
+    await expect(confirmButton).toBeVisible({ timeout: 5_000 });
+    await confirmButton.click();
+
+    // The delete moved the address, which is the app doing its job.
+    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${newer.id}`));
+
+    // Now reopen cold. The remembered id no longer resolves, so it must fall back
+    // to the newest rather than showing a pane for a snippet that is gone.
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+
+    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${newer.id}`));
+    await expect(popupPage.getByTestId("snippet-list")).toBeVisible();
+  });
+
+  test("a deep link still wins over the remembered snippet", async ({
+    popupPage,
+    extensionId,
+  }) => {
+    // The guard that must survive the feature. Auto-selecting regardless is what
+    // made every deep link open the same snippet whatever its id — a link that looks
+    // right and is wrong.
+    const older = makeSnippet({
+      label: "Older",
+      shortcut: "/o",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const target = makeSnippet({
+      label: "Target",
+      shortcut: "/t",
+      updatedAt: "2026-06-01T00:00:00.000Z",
+    });
+    await seedAndReload(popupPage, [older, target]);
+
+    // The sidebar lists newest first, so the *older* snippet is at index 1.
+    await popupPage.getByTestId("snippet-list-item").nth(1).click();
+    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}`));
+
+    // Cold open straight at the target.
+    await popupPage.goto(
+      `chrome-extension://${extensionId}/popup.html#/snippet/${target.id}`
+    );
+    await popupPage.waitForLoadState("domcontentloaded");
+    await waitForPopupReady(popupPage);
+
+    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${target.id}`));
+  });
+
+  test("#/new is still left alone", async ({ popupPage }) => {
+    // The other guard. Without it the draft read resolved, startCreating() ran, and
+    // then getSnippets() replaced the route — so "Save selection" opened a form and
+    // then closed it, taking the pasted text with it.
+    const only = makeSnippet({ label: "Only", shortcut: "/o" });
+    await seedAndReload(popupPage, [only]);
+
+    await popupPage.getByTestId("add-snippet").click();
+    await expect(popupPage).toHaveURL(/#\/new$/);
+
+    await popupPage.reload();
+    await popupPage.waitForLoadState("domcontentloaded");
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.session.set({ __clipioPopupView__: "/new" });
+    });
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+
+    await expect(popupPage).toHaveURL(/#\/new$/);
+    await expect(popupPage.getByTestId("snippet-label-input")).toBeVisible();
+  });
+});
+
 test.describe("Popup — a new snippet's shortcut follows the trigger prefix", () => {
   /**
    * The setting is a free-text field, so a user can set it to anything. The default
@@ -287,6 +470,29 @@ test.describe("Popup — a new snippet's shortcut follows the trigger prefix", (
 
     await expect(popupPage.getByTestId("snippet-shortcut-input")).toHaveValue(
       ";"
+    );
+  });
+
+  test("prefills / when the prefix is explicitly the default", async ({
+    popupPage,
+  }) => {
+    // The shipped default, set *explicitly* rather than left absent. This is the
+    // case a user lands in after trying another prefix and switching back — and it
+    // is not covered by either neighbour: "absent" resolves to the item's default,
+    // and "blank" is coerced. An explicit "/" is a third path through
+    // `normaliseTriggerPrefix`, and it was the one untested.
+    await seedAndReload(popupPage, []);
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.local.set({ snippetPreviewPrefix: "/" });
+    });
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+
+    await popupPage.getByTestId("add-snippet").click();
+
+    await expect(popupPage.getByTestId("snippet-shortcut-input")).toHaveValue(
+      "/"
     );
   });
 

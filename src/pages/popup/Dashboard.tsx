@@ -49,6 +49,8 @@ import {
   dismissLoadError,
   dismissCreateError,
   findSnippet,
+  rememberSnippetView,
+  resolveInitialSnippet,
   setDraft,
   useSnippets,
 } from "@/store/snippets";
@@ -103,6 +105,10 @@ export default function Dashboard() {
 
   const selectSnippet = useCallback(
     (id: string) => {
+      // Recorded here rather than in the route, so a deep link is remembered too —
+      // the user did view it. Fire-and-forget: navigation must not wait on a
+      // storage write.
+      rememberSnippetView(id);
       void navigate({
         to: SNIPPET_ROUTE,
         params: { snippetId: id },
@@ -133,6 +139,7 @@ export default function Dashboard() {
   // another context, so a snippet deleted in the options page stayed in this list
   // with a delete button that would fail. One store, one owner, one event.
   const snippets = useSnippets((s) => s.snippets);
+  const lastViewedSnippetId = useSnippets((s) => s.lastViewedSnippetId);
   const searchQuery = useSearch((s) => s.query);
   const loading = useSnippets((s) => !s.isLoaded);
   const quotaWarning = useSnippets((s) => s.quotaWarning);
@@ -421,7 +428,8 @@ export default function Dashboard() {
   }, []);
 
   /**
-   * Land on something when the URL does not already say what to show.
+   * Land on something when the URL does not already say what to show: the last
+   * snippet viewed, falling back to the newest.
    *
    * A deep link like `#/snippet/abc` is a request for *that* snippet.
    * Auto-selecting the newest regardless would make every deep link open the
@@ -447,9 +455,19 @@ export default function Dashboard() {
     if (isCreating) return;
     if (autoSelected.current || snippets.length === 0) return;
     autoSelected.current = true;
-    const newest = selectNewest(snippets);
-    if (newest) selectSnippet(newest.id);
-  }, [snippets, selectedSnippetId, isCreating, selectSnippet]);
+    // Last viewed, falling back to newest. The fallback is load-bearing: the
+    // remembered snippet can be deleted from the options page, arrive deleted from
+    // another device's sync, or be replaced by an import, and a stale id must not
+    // leave the popup on a blank pane.
+    const initial = resolveInitialSnippet(snippets, lastViewedSnippetId);
+    if (initial) selectSnippet(initial.id);
+  }, [
+    snippets,
+    lastViewedSnippetId,
+    selectedSnippetId,
+    isCreating,
+    selectSnippet,
+  ]);
 
   // -------------------------------------------------------------------------
   // CRUD helpers

@@ -47,7 +47,8 @@ import {
   updateSnippet as updateSnippetInStorage,
   clearSyncDataLostFlag,
 } from "@/storage";
-import { syncDataLostItem } from "@/storage/items";
+import { lastViewedSnippetIdItem, syncDataLostItem } from "@/storage/items";
+import { selectNewest } from "@/lib/snippet-utils";
 import { captureError } from "@/lib/sentry";
 import { i18n } from "#i18n";
 
@@ -66,6 +67,13 @@ export type SnippetsState = {
   isSaving: boolean;
   /** Why the last create failed, or `null`. Rendered inside the create form. */
   createError: string | null;
+  /**
+   * The id of the snippet last shown, or `null`.
+   *
+   * Remembered so reopening the popup resumes where the user left off. `null`
+   * means nothing remembered — a first run, or a library that has been cleared.
+   */
+  lastViewedSnippetId: string | null;
   /**
    * The library.
    *
@@ -111,6 +119,7 @@ export const EMPTY_DRAFT: SnippetsState["draft"] = {
 
 export const snippetsStore = createStore<SnippetsState>({
   draft: { ...EMPTY_DRAFT },
+  lastViewedSnippetId: null,
   isSaving: false,
   createError: null,
   snippets: [],
@@ -193,11 +202,18 @@ export async function loadSnippets(): Promise<void> {
   const { isStale } = takeTicket();
 
   try {
-    const list = await getSnippetsFromStorage();
+    // Read alongside the library rather than in a second effect: the remembered id
+    // is only meaningful against the library it came from, and a separate read
+    // could resolve after a newer load and revive a stale id.
+    const [list, lastViewedSnippetId] = await Promise.all([
+      getSnippetsFromStorage(),
+      lastViewedSnippetIdItem.getValue(),
+    ]);
     if (isStale()) return;
     snippetsStore.setState((prev) => ({
       ...prev,
       snippets: list,
+      lastViewedSnippetId: lastViewedSnippetId ?? null,
       // Set on success and on failure alike. A library that has arrived is loaded;
       // leaving this false would keep the dashboard spinning over content it
       // already has.
@@ -234,11 +250,18 @@ export async function loadSnippets(): Promise<void> {
 export async function refreshSnippets(): Promise<void> {
   const { isStale } = takeTicket();
   try {
-    const list = await getSnippetsFromStorage();
+    // Read alongside the library rather than in a second effect: the remembered id
+    // is only meaningful against the library it came from, and a separate read
+    // could resolve after a newer load and revive a stale id.
+    const [list, lastViewedSnippetId] = await Promise.all([
+      getSnippetsFromStorage(),
+      lastViewedSnippetIdItem.getValue(),
+    ]);
     if (isStale()) return;
     snippetsStore.setState((prev) => ({
       ...prev,
       snippets: list,
+      lastViewedSnippetId: lastViewedSnippetId ?? null,
       isLoaded: true,
     }));
   } catch (error) {
@@ -720,6 +743,52 @@ export function dismissRecoveryError(): void {
  * and the object in `snippets` — two inputs, one answer, computed on read. See
  * the note at the top of this file.
  */
+/**
+ * Which snippet the popup should open when the URL does not say.
+ *
+ * The last one viewed, if it is still there; otherwise the newest. The fallback is
+ * not a nicety: a snippet can be deleted from the options page, arrive deleted
+ * from another device's sync, or be replaced by an import — and a remembered id that
+ * no longer resolves must not leave the popup on a blank pane.
+ *
+ * `null` only for an empty library, which the caller treats as "show the empty
+ * state" rather than "navigate somewhere".
+ *
+ * A pure function because this decides what a user sees on *every* popup open, and
+ * it has three inputs that can disagree.
+ */
+export function resolveInitialSnippet(
+  snippets: readonly Snippet[],
+  lastViewedSnippetId: string | null
+): Snippet | null {
+  if (lastViewedSnippetId) {
+    const remembered = snippets.find((s) => s.id === lastViewedSnippetId);
+    if (remembered) return remembered;
+  }
+  // `selectNewest` takes a mutable array and does not mutate it; the copy is
+  // so that cannot change under us.
+  return selectNewest([...snippets]);
+}
+
+/**
+ * Record that a snippet was shown.
+ *
+ * Fire-and-forget, and deliberately not awaited by callers: this runs on every
+ * selection *including* the auto-selection on open, and a navigation should never
+ * wait on a storage write. A failure is reported once, and the next open simply
+ * falls back to newest.
+ */
+export function rememberSnippetView(snippetId: string): void {
+  if (snippetsStore.state.lastViewedSnippetId === snippetId) return;
+  snippetsStore.setState((prev) => ({
+    ...prev,
+    lastViewedSnippetId: snippetId,
+  }));
+  lastViewedSnippetIdItem.setValue(snippetId).catch((error: unknown) => {
+    captureError(error, { action: "snippets.rememberView", snippetId });
+  });
+}
+
 export function findSnippet(
   snippets: readonly Snippet[],
   snippetId: string | null
@@ -743,6 +812,7 @@ export function resetSnippetsStoreForTests(): void {
   readTicket++;
   snippetsStore.setState(() => ({
     draft: { ...EMPTY_DRAFT },
+    lastViewedSnippetId: null,
     isSaving: false,
     createError: null,
     snippets: [],

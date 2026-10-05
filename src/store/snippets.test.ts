@@ -17,6 +17,8 @@ import {
   dismissCreateError,
   findSnippet,
   isWriteRefusal,
+  rememberSnippetView,
+  resolveInitialSnippet,
   setDraft,
   refreshSnippets,
   resetSnippetsStoreForTests,
@@ -62,12 +64,16 @@ vi.mock("@/storage", () => storage);
 
 vi.mock("@/storage/items", () => ({
   syncDataLostItem: { getValue: vi.fn(async () => false) },
+  lastViewedSnippetIdItem: {
+    getValue: vi.fn(async () => null),
+    setValue: vi.fn(async () => {}),
+  },
 }));
 
 vi.mock("@/lib/sentry", () => ({ captureError: vi.fn() }));
 
 import { captureError } from "@/lib/sentry";
-import { syncDataLostItem } from "@/storage/items";
+import { lastViewedSnippetIdItem, syncDataLostItem } from "@/storage/items";
 import {
   emitStorageChange,
   resetBrowserMocks,
@@ -928,5 +934,100 @@ describe("creating a snippet", () => {
 
     expect(rowsFor("e1")).toBe(1);
     expect(state().snippets[0].label).toBe("After");
+  });
+});
+
+/**
+ * What the popup opens on when the URL does not say.
+ *
+ * This decides what a user sees on *every* popup open, so each branch is pinned —
+ * including the stale-id case, which is the one that leaves a blank pane.
+ */
+describe("resolveInitialSnippet", () => {
+  const OLDEST = makeSnippet({
+    id: "old",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
+  const NEWEST = makeSnippet({
+    id: "new",
+    updatedAt: "2026-12-01T00:00:00.000Z",
+  });
+  const MIDDLE = makeSnippet({
+    id: "mid",
+    updatedAt: "2026-06-01T00:00:00.000Z",
+  });
+  const LIBRARY = [MIDDLE, OLDEST, NEWEST];
+
+  it("opens the last viewed snippet", () => {
+    expect(resolveInitialSnippet(LIBRARY, "old")?.id).toBe("old");
+  });
+
+  it("prefers the last viewed over the newest", () => {
+    // The whole point. Without this the feature changes nothing.
+    expect(resolveInitialSnippet(LIBRARY, "mid")?.id).toBe("mid");
+  });
+
+  it("falls back to the newest when nothing is remembered", () => {
+    expect(resolveInitialSnippet(LIBRARY, null)?.id).toBe("new");
+  });
+
+  it("falls back to the newest when the remembered snippet is gone", () => {
+    // The branch that keeps a blank pane from appearing. The snippet can be
+    // deleted from the options page, arrive deleted from another device's sync, or
+    // be replaced by an import — and a stale id resolves to nothing.
+    expect(resolveInitialSnippet(LIBRARY, "deleted-elsewhere")?.id).toBe("new");
+  });
+
+  it("returns null for an empty library", () => {
+    // Not a snippet: the caller shows the empty state rather than navigating.
+    expect(resolveInitialSnippet([], "old")).toBeNull();
+    expect(resolveInitialSnippet([], null)).toBeNull();
+  });
+
+  it("returns null when the remembered snippet is gone and the library is empty", () => {
+    expect(resolveInitialSnippet([], "deleted-elsewhere")).toBeNull();
+  });
+
+  it("does not mutate the library it was given", () => {
+    // `selectNewest` sorts; the store's own array must not come back reordered.
+    const source = [MIDDLE, OLDEST, NEWEST];
+    resolveInitialSnippet(source, null);
+    expect(source.map((s) => s.id)).toEqual(["mid", "old", "new"]);
+  });
+});
+
+describe("rememberSnippetView", () => {
+  beforeEach(() => {
+    vi.mocked(lastViewedSnippetIdItem.setValue).mockClear();
+  });
+
+  it("records the id in state and in storage", () => {
+    rememberSnippetView("s1");
+    expect(state().lastViewedSnippetId).toBe("s1");
+    expect(lastViewedSnippetIdItem.setValue).toHaveBeenCalledWith("s1");
+  });
+
+  it("does not rewrite storage when the id has not changed", () => {
+    // It runs on every selection, including the auto-selection on open — which
+    // selects the same snippet on every open. Writing that back each time would
+    // be a storage write per popup open for no reason.
+    rememberSnippetView("s1");
+    vi.mocked(lastViewedSnippetIdItem.setValue).mockClear();
+
+    rememberSnippetView("s1");
+
+    expect(lastViewedSnippetIdItem.setValue).not.toHaveBeenCalled();
+  });
+
+  it("keeps the recorded id when the write fails", () => {
+    // The next open falls back to newest, which is a mild surprise rather than a
+    // broken popup — but the in-memory value should not be rolled back, because
+    // the user *did* view it.
+    vi.mocked(lastViewedSnippetIdItem.setValue).mockRejectedValue(
+      new Error("quota")
+    );
+
+    expect(() => rememberSnippetView("s1")).not.toThrow();
+    expect(state().lastViewedSnippetId).toBe("s1");
   });
 });

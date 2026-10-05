@@ -94,6 +94,9 @@ const EXPECTED: Record<string, unknown> = {
   // Whether that sidebar is expanded. Persisted so a deliberate collapse survives
   // the next popup open.
   "local:sidebarOpen": true,
+  // The snippet last open in the popup, so reopening resumes there. `null` means
+  // nothing remembered yet — which is also what a cleared library looks like.
+  "local:lastViewedSnippetId": null,
 };
 
 describe("storage items — keys", () => {
