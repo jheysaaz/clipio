@@ -28,7 +28,7 @@ let localStore: Record<string, unknown> = {};
 //
 // WHY THIS EXISTS
 //
-// `src/state/snippets.ts` subscribes to `browser.storage.onChanged` so a
+// `src/store/snippets.ts` subscribes to `browser.storage.onChanged` so a
 // snippet added or deleted in another context reaches an open popup. Without an
 // event here, that whole subscription is unreachable from a test — the mock
 // would accept the `addListener` call and never fire, and the listener would be

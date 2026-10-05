@@ -16,8 +16,8 @@ import {
   useEditorSelection,
   useOverlayFlag,
   type EditorRange,
-} from "@/state/editor-selection";
-import { editorMediaStore, useEditorMedia } from "@/state/editor-media";
+} from "@/store/editor-selection";
+import { editorMediaStore, useEditorMedia } from "@/store/editor-media";
 import {
   BoldPlugin,
   ItalicPlugin,
@@ -92,7 +92,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
   ) {
     const initialValueRef = useRef(value);
     const isExternalUpdate = useRef(false);
-    // Overlay visibility lives in `@/state/editor-selection` as one field, so two
+    // Overlay visibility lives in `@/store/editor-selection` as one field, so two
     // overlays being open is not representable. With three `useState` booleans
     // nothing stopped the GIF picker opening over the image picker — two floating
     // panels competing for the same Escape key and the same saved range.
@@ -135,7 +135,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
       }));
     // Track slash context when image/gif is triggered from slash menu
 
-    // Picker ranges live in `@/state/editor-media`: where an open picker inserts,
+    // Picker ranges live in `@/store/editor-media`: where an open picker inserts,
     // kept separate per picker so closing one does not discard the other's.
     const gifPickerRange = useEditorMedia((s) => s.gifPickerRange);
     const imagePickerRange = useEditorMedia((s) => s.imagePickerRange);

@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { SettingRow } from "./SettingRow";
 import { ShortcutRecorder } from "./ShortcutRecorder";
-import { setThemeMode } from "@/state/settings";
+import { setThemeMode } from "@/store/settings";
 import type { SettingEntry } from "./registry";
 import { captureError } from "@/lib/sentry";
 import { i18n } from "#i18n";

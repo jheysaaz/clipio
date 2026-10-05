@@ -47,8 +47,8 @@ import {
   findSnippet,
   setDraft,
   useSnippets,
-} from "@/state/snippets";
-import { setSearchQuery, useSearch, useVisibleSnippets } from "@/state/search";
+} from "@/store/snippets";
+import { setSearchQuery, useSearch, useVisibleSnippets } from "@/store/search";
 import { WarningBanner } from "@/components/ui/warning-banner";
 import {
   contextMenuDraftItem,
@@ -64,7 +64,7 @@ import {
   setSidebarWidthToMax,
   setSidebarWidthToMin,
   useSidebarWidth,
-} from "@/state/sidebar";
+} from "@/store/sidebar";
 import { openReleasePage } from "@/lib/update-checker";
 import {
   LIST_ROUTE,
@@ -108,7 +108,7 @@ export default function Dashboard() {
     void navigate({ to: NEW_ROUTE, replace: true });
   }, [navigate]);
 
-  // The create form and the delete confirmation live in `@/state/snippets`. The
+  // The create form and the delete confirmation live in `@/store/snippets`. The
   // draft in particular is not really the component's: it is filled from a
   // context-menu selection *before* the create view mounts, and the pasted text has
   // to survive the route moving to `#/new`. Component state started empty every
@@ -120,7 +120,7 @@ export default function Dashboard() {
   const setPendingSnippet = requestSnippetDelete;
 
   // The library, its load state, the storage warnings and the recovery banner all
-  // live in `src/state/snippets.ts`. They used to be eight `useState` calls here,
+  // live in `src/store/snippets.ts`. They used to be eight `useState` calls here,
   // set from five separate effects — and nothing listened for changes made in
   // another context, so a snippet deleted in the options page stayed in this list
   // with a delete button that would fail. One store, one owner, one event.

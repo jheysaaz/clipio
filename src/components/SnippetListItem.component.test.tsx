@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import SnippetListItem from "./SnippetListItem";
 import type { Snippet } from "@/types";
 import { TIMING } from "@/config/constants";
-import { SnippetWriteRefused } from "@/state/snippets";
+import { SnippetWriteRefused } from "@/store/snippets";
 import { captureError } from "@/lib/sentry";
 
 const snippet: Snippet = {

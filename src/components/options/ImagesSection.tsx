@@ -21,7 +21,7 @@ import {
   setViewMode,
   totalMediaBytes,
   useMedia,
-} from "@/state/media";
+} from "@/store/media";
 import { i18n } from "#i18n";
 
 export function ImagesSection() {

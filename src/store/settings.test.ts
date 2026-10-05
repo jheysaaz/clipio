@@ -4,7 +4,7 @@
  * These are new coverage rather than moved coverage. `src/hooks/**` is on the
  * vitest exclusion list, so `ThemeProvider` and `FontProvider` shipped with no
  * unit tests at all — only e2e assertions that the options page renders. The
- * store is in `src/state/**`, which is measured, so what is covered here is the
+ * store is in `src/store/**`, which is measured, so what is covered here is the
  * behaviour that was previously untestable: the legacy-theme fallback, the
  * corrupt-font self-heal, and the guard that stops the store overwriting a saved
  * theme before it has read it.

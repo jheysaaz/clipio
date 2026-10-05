@@ -9,7 +9,7 @@ import {
   optionsHistory,
   routeTree,
 } from "@/routes/options";
-import "@/state/settings";
+import "@/store/settings";
 import { initSentry, captureError } from "@/lib/sentry";
 import { Toaster } from "@/components/ui/toaster";
 import { i18n } from "#i18n";

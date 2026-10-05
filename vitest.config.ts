@@ -100,7 +100,7 @@ export default defineConfig({
         // Test scaffolding
         "src/**/__mocks__/**",
         // NOTE: `src/hooks/**` was excluded here while ThemeContext and
-        // FontContext lived there. Both were replaced by `src/state/settings.ts`
+        // FontContext lived there. Both were replaced by `src/store/settings.ts`
         // in Phase 4a and the directory no longer exists. The entry was removed
         // rather than left to rot, because this file's own comment on the editor
         // exclusion calls a glob that quietly stops matching "worse than a longer

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { Snippet } from "@/types";
 import { cn } from "@/lib/utils";
 import { TIMING } from "@/config/constants";
-import { isWriteRefusal } from "@/state/snippets";
+import { isWriteRefusal } from "@/store/snippets";
 import { captureError } from "@/lib/sentry";
 import { i18n } from "#i18n";
 import { toast } from "sonner";

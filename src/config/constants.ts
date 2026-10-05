@@ -146,7 +146,7 @@ export const ONBOARDING_SUPPORTED_LOCALES = ["en", "es"] as const;
  * Popup sidebar geometry.
  *
  * In `constants.ts` rather than in the component so the clamp that enforces them
- * lives next to them — see `src/state/sidebar.ts`.
+ * lives next to them — see `src/store/sidebar.ts`.
  */
 export const SIDEBAR_MIN_WIDTH = 120;
 export const SIDEBAR_MAX_WIDTH = 240;

@@ -22,6 +22,7 @@ import {
   SIDEBAR_MIN_WIDTH,
 } from "@/config/constants";
 import { sidebarWidthItem } from "@/storage/items";
+import { effectOn } from "./effect";
 import { captureError } from "@/lib/sentry";
 
 /** Clamp a width into the range the resizer enforces. */
@@ -98,7 +99,37 @@ export function setSidebarWidthToMax(): void {
   setSidebarWidth(SIDEBAR_MAX_WIDTH);
 }
 
-// Persist. Deliberately not torn down — the store lives as long as the document.
+// ---------------------------------------------------------------------------
+// Persist
+// ---------------------------------------------------------------------------
+
+/**
+ * Write the width when it changes.
+ *
+ * **This was missing entirely** in the first version of this module. It loaded the
+ * stored width, clamped a self-heal back into storage, and watched for changes made
+ * elsewhere — but nothing ever wrote a user's resize. So the width appeared to work
+ * while the popup was open and was forgotten the moment it closed, which is the
+ * exact symptom this module was supposed to fix. A store with a watcher and no
+ * writer reads as persistence and is not.
+ *
+ * Guarded on `isLoaded` for the same reason as the theme in `settings.ts`: without
+ * it this runs once on registration and writes the default straight over a saved
+ * value before the read lands.
+ */
+effectOn(sidebarStore, ["width", "isLoaded"], ({ width, isLoaded }) => {
+  // `isLoaded` is the load-bearing guard, and the reason this is not just "write
+  // on every change": the effect also runs once on registration, so without it
+  // this would write the default straight over a saved value before the read
+  // lands. Verified by the test that holds the read open.
+  if (!isLoaded) return;
+  // A storage failure must not stop the resize working — the store is already
+  // painted. Warn and carry on, as the settings store does.
+  sidebarWidthItem.setValue(width).catch(console.warn);
+});
+
+// A change made in another document. Deliberately not torn down — the store lives
+// as long as the document does, and the document going away is what ends it.
 sidebarWidthItem.watch((stored) => {
   const width = clampSidebarWidth(stored);
   if (width === sidebarStore.state.width) return;

@@ -8,7 +8,7 @@ import { RouterProvider, createRouter } from "@tanstack/react-router";
 // FontProvider + ThemeProvider pair this tree used to be wrapped in — there is no
 // provider to wrap in any more.
 import { popupHistory, popupRouteTree } from "@/routes/popup";
-import "@/state/settings";
+import "@/store/settings";
 import { initSentry, captureError } from "@/lib/sentry";
 import { Toaster } from "@/components/ui/toaster";
 

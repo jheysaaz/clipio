@@ -134,7 +134,7 @@ much further.
 ### 5. The coverage ratchet applies to everything we add
 
 `vitest.config.ts` has `thresholds.perFile: true` at a flat 80 on all four
-metrics. New `src/state/**`, `src/routes/**`, `src/lib/setting-index.ts` are
+metrics. New `src/store/**`, `src/routes/**`, `src/lib/setting-index.ts` are
 all **in** the denominator. Only `src/hooks/**`, `src/pages/**`,
 `src/components/options/**` and `src/entrypoints/**` are excluded today. So the
 new stores and route modules need real unit tests, and route files — which are
@@ -339,13 +339,13 @@ blast radius:
 
 | Cluster | Slices | Destination |
 |---|---|---|
-| `Dashboard.tsx` | 25 | `src/state/snippets.ts` |
-| `RichTextEditor.tsx` | 28 | `src/state/editor.ts` |
-| `ImportWizard.tsx` | 20 | `src/state/import.ts` |
-| `SnippetDetailView.tsx` | 13 | `src/state/snippets.ts` |
-| `ImagesSection.tsx` | 11 | `src/state/media.ts` |
+| `Dashboard.tsx` | 25 | `src/store/snippets.ts` |
+| `RichTextEditor.tsx` | 28 | `src/store/editor-selection.ts` + `editor-media.ts` |
+| `ImportWizard.tsx` | 20 | `src/store/import.ts` |
+| `SnippetDetailView.tsx` | 13 | `src/store/snippets.ts` |
+| `ImagesSection.tsx` | 11 | `src/store/media.ts` |
 | `NewSnippetView.tsx`, `ImagePicker`, `GifPicker`, `BlockedSitesPanel`, `DebugLogPanel`, `AboutPanel` | 4–9 each | per-feature stores |
-| `ThemeContext` / `FontContext` | 2 providers | `src/state/settings.ts` |
+| `ThemeContext` / `FontContext` | 2 providers | `src/store/settings.ts` |
 
 This is the largest phase by a wide margin. It gets split into **four PRs**, one
 per cluster group, so review stays tractable and a regression is bisectable:
@@ -359,7 +359,7 @@ per cluster group, so review stays tractable and a regression is bisectable:
 - **4d** `editor-selection.ts` + `editor-media.ts` — the Plate editor, split in two
   as decided below. **Done.** See the coverage warning.
 
-**Phase 4 is complete.** Nine store modules in `src/state/`, every one above the
+**Phase 4 is complete.** Nine store modules in `src/store/`, every one above the
 flat-80 ratchet on all four metrics. `ImagesSection.tsx` and `RichTextEditor.tsx`
 hold no `useState` at all; `Dashboard.tsx` holds two and `ImportWizard.tsx` two,
 all four deliberately local (see "Deliberately left as component state").
@@ -368,10 +368,10 @@ all four deliberately local (see "Deliberately left as component state").
 
 This is the one thing in the plan I want a decision on before starting.
 
-`RichTextEditor.tsx` is on the explicit exclusion list in `vitest.config.ts:54`
+`RichTextEditor.tsx` is on the explicit exclusion list in `vitest.config.ts`
 — it is excluded *as a file*. Lifting its 28 slices into a new
-`src/state/editor.ts` moves that code **into the denominator**, because
-`src/state/**` is not excluded and the ratchet is `perFile: true` at a flat 80.
+`src/store/editor-*.ts` moves that code **into the denominator**, because
+`src/store/**` is not excluded and the ratchet is `perFile: true` at a flat 80.
 
 So the sweep does not just relocate excluded code — it **promotes** it to
 measured, and Plate/Slate editor state is branch-heavy and awkward to test
@@ -392,16 +392,16 @@ this pass.**
 ### The rest of the shape
 
 ```
-src/state/settings.ts         theme, uiFont (replaces both contexts)
-src/state/sidebar.ts          popup sidebar width, persisted and clamped
-src/state/snippets.ts         library, selection, CRUD, quota + sync warnings,
+src/store/settings.ts         theme, uiFont (replaces both contexts)
+src/store/sidebar.ts          popup sidebar width, persisted and clamped
+src/store/snippets.ts         library, selection, CRUD, quota + sync warnings,
                               create form, recovery, live cross-context sync
-src/state/search.ts           popup query and the visible list
-src/state/media.ts            media library, alt text, delete confirmation
-src/state/import.ts           the wizard's step machine and its decisions
-src/state/editor-selection.ts overlay state, caret context, slash-menu handoff
-src/state/editor-media.ts     picker ranges and the upload error
-src/state/effect.ts           the effect primitive the above are built on
+src/store/search.ts           popup query and the visible list
+src/store/media.ts            media library, alt text, delete confirmation
+src/store/import.ts           the wizard's step machine and its decisions
+src/store/editor-selection.ts overlay state, caret context, slash-menu handoff
+src/store/editor-media.ts     picker ranges and the upload error
+src/store/effect.ts           the effect primitive the above are built on
 ```
 
 No `index.ts`: the wiring proved unnecessary. Each store loads its own dependencies,
@@ -462,7 +462,7 @@ branches. **The threshold was not lowered** — the missing branches were the
   the same store is the entire point; a `ImportWizardStepState` store that only
   the wizard reads is just `useState` with extra ceremony.
 
-**Coverage** — every `src/state/**` file is in the denominator at 80 per-file.
+**Coverage** — every `src/store/**` file is in the denominator at 80 per-file.
 They are thin, and Derived/Effect logic is testable in plain Node without a
 renderer, so this should be comfortable rather than a fight.
 
@@ -650,7 +650,7 @@ Recorded because each contradicts something this plan asserted.
 
 - **`@tanstack/store@0.11.2` ships no `Effect` and no `Derived`.** Both were
   assumed above. The real surface is `Store` (`setState` / `get` / `subscribe`),
-  `createAtom`, and the React bindings. `src/state/effect.ts` implements the
+  `createAtom`, and the React bindings. `src/store/effect.ts` implements the
   run-once-then-on-change contract on `subscribe` — the primitive `Effect` was
   built on — with the same signature, so swapping the real one in later is a
   one-line change. Derived values need `createAtom`.

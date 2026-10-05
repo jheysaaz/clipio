@@ -24,7 +24,7 @@ const incrementSnippetUsage = vi.fn();
 vi.mock("@/lib/sentry", () => ({ captureError: vi.fn() }));
 
 import { captureError } from "@/lib/sentry";
-import { SnippetWriteRefused } from "@/state/snippets";
+import { SnippetWriteRefused } from "@/store/snippets";
 
 vi.mock("@/lib/copy-markdown-as-rich-text", () => ({
   copyMarkdownAsRichText: (...args: unknown[]) =>

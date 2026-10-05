@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import type { Snippet } from "@/types";
 import { InlineError } from "@/components/ui/inline-error";
 import { getRelativeTime } from "@/lib/date-utils";
-import { isWriteRefusal } from "@/state/snippets";
+import { isWriteRefusal } from "@/store/snippets";
 import {
   getSnippetUsageCount,
   incrementSnippetUsage,

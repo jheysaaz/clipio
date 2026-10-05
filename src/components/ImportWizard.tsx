@@ -54,7 +54,7 @@ import {
   useImport,
   willExceedQuota,
   type WizardStep,
-} from "@/state/import";
+} from "@/store/import";
 import { SYNC_QUOTA } from "@/config/constants";
 import { captureError, captureMessage } from "@/lib/sentry";
 import { i18n } from "#i18n";
@@ -307,7 +307,7 @@ export default function ImportWizard({
   // ---------------------------------------------------------------------------
   // Step navigation
   //
-  // The routing itself is in `@/state/import` — which step comes next, what the
+  // The routing itself is in `@/store/import` — which step comes next, what the
   // rows are seeded with, and which snippet list each step is talking about. That
   // is where the decisions that can silently overwrite or mangle a snippet live,
   // and they were unreachable from a test while they lived here.
