@@ -10,6 +10,7 @@
  */
 
 import { storage } from "wxt/utils/storage";
+import { DEFAULT_SIDEBAR_WIDTH } from "@/config/constants";
 import type { Snippet } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -99,6 +100,26 @@ import { DEFAULT_UI_FONT } from "@/lib/ui-font";
 export const uiFontItem = storage.defineItem<UiFont>("local:uiFont", {
   defaultValue: DEFAULT_UI_FONT,
 });
+
+// ---------------------------------------------------------------------------
+// Popup layout
+// ---------------------------------------------------------------------------
+
+/**
+ * The popup sidebar's width, in pixels.
+ *
+ * Persisted so the resize survives a popup closing — which it does on every blur,
+ * so "without this it resets constantly" is not a hypothetical. Clamped on read as
+ * well as on write, because the popup and the options page are different documents
+ * and a stale value from an older build could exceed the bounds the resizer
+ * enforces.
+ */
+export const sidebarWidthItem = storage.defineItem<number>(
+  "local:sidebarWidth",
+  {
+    defaultValue: DEFAULT_SIDEBAR_WIDTH,
+  }
+);
 
 // ---------------------------------------------------------------------------
 // Usage tracking

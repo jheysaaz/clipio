@@ -56,7 +56,15 @@ import {
   dismissedUpdateVersionItem,
 } from "@/storage/items";
 import { captureError } from "@/lib/sentry";
+import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "@/config/constants";
 import { selectNewest } from "@/lib/snippet-utils";
+import {
+  nudgeSidebarWidth,
+  setSidebarWidth,
+  setSidebarWidthToMax,
+  setSidebarWidthToMin,
+  useSidebarWidth,
+} from "@/state/sidebar";
 import { openReleasePage } from "@/lib/update-checker";
 import {
   LIST_ROUTE,
@@ -140,8 +148,13 @@ export default function Dashboard() {
   );
 
   const createError = useSnippets((s) => s.createError);
+  // The sidebar's *open* state is local to this popup — a collapsed sidebar is not
+  // worth remembering, and it should start expanded every time.
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarWidth, setSidebarWidth] = useState(240);
+  // The width is persisted, because a popup closes on every blur: as component
+  // state it reset constantly, so dragging the divider and clicking back into the
+  // page lost the size.
+  const sidebarWidth = useSidebarWidth((s) => s.width);
   const [updateRelease, setUpdateRelease] = useState<{
     version: string;
     htmlUrl: string;
@@ -156,14 +169,11 @@ export default function Dashboard() {
   // Sidebar resize
   // -------------------------------------------------------------------------
 
-  const SIDEBAR_MIN_WIDTH = 120;
-  const SIDEBAR_MAX_WIDTH = 240;
-
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing.current) return;
-    setSidebarWidth(
-      Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, e.clientX))
-    );
+    // The clamp lives in the store, so a drag cannot leave the divider somewhere
+    // the keyboard resize cannot reach.
+    setSidebarWidth(e.clientX);
   }, []);
 
   const handleMouseUp = useCallback(() => {
@@ -186,19 +196,19 @@ export default function Dashboard() {
     switch (e.key) {
       case "ArrowLeft":
         e.preventDefault();
-        setSidebarWidth((w) => Math.max(SIDEBAR_MIN_WIDTH, w - step));
+        nudgeSidebarWidth(-step);
         break;
       case "ArrowRight":
         e.preventDefault();
-        setSidebarWidth((w) => Math.min(SIDEBAR_MAX_WIDTH, w + step));
+        nudgeSidebarWidth(step);
         break;
       case "Home":
         e.preventDefault();
-        setSidebarWidth(SIDEBAR_MIN_WIDTH);
+        setSidebarWidthToMin();
         break;
       case "End":
         e.preventDefault();
-        setSidebarWidth(SIDEBAR_MAX_WIDTH);
+        setSidebarWidthToMax();
         break;
     }
   }, []);

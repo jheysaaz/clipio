@@ -142,6 +142,16 @@ export const REVIEW_ERROR_SNOOZE_HOURS = 24 as const;
 export const ONBOARDING_SUPPORTED_LOCALES = ["en", "es"] as const;
 
 /** Context-menu item IDs. */
+/**
+ * Popup sidebar geometry.
+ *
+ * In `constants.ts` rather than in the component so the clamp that enforces them
+ * lives next to them — see `src/state/sidebar.ts`.
+ */
+export const SIDEBAR_MIN_WIDTH = 120;
+export const SIDEBAR_MAX_WIDTH = 240;
+export const DEFAULT_SIDEBAR_WIDTH = SIDEBAR_MAX_WIDTH;
+
 export const CONTEXT_MENU = {
   PARENT: "clipio-parent",
   SAVE_SELECTION: "clipio-save-selection",
