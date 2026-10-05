@@ -25,6 +25,16 @@ import { updateContentScriptCache } from "@/storage/backends/local";
 import { storageManager } from "@/storage";
 import { checkForUpdate, openReleasePage } from "@/lib/update-checker";
 import { addBlockedSite } from "@/lib/blocked-sites";
+import {
+  FEEDBACK_ROUTE,
+  resolveContextMenuAction,
+  type ContextMenuAction,
+} from "@/lib/context-menu";
+import {
+  needsCacheRefresh,
+  readSyncChange,
+  type StorageChanges,
+} from "@/lib/sync-change";
 import { debugLog } from "@/lib/debug";
 import {
   shouldShowReviewPrompt,
@@ -32,7 +42,6 @@ import {
   getStoreReviewUrl,
 } from "@/lib/review-prompt";
 
-const SNIPPET_PREFIX = "snip:";
 const DEV_QA_OPENED_KEY = "__clipioDevQaOpened__";
 const DEV_QA_URL = "http://localhost:7777/manual-qa.html";
 const CONTEXT_MENU_DRAFT_SESSION_KEY = "__clipioContextMenuDraft__";
@@ -389,20 +398,46 @@ export default defineBackground(() => {
   // ---------------------------------------------------------------------------
   // Context-menu click handler
   // ---------------------------------------------------------------------------
+  /**
+   * Run what a context-menu click means.
+   *
+   * The routing is `resolveContextMenuAction`; this is the doing. Split so the
+   * table can be asserted exhaustively — it is a file nothing measured until now,
+   * and one of its branches had already shipped broken.
+   */
   browser.contextMenus.onClicked.addListener(async (info) => {
-    switch (info.menuItemId) {
-      case CONTEXT_MENU.SAVE_SELECTION: {
-        const selectedText = info.selectionText?.trim();
-        if (!selectedText) return;
+    let action: ContextMenuAction;
+    try {
+      action = resolveContextMenuAction({
+        // Chrome types `menuItemId` as `string | number`; the ids are strings, and
+        // a number cannot match any of them, so it resolves to `none` — which is
+        // the right answer for an id this build does not know.
+        menuItemId: String(info.menuItemId),
+        selectionText: info.selectionText,
+        pageUrl: info.pageUrl,
+      });
+    } catch (err) {
+      // Only `hide-on-site` throws, on an unparseable page URL. Reported rather
+      // than swallowed: the menu item would otherwise just never work, with no
+      // sign of why.
+      captureError(err, { action: "contextMenu.resolve" });
+      return;
+    }
+
+    switch (action.kind) {
+      case "none":
+        return;
+
+      case "save-selection": {
         try {
           // Stash the selected text so the popup can pre-fill the draft
-          await contextMenuDraftItem.setValue(selectedText);
+          await contextMenuDraftItem.setValue(action.text);
           await browser.storage.session.remove(CONTEXT_MENU_DRAFT_SESSION_KEY);
         } catch (err) {
           captureError(err, { action: "saveSelection.persistDraft" });
           try {
             await browser.storage.session.set({
-              [CONTEXT_MENU_DRAFT_SESSION_KEY]: selectedText,
+              [CONTEXT_MENU_DRAFT_SESSION_KEY]: action.text,
             });
           } catch (sessionErr) {
             captureError(sessionErr, { action: "saveSelection.sessionDraft" });
@@ -410,50 +445,41 @@ export default defineBackground(() => {
         }
 
         await openPopupOrFallback("saveSelection");
-        break;
+        return;
       }
 
-      case CONTEXT_MENU.CREATE_SNIPPET: {
+      case "create-snippet":
         await openPopupOrFallback("createSnippet");
-        break;
-      }
+        return;
 
-      case CONTEXT_MENU.OPEN_DASHBOARD: {
+      case "open-dashboard": {
         const optionsUrl = browser.runtime.getURL("/options.html");
         browser.tabs.create({ url: optionsUrl }).catch((err: unknown) => {
           captureError(err, { action: "openDashboard" });
         });
-        break;
+        return;
       }
 
-      case CONTEXT_MENU.GIVE_FEEDBACK: {
+      case "open-feedback": {
         const optionsUrl = browser.runtime.getURL("/options.html");
-        // A real route, not a legacy hash. `#feedback` was never a section id,
-        // so the options page rejected it and the user landed on Library — the
-        // link worked and arrived somewhere else. `legacyHashRedirect` still
-        // handles the old string for bookmarks; this stops producing new ones.
         browser.tabs
-          .create({
-            url: optionsUrl + "#/about/feedback",
-          })
+          .create({ url: optionsUrl + FEEDBACK_ROUTE })
           .catch((err: unknown) => {
             captureError(err, { action: "giveFeedback" });
           });
-        break;
+        return;
       }
 
-      case CONTEXT_MENU.HIDE_ON_SITE: {
-        const url = info.pageUrl;
-        if (!url) break;
+      case "hide-on-site": {
         try {
-          const hostname = new URL(url).hostname;
-          if (!hostname) break;
           const current = await blockedSitesItem.getValue();
-          await blockedSitesItem.setValue(addBlockedSite(current, hostname));
+          await blockedSitesItem.setValue(
+            addBlockedSite(current, action.hostname)
+          );
         } catch (err) {
           captureError(err, { action: "hideOnSite" });
         }
-        break;
+        return;
       }
     }
   });
@@ -499,12 +525,7 @@ export default defineBackground(() => {
 
   // ---------------------------------------------------------------------------
   browser.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "sync") return;
-
-    const snipChanges = Object.entries(changes).filter(([key]) =>
-      key.startsWith(SNIPPET_PREFIX)
-    );
-    if (snipChanges.length === 0) return;
+    const reading = readSyncChange(changes as StorageChanges, areaName);
 
     // -----------------------------------------------------------------------
     // Refresh the content-script cache when sync gains or changes a snippet.
@@ -523,31 +544,21 @@ export default defineBackground(() => {
     //
     // The background worker is the only context that both outlives a page and
     // can observe a sync-area change, so it is where this belongs.
-    const gainedOrChanged = snipChanges.some(
-      ([, change]) => change.newValue !== undefined
-    );
-    if (gainedOrChanged) {
+    if (needsCacheRefresh(reading)) {
       scheduleCacheRefreshFromSync();
     }
 
-    // If multiple snip: keys disappear at once it is almost certainly a
-    // browser sign-out (Chrome wipes storage.sync on account removal).
-    const removedSnipKeys = snipChanges.filter(
-      ([, change]) =>
-        change.oldValue !== undefined && change.newValue === undefined
-    );
+    if (!reading.likelySignOut) return;
 
-    if (removedSnipKeys.length >= 2) {
-      const msg = `[Clipio] ${
-        removedSnipKeys.length
-      } sync keys removed at once — possible sign-out`;
-      console.warn(msg);
-      captureMessage("Sync storage wipe detected", "warning", {
-        wipedKeyCount: removedSnipKeys.length,
-      });
-      syncDataLostItem.setValue(true).catch((err: unknown) => {
-        captureError(err, { action: "syncDataLostFlag" });
-      });
-    }
+    const msg = `[Clipio] ${
+      reading.removedKeys
+    } sync keys removed at once — possible sign-out`;
+    console.warn(msg);
+    captureMessage("Sync storage wipe detected", "warning", {
+      wipedKeyCount: reading.removedKeys,
+    });
+    syncDataLostItem.setValue(true).catch((err: unknown) => {
+      captureError(err, { action: "syncDataLostFlag" });
+    });
   });
 });

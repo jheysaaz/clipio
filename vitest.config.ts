@@ -41,7 +41,32 @@ export default defineConfig({
       // (AGENTS.md Testing Standards rule 11: no blanket excludes without
       // justification).
       exclude: [
-        // Thin entrypoint wiring — exercised end-to-end by Playwright specs
+        // Entrypoint wiring: listener registration, not logic.
+        //
+        // This exclusion previously read "Thin entrypoint wiring — exercised
+        // end-to-end by Playwright specs", and the second half was false. It was
+        // the stated justification for excluding `background.ts`, whose
+        // sign-out detector and context-menu routing table had no test anywhere —
+        // and one of those branches had already shipped broken ("Give feedback"
+        // pointed at `options.html#feedback`, never a section id, so the user
+        // landed on Library while every layer reported success).
+        //
+        // Both decisions have been extracted into `src/lib/` and are measured
+        // there: `sync-change.ts` and `context-menu.ts`. What remains here is
+        // registration and side effects.
+        //
+        // `content.ts` is the other half of this exclusion, and it is genuinely
+        // hard rather than thin: 1479 lines of timers, MutationObservers and DOM
+        // insertion. Its one piece of real logic — the check that decides whether
+        // an insertion landed, which gates confetti and the Sentry revert report
+        // — is already extracted, as `insertion-verification.ts`, and measured at
+        // well above the threshold.
+        //
+        // Un-excluding the directory is therefore not a matter of writing tests;
+        // it would put the flat-80 `perFile` ratchet behind listener wiring, and
+        // the pressure at the end of that is the pressure AGENTS.md forbids
+        // answering by lowering a threshold. Listed as one path so the exclusion
+        // is visible rather than inherited.
         "src/entrypoints/**",
         // Generic UI primitives — covered by e2e axe scans, not unit logic
         "src/components/ui/**",
