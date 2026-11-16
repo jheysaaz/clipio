@@ -6,7 +6,7 @@ Built with [WXT](https://wxt.dev), React 19, and Tailwind CSS v4. Available for 
 
 ## Requirements
 
-- [Node.js](https://nodejs.org) 24+
+- [Node.js](https://nodejs.org) 26+
 - [pnpm](https://pnpm.io) 10+
 
 ## Development

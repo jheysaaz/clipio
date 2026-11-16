@@ -20,19 +20,19 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: latest
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: "26"
           cache: "pnpm"
 
       - name: Install dependencies
@@ -48,9 +48,13 @@ jobs:
       - name: Run fast gate
         run: pnpm verify
 
+      # Composite, so it has no runtime of its own — but its PR-comment step is
+      # `actions/github-script@v7.0.1`, which does. v6 and v7 nest
+      # github-script@v8 instead. Bumping only the "real" actions left this
+      # warning behind on the Gate job.
       - name: Upload coverage to Codecov
         if: always()
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/coverage-final.json
@@ -60,7 +64,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage/
@@ -73,17 +77,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: latest
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: "26"
           cache: "pnpm"
 
       - name: Install dependencies
@@ -105,7 +109,7 @@ jobs:
 
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: playwright-report/
@@ -113,7 +117,7 @@ jobs:
 
       - name: Upload Playwright traces on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: test-results/
@@ -126,17 +130,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: latest
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: "26"
           cache: "pnpm"
 
       - name: Install dependencies
@@ -152,18 +156,27 @@ jobs:
         env:
           SENTRY_AUTH_TOKEN: ""
 
+      # `.output/` is hidden, and upload-artifact excludes hidden files by
+      # default. Without include-hidden-files these two steps have been
+      # uploading nothing since the zips moved under `.output/`, and said so
+      # only as a warning — the job stayed green with an artifact that did not
+      # exist. `if-no-files-found: error` is what makes that visible.
       - name: Upload Chrome ZIP artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: chrome-zip
           path: .output/*-chrome.zip
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 3
 
       - name: Upload Firefox ZIP artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: firefox-zip
           path: |
             .output/*-firefox.zip
             .output/*-sources.zip
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 3
