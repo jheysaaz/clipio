@@ -144,11 +144,16 @@ jobs:
       - name: List .output directory
         run: ls -la .output/
 
+      # `.output/` is a hidden directory, and upload-artifact v4.4+ excludes
+      # hidden files by default. Without this input the action reports "No
+      # files were found" for a zip that plainly exists, which is what killed
+      # the v1.6.0 and v1.6.1 releases.
       - name: Upload Chrome ZIP artifact
         uses: actions/upload-artifact@v4
         with:
           name: chrome-zip
           path: .output/*-chrome.zip
+          include-hidden-files: true
           retention-days: 7
           if-no-files-found: error
 
@@ -167,6 +172,7 @@ jobs:
           path: |
             .output/*-firefox.zip
             .output/*-sources.zip
+          include-hidden-files: true
           retention-days: 7
           if-no-files-found: error
 
@@ -205,8 +211,35 @@ jobs:
           name: firefox-zip
           path: .output/
 
+      # The release must not be hostage to store credentials: submitting is
+      # optional and, when the secrets are absent, the job says so and stops
+      # instead of failing a run whose GitHub release already succeeded.
+      - name: Check store credentials
+        id: creds
+        env:
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          FIREFOX_EXTENSION_ID: ${{ secrets.FIREFOX_EXTENSION_ID }}
+          FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
+          FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
+        run: |
+          missing=""
+          for name in CHROME_EXTENSION_ID CHROME_CLIENT_ID CHROME_CLIENT_SECRET \
+                      CHROME_REFRESH_TOKEN FIREFOX_EXTENSION_ID FIREFOX_JWT_ISSUER \
+                      FIREFOX_JWT_SECRET; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Store submission skipped — missing secrets:$missing"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Submit to stores (dry run)
-        if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
+        if: steps.creds.outputs.enabled == 'true' && github.event_name == 'workflow_dispatch' && inputs.dry_run == true
         run: |
           pnpm wxt submit --dry-run \
             --chrome-zip .output/*-chrome.zip \
@@ -222,7 +255,7 @@ jobs:
           FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
 
       - name: Submit to stores
-        if: github.event_name == 'push' || inputs.dry_run != true
+        if: steps.creds.outputs.enabled == 'true' && (github.event_name == 'push' || inputs.dry_run != true)
         run: |
           pnpm wxt submit \
             --chrome-zip .output/*-chrome.zip \

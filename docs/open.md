@@ -76,8 +76,18 @@ config change.
 
 ### Chrome / Firefox store credentials not yet configured
 
-Publishing is blocked on this. Unrelated to the v1.6.0 failure, which died in the
-E2E job before `Submit to Stores` ever ran.
+`Submit to Stores` is the only part of publishing blocked on this. The workflow
+now checks the seven secrets first and, when they are absent, skips submission
+with a notice instead of failing the run — so a tag cut without credentials still
+produces a GitHub release with the Chrome, Firefox and sources zips attached.
+
+Two tags never got that far. v1.6.0 died on a flaky e2e (`waitForEvent("page")`,
+removed later with the old About panel). v1.6.1 died on `upload-artifact`'s
+hidden-file default: `.output/` is a hidden directory and v4.4+ excludes hidden
+files, so the action reported "No files were found" for a zip that plainly
+existed. The release job now passes `include-hidden-files: true`. Both tags were
+released retroactively from their own commits; their artifacts were built from
+the tag, not from `main`.
 
 ---
 
