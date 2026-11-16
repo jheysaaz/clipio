@@ -48,9 +48,13 @@ jobs:
       - name: Run fast gate
         run: pnpm verify
 
+      # Composite, so it has no runtime of its own — but its PR-comment step is
+      # `actions/github-script@v7.0.1`, which does. v6 and v7 nest
+      # github-script@v8 instead. Bumping only the "real" actions left this
+      # warning behind on the Gate job.
       - name: Upload coverage to Codecov
         if: always()
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/coverage-final.json
