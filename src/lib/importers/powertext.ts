@@ -12,6 +12,8 @@
  *  - Plain text values    → stored verbatim (after placeholder substitution)
  */
 
+import powertextIconUrl from "~/assets/brands/powertext.png";
+
 import type { ParsedSnippet, FormatParser } from "./types";
 import { htmlToMarkdown } from "@/components/editor/serialization";
 
@@ -99,7 +101,11 @@ function maybeConvertHtml(raw: string): string | null {
 export const PowerTextParser: FormatParser = {
   id: "powertext",
   displayName: "Power Text",
-  iconUrl: "/icon/powertext.png",
+  // Bundled asset, not a `/icon/…` public path: Power Text is a third-party
+  // mark shown only inside our own options page, so it gets a content-hashed
+  // URL from the bundler and never appears in `web_accessible_resources`.
+  // See docs/decisions/0012-assets-own-vs-bundled.md.
+  iconUrl: powertextIconUrl,
 
   canParse(raw: unknown): boolean {
     if (raw === null || typeof raw !== "object" || Array.isArray(raw))

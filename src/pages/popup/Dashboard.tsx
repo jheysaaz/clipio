@@ -7,6 +7,12 @@ import {
   lazy,
   Suspense,
 } from "react";
+import {
+  useNavigate,
+  useRouterState,
+  useBlocker,
+  type ShouldBlockFn,
+} from "@tanstack/react-router";
 import { i18n } from "#i18n";
 import {
   Plus,
@@ -26,159 +32,282 @@ const NewSnippetView = lazy(() => import("~/components/NewSnippetView"));
 import { InlineError } from "@/components/ui/inline-error";
 import { toast } from "sonner";
 
-import type { Snippet, SnippetFormData } from "@/types";
-import { createSnippet } from "@/types";
-import { fuzzyMatchSnippets } from "@/lib/preview-helpers";
+import type { Snippet } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  getSnippets,
-  saveSnippet,
-  updateSnippet,
-  deleteSnippet,
-  getStorageStatus,
-  bulkSaveSnippets,
-  tryRecoverFromBackup,
-  clearSyncDataLostFlag,
-  StorageQuotaError,
-} from "@/storage";
+  initialiseSnippets,
+  addSnippet,
+  editSnippet,
+  removeSnippet,
+  restoreRecoveredSnippets,
+  dismissRecoveryBanner,
+  dismissRecoveryError,
+  dismissQuotaWarning,
+  dismissSyncPausedWarning,
+  dismissLoadError,
+  dismissCreateError,
+  findSnippet,
+  rememberSnippetView,
+  resolveInitialSnippet,
+  setDraft,
+  useSnippets,
+} from "@/store/snippets";
+import { setSearchQuery, useSearch, useVisibleSnippets } from "@/store/search";
 import { WarningBanner } from "@/components/ui/warning-banner";
 import {
-  syncDataLostItem,
   contextMenuDraftItem,
   latestVersionItem,
   dismissedUpdateVersionItem,
 } from "@/storage/items";
 import { captureError } from "@/lib/sentry";
+import {
+  POPUP_VIEW_SESSION_KEY,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+} from "@/config/constants";
 import { selectNewest } from "@/lib/snippet-utils";
+import { blankSnippetDraft } from "@/lib/trigger-prefix";
+import {
+  nudgeSidebarWidth,
+  setSidebarWidth,
+  setSidebarWidthToMax,
+  setSidebarWidthToMin,
+  useSidebarWidth,
+  setSidebarOpen as storeSetSidebarOpen,
+} from "@/store/sidebar";
 import { openReleasePage } from "@/lib/update-checker";
+import {
+  LIST_ROUTE,
+  NEW_ROUTE,
+  SNIPPET_ROUTE,
+  viewFromPath,
+} from "@/routes/popup";
 
 const CONTEXT_MENU_DRAFT_SESSION_KEY = "__clipioContextMenuDraft__";
 
-/**
- * Turn a `StorageQuotaError` into something the user can act on.
- *
- * `checkQuota` says which limit broke and by how much, so the message can name
- * it instead of saying "quota exceeded". Falls back to the generic copy when
- * the error came from the browser rather than the preflight, which is the one
- * case where we have no breakdown — and the case we want to hear about, so it is
- * also reported.
- */
-/** Bytes as KB, for the quota message. The limits are small enough that one
- *  decimal is enough to be useful and never enough to be misleading. */
-function formatBytes(bytes: number): string {
-  return `${(bytes / 1024).toFixed(1)} KB`;
-}
-
-function quotaMessage(error: StorageQuotaError): string {
-  const reasons = error.reasons;
-  if (!reasons || reasons.length === 0) {
-    captureError(error, { action: "quotaError.noReasons" });
-    return i18n.t("dashboard.errors.quotaExceeded");
-  }
-  const parts = reasons.map((reason) => {
-    if (reason.kind === "per-item") {
-      return i18n.t("dashboard.errors.quotaPerItem", [
-        formatBytes(reason.actual),
-        formatBytes(reason.limit),
-      ]);
-    }
-    if (reason.kind === "count") {
-      return i18n.t("dashboard.errors.quotaCount", [
-        String(reason.actual),
-        String(reason.limit),
-      ]);
-    }
-    return i18n.t("dashboard.errors.quotaTotal", [
-      formatBytes(reason.actual),
-      formatBytes(reason.limit),
-    ]);
-  });
-  return parts.join(" ");
-}
-
 export default function Dashboard() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
-  const [draftSnippet, setDraftSnippet] = useState<SnippetFormData>({
-    label: "",
-    shortcut: "",
-    content: "",
-    tags: [],
-  });
-  const [isSaving, setIsSaving] = useState(false);
-  const [snippets, setSnippets] = useState<Snippet[]>([]);
-  const [selectedSnippet, setSelectedSnippet] = useState<Snippet | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarWidth, setSidebarWidth] = useState(240);
-  const [quotaWarning, setQuotaWarning] = useState(false);
-  const [syncPausedWarning, setSyncPausedWarning] = useState(false);
+  const navigate = useNavigate();
 
-  const [recoverySnippets, setRecoverySnippets] = useState<Snippet[]>([]);
-  const [showRecoveryBanner, setShowRecoveryBanner] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  // Which snippet is selected, and whether the create form is open, are now the
+  // URL. That is what gives a selection an address: a future "open this specific
+  // snippet" — a context-menu entry, a notification, a keyboard shortcut — builds
+  // a location instead of inventing a side channel.
+  //
+  // `replace`, never `push`. The popup closes on blur, so a history entry is
+  // something the user can never use; growing `history.length` would only make a
+  // stray Back press worse.
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const view = viewFromPath(pathname);
+  const isCreating = view.kind === "new";
+  const selectedSnippetId = view.kind === "snippet" ? view.id : null;
+
+  const selectSnippet = useCallback(
+    (id: string) => {
+      // Recorded here rather than in the route, so a deep link is remembered too —
+      // the user did view it. Fire-and-forget: navigation must not wait on a
+      // storage write.
+      rememberSnippetView(id);
+      void navigate({
+        to: SNIPPET_ROUTE,
+        params: { snippetId: id },
+        replace: true,
+      });
+    },
+    [navigate]
+  );
+  const showList = useCallback(() => {
+    void navigate({ to: LIST_ROUTE, replace: true });
+  }, [navigate]);
+  const startCreating = useCallback(() => {
+    void navigate({ to: NEW_ROUTE, replace: true });
+  }, [navigate]);
+
+  // The create form and the delete confirmation live in `@/store/snippets`. The
+  // draft in particular is not really the component's: it is filled from a
+  // context-menu selection *before* the create view mounts, and the pasted text has
+  // to survive the route moving to `#/new`. Component state started empty every
+  // time, which is how "Save selection" could open a form with nothing in it.
+  const draftSnippet = useSnippets((s) => s.draft);
+  const setDraftSnippet = setDraft;
+  const isSaving = useSnippets((s) => s.isSaving);
+
+  // The library, its load state, the storage warnings and the recovery banner all
+  // live in `src/store/snippets.ts`. They used to be eight `useState` calls here,
+  // set from five separate effects — and nothing listened for changes made in
+  // another context, so a snippet deleted in the options page stayed in this list
+  // with a delete button that would fail. One store, one owner, one event.
+  const snippets = useSnippets((s) => s.snippets);
+  const lastViewedSnippetId = useSnippets((s) => s.lastViewedSnippetId);
+  const searchQuery = useSearch((s) => s.query);
+  const loading = useSnippets((s) => !s.isLoaded);
+  const quotaWarning = useSnippets((s) => s.quotaWarning);
+  const syncPausedWarning = useSnippets((s) => s.syncPausedWarning);
+  const recoverySnippets = useSnippets((s) => s.recoverySnippets);
+  const showRecoveryBanner = useSnippets((s) => s.showRecoveryBanner);
+  const loadError = useSnippets((s) => s.loadError);
+  const recoveryError = useSnippets((s) => s.recoveryError);
+
+  /**
+   * The selected snippet, looked up from the list.
+   *
+   * Derived rather than stored: the route holds the *id*, and the object lives in
+   * the store. Storing both meant two sources of truth, and an edit to the
+   * selected snippet had to be written back into a copy or the detail pane would
+   * keep rendering the pre-edit version.
+   */
+  const selectedSnippet: Snippet | null = useMemo(
+    () => findSnippet(snippets, selectedSnippetId),
+    [snippets, selectedSnippetId]
+  );
+
+  const createError = useSnippets((s) => s.createError);
+  const sidebarOpen = useSidebarWidth((s) => s.isOpen);
+  const setSidebarOpen = (open: boolean) => storeSetSidebarOpen(open);
+  // The width is persisted, because a popup closes on every blur: as component
+  // state it reset constantly, so dragging the divider and clicking back into the
+  // page lost the size.
+  const sidebarWidth = useSidebarWidth((s) => s.width);
   const [updateRelease, setUpdateRelease] = useState<{
     version: string;
     htmlUrl: string;
     publishedAt: string;
   } | null>(null);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
-  const isResizing = useRef(false);
+  const draggingRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // -------------------------------------------------------------------------
+  // The unsaved-changes guard
+  // -------------------------------------------------------------------------
+  //
+  // `useBlocker` is the router's own mechanism, so one code path guards every way
+  // out of a dirty editor: a sidebar click, an arrow key, "Add snippet", the
+  // browser's Back and Forward. It was a `pendingSnippet` store field consulted by
+  // the sidebar row alone, which left Back — the one a popup user actually reaches
+  // for — walking straight past it and dropping the edit.
+  //
+  // The popup's own navigation stays `replace`-only (ADR 0011). Blocking does not
+  // change that: a blocked navigation simply does not happen, so `history.length`
+  // still never grows.
+
   const detailHasChanges = useRef(false);
-  const [pendingSnippet, setPendingSnippet] = useState<Snippet | null>(null);
 
-  // -------------------------------------------------------------------------
+  /**
+   * Whether this navigation would throw away an edit.
+   *
+   * A ref, not state: it is written from the editor's own effect on every
+   * keystroke, and `useBlocker` re-registers its listener whenever this function's
+   * identity changes — so state here would tear the blocker down and rebuild it
+   * per character.
+   *
+   * `useCallback` for the same reason, and with no dependencies on purpose: the ref
+   * it reads is stable for the life of the popup.
+   *
+   * Only a *different* address is guarded. Re-selecting the snippet already open
+   * replaces the location with the one the router is already at, and a dialog
+   * warning about edits that are not going anywhere would be a lie.
+   */
+  const shouldBlockNavigation: ShouldBlockFn = useCallback(
+    ({ current, next }) =>
+      detailHasChanges.current && current.pathname !== next.pathname,
+    []
+  );
+
+  const blocker = useBlocker({
+    shouldBlockFn: shouldBlockNavigation,
+    // No `beforeunload`: the popup is torn down on blur, so there is no document
+    // unload for a prompt to be *about* — only one the user cannot answer.
+    enableBeforeUnload: false,
+    withResolver: true,
+  });
+
+  /**
+   * Let a blocked navigation happen.
+   *
+   * The dirty flag is cleared first, and it has to be. The editor is about to
+   * unmount without ever reporting `false` — `SnippetDetailView` only reports on a
+   * *change* — so leaving the flag set would re-arm the blocker against the very
+   * navigation being permitted, and against every one after it: navigating to
+   * `#/list` mounts no editor to correct it, and the next selection would raise the
+   * dialog again, about nothing.
+   */
+  const confirmBlockedNavigation = useCallback(() => {
+    detailHasChanges.current = false;
+    blocker.proceed?.();
+  }, [blocker]);
+
+  // ---------------------------------------------------------------------------
   // Sidebar resize
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  //
+  // Pointer capture, not a document-level `mousemove` listener, and this is the
+  // difference between the popup sidebar feeling solid and feeling like it fights
+  // you:
+  //
+  //  - a document listener keeps firing when the pointer leaves the window, so
+  //    dragging past the edge kept resizing from nowhere
+  //  - `mousemove` coalesces differently across devices than `pointermove` does
+  //  - capture means the handle keeps receiving moves even when the cursor is
+  //    faster than the page, which is what stops the sidebar lagging behind the
+  //    pointer mid-drag
+  //
+  // The options page resizer has done this all along, and it feels right there.
 
-  const SIDEBAR_MIN_WIDTH = 120;
-  const SIDEBAR_MAX_WIDTH = 240;
+  const handleResizePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      draggingRef.current = true;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      document.body.style.cursor = "col-resize";
+      // Stop the browser selecting the snippet labels mid-drag.
+      document.body.style.userSelect = "none";
+    },
+    []
+  );
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isResizing.current) return;
-    setSidebarWidth(
-      Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, e.clientX))
-    );
-  }, []);
+  const handleResizePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!draggingRef.current) return;
+      // The clamp lives in the store, so a drag cannot leave the divider somewhere
+      // the keyboard resize cannot reach.
+      setSidebarWidth(e.clientX);
+    },
+    []
+  );
 
-  const handleMouseUp = useCallback(() => {
-    isResizing.current = false;
-    document.body.style.cursor = "";
-    document.body.style.userSelect = "";
-  }, []);
-
-  useEffect(() => {
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [handleMouseMove, handleMouseUp]);
+  const handleResizePointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    },
+    []
+  );
 
   const handleResizeKeyDown = useCallback((e: React.KeyboardEvent) => {
     const step = 20;
     switch (e.key) {
       case "ArrowLeft":
         e.preventDefault();
-        setSidebarWidth((w) => Math.max(SIDEBAR_MIN_WIDTH, w - step));
+        nudgeSidebarWidth(-step);
         break;
       case "ArrowRight":
         e.preventDefault();
-        setSidebarWidth((w) => Math.min(SIDEBAR_MAX_WIDTH, w + step));
+        nudgeSidebarWidth(step);
         break;
       case "Home":
         e.preventDefault();
-        setSidebarWidth(SIDEBAR_MIN_WIDTH);
+        setSidebarWidthToMin();
         break;
       case "End":
         e.preventDefault();
-        setSidebarWidth(SIDEBAR_MAX_WIDTH);
+        setSidebarWidthToMax();
         break;
     }
   }, []);
@@ -188,28 +317,7 @@ export default function Dashboard() {
   // -------------------------------------------------------------------------
 
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const list = await getSnippets();
-        setSnippets(list);
-        setSelectedSnippet(selectNewest(list));
-
-        // Check if we're already in local-fallback mode
-        const status = await getStorageStatus();
-        if (status.quotaExceeded) {
-          setQuotaWarning(true);
-        } else if (status.mode === "local" && status.localReason === "manual") {
-          setSyncPausedWarning(true);
-        }
-      } catch (err) {
-        console.error("[Clipio] Failed to load snippets:", err);
-        captureError(err, { action: "loadSnippets" });
-        setLoadError(i18n.t("dashboard.errors.failedToLoad"));
-      } finally {
-        setLoading(false);
-      }
-    })();
+    void initialiseSnippets();
   }, []);
 
   // Check if the popup was opened via the "Save selection" context-menu action.
@@ -230,14 +338,11 @@ export default function Dashboard() {
                 action: "loadContextMenuDraft.clearSession",
               });
             });
-          setDraftSnippet({
-            label: "",
-            shortcut: "/",
-            content: draft,
-            tags: [],
-          });
-          setSelectedSnippet(null);
-          setIsCreating(true);
+          // Prefilled from the configured trigger prefix, read fresh: a value
+          // captured at module load is stale for the life of the popup, and
+          // "change it in Options, reopen the popup" is exactly the case.
+          setDraftSnippet(await blankSnippetDraft(draft));
+          startCreating();
           return;
         }
 
@@ -253,14 +358,8 @@ export default function Dashboard() {
                 action: "loadContextMenuDraft.clearSession",
               });
             });
-          setDraftSnippet({
-            label: "",
-            shortcut: "/",
-            content: sessionDraft,
-            tags: [],
-          });
-          setSelectedSnippet(null);
-          setIsCreating(true);
+          setDraftSnippet(await blankSnippetDraft(sessionDraft));
+          startCreating();
         }
       } catch (err) {
         console.error("[Clipio] Failed to read context-menu draft:", err);
@@ -269,25 +368,46 @@ export default function Dashboard() {
     })();
   }, []);
 
-  // Check uninstall-warning flag + sign-out recovery on mount
+  /**
+   * Honour the route a context-menu action asked for.
+   *
+   * `browser.action.openPopup()` takes no URL, so when the background opens the
+   * popup there is nothing it can address — the popup comes up at whatever route it
+   * last held. The background therefore leaves the requested route in session
+   * storage and this reads it.
+   *
+   * Separate from the draft effect above, and deliberately *not* an else-branch of
+   * it: "Save selection" carries text and implies the create route, while "Create
+   * snippet" carries only the route. One is a draft, the other is a destination, and
+   * merging them would mean two channels for one decision free to disagree.
+   *
+   * Consumed on read. Left in place it would drag the popup back to `#/new` on the
+   * next open, long after the user had navigated somewhere else.
+   *
+   * `replace`, never `push` — ADR 0011. The popup closes on blur, so a history
+   * entry is something the user can never use.
+   */
   useEffect(() => {
     (async () => {
       try {
-        const dataLost = await syncDataLostItem.getValue();
-        if (dataLost) {
-          const backup = await tryRecoverFromBackup();
-          if (backup.length > 0) {
-            setRecoverySnippets(backup);
-            setShowRecoveryBanner(true);
-          }
-          await clearSyncDataLostFlag();
-        }
+        const stored = await browser.storage.session.get(
+          POPUP_VIEW_SESSION_KEY
+        );
+        const requested = stored[POPUP_VIEW_SESSION_KEY];
+        if (typeof requested !== "string" || !requested) return;
+        // Removed before navigating, so a failure here cannot leave a stale route
+        // that yanks the user back on a later open.
+        await browser.storage.session
+          .remove(POPUP_VIEW_SESSION_KEY)
+          .catch((err: unknown) => {
+            captureError(err, { action: "popupView.clearSession" });
+          });
+        navigate({ to: requested, replace: true });
       } catch (err) {
-        console.error("[Clipio] Flag check failed:", err);
-        captureError(err, { action: "flagCheck" });
+        captureError(err, { action: "popupView" });
       }
     })();
-  }, []);
+  }, [navigate]);
 
   // Check for available update banner
   useEffect(() => {
@@ -307,20 +427,67 @@ export default function Dashboard() {
     })();
   }, []);
 
+  /**
+   * Land on something when the URL does not already say what to show: the last
+   * snippet viewed, falling back to the newest.
+   *
+   * A deep link like `#/snippet/abc` is a request for *that* snippet.
+   * Auto-selecting the newest regardless would make every deep link open the
+   * same snippet whatever its id — a link that looks right and is wrong, which is
+   * worse than no link.
+   *
+   * Kept separate from loading, and keyed on the live address, because the router
+   * may not have resolved the location by the time snippets arrive: a snapshot
+   * taken during the load effect would still read "no snippet addressed" and
+   * overrule the deep link.
+   */
+  const autoSelected = useRef(false);
+  useEffect(() => {
+    // `#/new` is a destination in its own right, so it must be left alone for the
+    // same reason a deep-linked snippet is. Without this guard the effect fired
+    // on the way in — the draft read resolves, `startCreating()` runs, then
+    // `getSnippets()` resolves and this replaced the route with the newest
+    // snippet. The create form closed itself and took the pasted text with it:
+    // right-click → "Save selection" → the form appears → a moment later it is
+    // gone. The `e2e/background.spec.ts` test missed it because it runs against
+    // an empty library, where `snippets.length === 0` returns early anyway.
+    if (selectedSnippetId) return;
+    if (isCreating) return;
+    if (autoSelected.current || snippets.length === 0) return;
+    autoSelected.current = true;
+    // Last viewed, falling back to newest. The fallback is load-bearing: the
+    // remembered snippet can be deleted from the options page, arrive deleted from
+    // another device's sync, or be replaced by an import, and a stale id must not
+    // leave the popup on a blank pane.
+    const initial = resolveInitialSnippet(snippets, lastViewedSnippetId);
+    if (initial) selectSnippet(initial.id);
+  }, [
+    snippets,
+    lastViewedSnippetId,
+    selectedSnippetId,
+    isCreating,
+    selectSnippet,
+  ]);
+
   // -------------------------------------------------------------------------
   // CRUD helpers
   // -------------------------------------------------------------------------
 
-  const handleAddSnippet = () => {
-    setDraftSnippet({ label: "", shortcut: "/", content: "", tags: [] });
-    setSelectedSnippet(null);
-    setIsCreating(true);
+  // Async because the shortcut default comes from storage. Not pre-filled in
+  // `NewSnippetView` on mount instead: this sets the draft *before* navigating, so
+  // the form mounts with a non-empty shortcut and a mount-time prefill would be
+  // skipped — and if it were not, it would be a second writer racing the draft it
+  // was handed.
+  const handleAddSnippet = async () => {
+    setDraftSnippet(await blankSnippetDraft());
+    startCreating();
   };
 
-  const handleCancelCreate = () => {
-    setIsCreating(false);
-    setDraftSnippet({ label: "", shortcut: "/", content: "", tags: [] });
-    setSelectedSnippet(selectNewest(snippets));
+  const handleCancelCreate = async () => {
+    setDraftSnippet(await blankSnippetDraft());
+    const newest = selectNewest(snippets);
+    if (newest) selectSnippet(newest.id);
+    else showList();
   };
 
   const handleSaveNewSnippet = async () => {
@@ -331,86 +498,56 @@ export default function Dashboard() {
     )
       return;
 
-    setIsSaving(true);
-    try {
-      const newSnippet = createSnippet(draftSnippet);
-      await saveSnippet(newSnippet);
-      setSnippets((prev) => [...prev, newSnippet]);
-      setSelectedSnippet(newSnippet);
-      setIsCreating(false);
-      setDraftSnippet({ label: "", shortcut: "", content: "", tags: [] });
-      toast.success(i18n.t("dashboard.toast.snippetSaved"));
-    } catch (err) {
-      if (err instanceof StorageQuotaError) {
-        // Show the banner, and explain rather than silently retrying.
-        //
-        // This used to retry the save "after manager has switched to local
-        // mode". The manager no longer switches: Wave 9 replaced the silent
-        // fallback with a refusal (), so
-        // the retry ran the identical, stateless preflight and could not
-        // succeed. The snippet is now simply not saved, which is a real
-        // behaviour change — the user is told and can switch storage mode from
-        // the options page.
-        setQuotaWarning(true);
-        setCreateError(quotaMessage(err));
-        // The create view is deliberately left OPEN. Closing it here unmounted
-        // `NewSnippetView`, which is the component that renders `createError` —
-        // so the explanation was set and then immediately made invisible, and
-        // the user saw their snippet silently not save. Keeping the form open
-        // also lets them shorten the snippet and retry without starting over.
-      } else {
-        captureError(err, { action: "saveSnippet" });
-        setCreateError(i18n.t("dashboard.errors.failedToCreate"));
-      }
-    } finally {
-      setIsSaving(false);
+    // `addSnippet` owns the saving flag, the error and the draft reset, so the
+    // button cannot stay disabled after a refusal and the message cannot be shown
+    // against a draft that has already been cleared.
+    const result = await addSnippet(draftSnippet);
+    if (!result.ok) {
+      // The create view stays OPEN. Closing it here unmounts `NewSnippetView`,
+      // which is the component that renders `createError` — so the explanation was
+      // set and then immediately made invisible and the user watched their snippet
+      // silently not save. Keeping the form open also lets them shorten the
+      // snippet and retry without starting over.
+      return;
     }
+    // Address the new snippet rather than only showing it: the id is now in the
+    // URL, so "copy link to this snippet" needs no work to start working.
+    selectSnippet(result.value.id);
+    toast.success(i18n.t("dashboard.toast.snippetSaved"));
   };
 
   const handleDeleteSnippet = async (snippetId: string) => {
-    try {
-      await deleteSnippet(snippetId);
-      const newList = snippets.filter((s) => s.id !== snippetId);
-      setSnippets(newList);
-      if (selectedSnippet?.id === snippetId) {
-        setSelectedSnippet(selectNewest(newList));
-      }
-      toast.success(i18n.t("dashboard.toast.snippetDeleted"));
-    } catch (err) {
-      console.error("[Clipio] Failed to delete snippet:", err);
-      captureError(err, { action: "deleteSnippet" });
-      throw err;
+    // `removeSnippet` throws on failure; this propagates to the delete dialog,
+    // which shows a message rather than pretending it worked.
+    const { remaining } = await removeSnippet(snippetId);
+    // The snippet is gone, so there is nothing left for the unsaved-changes guard
+    // to protect — and the navigation below would otherwise be blocked by edits to
+    // a snippet that no longer exists, raising the dialog *after* the delete had
+    // already succeeded.
+    detailHasChanges.current = false;
+    // Deleting the addressed snippet has to move the address too, or the URL
+    // would keep pointing at something that no longer exists.
+    if (selectedSnippetId === snippetId) {
+      const newest = selectNewest(remaining);
+      if (newest) selectSnippet(newest.id);
+      else showList();
     }
+    toast.success(i18n.t("dashboard.toast.snippetDeleted"));
   };
 
   const handleUpdateSnippet = async (updated: Snippet) => {
-    try {
-      await updateSnippet(updated);
-      setSnippets((prev) =>
-        prev.map((s) => (s.id === updated.id ? updated : s))
-      );
-      if (selectedSnippet?.id === updated.id) setSelectedSnippet(updated);
-      toast.success(i18n.t("dashboard.toast.snippetUpdated"));
-    } catch (err) {
-      console.error("[Clipio] Failed to update snippet:", err);
-      captureError(err, { action: "updateSnippet" });
-      throw err;
-    }
+    await editSnippet(updated);
+    toast.success(i18n.t("dashboard.toast.snippetUpdated"));
   };
 
   // -------------------------------------------------------------------------
   // Filtering & keyboard navigation
   // -------------------------------------------------------------------------
 
-  const filteredSnippets: Snippet[] = useMemo(
-    () =>
-      searchQuery
-        ? fuzzyMatchSnippets(searchQuery, snippets).map(
-            (f) => f.snippet as unknown as Snippet
-          )
-        : [...snippets].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    [searchQuery, snippets]
-  );
+  // The list the sidebar renders, and the list the keyboard handler walks. One
+  // value, so they cannot disagree — which a `useMemo` and a separate piece of
+  // state invited.
+  const filteredSnippets = useVisibleSnippets(snippets);
 
   const handleKeyboardNavigation = useCallback(
     (e: KeyboardEvent) => {
@@ -440,7 +577,7 @@ export default function Dashboard() {
       }
 
       if (newIndex !== currentIndex && newIndex >= 0) {
-        setSelectedSnippet(filteredSnippets[newIndex]);
+        selectSnippet(filteredSnippets[newIndex].id);
       }
     },
     [filteredSnippets, selectedSnippet, isCreating]
@@ -481,28 +618,18 @@ export default function Dashboard() {
               recoverySnippets.length
             ),
             onClick: async () => {
-              try {
-                await bulkSaveSnippets(recoverySnippets);
-                const list = await getSnippets();
-                setSnippets(list);
-                setSelectedSnippet(selectNewest(list));
-                setShowRecoveryBanner(false);
-              } catch (err) {
-                console.error("[Clipio] Recovery failed:", err);
-                captureError(err, { action: "recoverSnippets" });
-                setRecoveryError(i18n.t("dashboard.errors.failedToRestore"));
-              }
+              const result = await restoreRecoveredSnippets();
+              if (!result.ok) return;
+              const newest = selectNewest(result.value);
+              if (newest) selectSnippet(newest.id);
             },
           }}
-          onDismiss={() => setShowRecoveryBanner(false)}
+          onDismiss={dismissRecoveryBanner}
         >
           {i18n.t("dashboard.warnings.recovery.body", recoverySnippets.length)}
         </WarningBanner>
       )}
-      <InlineError
-        message={recoveryError}
-        onDismiss={() => setRecoveryError(null)}
-      />
+      <InlineError message={recoveryError} onDismiss={dismissRecoveryError} />
 
       {/* Quota warning banner — only shown when sync quota was actually exceeded */}
       {quotaWarning && (
@@ -512,7 +639,7 @@ export default function Dashboard() {
             label: i18n.t("dashboard.warnings.quotaFull.action"),
             onClick: () => browser.runtime.openOptionsPage(),
           }}
-          onDismiss={() => setQuotaWarning(false)}
+          onDismiss={dismissQuotaWarning}
         >
           {i18n.t("dashboard.warnings.quotaFull.body")}
         </WarningBanner>
@@ -526,7 +653,7 @@ export default function Dashboard() {
             label: i18n.t("dashboard.warnings.syncPaused.action"),
             onClick: () => browser.runtime.openOptionsPage(),
           }}
-          onDismiss={() => setSyncPausedWarning(false)}
+          onDismiss={dismissSyncPausedWarning}
         >
           {i18n.t("dashboard.warnings.syncPaused.body")}
         </WarningBanner>
@@ -565,6 +692,10 @@ export default function Dashboard() {
           {/* Resize Handle */}
           <div
             role="separator"
+            onPointerDown={handleResizePointerDown}
+            onPointerMove={handleResizePointerMove}
+            onPointerUp={handleResizePointerUp}
+            onPointerCancel={handleResizePointerUp}
             aria-orientation="vertical"
             aria-valuenow={sidebarWidth}
             aria-valuemin={SIDEBAR_MIN_WIDTH}
@@ -572,11 +703,6 @@ export default function Dashboard() {
             aria-label={i18n.t("common.resizeSidebar")}
             tabIndex={0}
             className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-muted-foreground/20 transition-colors z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            onMouseDown={() => {
-              isResizing.current = true;
-              document.body.style.cursor = "col-resize";
-              document.body.style.userSelect = "none";
-            }}
             onKeyDown={handleResizeKeyDown}
           />
 
@@ -629,7 +755,7 @@ export default function Dashboard() {
               ) : loadError ? (
                 <InlineError
                   message={loadError}
-                  onDismiss={() => setLoadError(null)}
+                  onDismiss={dismissLoadError}
                   className="border border-red-200 dark:border-red-800 rounded-lg"
                 />
               ) : filteredSnippets.length === 0 ? (
@@ -697,13 +823,12 @@ export default function Dashboard() {
                         selectedSnippet?.id === snippet.id && !isCreating
                       }
                       onClick={() => {
-                        const target = snippet;
-                        if (detailHasChanges.current) {
-                          setPendingSnippet(target);
-                          return;
-                        }
+                        // No dirty check here on purpose. `selectSnippet` goes
+                        // through the router, so `useBlocker` already intercepted
+                        // this if the editor had unsaved changes — a second guard
+                        // would be a second answer to the same question, and the
+                        // two could disagree.
                         if (isCreating) {
-                          setIsCreating(false);
                           setDraftSnippet({
                             label: "",
                             shortcut: "",
@@ -711,7 +836,7 @@ export default function Dashboard() {
                             tags: [],
                           });
                         }
-                        setSelectedSnippet(target);
+                        selectSnippet(snippet.id);
                       }}
                       onUpdate={handleUpdateSnippet}
                     />
@@ -766,7 +891,7 @@ export default function Dashboard() {
                 onCancel={handleCancelCreate}
                 isSaving={isSaving}
                 createError={createError}
-                onClearCreateError={() => setCreateError(null)}
+                onClearCreateError={dismissCreateError}
                 sidebarOpen={sidebarOpen}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
                 existingSnippets={snippets}
@@ -853,9 +978,12 @@ export default function Dashboard() {
                     className="w-full h-7 text-xs gap-1.5"
                     onClick={() =>
                       browser.tabs.create({
+                        // The import panel's own route, rather than the
+                        // `#import-export` hash this used to build — which named
+                        // no section and so fell through to Library by accident.
                         url:
                           browser.runtime.getURL("/options.html") +
-                          "#import-export",
+                          "#/library/import",
                       })
                     }
                   >
@@ -908,17 +1036,19 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Unsaved changes guard */}
+      {/*
+        Unsaved changes guard. Driven entirely by the router's blocker, so it opens
+        for a sidebar click, an arrow key, "Add snippet" or the browser's Back
+        alike — one dialog for one question, asked by the thing that actually knows
+        whether the navigation is going to happen.
+      */}
       <ConfirmDialog
-        isOpen={pendingSnippet !== null}
-        onClose={() => setPendingSnippet(null)}
-        onConfirm={() => {
-          if (pendingSnippet) {
-            detailHasChanges.current = false;
-            setSelectedSnippet(pendingSnippet);
-            setPendingSnippet(null);
-          }
-        }}
+        isOpen={blocker.status === "blocked"}
+        // `reset` keeps the user where they are, which is what "Keep editing"
+        // means. It is also what the alert dialog calls on Escape or an outside
+        // click, so every way out of this dialog other than Discard is a cancel.
+        onClose={() => blocker.reset?.()}
+        onConfirm={confirmBlockedNavigation}
         title={i18n.t("snippetDetail.unsavedChanges.title")}
         message={i18n.t("snippetDetail.unsavedChanges.message")}
         confirmText={i18n.t("snippetDetail.unsavedChanges.discard")}

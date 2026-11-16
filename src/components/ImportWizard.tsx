@@ -30,31 +30,32 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { getSnippets, getStorageStatus } from "@/storage";
-import { bulkSaveSnippets } from "@/storage";
-import type { Snippet } from "@/types";
 
 import { detectFormat } from "@/lib/importers/detect";
-import { TextBlazeParser } from "@/lib/importers/textblaze";
-import { ClipioParser, importClipioZip } from "@/lib/importers/clipio";
-import { PowerTextParser } from "@/lib/importers/powertext";
+import { IMPORT_PARSERS, getParser } from "@/lib/importers/registry";
+import { importClipioZip } from "@/lib/importers/clipio";
 import type {
   FormatId,
-  ParsedSnippet,
-  ConflictEntry,
   ConflictResolution,
-  UnsupportedPlaceholderEntry,
   UnsupportedPlaceholderAction,
 } from "@/lib/importers/types";
+import { estimateJsonSize } from "@/lib/importers/merge";
 import {
-  applyUnsupportedAction,
-  buildFinalSnippets,
-  detectConflicts,
-  estimateJsonSize,
-  suggestShortcut,
-} from "@/lib/importers/merge";
+  advanceFromPlaceholders,
+  advanceFromUpload,
+  canAdvanceFromUpload,
+  countImported,
+  detectedParserLabel,
+  initialiseImport,
+  importStore,
+  previewFinalSnippets,
+  resetImport,
+  runImport,
+  useImport,
+  willExceedQuota,
+  type WizardStep,
+} from "@/store/import";
 import { SYNC_QUOTA } from "@/config/constants";
-import { restoreMediaEntry } from "@/storage/backends/media";
 import { captureError, captureMessage } from "@/lib/sentry";
 import { i18n } from "#i18n";
 
@@ -62,22 +63,10 @@ import { i18n } from "#i18n";
 // Types
 // ---------------------------------------------------------------------------
 
-type WizardStep = 1 | 2 | 3 | 4;
-
 interface ImportWizardProps {
   onClose: () => void;
   onImportComplete: (count: number) => void;
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const PARSERS = {
-  clipio: ClipioParser,
-  textblaze: TextBlazeParser,
-  powertext: PowerTextParser,
-} as const;
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -142,58 +131,41 @@ export default function ImportWizard({
   onClose,
   onImportComplete,
 }: ImportWizardProps) {
-  const [step, setStep] = useState<WizardStep>(1);
-  const [existingSnippets, setExistingSnippets] = useState<Snippet[]>([]);
+  const step = useImport((s) => s.step);
+  const existingSnippets = useImport((s) => s.existingSnippets);
+  const isDragging = useImport((s) => s.isDragging);
+  const fileName = useImport((s) => s.fileName);
+  const rawJson = useImport((s) => s.rawJson);
+  const detectedFormat = useImport((s) => s.detectedFormat);
+  const selectedFormat = useImport((s) => s.selectedFormat);
+  const parseError = useImport((s) => s.parseError);
+  const parsedSnippets = useImport((s) => s.parsedSnippets);
+  const unsupportedEntries = useImport((s) => s.unsupportedEntries);
+  const conflictEntries = useImport((s) => s.conflictEntries);
+  const importing = useImport((s) => s.importing);
+  const importDone = useImport((s) => s.importDone);
+  const importedCount = useImport((s) => s.importedCount);
+  const importError = useImport((s) => s.importError);
+  const storageMode = useImport((s) => s.storageMode);
+  const isZipImport = useImport((s) => s.isZipImport);
+  const zipMediaCount = useImport((s) => s.zipMediaCount);
+  const zipMissingMediaWarning = useImport((s) => s.zipMissingMediaWarning);
 
-  // Step 1
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [rawJson, setRawJson] = useState<
-    Record<string, unknown> | unknown[] | null
-  >(null);
-  const [detectedFormat, setDetectedFormat] = useState<FormatId | null>(null);
-  const [selectedFormat, setSelectedFormat] = useState<FormatId | "">("");
-  const [parseError, setParseError] = useState<string | null>(null);
-  const [parsedSnippets, setParsedSnippets] = useState<ParsedSnippet[]>([]);
 
-  // Step 2
-  const [unsupportedEntries, setUnsupportedEntries] = useState<
-    UnsupportedPlaceholderEntry[]
-  >([]);
+  // Two pieces of purely local form state. Kept here rather than in the store
+  // because they are not part of the wizard's meaning: which radio button is
+  // selected, and what is currently typed into a rename field. Neither survives a
+  // step change and neither is read by a decision.
   const [bulkUnsupportedAction, setBulkUnsupportedAction] = useState("");
-
-  // Step 3
-  const [conflictEntries, setConflictEntries] = useState<ConflictEntry[]>([]);
   const [bulkConflictResolution, setBulkConflictResolution] = useState("");
 
-  // Step 4
-  const [importing, setImporting] = useState(false);
-  const [importDone, setImportDone] = useState(false);
-  const [importedCount, setImportedCount] = useState(0);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [storageMode, setStorageMode] = useState<"sync" | "local">("sync");
-
-  // ZIP import state (v2 exports)
-  const [isZipImport, setIsZipImport] = useState(false);
-  const [zipMediaCount, setZipMediaCount] = useState(0);
-  const [zipMissingMediaWarning, setZipMissingMediaWarning] = useState<
-    string | null
-  >(null);
-  // Holds the resolved media blobs from a ZIP import so they can be saved on confirm
-  const zipMediaBlobsRef = useRef<
-    Map<
-      string,
-      { blob: Blob; meta: import("~/storage/backends/media").MediaMetadata }
-    >
-  >(new Map());
-
-  // Load existing snippets & storage status on mount
+  // Load the library and storage status on mount. The wizard stays mounted behind
+  // the options page's dialog, so `resetImport` on close — not a fresh mount — is
+  // what returns it to step 1 for the next import.
   useEffect(() => {
-    getSnippets().then(setExistingSnippets).catch(console.error);
-    getStorageStatus()
-      .then((s) => setStorageMode(s.mode))
-      .catch(console.error);
+    void initialiseImport();
+    return () => resetImport();
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -201,52 +173,60 @@ export default function ImportWizard({
   // ---------------------------------------------------------------------------
 
   const processFile = useCallback((file: File) => {
-    setParseError(null);
-    setFileName(file.name);
+    importStore.setState((prev) => ({
+      ...prev,
+      parseError: null,
+      fileName: file.name,
+      // A second file replaces the first entirely, including its media. Leaving
+      // the old blobs in place would attach one archive's images to another's
+      // snippets on confirm.
+      isZipImport: false,
+      zipMediaCount: 0,
+      zipMissingMediaWarning: null,
+      zipMediaBlobs: new Map(),
+    }));
 
     // ZIP import path (v2 exports)
     const isZip =
       file.name.endsWith(".zip") || file.name.endsWith(".clipio.zip");
     if (isZip) {
-      setIsZipImport(true);
-      zipMediaBlobsRef.current = new Map();
-      setZipMediaCount(0);
-      setZipMissingMediaWarning(null);
+      importStore.setState((prev) => ({ ...prev, isZipImport: true }));
 
       importClipioZip(file)
         .then((result) => {
-          zipMediaBlobsRef.current = result.mediaBlobs;
-          setZipMediaCount(result.mediaBlobs.size);
+          importStore.setState((prev) => ({
+            ...prev,
+            zipMediaBlobs: result.mediaBlobs,
+            zipMediaCount: result.mediaBlobs.size,
+            zipMissingMediaWarning:
+              result.missingMediaIds.length > 0
+                ? i18n.t("importWizard.confirm.missingImagesWarning")
+                : null,
+            parsedSnippets: result.snippets,
+            rawJson: null,
+            detectedFormat: "clipio",
+            selectedFormat: "clipio",
+            parseError: null,
+          }));
           if (result.missingMediaIds.length > 0) {
-            setZipMissingMediaWarning(
-              i18n.t("importWizard.confirm.missingImagesWarning")
-            );
             captureMessage("ZIP import: missing media entries", "warning", {
               missingIds: result.missingMediaIds,
             });
           }
-          setParsedSnippets(result.snippets);
-          setRawJson(null);
-          setDetectedFormat("clipio");
-          setSelectedFormat("clipio");
-          setParseError(null);
         })
         .catch((e) => {
           captureError(e, { action: "importClipioZip" });
-          setParseError(
-            e instanceof Error
-              ? e.message
-              : i18n.t("importWizard.upload.couldNotRead")
-          );
-          setIsZipImport(false);
+          importStore.setState((prev) => ({
+            ...prev,
+            parseError:
+              e instanceof Error
+                ? e.message
+                : i18n.t("importWizard.upload.couldNotRead"),
+            isZipImport: false,
+          }));
         });
       return;
     }
-
-    setIsZipImport(false);
-    zipMediaBlobsRef.current = new Map();
-    setZipMediaCount(0);
-    setZipMissingMediaWarning(null);
 
     file
       .text()
@@ -255,47 +235,69 @@ export default function ImportWizard({
         try {
           json = JSON.parse(text);
         } catch {
-          setParseError(i18n.t("importWizard.upload.invalidJson"));
+          importStore.setState((prev) => ({
+            ...prev,
+            parseError: i18n.t("importWizard.upload.invalidJson"),
+          }));
           return;
         }
 
-        setRawJson(json as Record<string, unknown> | unknown[]);
         const fmt = detectFormat(json);
-        setDetectedFormat(fmt);
-        setSelectedFormat(fmt ?? "");
+        importStore.setState((prev) => ({
+          ...prev,
+          rawJson: json as Record<string, unknown> | unknown[],
+          detectedFormat: fmt,
+          selectedFormat: fmt ?? "",
+        }));
 
-        if (fmt) {
-          tryParse(json, fmt);
-        }
+        if (fmt) tryParse(json, fmt);
       })
-      .catch(() => setParseError(i18n.t("importWizard.upload.couldNotRead")));
+      .catch(() =>
+        importStore.setState((prev) => ({
+          ...prev,
+          parseError: i18n.t("importWizard.upload.couldNotRead"),
+        }))
+      );
   }, []);
 
   function tryParse(json: unknown, format: FormatId) {
     try {
-      const parser = PARSERS[format];
+      const parser = getParser(format);
+      // Unreachable from the UI: `format` is a `FormatId` and every one is
+      // registered. Guarded anyway so a format added to the union without a
+      // parser surfaces as a parse error instead of a TypeError.
+      if (!parser)
+        throw new Error(`No parser registered for format "${format}"`);
       const snippets = parser.parse(json);
-      setParsedSnippets(snippets);
-      setParseError(null);
+      importStore.setState((prev) => ({
+        ...prev,
+        parsedSnippets: snippets,
+        parseError: null,
+      }));
     } catch (e) {
-      setParseError(
-        e instanceof Error
-          ? e.message
-          : i18n.t("importWizard.upload.failedToParse")
-      );
-      setParsedSnippets([]);
+      importStore.setState((prev) => ({
+        ...prev,
+        parseError:
+          e instanceof Error
+            ? e.message
+            : i18n.t("importWizard.upload.failedToParse"),
+        // Cleared, so a failed re-parse cannot leave the previous format's
+        // snippets on screen for a format that did not parse.
+        parsedSnippets: [],
+      }));
     }
   }
 
   function handleFormatChange(fmt: FormatId) {
-    setSelectedFormat(fmt);
-    if (rawJson) tryParse(rawJson, fmt);
+    importStore.setState((prev) => ({ ...prev, selectedFormat: fmt }));
+    const { rawJson: json } = importStore.state;
+    if (json) tryParse(json, fmt);
   }
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
-      setIsDragging(false);
+      importStore.setState((prev) => ({ ...prev, isDragging: false }));
       const file = e.dataTransfer.files[0];
       if (file) processFile(file);
     },
@@ -304,127 +306,25 @@ export default function ImportWizard({
 
   // ---------------------------------------------------------------------------
   // Step navigation
+  //
+  // The routing itself is in `@/store/import` — which step comes next, what the
+  // rows are seeded with, and which snippet list each step is talking about. That
+  // is where the decisions that can silently overwrite or mangle a snippet live,
+  // and they were unreachable from a test while they lived here.
   // ---------------------------------------------------------------------------
 
-  function advanceFromStep1() {
-    // Prepare step 2: collect snippets with unsupported placeholders
-    const withUnsupported = parsedSnippets.filter(
-      (s) => s.unsupportedPlaceholders.length > 0
-    );
-
-    if (withUnsupported.length > 0) {
-      setUnsupportedEntries(
-        withUnsupported.map((s) => ({ snippet: s, action: "keep" }))
-      );
-      setStep(2);
-    } else {
-      prepareStep3(parsedSnippets);
-    }
-  }
-
-  function applyUnsupportedAndAdvance() {
-    // Apply actions to the parsed snippets
-    const modified: ParsedSnippet[] = [];
-    const unsupportedMap = new Map(
-      unsupportedEntries.map((e) => [e.snippet.suggestedId, e.action])
-    );
-
-    for (const snippet of parsedSnippets) {
-      const action = unsupportedMap.get(snippet.suggestedId) ?? "keep";
-      const result = applyUnsupportedAction(snippet, action);
-      if (result !== null) modified.push(result);
-    }
-
-    prepareStep3(modified);
-  }
-
-  function prepareStep3(snippets: ParsedSnippet[]) {
-    // Update parsedSnippets with the potentially modified set
-    setParsedSnippets(snippets);
-    const conflicts = detectConflicts(snippets, existingSnippets);
-
-    if (conflicts.length > 0) {
-      // Pre-fill renamed shortcuts
-      const filled = conflicts.map((c) => ({
-        ...c,
-        renamedShortcut:
-          c.resolution === "rename"
-            ? suggestShortcut(c.incoming.shortcut, existingSnippets)
-            : suggestShortcut(c.incoming.shortcut, existingSnippets),
-      }));
-      setConflictEntries(filled);
-      setStep(3);
-    } else {
-      setConflictEntries([]);
-      setStep(4);
-    }
-  }
-
-  function advanceFromStep3() {
-    setStep(4);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Final import
-  // ---------------------------------------------------------------------------
-
-  async function handleImport() {
-    setImporting(true);
-    try {
-      // Save media blobs from ZIP import first
-      if (isZipImport && zipMediaBlobsRef.current.size > 0) {
-        let savedCount = 0;
-        for (const [id, { blob, meta }] of zipMediaBlobsRef.current) {
-          try {
-            await restoreMediaEntry({ ...meta, id, blob });
-            savedCount++;
-          } catch (e) {
-            captureError(e, { action: "importZipMedia", mediaId: id });
-          }
-        }
-        if (savedCount < zipMediaBlobsRef.current.size) {
-          captureMessage(
-            "ZIP import: some media blobs failed to save",
-            "warning",
-            {
-              saved: savedCount,
-              total: zipMediaBlobsRef.current.size,
-            }
-          );
-        }
-      }
-
-      const finalSnippets = buildFinalSnippets(
-        existingSnippets,
-        parsedSnippets,
-        conflictEntries
-      );
-      await bulkSaveSnippets(finalSnippets);
-      const count =
-        finalSnippets.length -
-        existingSnippets.length +
-        conflictEntries.filter((c) => c.resolution === "overwrite").length;
-      setImportedCount(count);
-      setImportDone(true);
-      onImportComplete(count);
-    } catch (e) {
-      console.error("[Clipio] Import failed:", e);
-      captureError(e, { action: "importSnippets" });
-      const detail =
-        e instanceof Error
-          ? e.message
-          : i18n.t("importWizard.confirm.failedToImport");
-      setImportError(detail);
-    } finally {
-      setImporting(false);
-    }
+  async function runWizardImport() {
+    const count = await runImport();
+    if (count !== null) onImportComplete(count);
   }
 
   // ---------------------------------------------------------------------------
   // Computed values for step 4
   // ---------------------------------------------------------------------------
 
-  const finalSnippetPreview = buildFinalSnippets(
+  const detectedParser = detectedParserLabel(detectedFormat);
+
+  const finalSnippetPreview = previewFinalSnippets(
     existingSnippets,
     parsedSnippets,
     conflictEntries
@@ -434,8 +334,6 @@ export default function ImportWizard({
     100,
     Math.round((estimatedSize / SYNC_QUOTA.TOTAL_BYTES) * 100)
   );
-  const willExceedQuota =
-    storageMode !== "local" && estimatedSize > SYNC_QUOTA.WARN_AT;
 
   const skippedCount = conflictEntries.filter(
     (c) => c.resolution === "skip"
@@ -446,10 +344,18 @@ export default function ImportWizard({
   const renamedCount = conflictEntries.filter(
     (c) => c.resolution === "rename"
   ).length;
-  // Every parsed snippet that isn't explicitly skipped gets imported
-  // (as new, overwrite, or rename) — overwrittenCount is already included
-  // in parsedSnippets.length so must NOT be added again.
-  const snippetsToAdd = parsedSnippets.length - skippedCount;
+
+  // One number, from one place. The component computed this twice by different
+  // routes — see `countImported` for why that was two answers to maintain rather
+  // than a number to fix.
+  const quotaWillExceed = willExceedQuota(
+    existingSnippets,
+    parsedSnippets,
+    conflictEntries,
+    storageMode
+  );
+
+  const snippetsToAdd = countImported(parsedSnippets, conflictEntries);
 
   const STEP_LABELS = [
     i18n.t("importWizard.steps.upload"),
@@ -459,11 +365,66 @@ export default function ImportWizard({
   ];
 
   // ---------------------------------------------------------------------------
+  // Narrow setters for the two remaining places the view writes wizard state
+  // directly. A back button, and the per-row editors on steps 2 and 3 — the rows
+  // themselves are seeded by the routing, so these only ever adjust what is on
+  // screen.
+  // ---------------------------------------------------------------------------
+
+  function setStepCompat(
+    next: WizardStep | ((s: WizardStep) => WizardStep)
+  ): void {
+    const resolved =
+      typeof next === "function"
+        ? (next as (s: WizardStep) => WizardStep)(step)
+        : next;
+    importStore.setState((p) => ({ ...p, step: resolved }));
+  }
+
+  function setUnsupportedEntriesCompat(
+    next:
+      | typeof unsupportedEntries
+      | ((p: typeof unsupportedEntries) => typeof unsupportedEntries)
+  ): void {
+    importStore.setState((p) => ({
+      ...p,
+      unsupportedEntries:
+        typeof next === "function"
+          ? (
+              next as (
+                x: typeof unsupportedEntries
+              ) => typeof unsupportedEntries
+            )(p.unsupportedEntries)
+          : next,
+    }));
+  }
+
+  function setConflictEntriesCompat(
+    next:
+      | typeof conflictEntries
+      | ((p: typeof conflictEntries) => typeof conflictEntries)
+  ): void {
+    importStore.setState((p) => ({
+      ...p,
+      conflictEntries:
+        typeof next === "function"
+          ? (next as (x: typeof conflictEntries) => typeof conflictEntries)(
+              p.conflictEntries
+            )
+          : next,
+    }));
+  }
+
+  /** Step 3 has nothing to resolve on its way out — it only advances. */
+  function advanceFromStep3Compat(): void {
+    setStepCompat(4);
+  }
+
+  // ---------------------------------------------------------------------------
   // Render helpers
   // ---------------------------------------------------------------------------
 
-  const canGoNext1 =
-    parsedSnippets.length > 0 && !parseError && !!selectedFormat;
+  const canGoNext1 = canAdvanceFromUpload(importStore.state);
 
   // ---------------------------------------------------------------------------
   // Step 1 — Upload
@@ -481,9 +442,11 @@ export default function ImportWizard({
         )}
         onDragOver={(e) => {
           e.preventDefault();
-          setIsDragging(true);
+          importStore.setState((p) => ({ ...p, isDragging: true }));
         }}
-        onDragLeave={() => setIsDragging(false)}
+        onDragLeave={() =>
+          importStore.setState((p) => ({ ...p, isDragging: false }))
+        }
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
       >
@@ -530,11 +493,11 @@ export default function ImportWizard({
             <p className="text-sm text-muted-foreground">
               {i18n.t("importWizard.upload.detectedFormat")}
             </p>
-            {detectedFormat ? (
+            {detectedParser ? (
               <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground">
-                {PARSERS[detectedFormat].iconUrl && (
+                {detectedParser.iconUrl && (
                   <img
-                    src={PARSERS[detectedFormat].iconUrl}
+                    src={detectedParser.iconUrl}
                     alt=""
                     className="w-3.5 h-3.5 rounded-sm object-contain"
                     onError={(e) =>
@@ -542,7 +505,7 @@ export default function ImportWizard({
                     }
                   />
                 )}
-                {PARSERS[detectedFormat].displayName}
+                {detectedParser.displayName}
               </span>
             ) : (
               <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">
@@ -560,11 +523,7 @@ export default function ImportWizard({
               onValueChange={(v) => handleFormatChange(v as FormatId)}
               className="flex gap-4"
             >
-              {(
-                Object.values(
-                  PARSERS
-                ) as (typeof PARSERS)[keyof typeof PARSERS][]
-              ).map((parser) => (
+              {IMPORT_PARSERS.map((parser) => (
                 <div key={parser.id} className="flex items-center gap-2">
                   <RadioGroupItem value={parser.id} id={`fmt-${parser.id}`} />
                   <Label
@@ -625,7 +584,7 @@ export default function ImportWizard({
         <Select
           value={bulkUnsupportedAction}
           onValueChange={(v) => {
-            setUnsupportedEntries((prev) =>
+            setUnsupportedEntriesCompat((prev) =>
               prev.map((e) => ({
                 ...e,
                 action: v as UnsupportedPlaceholderAction,
@@ -690,7 +649,7 @@ export default function ImportWizard({
               <Select
                 value={entry.action}
                 onValueChange={(v) => {
-                  setUnsupportedEntries((prev) =>
+                  setUnsupportedEntriesCompat((prev) =>
                     prev.map((e, i) =>
                       i === idx
                         ? { ...e, action: v as UnsupportedPlaceholderAction }
@@ -742,7 +701,7 @@ export default function ImportWizard({
         <Select
           value={bulkConflictResolution}
           onValueChange={(v) => {
-            setConflictEntries((prev) =>
+            setConflictEntriesCompat((prev) =>
               prev.map((c) => ({ ...c, resolution: v as ConflictResolution }))
             );
             setBulkConflictResolution("");
@@ -807,7 +766,7 @@ export default function ImportWizard({
               <Select
                 value={entry.resolution}
                 onValueChange={(v) => {
-                  setConflictEntries((prev) =>
+                  setConflictEntriesCompat((prev) =>
                     prev.map((c, i) =>
                       i === idx
                         ? { ...c, resolution: v as ConflictResolution }
@@ -841,7 +800,7 @@ export default function ImportWizard({
                 <Input
                   value={entry.renamedShortcut ?? ""}
                   onChange={(e) => {
-                    setConflictEntries((prev) =>
+                    setConflictEntriesCompat((prev) =>
                       prev.map((c, i) =>
                         i === idx
                           ? { ...c, renamedShortcut: e.target.value }
@@ -954,11 +913,11 @@ export default function ImportWizard({
           <Progress
             value={quotaPercent}
             aria-label={i18n.t("importWizard.confirm.estimatedStorage")}
-            className={cn(willExceedQuota ? "[&>div]:bg-amber-500" : "")}
+            className={cn(quotaWillExceed ? "[&>div]:bg-amber-500" : "")}
           />
         </div>
 
-        {willExceedQuota && (
+        {quotaWillExceed && (
           <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs">
             <Icon icon={AlertTriangle} className="mt-0.5 shrink-0" />
             <span>{i18n.t("importWizard.confirm.quotaWarning")}</span>
@@ -996,7 +955,7 @@ export default function ImportWizard({
           size="sm"
           onClick={() => {
             if (step === 1) onClose();
-            else setStep((s) => (s - 1) as WizardStep);
+            else setStepCompat((s) => (s - 1) as WizardStep);
           }}
           disabled={importing}
         >
@@ -1010,9 +969,9 @@ export default function ImportWizard({
           <Button
             size="sm"
             onClick={() => {
-              if (step === 1) advanceFromStep1();
-              else if (step === 2) applyUnsupportedAndAdvance();
-              else if (step === 3) advanceFromStep3();
+              if (step === 1) advanceFromUpload();
+              else if (step === 2) advanceFromPlaceholders();
+              else if (step === 3) advanceFromStep3Compat();
             }}
             disabled={step === 1 && !canGoNext1}
           >
@@ -1024,7 +983,7 @@ export default function ImportWizard({
         {step === 4 && !importDone && (
           <Button
             size="sm"
-            onClick={handleImport}
+            onClick={() => void runWizardImport()}
             disabled={importing || snippetsToAdd === 0}
           >
             {importing

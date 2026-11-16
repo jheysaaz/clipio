@@ -3,12 +3,21 @@ import {
   useMemo,
   useRef,
   useCallback,
-  useState,
   useImperativeHandle,
   forwardRef,
 } from "react";
 import { cn } from "@/lib/utils";
 import { createPlateEditor, Plate, PlateContent } from "platejs/react";
+import {
+  editorSelectionStore,
+  setSlashQuery,
+  stashSlashContextForPicker,
+  takePendingSlashContext,
+  useEditorSelection,
+  useOverlayFlag,
+  type EditorRange,
+} from "@/store/editor-selection";
+import { editorMediaStore, useEditorMedia } from "@/store/editor-media";
 import {
   BoldPlugin,
   ItalicPlugin,
@@ -83,36 +92,60 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
   ) {
     const initialValueRef = useRef(value);
     const isExternalUpdate = useRef(false);
-    const [showSlashMenu, setShowSlashMenu] = useState(false);
-    const [slashMenuRange, setSlashMenuRange] = useState<
-      import("platejs").TRange | null
-    >(null);
-    const [slashSearchQuery, setSlashSearchQuery] = useState("");
-    const [manualTrigger, setManualTrigger] = useState(false);
+    // Overlay visibility lives in `@/store/editor-selection` as one field, so two
+    // overlays being open is not representable. With three `useState` booleans
+    // nothing stopped the GIF picker opening over the image picker — two floating
+    // panels competing for the same Escape key and the same saved range.
+    //
+    // `useOverlayFlag` keeps the call sites below unchanged while every write goes
+    // through the store, which is what makes the invariant hold rather than merely
+    // be intended.
+    const slash = useOverlayFlag("slash");
+    const gif = useOverlayFlag("gif");
+    const image = useOverlayFlag("image");
+    const showSlashMenu = slash.open;
+    const setShowSlashMenu = slash.setOpen;
+    const showGifPicker = gif.open;
+    const setShowGifPicker = gif.setOpen;
+    const showImagePicker = image.open;
+    const setShowImagePicker = image.setOpen;
+
+    const slashMenuRange = useEditorSelection((s) => s.slashMenuRange);
+    const slashSearchQuery = useEditorSelection((s) => s.slashSearchQuery);
+    const manualTrigger = useEditorSelection((s) => s.manualTrigger);
+    const setSlashSearchQuery = (query: string) => setSlashQuery(query);
+    const setManualTrigger = (manual: boolean) =>
+      editorSelectionStore.setState((prev) => ({
+        ...prev,
+        manualTrigger: manual,
+      }));
+    const setSlashMenuRange = (range: EditorRange | null) =>
+      editorSelectionStore.setState((prev) => ({
+        ...prev,
+        slashMenuRange: range,
+      }));
 
     // Image upload state
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [imageUploadError, setImageUploadError] = useState<string | null>(
-      null
-    );
+    const imageUploadError = useEditorMedia((s) => s.imageUploadError);
+    const setImageUploadError = (message: string | null) =>
+      editorMediaStore.setState((prev) => ({
+        ...prev,
+        imageUploadError: message,
+      }));
     // Track slash context when image/gif is triggered from slash menu
-    const pendingSlashContext = useRef<{
-      range: import("platejs").TRange | null;
-      query: string;
-      manual: boolean;
-    } | null>(null);
 
-    // GIF picker state
-    const [showGifPicker, setShowGifPicker] = useState(false);
-    const [gifPickerRange, setGifPickerRange] = useState<
-      import("platejs").TRange | null
-    >(null);
-
-    // Image picker state
-    const [showImagePicker, setShowImagePicker] = useState(false);
-    const [imagePickerRange, setImagePickerRange] = useState<
-      import("platejs").TRange | null
-    >(null);
+    // Picker ranges live in `@/store/editor-media`: where an open picker inserts,
+    // kept separate per picker so closing one does not discard the other's.
+    const gifPickerRange = useEditorMedia((s) => s.gifPickerRange);
+    const imagePickerRange = useEditorMedia((s) => s.imagePickerRange);
+    const setGifPickerRange = (range: EditorRange | null) =>
+      editorMediaStore.setState((prev) => ({ ...prev, gifPickerRange: range }));
+    const setImagePickerRange = (range: EditorRange | null) =>
+      editorMediaStore.setState((prev) => ({
+        ...prev,
+        imagePickerRange: range,
+      }));
 
     // Create editor instance
     const editor = useMemo(() => {
@@ -454,10 +487,9 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
           const entry = await saveMedia(file);
 
           // Delete slash trigger if image was inserted via slash command
-          const ctx = pendingSlashContext.current;
+          const ctx = takePendingSlashContext();
           if (ctx) {
             deleteSlashTrigger(ctx.manual, ctx.range, ctx.query);
-            pendingSlashContext.current = null;
           }
 
           editor.tf.insertNodes({
@@ -502,11 +534,11 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
     // Open file picker for image upload
     const handleInsertImage = useCallback(() => {
       // Capture slash context before closing menu
-      pendingSlashContext.current = {
-        range: slashMenuRange,
-        query: slashSearchQuery,
-        manual: manualTrigger,
-      };
+      stashSlashContextForPicker(
+        slashMenuRange,
+        slashSearchQuery,
+        manualTrigger
+      );
 
       setShowSlashMenu(false);
       setSlashMenuRange(null);
@@ -520,11 +552,11 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
     // Open GIF picker
     const handleInsertGif = useCallback(() => {
       // Capture slash context before closing menu
-      pendingSlashContext.current = {
-        range: slashMenuRange,
-        query: slashSearchQuery,
-        manual: manualTrigger,
-      };
+      stashSlashContextForPicker(
+        slashMenuRange,
+        slashSearchQuery,
+        manualTrigger
+      );
 
       setShowSlashMenu(false);
       setSlashMenuRange(null);
@@ -538,10 +570,9 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
     // Handle GIF selected from picker
     const handleSelectGif = useCallback(
       (giphyId: string) => {
-        const ctx = pendingSlashContext.current;
+        const ctx = takePendingSlashContext();
         if (ctx) {
           deleteSlashTrigger(ctx.manual, ctx.range, ctx.query);
-          pendingSlashContext.current = null;
         }
 
         editor.tf.insertNodes({
@@ -563,7 +594,6 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
     );
 
     const handleCloseGifPicker = useCallback(() => {
-      pendingSlashContext.current = null;
       setShowGifPicker(false);
       setGifPickerRange(null);
       editor.tf.focus();
@@ -572,11 +602,11 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
     // Open Image picker from slash menu
     const handleOpenImagePicker = useCallback(() => {
       // Capture slash context before closing menu
-      pendingSlashContext.current = {
-        range: slashMenuRange,
-        query: slashSearchQuery,
-        manual: manualTrigger,
-      };
+      stashSlashContextForPicker(
+        slashMenuRange,
+        slashSearchQuery,
+        manualTrigger
+      );
 
       setShowSlashMenu(false);
       setSlashMenuRange(null);
@@ -590,10 +620,9 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
     // Handle image selected from picker (by mediaId)
     const handleSelectImage = useCallback(
       (mediaId: string) => {
-        const ctx = pendingSlashContext.current;
+        const ctx = takePendingSlashContext();
         if (ctx) {
           deleteSlashTrigger(ctx.manual, ctx.range, ctx.query);
-          pendingSlashContext.current = null;
         }
 
         editor.tf.insertNodes({
@@ -630,7 +659,6 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
     );
 
     const handleCloseImagePicker = useCallback(() => {
-      pendingSlashContext.current = null;
       setShowImagePicker(false);
       setImagePickerRange(null);
       editor.tf.focus();
@@ -670,7 +698,6 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
         if (file) {
           // Clear any pending slash context so the file handler doesn't try to
           // delete a slash trigger that doesn't exist in this code path.
-          pendingSlashContext.current = null;
           handleFileSelected(file);
         }
       },

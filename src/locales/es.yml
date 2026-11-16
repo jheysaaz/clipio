@@ -64,6 +64,7 @@ dashboard:
     failedToLoad: Error al cargar los fragmentos.
     failedToCreate: Error al crear el fragmento. Por favor, inténtalo de nuevo.
     failedToRestore: Error al restaurar los fragmentos.
+    failedToUpdate: Error al actualizar el fragmento. Inténtalo de nuevo.
     quotaExceeded: El almacenamiento de sincronización está lleno, así que este fragmento no se guardó.
     quotaPerItem: Este fragmento ocupa $1 y la sincronización permite $2 por fragmento.
     quotaTotal: Tus fragmentos ocupan $1 y la sincronización permite $2.
@@ -76,7 +77,7 @@ newSnippet:
   name: Nombre
   namePlaceholder: "Ej: Firma de correo"
   shortcut: Atajo
-  shortcutPlaceholder: "Ej: /firma"
+  shortcutPlaceholder: "Ej: $1firma"
   shortcutError: El atajo no puede contener espacios
   shortcutErrorDuplicate: 'El atajo "$1" ya está en uso por "$2". Elige un atajo diferente.'
   shortcutErrorPrefix: 'El atajo "$1" entra en conflicto con "$2" — uno puede impedir que el otro se expanda.'
@@ -130,6 +131,10 @@ options:
     topUsageEmpty: Todavía no hay datos de uso.
     viewRelease: Ver la publicación
     upToDate: Actualizado
+  notFound:
+    title: Esa página no existe
+    body: Este enlace apunta a una sección de preferencias que Clipio ya no tiene. Puede que sea de una versión anterior.
+    action: Ir a Biblioteca
   # Nombres accesibles de controles sin texto visible. Los lee un lector de
   # pantalla, así que un usuario en español debe oír español.
   a11y:
@@ -434,7 +439,7 @@ editor:
 contextMenu:
   saveSelection: Guardar selección como fragmento
   createSnippet: Crear nuevo fragmento
-  openDashboard: Abrir Clipio
+  openOptions: Abrir opciones
   giveFeedback: Enviar comentarios
   hideOnThisSite: Ocultar en este sitio
 

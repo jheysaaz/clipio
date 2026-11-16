@@ -180,6 +180,46 @@ export class SnippetPreviewUI {
     // could hijack that page's own "Inter" — or be hijacked by it.
     style.textContent = `
       ${FONT_FACES[this.font]}
+
+      /*
+       * A thin scrollbar for the suggestion list.
+       *
+       * The panel is only 180px tall and the space is genuinely tight - it sits
+       * over the user's own text. Left unstyled, overflow-y:auto gets whatever the
+       * OS gives: on Windows and on Linux Chrome that is a permanently visible
+       * ~15px gutter, a tenth of the panel, sitting there whether or not the list
+       * is long enough to need scrolling.
+       *
+       * Three things together, because no single one covers the browsers.
+       * scrollbar-width is the standard and Firefox honours it. The WebKit
+       * pseudo-elements cover Chrome and Safari, which is where the fat gutter
+       * actually appears. scrollbar-gutter:stable is deliberately NOT used, because
+       * reserving the space permanently would defeat the point - the scrollbar
+       * should take width only when the list overflows.
+       *
+       * Colours come from the system palette keywords rather than literals, so the
+       * forced-colors block below covers the scrollbar too; a scrollbar that
+       * ignored it would be the one part of the panel still using the user's
+       * default colours.
+       */
+      .clipio-preview-list {
+        scrollbar-width: thin;
+        scrollbar-color: ButtonText transparent;
+      }
+      .clipio-preview-list::-webkit-scrollbar {
+        width: 6px;
+      }
+      .clipio-preview-list::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .clipio-preview-list::-webkit-scrollbar-thumb {
+        background-color: ButtonText;
+        border-radius: 3px;
+      }
+      .clipio-preview-list::-webkit-scrollbar-thumb:hover {
+        background-color: Highlight;
+      }
+
       @media (prefers-contrast: high) {
         .clipio-preview-item.selected {
           outline: 2px solid Highlight !important;
@@ -254,6 +294,9 @@ export class SnippetPreviewUI {
     this.list = document.createElement("div");
     this.list.setAttribute("role", "listbox");
     this.list.setAttribute("aria-label", "Snippet suggestions");
+    // The class targets the scrollbar rules in the shadow root's <style>; inline
+    // `cssText` cannot carry pseudo-elements.
+    this.list.className = "clipio-preview-list";
     this.list.style.cssText = `
       max-height: 180px;
       overflow-y: auto;

@@ -5,6 +5,7 @@ import {
   REVIEW_CHECK_ALARM_NAME,
   REVIEW_CHECK_DELAY_HOURS,
   ONBOARDING_SUPPORTED_LOCALES,
+  POPUP_VIEW_SESSION_KEY,
   TIMING,
 } from "@/config/constants";
 import {
@@ -19,16 +20,25 @@ import { initSentry, captureError, captureMessage } from "@/lib/sentry";
 import { registerSentryRelayListener } from "@/lib/sentry-relay";
 import { i18n } from "#i18n";
 import { buildUninstallUrl } from "@/lib/uninstall-url";
-import {
-  MEDIA_GET_DATA_URL,
-  type MediaGetDataUrlRequest,
-  type MediaGetDataUrlResponse,
-} from "@/lib/messages";
+import { MESSAGE, MediaNotFoundError, onMessageFromSelf } from "@/lib/protocol";
 import { getMedia } from "@/storage/backends/media";
 import { updateContentScriptCache } from "@/storage/backends/local";
 import { storageManager } from "@/storage";
 import { checkForUpdate, openReleasePage } from "@/lib/update-checker";
 import { addBlockedSite } from "@/lib/blocked-sites";
+import {
+  FEEDBACK_ROUTE,
+  OPTIONS_HOME_ROUTE,
+  popupHashRoute,
+  popupRouteForAction,
+  resolveContextMenuAction,
+  type ContextMenuAction,
+} from "@/lib/context-menu";
+import {
+  needsCacheRefresh,
+  readSyncChange,
+  type StorageChanges,
+} from "@/lib/sync-change";
 import { debugLog } from "@/lib/debug";
 import {
   shouldShowReviewPrompt,
@@ -36,10 +46,26 @@ import {
   getStoreReviewUrl,
 } from "@/lib/review-prompt";
 
-const SNIPPET_PREFIX = "snip:";
 const DEV_QA_OPENED_KEY = "__clipioDevQaOpened__";
 const DEV_QA_URL = "http://localhost:7777/manual-qa.html";
 const CONTEXT_MENU_DRAFT_SESSION_KEY = "__clipioContextMenuDraft__";
+
+/**
+ * Read a blob as a data URL.
+ *
+ * Promisified from `FileReader` because the protocol handler is `async`. Rejects
+ * on a read error rather than resolving with a null, so the failure is visible to
+ * the caller instead of arriving as an empty image.
+ */
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("FileReader failed to read the blob"));
+    reader.readAsDataURL(blob);
+  });
+}
 
 async function setupBackgroundAlarms(): Promise<void> {
   try {
@@ -83,9 +109,9 @@ async function registerContextMenus(): Promise<void> {
         contexts: ["page", "editable"],
       }),
       browser.contextMenus.create({
-        id: CONTEXT_MENU.OPEN_DASHBOARD,
+        id: CONTEXT_MENU.OPEN_OPTIONS,
         parentId: CONTEXT_MENU.PARENT,
-        title: i18n.t("contextMenu.openDashboard"),
+        title: i18n.t("contextMenu.openOptions"),
         contexts: ["page", "selection", "editable"],
       }),
       browser.contextMenus.create({
@@ -112,17 +138,58 @@ async function registerContextMenus(): Promise<void> {
   }
 }
 
-async function openPopupOrFallback(action: string): Promise<void> {
+/**
+ * Open the popup, on a route the API cannot be given.
+ *
+ * `openPopup()` takes no URL, so the route is passed separately and used where it
+ * *is* under this code's control: the tab fallback, which is an ordinary URL. The
+ * popup surface gets the route a different way — see `requestPopupView`.
+ */
+async function openPopupOrFallback(action: string, route = ""): Promise<void> {
   try {
     await (browser.action ?? browser.browserAction).openPopup();
   } catch {
     captureMessage("openPopup failed — falling back to tab", "warning", {
       action,
     });
-    const popupUrl = browser.runtime.getURL("/popup.html");
+    const popupUrl = browser.runtime.getURL("/popup.html") + route;
     browser.tabs.create({ url: popupUrl }).catch((err: unknown) => {
       captureError(err, { action: `${action}.popupFallback` });
     });
+  }
+}
+
+/**
+ * Leave the route a popup should boot into, for the popup to read.
+ *
+ * ── Why the route has to travel ──────────────────────────────────────────────
+ *
+ * The popup reopens at whatever route it was last showing, and no API lets the
+ * service worker address it. So "Create new snippet" landed on whichever snippet
+ * the popup happened to be showing: the one menu item whose whole meaning is
+ * *which* page to open, opening the page the user did not ask for. The route is
+ * the fix, and `storage.session` is how it reaches the popup — the same channel
+ * the context-menu draft already uses, and for the same reason.
+ *
+ * ── What the popup has to do with it ──────────────────────────────────────────
+ *
+ * Read `POPUP_VIEW_SESSION_KEY` on mount, navigate to it with `replace`, and
+ * remove it — consuming it, so a pending request cannot fire on a later open.
+ * The stored value is a router **path** (`/new`), not a URL fragment: handing
+ * `"#/new"` to `navigate` lands on the not-found view, so the URL reads `#/new`
+ * while nothing renders.
+ * `Dashboard.tsx` does the same for the draft in its mount effect. Without that
+ * reader the write here is inert and the popup keeps restoring its last route, so
+ * the two belong in one change.
+ *
+ * A failure is reported rather than swallowed: the menu item would otherwise
+ * quietly open the wrong page, which is exactly the bug this replaced.
+ */
+async function requestPopupView(route: string): Promise<void> {
+  try {
+    await browser.storage.session.set({ [POPUP_VIEW_SESSION_KEY]: route });
+  } catch (err) {
+    captureError(err, { action: "contextMenu.requestPopupView" });
   }
 }
 
@@ -244,60 +311,37 @@ export default defineBackground(() => {
   // ---------------------------------------------------------------------------
   // Media blob → data URL bridge
   // ---------------------------------------------------------------------------
-  // Content scripts in the isolated world see the PAGE's origin IndexedDB,
-  // not the extension's. All media blobs are stored at the extension origin.
-  // Content scripts send this message to retrieve a blob as a data URL.
-  browser.runtime.onMessage.addListener(
-    (
-      message: unknown,
-      sender,
-      sendResponse: (response: MediaGetDataUrlResponse) => void
-    ): true | void => {
-      if (
-        typeof message !== "object" ||
-        message === null ||
-        (message as MediaGetDataUrlRequest).type !== MEDIA_GET_DATA_URL
-      ) {
-        return;
-      }
-      debugLog("background", "message:received", {
-        type: (message as MediaGetDataUrlRequest).type,
-      }).catch(() => {});
-      // Only accept messages from our own extension (content scripts or popup).
-      // Reject requests from external web pages that may know the extension ID.
-      if (sender.id !== browser.runtime.id) {
-        return;
-      }
-      const { mediaId } = message as MediaGetDataUrlRequest;
-      getMedia(mediaId)
-        .then((entry) => {
-          if (!entry) {
-            sendResponse({ dataUrl: null, alt: null });
-            return;
-          }
-          const reader = new FileReader();
-          reader.onload = () =>
-            sendResponse({
-              dataUrl: reader.result as string,
-              alt: entry.alt ?? null,
-            });
-          reader.onerror = () => {
-            captureError(reader.error, {
-              action: "mediaGetDataUrl",
-              mediaId,
-            });
-            sendResponse({ dataUrl: null, alt: null });
-          };
-          reader.readAsDataURL(entry.blob);
-        })
-        .catch((err: unknown) => {
-          captureError(err, { action: "mediaGetDataUrl", mediaId });
-          sendResponse({ dataUrl: null, alt: null });
-        });
-      // Return true to keep the message channel open for the async sendResponse
-      return true;
+  // Content scripts in the isolated world see the PAGE's origin IndexedDB, not
+  // the extension's. All media blobs are stored at the extension origin, so
+  // every blob read crosses to here first.
+  //
+  // A missing entry throws `MediaNotFoundError` rather than answering with a null
+  // data URL. The old response type had `dataUrl: string | null`, so "no such
+  // media" and "the blob was unreadable" looked identical to the caller and
+  // every reader had to branch on a sentinel. The content script now gets a
+  // rejection it can name.
+  onMessageFromSelf(MESSAGE.MEDIA_GET, async ({ data }) => {
+    debugLog("background", "message:received", {
+      type: MESSAGE.MEDIA_GET,
+    }).catch(() => {});
+
+    const { mediaId } = data;
+    const entry = await getMedia(mediaId);
+    if (!entry) throw new MediaNotFoundError(mediaId);
+
+    try {
+      return {
+        dataUrl: await blobToDataUrl(entry.blob),
+        alt: entry.alt ?? null,
+      };
+    } catch (err) {
+      // An unreadable blob is our problem, not the caller's: it means the entry
+      // in IndexedDB is corrupt. Report it and let the caller retry rather than
+      // surfacing "no such image" to the user.
+      captureError(err, { action: "mediaGetDataUrl", mediaId });
+      throw err;
     }
-  );
+  });
 
   // ---------------------------------------------------------------------------
   // On install / update
@@ -399,20 +443,46 @@ export default defineBackground(() => {
   // ---------------------------------------------------------------------------
   // Context-menu click handler
   // ---------------------------------------------------------------------------
+  /**
+   * Run what a context-menu click means.
+   *
+   * The routing is `resolveContextMenuAction`; this is the doing. Split so the
+   * table can be asserted exhaustively — it is a file nothing measured until now,
+   * and one of its branches had already shipped broken.
+   */
   browser.contextMenus.onClicked.addListener(async (info) => {
-    switch (info.menuItemId) {
-      case CONTEXT_MENU.SAVE_SELECTION: {
-        const selectedText = info.selectionText?.trim();
-        if (!selectedText) return;
+    let action: ContextMenuAction;
+    try {
+      action = resolveContextMenuAction({
+        // Chrome types `menuItemId` as `string | number`; the ids are strings, and
+        // a number cannot match any of them, so it resolves to `none` — which is
+        // the right answer for an id this build does not know.
+        menuItemId: String(info.menuItemId),
+        selectionText: info.selectionText,
+        pageUrl: info.pageUrl,
+      });
+    } catch (err) {
+      // Only `hide-on-site` throws, on an unparseable page URL. Reported rather
+      // than swallowed: the menu item would otherwise just never work, with no
+      // sign of why.
+      captureError(err, { action: "contextMenu.resolve" });
+      return;
+    }
+
+    switch (action.kind) {
+      case "none":
+        return;
+
+      case "save-selection": {
         try {
           // Stash the selected text so the popup can pre-fill the draft
-          await contextMenuDraftItem.setValue(selectedText);
+          await contextMenuDraftItem.setValue(action.text);
           await browser.storage.session.remove(CONTEXT_MENU_DRAFT_SESSION_KEY);
         } catch (err) {
           captureError(err, { action: "saveSelection.persistDraft" });
           try {
             await browser.storage.session.set({
-              [CONTEXT_MENU_DRAFT_SESSION_KEY]: selectedText,
+              [CONTEXT_MENU_DRAFT_SESSION_KEY]: action.text,
             });
           } catch (sessionErr) {
             captureError(sessionErr, { action: "saveSelection.sessionDraft" });
@@ -420,46 +490,67 @@ export default defineBackground(() => {
         }
 
         await openPopupOrFallback("saveSelection");
-        break;
+        return;
       }
 
-      case CONTEXT_MENU.CREATE_SNIPPET: {
-        await openPopupOrFallback("createSnippet");
-        break;
+      case "create-snippet": {
+        const route = popupRouteForAction(action);
+        if (route === null) {
+          // Unreachable while the table maps this action to a route, and the
+          // point of reporting it is that a table edit which lost the mapping
+          // would otherwise ship as a menu item that opens the last route the
+          // popup happened to be showing — silent, and wrong.
+          captureMessage(
+            "create-snippet resolved to no popup route",
+            "warning",
+            {
+              action: "createSnippet",
+            }
+          );
+          return;
+        }
+        // Two paths, because this code controls one of them and not the other:
+        // the popup surface is addressed through storage, the tab fallback
+        // carries the route in its own URL.
+        await requestPopupView(route);
+        await openPopupOrFallback("createSnippet", popupHashRoute(route));
+        return;
       }
 
-      case CONTEXT_MENU.OPEN_DASHBOARD: {
-        const optionsUrl = browser.runtime.getURL("/options.html");
-        browser.tabs.create({ url: optionsUrl }).catch((err: unknown) => {
-          captureError(err, { action: "openDashboard" });
-        });
-        break;
-      }
-
-      case CONTEXT_MENU.GIVE_FEEDBACK: {
+      case "open-options": {
+        // The route is named rather than left to the page's own redirect, so the
+        // link says where it goes and the test can check it. `options.html` with no
+        // hash was not a destination — it was a decision made somewhere this link
+        // could not be checked, which is the same class of bug as `#feedback`.
         const optionsUrl = browser.runtime.getURL("/options.html");
         browser.tabs
-          .create({
-            url: optionsUrl + "#feedback",
-          })
+          .create({ url: optionsUrl + OPTIONS_HOME_ROUTE })
+          .catch((err: unknown) => {
+            captureError(err, { action: "openOptions" });
+          });
+        return;
+      }
+
+      case "open-feedback": {
+        const optionsUrl = browser.runtime.getURL("/options.html");
+        browser.tabs
+          .create({ url: optionsUrl + FEEDBACK_ROUTE })
           .catch((err: unknown) => {
             captureError(err, { action: "giveFeedback" });
           });
-        break;
+        return;
       }
 
-      case CONTEXT_MENU.HIDE_ON_SITE: {
-        const url = info.pageUrl;
-        if (!url) break;
+      case "hide-on-site": {
         try {
-          const hostname = new URL(url).hostname;
-          if (!hostname) break;
           const current = await blockedSitesItem.getValue();
-          await blockedSitesItem.setValue(addBlockedSite(current, hostname));
+          await blockedSitesItem.setValue(
+            addBlockedSite(current, action.hostname)
+          );
         } catch (err) {
           captureError(err, { action: "hideOnSite" });
         }
-        break;
+        return;
       }
     }
   });
@@ -505,12 +596,7 @@ export default defineBackground(() => {
 
   // ---------------------------------------------------------------------------
   browser.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "sync") return;
-
-    const snipChanges = Object.entries(changes).filter(([key]) =>
-      key.startsWith(SNIPPET_PREFIX)
-    );
-    if (snipChanges.length === 0) return;
+    const reading = readSyncChange(changes as StorageChanges, areaName);
 
     // -----------------------------------------------------------------------
     // Refresh the content-script cache when sync gains or changes a snippet.
@@ -529,31 +615,21 @@ export default defineBackground(() => {
     //
     // The background worker is the only context that both outlives a page and
     // can observe a sync-area change, so it is where this belongs.
-    const gainedOrChanged = snipChanges.some(
-      ([, change]) => change.newValue !== undefined
-    );
-    if (gainedOrChanged) {
+    if (needsCacheRefresh(reading)) {
       scheduleCacheRefreshFromSync();
     }
 
-    // If multiple snip: keys disappear at once it is almost certainly a
-    // browser sign-out (Chrome wipes storage.sync on account removal).
-    const removedSnipKeys = snipChanges.filter(
-      ([, change]) =>
-        change.oldValue !== undefined && change.newValue === undefined
-    );
+    if (!reading.likelySignOut) return;
 
-    if (removedSnipKeys.length >= 2) {
-      const msg = `[Clipio] ${
-        removedSnipKeys.length
-      } sync keys removed at once — possible sign-out`;
-      console.warn(msg);
-      captureMessage("Sync storage wipe detected", "warning", {
-        wipedKeyCount: removedSnipKeys.length,
-      });
-      syncDataLostItem.setValue(true).catch((err: unknown) => {
-        captureError(err, { action: "syncDataLostFlag" });
-      });
-    }
+    const msg = `[Clipio] ${
+      reading.removedKeys
+    } sync keys removed at once — possible sign-out`;
+    console.warn(msg);
+    captureMessage("Sync storage wipe detected", "warning", {
+      wipedKeyCount: reading.removedKeys,
+    });
+    syncDataLostItem.setValue(true).catch((err: unknown) => {
+      captureError(err, { action: "syncDataLostFlag" });
+    });
   });
 });

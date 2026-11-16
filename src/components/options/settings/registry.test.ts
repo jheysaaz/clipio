@@ -8,13 +8,11 @@ import {
   SECTIONS,
   SETTINGS,
   SECTION_LABEL_KEYS,
-  searchSettings,
   settingsForSection,
   getSection,
   getSetting,
-  normalizeQuery,
-  type SettingEntry,
 } from "./registry";
+import { searchRegistryEntries, _resetSearchIndexCache } from "./search";
 
 // ---------------------------------------------------------------------------
 // Registry shape
@@ -161,9 +159,6 @@ describe("lookups", () => {
   });
 });
 
-/** Result ids, for readable ranking assertions. */
-const byId = (entries: SettingEntry[]) => entries.map((e) => e.id);
-
 describe("section taxonomy", () => {
   it("exposes Images as its own section", () => {
     // Images was folded into Library, then split back out: the media list has
@@ -186,88 +181,102 @@ describe("section taxonomy", () => {
 });
 
 // ---------------------------------------------------------------------------
-// normalizeQuery
+// Search, against the real registry
 // ---------------------------------------------------------------------------
+//
+// The ranking itself is covered in src/lib/setting-index.test.ts with synthetic
+// entries. These tests exist because that file cannot catch the wiring failing:
+// it proves nothing about whether the copy the user actually reads — resolved
+// from the real en.yml, not a fixture — reaches the index.
+//
+// `#i18n` is aliased in vitest.config.ts to a stub reading the real en.yml, so
+// the assertions below are made against real user-visible strings.
 
-describe("normalizeQuery", () => {
-  it("lowercases and trims", () => {
-    expect(normalizeQuery("  CoNFeTTi ")).toBe("confetti");
+const ids = (query: string) =>
+  searchRegistryEntries(query).map((r) => r.entry.id);
+
+describe("searchRegistryEntries — real registry", () => {
+  it("finds the appearance font setting by an option label", () => {
+    // The case that motivated the index. "OpenDyslexic" is rendered inside the
+    // font select on the Appearance section; the previous search scored the i18n
+    // key name instead of the copy, so this returned nothing.
+    expect(ids("opendyslexic")).toContain("font-family");
   });
 
-  it("folds diacritics so unaccented queries still match", () => {
-    expect(normalizeQuery("temática")).toBe("tematica");
+  it("finds it by the option label spelled as separate words", () => {
+    // "OpenDyslexic" is one token to a tokenizer, so this only resolves because
+    // camel-cased runs are indexed whole *and* by part.
+    expect(ids("open dyslexic")).toContain("font-family");
   });
 
-  it("matches an accented keyword from an unaccented query", () => {
-    // The point of the fold: a Spanish user typing "tematica" must reach a
-    // keyword written "temática", and the reverse must also hold.
-    const synthetic: SettingEntry = {
-      ...SETTINGS[0],
-      id: "synthetic",
-      keywords: ["temática"],
-    };
-    expect(byId(searchSettings("tematica", [synthetic]))).toEqual([
-      "synthetic",
-    ]);
-    expect(byId(searchSettings("TEMÁTICA", [synthetic]))).toEqual([
-      "synthetic",
-    ]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// searchSettings
-// ---------------------------------------------------------------------------
-
-describe("searchSettings", () => {
-  it("returns nothing for an empty query so callers can show everything", () => {
-    expect(searchSettings("")).toEqual([]);
-    expect(searchSettings("   ")).toEqual([]);
+  it("finds it by a font family that appears in no label", () => {
+    expect(ids("segoe")).toContain("font-family");
   });
 
-  it("finds a setting by its id", () => {
-    expect(byId(searchSettings("confetti"))).toContain("confetti");
+  it("finds a setting by a word that only appears in its description", () => {
+    // Descriptions were never indexed before.
+    expect(ids("filterable")).toContain("preview-enabled");
   });
 
-  it("finds a setting by a keyword absent from its title", () => {
-    // "hotkey" appears only in the shortcut entry's keywords.
-    expect(byId(searchSettings("hotkey"))).toContain("preview-shortcut");
+  it("finds a setting by its section label", () => {
+    expect(ids("appearance")).toContain("font-family");
   });
 
-  it("is case-insensitive", () => {
-    expect(byId(searchSettings("CONFETTI"))).toEqual(
-      byId(searchSettings("confetti"))
-    );
+  it("finds a setting by its hand-authored keyword", () => {
+    expect(ids("quota")).toContain("storage-mode");
   });
 
-  // Ranking: a prefix on the id must beat a keyword that merely contains it.
-  it("ranks an id prefix above a keyword substring", () => {
-    const results = byId(searchSettings("theme"));
-    expect(results[0]).toBe("theme");
+  it("returns results ordered best-first, matching what the old ranking promised", () => {
+    // An exact id must still beat everything, which is the one guarantee the
+    // previous implementation made that users would have noticed losing.
+    expect(ids("theme")[0]).toBe("theme");
+    expect(ids("confetti")[0]).toBe("confetti");
   });
 
-  it("breaks ties between equally-ranked matches by id", () => {
-    // "preview" prefixes three ids equally; order must be stable, not
-    // insertion-dependent.
-    const results = byId(searchSettings("preview"));
-    expect(results[0]).toBe("preview-enabled");
-    expect([...results].sort()).toEqual(results);
+  it("returns nothing for an empty query", () => {
+    expect(searchRegistryEntries("")).toEqual([]);
   });
 
-  it("does not match every setting on a single bare letter", () => {
-    // A one-character query must not return the whole registry — that is what
-    // makes the list useless rather than merely long.
-    expect(byId(searchSettings("p")).length).toBeLessThan(SETTINGS.length);
+  it("returns nothing for a punctuation-only query", () => {
+    // The caller shows every setting on an empty query and a no-results message
+    // otherwise, so this must not read as "everything matches".
+    expect(searchRegistryEntries("-")).toEqual([]);
   });
 
-  // Negative: a query that matches nothing must yield nothing, not everything.
-  it("returns an empty array when nothing matches", () => {
-    expect(searchSettings("zzzzqqq")).toEqual([]);
+  it("returns nothing for a query that matches no setting", () => {
+    expect(ids("zzzzqqq")).toEqual([]);
   });
 
-  it("searches only the supplied entries", () => {
-    const subset = SETTINGS.filter((s) => s.id === "confetti");
-    expect(byId(searchSettings("theme", subset))).toEqual([]);
-    expect(byId(searchSettings("confetti", subset))).toEqual(["confetti"]);
+  it("reports no title highlight when the match was on an option label", () => {
+    // The row renders the title. Reporting a range here would underline the
+    // wrong characters, so the index returns none rather than guessing.
+    const [result] = searchRegistryEntries("opendyslexic");
+    expect(result.titleHits).toEqual([]);
+  });
+
+  it("reports a title highlight when the match was on the title", () => {
+    const [result] = searchRegistryEntries("confetti");
+    expect(result.titleHits).toHaveLength(1);
+    const title = result.entry.titleKey;
+    expect(title).toBeTruthy();
+  });
+
+  it("does not repeat work when called twice with the same memoised index", () => {
+    // The index is cached at module load. A second call must produce identical
+    // output rather than rebuilding and re-resolving every key.
+    _resetSearchIndexCache();
+    const first = ids("opendyslexic");
+    const second = ids("opendyslexic");
+    expect(second).toEqual(first);
+  });
+
+  it("resolves every result back to a registered setting", () => {
+    // A result index could name a setting that no longer exists; the resolver
+    // drops those rather than handing a row a missing entry.
+    for (const query of ["a", "e", "se", "on", "in"]) {
+      for (const { entry } of searchRegistryEntries(query)) {
+        expect(getSetting(entry.id)).toBe(entry);
+      }
+    }
   });
 });

@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import type { Snippet } from "@/types";
 import { cn } from "@/lib/utils";
 import { TIMING } from "@/config/constants";
+import { isWriteRefusal } from "@/store/snippets";
+import { captureError } from "@/lib/sentry";
+import { i18n } from "#i18n";
+import { toast } from "sonner";
 
 // Max characters for content preview
 const PREVIEW_MAX_LENGTH = 60;
@@ -146,14 +150,39 @@ export default function SnippetListItem({
     setEditingField("shortcut");
   };
 
+  /**
+   * Commit an inline rename.
+   *
+   * The edit closes immediately and the promise is caught, deliberately and
+   * separately. `onUpdate` is the whole write — it talks to storage — and this
+   * used to fire and forget it, so a rejection became an unhandled promise: the
+   * input closed, the old name stayed in the list, and there was no toast, no
+   * banner and no report. The user renamed a snippet and it silently did not
+   * rename.
+   *
+   * The field is not reopened on failure. The store still holds the old value —
+   * a rejected write never reached it — so the row is already showing the truth,
+   * and reopening the input over it would invite the user to retype a change that
+   * was never applied. The toast says what happened instead.
+   */
   const handleSave = () => {
     if (editValue.trim() && editingField) {
       const currentValue =
         editingField === "label" ? snippet.label : snippet.shortcut;
       if (editValue.trim() !== currentValue) {
-        onUpdate?.({
-          ...snippet,
-          [editingField]: editValue.trim(),
+        void Promise.resolve(
+          onUpdate?.({ ...snippet, [editingField]: editValue.trim() })
+        ).catch((error: unknown) => {
+          if (isWriteRefusal(error)) {
+            toast.error(error.userMessage);
+            return;
+          }
+          console.error("Error renaming snippet:", error);
+          captureError(error, {
+            action: "renameSnippet",
+            snippetId: snippet.id,
+          });
+          toast.error(i18n.t("snippetDetail.errors.failedToSave"));
         });
       }
     }

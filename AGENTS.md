@@ -20,6 +20,7 @@ Do not run a subset and call it verified.
 
 ```
 src/lib/         pure logic — no DOM, no browser APIs. Where the tests are.
+src/store/       state, as stores. Each owns its decisions and is unit-tested.
 src/storage/     backends (sync, local, indexeddb, media) + manager
 src/components/  React. Thin — logic belongs in lib/.
 src/pages/       page composition

@@ -1,56 +1,54 @@
 /**
- * Options page shell.
+ * The options page shell: sidebar, banners, and the routed content area.
  *
- * Search-first sidebar on the left, a single heading and hairline setting rows
- * on the right. Replaces the previous five-card layout.
- *
- * Routing is hash-based so a section is linkable and survives a reload — the
- * old page ignored `#feedback` entirely and always booted to the dashboard.
- *
+ * Split out of `OptionsPage.tsx` because the shell is now the *root route*
+ * component — it renders once and stays mounted while the routed section below
+ * it changes. Previously the page component owned both, so switching section
+ * re-rendered the sidebar and the review banner along with it.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Heart, X } from "lucide-react";
+import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 
 import { Alert, AlertDescription, AlertAction } from "@/components/ui/alert";
 import { Icon } from "@/components/ui/icon";
 import { i18n } from "#i18n";
-import {
-  SECTIONS,
-  searchSettings,
-  rowsForSection,
-  SECTION_LABEL_KEYS,
-  type SectionId,
-  type SettingEntry,
+import type {
+  SectionId,
+  SettingEntry,
 } from "@/components/options/settings/registry";
-import { SettingsSidebar } from "@/components/options/settings/SettingsSidebar";
+import { searchRegistryEntries } from "@/components/options/settings/search";
 import { SettingControl } from "@/components/options/settings/SettingControl";
-import {
-  SectionContent,
-  SectionFooter,
-} from "@/components/options/SectionContent";
+import { SettingsSidebar } from "@/components/options/settings/SettingsSidebar";
 import {
   readSidebarWidth,
+  SIDEBAR_PERSIST_DEBOUNCE_MS,
   SIDEBAR_WIDTH_KEY,
 } from "@/components/options/settings/SidebarResizer";
+import { sectionIdFromPath } from "@/routes/options";
 import {
   getStoreReviewUrl,
   setReviewPromptState,
   shouldShowReviewBanner,
 } from "@/lib/review-prompt";
 
-const DEFAULT_SECTION: SectionId = "library";
+/** Where a section's route lives, derived so no list needs maintaining twice. */
+const sectionHref = (id: SectionId) => `/${id}` as const;
 
-/** Read the section from `#hash`, ignoring anything that is not a known id. */
-function sectionFromHash(hash: string): SectionId {
-  const id = hash.replace(/^#\/?/, "");
-  return SECTIONS.some((s) => s.id === id)
-    ? (id as SectionId)
-    : DEFAULT_SECTION;
-}
+export function OptionsShell() {
+  const navigate = useNavigate();
 
-export default function OptionsPage() {
-  const [section, setSection] = useState<SectionId>(DEFAULT_SECTION);
+  // The active section is derived from the URL, never stored. A second piece of
+  // state would be a source of truth that a back-button press could desynchronise
+  // from the address bar — which is exactly what the old `useState<SectionId>`
+  // alongside a `hashchange` listener could do.
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // `sectionIdFromPath` rather than the test inlined: this file and
+  // `SectionView.tsx` both need it, and re-deriving it here is the "two sources
+  // of truth for what sections exist" that decision 0011 exists to remove.
+  const activeSection: SectionId = sectionIdFromPath(pathname) ?? "library";
+
   const [query, setQuery] = useState("");
   const [showReviewBanner, setShowReviewBanner] = useState(false);
 
@@ -58,48 +56,50 @@ export default function OptionsPage() {
   // reading in an effect made the rail visibly jump on every reload.
   const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
 
-  // Deep link on first paint, then follow the back/forward buttons.
-  useEffect(() => {
-    const apply = () => setSection(sectionFromHash(window.location.hash));
-    apply();
-    window.addEventListener("hashchange", apply);
-    return () => window.removeEventListener("hashchange", apply);
-  }, []);
-
   // Persist the rail width. Best-effort: a storage failure must not stop the
   // resize from working for the rest of the session.
+  //
+  // Debounced, because a drag emits a pointermove per pixel and this wrote on every
+  // one. `localStorage.setItem` is synchronous and on the main thread, so that was
+  // a write per pixel competing with the drag's own re-renders — the same defect the
+  // popup sidebar had, fixed there in bc54f1b, and left unfixed here. The rail still
+  // tracks the pointer immediately; only the write waits.
   useEffect(() => {
-    try {
-      globalThis.localStorage?.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
-    } catch {
-      /* non-fatal */
-    }
+    const timer = setTimeout(() => {
+      try {
+        globalThis.localStorage?.setItem(
+          SIDEBAR_WIDTH_KEY,
+          String(sidebarWidth)
+        );
+      } catch {
+        /* non-fatal */
+      }
+    }, SIDEBAR_PERSIST_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
   }, [sidebarWidth]);
-
-  const navigate = useCallback((next: SectionId) => {
-    setSection(next);
-    if (window.location.hash !== `#${next}`) {
-      window.location.hash = `#${next}`;
-    }
-  }, []);
-
-  /** Jump to a setting's own section, leaving search to answer the rest. */
-  const pickSetting = useCallback(
-    (entry: SettingEntry) => {
-      navigate(entry.section);
-    },
-    [navigate]
-  );
-
-  const rows = useMemo(() => rowsForSection(section), [section]);
-  const meta = SECTIONS.find((s) => s.id === section);
-  const searching = query.trim().length > 0;
 
   useEffect(() => {
     // Policy lives in review-prompt.ts, not here. This was previously an inline
     // copy of two of those conditions, and the two copies had drifted apart.
     shouldShowReviewBanner().then(setShowReviewBanner).catch(console.warn);
   }, []);
+
+  /** Leaving search hands the main column back to the route. */
+  const goToSection = useCallback(
+    (next: SectionId) => {
+      setQuery("");
+      void navigate({ to: sectionHref(next) });
+    },
+    [navigate]
+  );
+
+  /** Jump to a setting's own section, leaving search to answer the rest. */
+  const pickSetting = useCallback(
+    (entry: SettingEntry) => goToSection(entry.section),
+    [goToSection]
+  );
+
+  const searching = query.trim().length > 0;
 
   return (
     <div className="flex h-screen">
@@ -112,8 +112,8 @@ export default function OptionsPage() {
         aria-label={i18n.t("options.a11y.optionsSidebar")}
       >
         <SettingsSidebar
-          activeSection={section}
-          onNavigate={navigate}
+          activeSection={activeSection}
+          onNavigate={goToSection}
           query={query}
           onQueryChange={setQuery}
           onPickSetting={pickSetting}
@@ -161,29 +161,7 @@ export default function OptionsPage() {
             </Alert>
           )}
 
-          {searching ? (
-            <SearchResults query={query} />
-          ) : (
-            <>
-              <header className="mb-1">
-                <h1 className="text-lg font-semibold text-foreground">
-                  {meta ? i18n.t(SECTION_LABEL_KEYS[meta.id]) : ""}
-                </h1>
-              </header>
-
-              <SectionContent section={section} />
-
-              {rows.length > 0 && (
-                <div data-testid={`section-${section}-rows`}>
-                  {rows.map((entry) => (
-                    <SettingControl key={entry.id} entry={entry} />
-                  ))}
-                </div>
-              )}
-
-              <SectionFooter section={section} />
-            </>
-          )}
+          {searching ? <SearchResults query={query} /> : <Outlet />}
         </div>
       </main>
     </div>
@@ -195,7 +173,7 @@ export default function OptionsPage() {
  * changed without leaving the result list.
  */
 function SearchResults({ query }: { query: string }) {
-  const results = searchSettings(query);
+  const results = searchRegistryEntries(query);
 
   if (results.length === 0) {
     return (
@@ -213,7 +191,7 @@ function SearchResults({ query }: { query: string }) {
       <h1 className="mb-3 text-lg font-semibold text-foreground">
         {i18n.t("options.search.resultsTitle", [String(results.length)])}
       </h1>
-      {results.map((entry) => (
+      {results.map(({ entry, titleHits }) => (
         // Focusable so ArrowDown from the search field can land here; the row
         // itself is not a control, so the wrapper carries the tab stop.
         <div
@@ -222,7 +200,7 @@ function SearchResults({ query }: { query: string }) {
           tabIndex={-1}
           className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <SettingControl entry={entry} />
+          <SettingControl entry={entry} highlight={titleHits} />
         </div>
       ))}
     </div>

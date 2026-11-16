@@ -17,6 +17,15 @@ export const SIDEBAR_MAX_PX = 420;
 export const SIDEBAR_DEFAULT_PX = 256;
 
 /**
+ * How long the width must be still before it is written.
+ *
+ * Matches `src/store/sidebar.ts` for the popup. Two sidebars on two surfaces are
+ * correctly separate — different bounds, different storage — but they are the same
+ * decision about when to stop writing, and one of them used to write per pixel.
+ */
+export const SIDEBAR_PERSIST_DEBOUNCE_MS = 250;
+
+/**
  * Where the width is persisted. Exported so the writer in `OptionsPage` uses
  * the same key rather than re-declaring a string literal.
  */
@@ -40,7 +49,22 @@ export function readSidebarWidth(): number {
   }
 }
 
+/**
+ * Clamp a width into the allowed range.
+ *
+ * Non-finite input falls back to the default. `Math.round(NaN)` is `NaN`, and
+ * `Math.min(420, Math.max(176, NaN))` is `NaN` — so a corrupt stored value or a
+ * stray `undefined` produced `NaN`, and every downstream comparison against it was
+ * false, which left the divider off-screen rather than at an edge.
+ *
+ * `readSidebarWidth`'s own guard hid this for the *stored* path. The resizer's
+ * `onWidthChange` callers had no such guard. Note that
+ * `src/store/sidebar.ts` exports a function with this same name and the same
+ * contract; the duplication is worth collapsing, and that is a separate change
+ * with its own cost.
+ */
 export function clampSidebarWidth(px: number): number {
+  if (!Number.isFinite(px)) return SIDEBAR_DEFAULT_PX;
   return Math.min(SIDEBAR_MAX_PX, Math.max(SIDEBAR_MIN_PX, Math.round(px)));
 }
 

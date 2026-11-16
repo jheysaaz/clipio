@@ -32,12 +32,12 @@ import { cn } from "@/lib/utils";
 import { currentPlatform } from "@/lib/shortcuts";
 import {
   SECTIONS,
-  searchSettings,
   type GroupLabelKey,
   type SectionId,
   type SectionMeta,
   type SettingEntry,
 } from "./registry";
+import { searchRegistryEntries } from "./search";
 import { i18n } from "#i18n";
 
 const SECTION_ICONS: Record<string, LucideIcon> = {
@@ -71,7 +71,10 @@ export function SettingsSidebar({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const results = useMemo(() => searchSettings(query), [query]);
+  const results = useMemo(
+    () => searchRegistryEntries(query).map((r) => r.entry),
+    [query]
+  );
   const searching = query.trim().length > 0;
   const firstResult = results[0];
 

@@ -17,6 +17,68 @@ import { i18n } from "#i18n";
 /** `"saving" | "saved" | "error" | null` — see SettingControl. */
 export type SaveStatus = "saving" | "saved" | "error" | null;
 
+/** A half-open range to emphasise inside the row's title. */
+export type HighlightRange = {
+  start: number;
+  end: number;
+};
+
+/**
+ * Splits `text` around the given ranges so each hit can be wrapped in a `<mark>`.
+ *
+ * Ranges arrive from the search index as offsets into the *original* title
+ * string, so they slice correctly even when the copy contains an accent — the
+ * index tokenises the unfolded string precisely so this does not have to guess.
+ *
+ * Overlapping ranges are merged and out-of-order input is tolerated. Both are
+ * cheap to normalise here and expensive to explain to every caller, and the
+ * index can legitimately produce two hits inside one word when a query token
+ * matches both a whole word and a camel-case part of it.
+ *
+ * Returns the plain string with no wrapper when there is nothing to highlight,
+ * so the common case renders no extra elements at all.
+ */
+export function highlightParts(
+  text: string,
+  ranges: readonly HighlightRange[] | undefined
+): ReactNode {
+  if (!ranges || ranges.length === 0) return text;
+
+  const sorted = [...ranges]
+    .filter((r) => r.end > r.start && r.start >= 0 && r.end <= text.length)
+    .sort((a, b) => a.start - b.start);
+
+  // Merge overlaps and adjacency, so nested or duplicated hits do not produce
+  // crossing <mark> elements.
+  const merged: HighlightRange[] = [];
+  for (const range of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && range.start <= last.end) {
+      last.end = Math.max(last.end, range.end);
+    } else {
+      merged.push({ ...range });
+    }
+  }
+  if (merged.length === 0) return text;
+
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  merged.forEach((range, i) => {
+    if (range.start > cursor) parts.push(text.slice(cursor, range.start));
+    parts.push(
+      <mark
+        key={i}
+        className="rounded-[3px] bg-primary/15 px-0.5 text-foreground"
+      >
+        {text.slice(range.start, range.end)}
+      </mark>
+    );
+    cursor = range.end;
+  });
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return parts;
+}
+
 export function SettingRow({
   title,
   description,
@@ -26,6 +88,7 @@ export function SettingRow({
   status = null,
   testId,
   className,
+  highlight,
 }: {
   title: string;
   description?: string;
@@ -43,6 +106,13 @@ export function SettingRow({
    * was lost. This puts it in the row.
    */
   status?: SaveStatus;
+  /**
+   * Ranges within `title` to emphasise.
+   *
+   * Only set for a row rendered inside search results, where the user needs to
+   * see *why* a row matched. Section rows pass nothing and render as before.
+   */
+  highlight?: readonly HighlightRange[];
   testId?: string;
   className?: string;
 }) {
@@ -56,7 +126,9 @@ export function SettingRow({
       )}
     >
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="text-sm font-medium text-foreground">
+          {highlightParts(title, highlight)}
+        </p>
         {description && (
           <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
             {description}

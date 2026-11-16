@@ -90,6 +90,48 @@ export function markdownSnippet(): Snippet {
   });
 }
 
+/**
+ * A snippet exercising block-level markdown.
+ *
+ * Separate from `markdownSnippet` on purpose. That one covers inline formatting
+ * only — which is precisely why block-level markdown reached production broken:
+ * the e2e test asserted `**bold**` rendered, so the suite was green while
+ * `# Heading`, `- item` and `> quote` were inserted as literal source.
+ */
+export function blockMarkdownSnippet(): Snippet {
+  return makeSnippet({
+    id: "block-markdown-snippet",
+    label: "Block Markdown Snippet",
+    shortcut: "/bm",
+    content: [
+      "# Heading",
+      "",
+      "- first item",
+      "- second item",
+      "",
+      "> a blockquote",
+    ].join("\n"),
+  });
+}
+
+/**
+ * A multi-line snippet for the confetti-in-rich-editors regression.
+ *
+ * Distinct from `markdownSnippet` (single line) and `blockMarkdownSnippet`
+ * (block structure). This one is deliberately several plain lines with no block
+ * syntax, because that is the exact shape that broke confetti: the insertion
+ * check compared `textContent` — which joins lines with nothing — against
+ * `innerText`, which separates them. A single line matched; two did not.
+ */
+export function multilineRichSnippet(): Snippet {
+  return makeSnippet({
+    id: "multiline-rich-snippet",
+    label: "Multiline Rich Snippet",
+    shortcut: "/mr",
+    content: "First line of the snippet\nSecond line of the snippet",
+  });
+}
+
 /** A multi-line snippet for textarea testing. */
 export function multilineSnippet(): Snippet {
   return makeSnippet({

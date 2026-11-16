@@ -166,7 +166,14 @@ export default function NewSnippetView({
             name="shortcut"
             data-testid="snippet-shortcut-input"
             type="text"
-            placeholder={i18n.t("newSnippet.shortcutPlaceholder")}
+            // Parameterised rather than hardcoded to "/": the shortcut default
+            // follows the configured trigger prefix, so a ";" user would otherwise
+            // see ";" prefilled and "/sig" greyed out beside it. Read off the
+            // shortcut this component is already given, rather than from storage
+            // again — the form is controlled, so this is the same value.
+            placeholder={i18n.t("newSnippet.shortcutPlaceholder", [
+              draftSnippet.shortcut.charAt(0) || "/",
+            ])}
             value={draftSnippet.shortcut}
             onChange={handleChange}
             aria-describedby={errors.shortcut ? "shortcut-error" : undefined}

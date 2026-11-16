@@ -17,6 +17,30 @@ import {
 } from "./SidebarResizer";
 
 describe("clampSidebarWidth", () => {
+  it("falls back to the default for a non-finite width", () => {
+    // The defect: `Math.round(NaN)` is `NaN`, and `Math.min(max, Math.max(min, NaN))`
+    // is `NaN` too — so a corrupt stored value or a stray `undefined` produced
+    // `NaN`, and every comparison against it was false, which put the divider
+    // off-screen rather than at an edge. `readSidebarWidth`'s own guard hid this
+    // for the stored path; the resizer's `onWidthChange` callers had no guard.
+    //
+    // Note that `src/store/sidebar.ts` exports a function with this same name and
+    // this same contract. The duplication is worth collapsing, and that is a
+    // separate change with its own cost.
+    expect(clampSidebarWidth(Number.NaN)).toBe(SIDEBAR_DEFAULT_PX);
+    // Infinities take the default too, not the nearest bound. A drag cannot produce
+    // one — only a corrupt stored value could — and "we do not know" should answer
+    // "here is a sensible width", not "give the user the maximum". It also matches
+    // the popup's twin in `src/store/sidebar.ts`, which matters more than it looks:
+    // two functions with one name should not have two contracts.
+    expect(clampSidebarWidth(Number.POSITIVE_INFINITY)).toBe(
+      SIDEBAR_DEFAULT_PX
+    );
+    expect(clampSidebarWidth(Number.NEGATIVE_INFINITY)).toBe(
+      SIDEBAR_DEFAULT_PX
+    );
+  });
+
   it("keeps a width already inside the range", () => {
     expect(clampSidebarWidth(300)).toBe(300);
   });

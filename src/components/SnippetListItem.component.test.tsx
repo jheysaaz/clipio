@@ -11,14 +11,19 @@
  *    dirty and trigger the unsaved-changes guard for no reason)
  *  - saving a blank value must NOT call onUpdate
  *  - Escape must discard rather than save
+ *  - a rejected rename must be reported, not swallowed: the write is the whole
+ *    point of the edit, and a silent failure looks exactly like a successful one
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import SnippetListItem from "./SnippetListItem";
 import type { Snippet } from "@/types";
 import { TIMING } from "@/config/constants";
+import { SnippetWriteRefused } from "@/store/snippets";
+import { captureError } from "@/lib/sentry";
 
 const snippet: Snippet = {
   id: "3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b",
@@ -54,6 +59,8 @@ describe("SnippetListItem", () => {
   beforeEach(() => {
     onClick.mockClear();
     onUpdate.mockClear();
+    onUpdate.mockResolvedValue(undefined);
+    vi.mocked(captureError).mockClear();
   });
 
   afterEach(() => {
@@ -209,6 +216,64 @@ describe("SnippetListItem", () => {
     await user.type(input, "No handler{Enter}");
 
     expect(screen.getByText("Address")).toBeInTheDocument();
+  });
+
+  // --- a failing rename -------------------------------------------------
+
+  it("reports a quota refusal instead of failing silently", async () => {
+    // The regression. `handleSave` fired `onUpdate` and forgot it, so a rejection
+    // became an unhandled promise: the input closed, the old name stayed in the
+    // list, and there was no toast, no banner and no report. The user renamed a
+    // snippet and it silently did not rename.
+    const user = userEvent.setup();
+    const toastError = vi.spyOn(toast, "error").mockImplementation(() => "");
+    onUpdate.mockRejectedValue(
+      new SnippetWriteRefused(
+        "This snippet is 210.5 KB and sync allows 100.0 KB."
+      )
+    );
+    renderItem();
+
+    await user.dblClick(screen.getByText("Address"));
+    await user.clear(screen.getByRole("textbox"));
+    await user.type(screen.getByRole("textbox"), "Home{Enter}");
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        "This snippet is 210.5 KB and sync allows 100.0 KB."
+      )
+    );
+    // And not reported as an exception — a refusal is an expected outcome.
+    expect(captureError).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ action: "renameSnippet" })
+    );
+    toastError.mockRestore();
+  });
+
+  it("reports a genuine failure and says the save did not happen", async () => {
+    const user = userEvent.setup();
+    const toastError = vi.spyOn(toast, "error").mockImplementation(() => "");
+    onUpdate.mockRejectedValue(new Error("network down"));
+    renderItem();
+
+    await user.dblClick(screen.getByText("Address"));
+    await user.clear(screen.getByRole("textbox"));
+    await user.type(screen.getByRole("textbox"), "Home{Enter}");
+
+    await waitFor(() =>
+      expect(captureError).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({ action: "renameSnippet" })
+      )
+    );
+    expect(toastError).toHaveBeenCalledWith(
+      "Failed to save snippet. Please try again."
+    );
+    // The input closed and the row still shows the old name, because the store
+    // never received the change. That is the truth, so it is what is shown.
+    expect(screen.getByText("Address")).toBeInTheDocument();
+    toastError.mockRestore();
   });
 
   it("renders content previews with media placeholders replaced", () => {

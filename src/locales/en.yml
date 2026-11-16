@@ -66,6 +66,7 @@ dashboard:
     failedToLoad: Failed to load snippets.
     failedToCreate: Failed to create snippet. Please try again.
     failedToRestore: Failed to restore snippets.
+    failedToUpdate: Failed to update snippet. Please try again.
     # Quota explanations. $1 is the projected/actual size, $2 the limit.
     quotaExceeded: Sync storage is full, so this snippet was not saved.
     quotaPerItem: This snippet is $1 and sync allows $2 per snippet.
@@ -79,7 +80,7 @@ newSnippet:
   name: Name
   namePlaceholder: "e.g., Email Signature"
   shortcut: Shortcut
-  shortcutPlaceholder: "e.g., /sig"
+  shortcutPlaceholder: "e.g., $1sig"
   shortcutError: Shortcut cannot contain spaces
   shortcutErrorDuplicate: 'Shortcut "$1" is already used by "$2". Choose a different shortcut.'
   shortcutErrorPrefix: 'Shortcut "$1" conflicts with "$2" — one may prevent the other from expanding.'
@@ -138,6 +139,10 @@ options:
   # Development-only controls. They render only when MODE !== "production", but
   # they are still user-visible to a developer running a Spanish build, so they
   # are translated like everything else.
+  notFound:
+    title: That page does not exist
+    body: This link points at a settings page Clipio no longer has. It may be from an older version.
+    action: Go to Library
   a11y:
     optionsNav: Options navigation
     optionsSidebar: Options sidebar
@@ -440,7 +445,7 @@ editor:
 contextMenu:
   saveSelection: Save selection as snippet
   createSnippet: Create new snippet
-  openDashboard: Open Clipio
+  openOptions: Open options
   giveFeedback: Give feedback
   hideOnThisSite: Hide on this site
 

@@ -8,7 +8,7 @@
  */
 
 import { vi, beforeEach, afterAll } from "vitest";
-import { mockBrowser } from "./mocks/browser";
+import { mockBrowser, mockChrome } from "./mocks/browser";
 
 // jest-dom matchers (toBeInTheDocument, toHaveValue, …) are available in every
 // test file. Imported here rather than per-file because a component test that
@@ -31,6 +31,13 @@ afterEach(() => {
 
 (globalThis as any).browser = mockBrowser;
 
+// `chrome.*` is the callback-flavoured dialect of the same APIs, and
+// `@webext-core/messaging` speaks it directly. Both globals are installed
+// because extension code uses `browser.*` while the messaging library uses
+// `chrome.*`; they are separate mocks on purpose — see the comment on
+// `mockChrome` in tests/mocks/browser.ts.
+(globalThis as any).chrome = mockChrome;
+
 // ---------------------------------------------------------------------------
 // wxt/utils/storage mock — storage items use WXT's typed storage API.
 // We provide a minimal mock so imports of items.ts don't crash.
@@ -40,18 +47,65 @@ afterEach(() => {
 
 vi.mock("wxt/utils/storage", () => ({
   storage: {
+    /**
+     * Key-aware, and backed by the real storage area rather than a closure.
+     *
+     * Both properties are load-bearing, and both were learned the hard way.
+     *
+     * **Key-aware.** This used to ignore the key entirely, which hid a real bug:
+     * `settings.ts` reads `storage.local` directly to tell an absent theme key
+     * from one set to its default, and looked up `"local:themeMode"` where WXT
+     * had written `"themeMode"`. No test could tell the two apart, so the store
+     * silently resolved `"system"` for every user while the Appearance select
+     * read "Dark". WXT splits the key on the first colon — the prefix selects the
+     * storage *area*, the remainder is the key inside it — so the mock does the
+     * same.
+     *
+     * **Area-backed.** It used to hold the value in a closure. Real WXT storage
+     * holds nothing: every read goes to `browser.storage.local`. A closure loses
+     * its value when `vi.resetModules()` discards the module registry, which
+     * meant a test could seed through one module instance and read through
+     * another and see a default — a divergence that looks exactly like the bug
+     * it was hiding. Watchers are still tracked here, because the area does not.
+     */
     defineItem: vi.fn(<T>(_key: string, options?: { defaultValue?: T }) => {
       const defaultValue = options?.defaultValue as T;
-      let value = defaultValue;
+      const driverKey = _key.split(":").slice(1).join(":") || _key;
+      const watchers = new Set<(v: T) => void>();
+
+      type LocalArea = {
+        get: (key: string) => Promise<Record<string, unknown>>;
+        set: (items: Record<string, unknown>) => Promise<void>;
+        remove: (key: string) => Promise<void>;
+      };
+      const local = () =>
+        (
+          globalThis as unknown as {
+            browser: { storage: { local: LocalArea } };
+          }
+        ).browser.storage.local;
+
       return {
-        getValue: vi.fn(async () => value),
+        getValue: vi.fn(async (): Promise<T> => {
+          const raw = (await local().get(driverKey))[driverKey];
+          return (raw === undefined ? defaultValue : raw) as T;
+        }),
         setValue: vi.fn(async (v: T) => {
-          value = v;
+          await local().set({ [driverKey]: v });
+          for (const watcher of watchers) watcher(v);
         }),
+        // A real remove leaves the key absent rather than writing the default
+        // back — which is what the presence probe in settings.ts relies on.
         removeValue: vi.fn(async () => {
-          value = defaultValue;
+          await local().remove(driverKey);
+          for (const watcher of watchers) watcher(defaultValue);
         }),
-        watch: vi.fn(() => () => {}),
+        watch: vi.fn((cb: (v: T) => void) => {
+          watchers.add(cb);
+          return () => {
+            watchers.delete(cb);
+          };
+        }),
       };
     }),
   },

@@ -17,6 +17,12 @@ export default defineConfig({
       "src/**/*.test.tsx",
       "tests/**/*.test.ts",
       "scripts/**/*.test.ts",
+      // Included because `samples/` holds the import fixtures a human is told to
+      // try by hand, and a fixture that no longer imports is worse than none: it
+      // reads as a broken importer. The test drives them through the real detect /
+      // parse / validate path, so it fails the moment a parser or the schema
+      // changes shape.
+      "samples/**/*.test.ts",
     ],
 
     // Global setup file for browser API mocks
@@ -35,7 +41,32 @@ export default defineConfig({
       // (AGENTS.md Testing Standards rule 11: no blanket excludes without
       // justification).
       exclude: [
-        // Thin entrypoint wiring — exercised end-to-end by Playwright specs
+        // Entrypoint wiring: listener registration, not logic.
+        //
+        // This exclusion previously read "Thin entrypoint wiring — exercised
+        // end-to-end by Playwright specs", and the second half was false. It was
+        // the stated justification for excluding `background.ts`, whose
+        // sign-out detector and context-menu routing table had no test anywhere —
+        // and one of those branches had already shipped broken ("Give feedback"
+        // pointed at `options.html#feedback`, never a section id, so the user
+        // landed on Library while every layer reported success).
+        //
+        // Both decisions have been extracted into `src/lib/` and are measured
+        // there: `sync-change.ts` and `context-menu.ts`. What remains here is
+        // registration and side effects.
+        //
+        // `content.ts` is the other half of this exclusion, and it is genuinely
+        // hard rather than thin: 1479 lines of timers, MutationObservers and DOM
+        // insertion. Its one piece of real logic — the check that decides whether
+        // an insertion landed, which gates confetti and the Sentry revert report
+        // — is already extracted, as `insertion-verification.ts`, and measured at
+        // well above the threshold.
+        //
+        // Un-excluding the directory is therefore not a matter of writing tests;
+        // it would put the flat-80 `perFile` ratchet behind listener wiring, and
+        // the pressure at the end of that is the pressure AGENTS.md forbids
+        // answering by lowering a threshold. Listed as one path so the exclusion
+        // is visible rather than inherited.
         "src/entrypoints/**",
         // Generic UI primitives — covered by e2e axe scans, not unit logic
         "src/components/ui/**",
@@ -68,8 +99,14 @@ export default defineConfig({
         "src/**/*.d.ts",
         // Test scaffolding
         "src/**/__mocks__/**",
-        // React glue — covered indirectly through components and e2e
-        "src/hooks/**",
+        // NOTE: `src/hooks/**` was excluded here while ThemeContext and
+        // FontContext lived there. Both were replaced by `src/store/settings.ts`
+        // in Phase 4a and the directory no longer exists. The entry was removed
+        // rather than left to rot, because this file's own comment on the editor
+        // exclusion calls a glob that quietly stops matching "worse than a longer
+        // list" — an exclusion that excludes nothing still reads as enforcement.
+        // `check-coverage-integrity.mjs` checks configured files against the
+        // report but not excludes against the tree, so nothing else would notice.
         // Page composition — covered by e2e specs
         "src/pages/**",
         // Options UI — covered by e2e options/image-gif specs

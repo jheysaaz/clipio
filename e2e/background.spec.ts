@@ -1,18 +1,47 @@
 /**
- * Phase 2: Background Script Tests (8 tests)
+ * Background script tests — the thin slice that is observable from a browser.
  *
- * Validates service worker behavior and browser API integration:
- * - Context menu creation and click handling
- * - Popup opening with fallback
- * - Sync-wipe detection
- * - Uninstall URL registration
- * - Service worker lifecycle
+ * ── What used to be here, and why it is not ─────────────────────────────────
  *
- * Test strategy:
- * - Access service worker via context.serviceWorkers()[0]
- * - Use serviceWorker.evaluate() to call extension APIs
- * - Verify storage state changes via extension pages
- * - Simulate context menu actions via service worker evaluation
+ * The header claimed "8 tests", including "Sync-wipe detection" and "Uninstall URL
+ * registration". There were two, and neither tested the background script.
+ *
+ * `creates context menu items on install` evaluated a hardcoded array of five menu
+ * ids and then asserted that array contained those five ids. It imported nothing
+ * from `background.ts` and would have passed with `registerContextMenus` deleted
+ * outright. AGENTS.md rule 1: "A test must import the code it claims to test.
+ * Asserting on a value the test built itself proves nothing." It was deleted
+ * rather than repaired because it cannot be repaired — `chrome.contextMenus` has
+ * no `getAll()`, so there is nothing in the page to assert against.
+ *
+ * What replaced it is `src/lib/context-menu.test.ts`, which asserts something
+ * stronger and actually reachable: that every id the router handles is distinct,
+ * that every clickable id in `CONTEXT_MENU` has a handler, and that "Give
+ * feedback" opens a real route. That last one was a shipped bug — it pointed at
+ * `options.html#feedback`, which was never a section id, so the user landed on
+ * Library while every layer reported success.
+ *
+ * Sync-wipe detection was likewise untested anywhere. It is now
+ * `src/lib/sync-change.ts`, which is unit-tested — and which is how a defect in
+ * `tests/mocks/browser.ts` was found: the mock reported a removal as having a
+ * `newValue` taken from the other storage area, and this logic branches on exactly
+ * that field.
+ *
+ * ── What remains untested, deliberately ─────────────────────────────────────
+ *
+ * `src/entrypoints/**` stays on the coverage exclusion list. `background.ts` is
+ * 564 lines of listener registration whose logic now lives in `src/lib/`, and
+ * `content.ts` is 1479 lines of timers and DOM insertion. Un-excluding the
+ * directory would put the flat-80 `perFile` ratchet behind code that is awkward to
+ * reach, and the pressure at the end of that is the pressure AGENTS.md forbids
+ * answering with a lower number. The exclusion comment says so rather than
+ * claiming e2e coverage it does not have.
+ *
+ * ── What is genuinely worth a browser ───────────────────────────────────────
+ *
+ * The service worker lifecycle, and the popup's consumption of a context-menu
+ * draft — a real cross-context round trip through storage, which the unit layer
+ * cannot reach.
  */
 
 import { test, expect } from "./fixtures.js";
@@ -39,62 +68,26 @@ async function getServiceWorker(
 // ---------------------------------------------------------------------------
 
 test.describe("Background Script", () => {
-  test("creates context menu items on install", async ({ context }) => {
-    const sw = await getServiceWorker(context);
-
-    // Query the context menus created by the extension
-    const menuIds = await sw.evaluate(async () => {
-      return new Promise<string[]>((resolve) => {
-        // chrome.contextMenus doesn't have a getAll() API — we verify by
-        // checking that the onInstalled handler registered our known IDs.
-        // We simulate a re-install to trigger menu creation and then verify.
-        const knownIds = [
-          "clipio-parent",
-          "clipio-save-selection",
-          "clipio-create-snippet",
-          "clipio-open-dashboard",
-          "clipio-give-feedback",
-        ];
-        resolve(knownIds);
-      });
-    });
-
-    // Verify all 5 known menu item IDs exist
-    expect(menuIds).toHaveLength(5);
-    expect(menuIds).toContain("clipio-parent");
-    expect(menuIds).toContain("clipio-save-selection");
-    expect(menuIds).toContain("clipio-create-snippet");
-    expect(menuIds).toContain("clipio-open-dashboard");
-    expect(menuIds).toContain("clipio-give-feedback");
-  });
-
-  test("save selection context menu flow stores draft in storage", async ({
+  test("the popup consumes a saved-selection draft from storage", async ({
     context,
     extensionId,
   }) => {
     const sw = await getServiceWorker(context);
 
-    // Simulate the context menu "save selection" click via service worker
+    // The draft is seeded straight into storage rather than by invoking the
+    // context-menu handler, and the handler's own decision — trim, reject an
+    // empty selection — is unit-tested in `src/lib/context-menu.test.ts`.
+    //
+    // What is genuinely worth a browser is the half that crosses contexts: the
+    // background writes to storage, the popup reads it, and the popup consumes
+    // it. The previous version of this test reimplemented the handler's write
+    // inside `sw.evaluate` and then asserted on it, so the write path it named
+    // was never executed by the code under test.
     await sw.evaluate(async (selectedText: string) => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      // Simulate the contextMenus.onClicked handler logic:
-      // Store the draft text that would come from selection
       await ext.storage.local.set({ contextMenuDraft: selectedText });
     }, "selected test text");
 
-    // Verify the draft was stored (read from a non-popup extension page so the
-    // popup's onMount handler doesn't consume & remove it before we check).
-    // We use the service worker itself to read back the stored value.
-    const storedDraft = await sw.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const result = await ext.storage.local.get("contextMenuDraft");
-      return result.contextMenuDraft;
-    });
-
-    expect(storedDraft).toBe("selected test text");
-
-    // Also verify the popup reads and consumes the draft: open the popup and
-    // confirm the create-snippet form is pre-filled with the draft content.
     const extPage = await context.newPage();
     await extPage.goto(`chrome-extension://${extensionId}/popup.html`);
     await extPage.waitForLoadState("domcontentloaded");
@@ -130,9 +123,6 @@ test.describe("Background Script", () => {
         { timeout: 5_000, message: "draft was never consumed" }
       )
       .toBeNull();
-
-    // And the value read back before the popup opened was correct.
-    expect(storedDraft).toBe("selected test text");
 
     await extPage.close();
   });

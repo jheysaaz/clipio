@@ -10,6 +10,8 @@
  *    via htmlToMarkdown()
  */
 
+import textblazeIconUrl from "~/assets/brands/textblaze.png";
+
 import type { ParsedSnippet, FormatParser } from "./types";
 import { htmlToMarkdown } from "@/components/editor/serialization";
 
@@ -166,7 +168,9 @@ function parseTBSnippet(
 export const TextBlazeParser: FormatParser = {
   id: "textblaze",
   displayName: "TextBlaze",
-  iconUrl: "/icon/textblaze.png",
+  // Bundled asset, not a `/icon/…` public path — same reasoning as
+  // PowerTextParser. See docs/decisions/0012-assets-own-vs-bundled.md.
+  iconUrl: textblazeIconUrl,
 
   canParse(raw: unknown): boolean {
     if (raw === null || typeof raw !== "object" || Array.isArray(raw))

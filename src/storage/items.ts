@@ -10,6 +10,7 @@
  */
 
 import { storage } from "wxt/utils/storage";
+import { DEFAULT_SIDEBAR_WIDTH } from "@/config/constants";
 import type { Snippet } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -99,6 +100,62 @@ import { DEFAULT_UI_FONT } from "@/lib/ui-font";
 export const uiFontItem = storage.defineItem<UiFont>("local:uiFont", {
   defaultValue: DEFAULT_UI_FONT,
 });
+
+// ---------------------------------------------------------------------------
+// Popup layout
+// ---------------------------------------------------------------------------
+
+/**
+ * The popup sidebar's width, in pixels.
+ *
+ * Persisted so the resize survives a popup closing — which it does on every blur,
+ * so "without this it resets constantly" is not a hypothetical. Clamped on read as
+ * well as on write, because the popup and the options page are different documents
+ * and a stale value from an older build could exceed the bounds the resizer
+ * enforces.
+ */
+export const sidebarWidthItem = storage.defineItem<number>(
+  "local:sidebarWidth",
+  {
+    defaultValue: DEFAULT_SIDEBAR_WIDTH,
+  }
+);
+
+/**
+ * Whether the popup sidebar is expanded.
+ *
+ * Persisted, which it was not before: the collapsed state was component state, so
+ * it reset to expanded on every popup open and a user who had deliberately made
+ * room by collapsing the sidebar had to do it again every single time.
+ *
+ * Separate from the width rather than encoded in it, because "collapsed" and
+ * "narrow" are different intentions — someone who collapsed it wants the detail
+ * pane, not a sliver of list.
+ */
+export const sidebarOpenItem = storage.defineItem<boolean>(
+  "local:sidebarOpen",
+  {
+    defaultValue: true,
+  }
+);
+
+/**
+ * The snippet the user last had open in the popup.
+ *
+ * Not derivable from `usageCountsItem`, which counts *insertions* rather than
+ * views: someone reading a snippet they have never inserted is the common case, and
+ * the one where a usage-derived "recent" is wrong.
+ *
+ * `null` means "nothing remembered yet", which is also what a cleared library and a
+ * never-opened popup both look like — so the reader treats a missing or stale id as
+ * "fall back", not as an error.
+ */
+export const lastViewedSnippetIdItem = storage.defineItem<string | null>(
+  "local:lastViewedSnippetId",
+  {
+    defaultValue: null,
+  }
+);
 
 // ---------------------------------------------------------------------------
 // Usage tracking

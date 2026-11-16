@@ -66,11 +66,10 @@ export const TIMING = {
   DOUBLE_CLICK_MS: 250,
 } as const;
 
-/** Runtime message type for dev-only Sentry test (content script). */
-export const SENTRY_TEST_MESSAGE_TYPE = "clipio-test-sentry" as const;
-
-/** Runtime message type for content-script ping/health-check (always-on). */
-export const CONTENT_SCRIPT_PING_MESSAGE_TYPE = "clipio-ping" as const;
+// Runtime message types used to live here as bare string constants. They are now
+// in src/lib/protocol/index.ts, declared in one typed map with their payloads and
+// responses, so a mismatched message is a compile error rather than an undefined
+// arriving at runtime.
 
 /** Alarm name for the periodic update check (fires every 6 hours). */
 export const UPDATE_CHECK_ALARM_NAME = "clipio-update-check" as const;
@@ -143,12 +142,62 @@ export const REVIEW_ERROR_SNOOZE_HOURS = 24 as const;
 export const ONBOARDING_SUPPORTED_LOCALES = ["en", "es"] as const;
 
 /** Context-menu item IDs. */
+/**
+ * Popup sidebar geometry.
+ *
+ * In `constants.ts` rather than in the component so the clamp that enforces them
+ * lives next to them — see `src/store/sidebar.ts`.
+ */
+export const SIDEBAR_MIN_WIDTH = 120;
+/**
+ * The popup's sidebar can grow well past its default.
+ *
+ * It could not before: `SIDEBAR_MAX_WIDTH` was 240, which is also
+ * `DEFAULT_SIDEBAR_WIDTH`, so the clamp left no headroom in either direction and
+ * dragging right did nothing at all. The user could only ever make the sidebar
+ * smaller. The popup sizes itself to its content, so the ceiling here is about
+ * leaving the detail pane usable rather than about the window.
+ */
+export const SIDEBAR_MAX_WIDTH = 380;
+export const DEFAULT_SIDEBAR_WIDTH = 240;
+
 export const CONTEXT_MENU = {
   PARENT: "clipio-parent",
   SAVE_SELECTION: "clipio-save-selection",
   CREATE_SNIPPET: "clipio-create-snippet",
-  OPEN_DASHBOARD: "clipio-open-dashboard",
+  /**
+   * Opens the **options page** — the key says so, the id string does not.
+   *
+   * The key was `OPEN_DASHBOARD` because there was no popup routing when it was
+   * written, so "the Clipio page" could only mean the options page; the menu label
+   * is now "Open options", which is what the item does. The id string stays: it is
+   * a stored identifier in the user's own context-menu registry, and renaming it
+   * would orphan every existing item for no gain — `registerContextMenus` calls
+   * `removeAll()` before re-creating them anyway.
+   */
+  OPEN_OPTIONS: "clipio-open-dashboard",
   GIVE_FEEDBACK: "clipio-give-feedback",
   SEPARATOR_HIDE: "clipio-separator-hide",
   HIDE_ON_SITE: "clipio-hide-on-site",
 } as const;
+
+/**
+ * The popup route the background asks a popup to boot into.
+ *
+ * ── Why a key at all ──────────────────────────────────────────────────────────
+ *
+ * `browser.action.openPopup()` takes no URL, and the popup reopens at whatever
+ * route it was last showing. There is no API for the service worker to address an
+ * extension popup, so the only way for a menu item to name the page it wants is
+ * to leave the name somewhere the popup will read — and `storage.session` is
+ * already the channel the context-menu draft uses, for the same reason.
+ *
+ * `session`, not `local`: a stale request must not survive the browser closing. A
+ * pending "open the create form" from yesterday evening is not something the user
+ * asked for today.
+ *
+ * The value is a popup route (`#/…`), and the popup navigates to it with
+ * `replace` — see docs/decisions/0011: the popup is addressed but keeps no
+ * history, so `history.length` never grows while it is open.
+ */
+export const POPUP_VIEW_SESSION_KEY = "__clipioPopupView__";

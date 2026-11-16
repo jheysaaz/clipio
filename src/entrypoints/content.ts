@@ -1,9 +1,5 @@
 import { hasImagePlaceholder, extractImageIds } from "@/lib/media-placeholders";
-import {
-  TIMING,
-  SENTRY_TEST_MESSAGE_TYPE,
-  CONTENT_SCRIPT_PING_MESSAGE_TYPE,
-} from "@/config/constants";
+import { TIMING } from "@/config/constants";
 import {
   cachedSnippetsItem,
   confettiEnabledItem,
@@ -46,10 +42,19 @@ import {
   type ShortcutIndex,
 } from "@/lib/content-helpers";
 import {
-  MEDIA_GET_DATA_URL,
-  type MediaGetDataUrlResponse,
-} from "@/lib/messages";
+  MESSAGE,
+  MediaNotFoundError,
+  isProtocolError,
+  onMessageFromSelf,
+  sendMessage,
+} from "@/lib/protocol";
 import { buildGifUrl } from "@/lib/giphy";
+import {
+  imageCountGained,
+  insertionTextMatches,
+  isImageOnlyMarkup,
+  plainTextFromHtml,
+} from "@/lib/insertion-verification";
 import {
   fuzzyMatchSnippets,
   calculatePreviewPosition,
@@ -82,40 +87,15 @@ export default defineContentScript({
     // Responds to health-check pings from the options page / background.
     // This is NOT dev-only so the Developers > Content Script Health card works
     // in production.
-    browser.runtime.onMessage.addListener(
-      (
-        message: unknown,
-        _sender: unknown,
-        sendResponse: (r: unknown) => void
-      ): boolean | undefined => {
-        if (
-          typeof message === "object" &&
-          message !== null &&
-          (message as { type?: string }).type ===
-            CONTENT_SCRIPT_PING_MESSAGE_TYPE
-        ) {
-          sendResponse({ pong: true });
-          return true;
-        }
-        return undefined;
-      }
-    );
+    onMessageFromSelf(MESSAGE.CONTENT_PING, () => ({ pong: true }));
 
     // Dev only: test Sentry capture (message from options or keyboard shortcut)
     if ((import.meta.env.MODE as string) !== "production") {
-      browser.runtime.onMessage.addListener((message: unknown): boolean => {
-        if (
-          typeof message === "object" &&
-          message !== null &&
-          (message as { type?: string }).type === SENTRY_TEST_MESSAGE_TYPE
-        ) {
-          captureError(
-            new Error("Clipio Sentry test exception (content script)")
-          );
-          captureMessage("Clipio Sentry test message (content script)", "info");
-          return false;
-        }
-        return false;
+      onMessageFromSelf(MESSAGE.SENTRY_TEST, () => {
+        captureError(
+          new Error("Clipio Sentry test exception (content script)")
+        );
+        captureMessage("Clipio Sentry test message (content script)", "info");
       });
       document.addEventListener(
         "keydown",
@@ -394,21 +374,31 @@ export default defineContentScript({
         await Promise.all(
           uniqueIds.map(async (id) => {
             try {
-              const response = (await browser.runtime.sendMessage({
-                type: MEDIA_GET_DATA_URL,
+              const response = await sendMessage(MESSAGE.MEDIA_GET, {
                 mediaId: id,
-              })) as MediaGetDataUrlResponse;
-              if (response?.dataUrl) {
-                blobMap.set(id, { src: response.dataUrl, alt: response.alt });
-              } else {
+              });
+              blobMap.set(id, { src: response.dataUrl, alt: response.alt });
+            } catch (err) {
+              // The two failures are now distinguishable, which they were not
+              // when the response was `{ dataUrl: string | null }`:
+              //
+              //  - `MediaNotFoundError` means the snippet references media that
+              //    is not in the store. That is expected after a partial import
+              //    or an uninstall/reinstall cycle, and it is worth a warning
+              //    breadcrumb naming the id so it can be traced.
+              //  - anything else is our fault, and goes to Sentry. Previously
+              //    both landed in the same `captureError` call, so a routine
+              //    missing image reported as an error and a genuinely corrupt
+              //    blob was indistinguishable from it in the issue tracker.
+              if (isProtocolError(err, MediaNotFoundError)) {
                 captureMessage(
                   "Media blob not found during content expansion",
                   "warning",
                   { mediaId: id }
                 );
+              } else {
+                captureError(err, { action: "resolveMedia", mediaId: id });
               }
-            } catch (err) {
-              captureError(err, { action: "resolveMedia", mediaId: id });
             }
           })
         );
@@ -450,25 +440,56 @@ export default defineContentScript({
     }
 
     // Plain text from HTML for contenteditable verification
-    function getPlainTextFromHtml(html: string): string {
-      const div = document.createElement("div");
-      div.innerHTML = html;
-      return (div.textContent || "").trim();
-    }
-
     function verifyInsertionSuccessForContentEditable(
       element: HTMLElement,
-      insertedHtml: string
+      insertedHtml: string,
+      /**
+       * How many `<img>` elements the field held *before* the insertion.
+       *
+       * Required, not defaulted. The obvious default is `0`, and `0` is exactly
+       * the value that reproduces the bug this parameter exists to fix: a field
+       * already holding one image would count as a gain on every insertion, so a
+       * host that reverted it would be reported as a success and
+       * `reportInsertionReverted` — the only signal that a host is fighting the
+       * extension — would never fire.
+       *
+       * `src/entrypoints/**` is excluded from coverage, so a test cannot catch a
+       * call site that passes the wrong thing. Making the argument mandatory is
+       * the only gate available: a third call site now fails to compile rather
+       * than silently defaulting to the broken value.
+       */
+      imagesBeforeInsertion: number
     ): Promise<boolean> {
-      const expectedPlain = getPlainTextFromHtml(insertedHtml);
-      if (!expectedPlain) {
-        // Image-only snippet: verify by checking whether the element gained
-        // at least one <img> element after the insertion.
-        if (/<img/i.test(insertedHtml)) {
+      // `insertionTextMatches` rather than a `textContent` vs `innerText`
+      // comparison done here. `textContent` drops line breaks and `innerText`
+      // produces them, so a multi-line snippet never matched, and confetti — which
+      // is gated on this — never fired in a rich editor. It worked in textareas
+      // because that path compares against the raw field value, and it worked for
+      // single-line snippets, which is all the e2e covered.
+      //
+      // Extracted to src/lib/insertion-verification.ts so it is unit-tested; a
+      // content script is excluded from coverage.
+      // The baseline is sampled by the caller, before the mutation. A host that
+      // reverts on a mutation observer does it before this call, so sampling in
+      // here would record the reverted state as the baseline and every
+      // image-only insertion would look like a success.
+      const imagesBefore = imagesBeforeInsertion;
+      if (!plainTextFromHtml(insertedHtml)) {
+        // Image-only snippet: verified by whether the field *gained* an image.
+        // "Does it contain one?" is not the question — a field that already held
+        // a logo answers yes before anything is inserted, so a reverted
+        // insertion looked like a success and `reportInsertionReverted` — the
+        // only signal that a host is fighting us — never fired.
+        if (isImageOnlyMarkup(insertedHtml)) {
           return new Promise((resolve) => {
             requestAnimationFrame(() => {
               requestAnimationFrame(() => {
-                resolve(element.querySelectorAll("img").length > 0);
+                resolve(
+                  imageCountGained(
+                    imagesBefore,
+                    element.querySelectorAll("img").length
+                  )
+                );
               });
             });
           });
@@ -479,7 +500,7 @@ export default defineContentScript({
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             const actual = element.innerText || element.textContent || "";
-            resolve(actual.includes(expectedPlain));
+            resolve(insertionTextMatches(insertedHtml, actual));
           });
         });
       });
@@ -662,7 +683,7 @@ export default defineContentScript({
         true
       );
 
-      // Allow image-only snippets through — getPlainTextFromHtml returns ""
+      // Allow image-only snippets through — plainTextFromHtml returns ""
       // for HTML with no text nodes (e.g. a single <img>), which would
       // incorrectly drop valid image-only snippets.
       if (!processedContent?.trim()) {
@@ -686,6 +707,9 @@ export default defineContentScript({
 
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = processedContent;
+
+      // The image baseline for an image-only snippet, taken before any node moves.
+      const imagesBefore = element.querySelectorAll("img").length;
 
       // Locate the cursor marker inside tempDiv BEFORE moving nodes into the
       // fragment — this scopes the lookup to the current insertion only and
@@ -729,7 +753,8 @@ export default defineContentScript({
 
       const insertionStuck = await verifyInsertionSuccessForContentEditable(
         element,
-        processedContent
+        processedContent,
+        imagesBefore
       );
       debugLog("expand:done", {
         shortcut: snippet.shortcut,
@@ -1152,6 +1177,9 @@ export default defineContentScript({
         const tempDiv = document.createElement("div");
         tempDiv.innerHTML = processedContent;
 
+        // The image baseline for an image-only snippet, before any node moves.
+        const imagesBefore = element.querySelectorAll("img").length;
+
         // Locate the cursor marker BEFORE moving nodes into the fragment so the
         // lookup is scoped to the current insertion only.
         const cursorMarker = tempDiv.querySelector(
@@ -1226,7 +1254,8 @@ export default defineContentScript({
 
         const insertionStuck = await verifyInsertionSuccessForContentEditable(
           element,
-          processedContent
+          processedContent,
+          imagesBefore
         );
         if (!insertionStuck) {
           reportInsertionReverted("contenteditable");

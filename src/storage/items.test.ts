@@ -88,6 +88,15 @@ const EXPECTED: Record<string, unknown> = {
   "local:snippetPreviewEnabled": true,
   "local:snippetPreviewPrefix": "/",
   "local:snippetPreviewShortcut": "Ctrl+Shift+Space",
+  // The popup sidebar's width. Persisted because the popup closes on every blur, so
+  // as component state it reset constantly.
+  "local:sidebarWidth": 240,
+  // Whether that sidebar is expanded. Persisted so a deliberate collapse survives
+  // the next popup open.
+  "local:sidebarOpen": true,
+  // The snippet last open in the popup, so reopening resumes there. `null` means
+  // nothing remembered yet — which is also what a cleared library looks like.
+  "local:lastViewedSnippetId": null,
 };
 
 describe("storage items — keys", () => {

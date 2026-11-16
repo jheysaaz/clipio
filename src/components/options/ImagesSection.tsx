@@ -1,5 +1,4 @@
-import { extractImageIds } from "@/lib/media-placeholders";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useEffect } from "react";
 import { Images, LayoutList, LayoutGrid, Trash2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -9,166 +8,55 @@ import { cn } from "@/lib/utils";
 import { InlineError } from "@/components/ui/inline-error";
 import { MEDIA_LIMITS } from "@/config/constants";
 import {
-  listMedia,
-  getMedia,
-  deleteMedia,
-  updateMediaAlt,
-  type MediaMetadata,
-} from "@/storage/backends/media";
-import { getSnippets } from "@/storage";
+  cancelDelete,
+  dismissLoadError,
+  clearAltSaved,
+  disposeObjectUrls,
+  findImageItem,
+  loadMediaLibrary,
+  removeMedia,
+  requestDelete,
+  saveAlt,
+  setAltDraft,
+  setViewMode,
+  totalMediaBytes,
+  useMedia,
+} from "@/store/media";
 import { i18n } from "#i18n";
-import { captureError } from "@/lib/sentry";
-
-interface ImageItem {
-  meta: MediaMetadata;
-  objectUrl: string | null;
-  referencingSnippets: string[];
-}
-
-type ImageViewMode = "list" | "grid";
 
 export function ImagesSection() {
-  const [items, setItems] = useState<ImageItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ImageViewMode>("list");
-  const objectUrlsRef = useRef<string[]>([]);
+  const items = useMedia((s) => s.items);
+  const loading = useMedia((s) => s.loading);
+  const loadError = useMedia((s) => s.loadError);
+  const deleteErrors = useMedia((s) => s.deleteErrors);
+  const confirmDeleteId = useMedia((s) => s.confirmDeleteId);
+  const viewMode = useMedia((s) => s.viewMode);
+  const altDraft = useMedia((s) => s.altDraft);
+  const altSaved = useMedia((s) => s.altSaved);
+  const altErrors = useMedia((s) => s.altErrors);
 
-  const [altDraft, setAltDraft] = useState<Record<string, string>>({});
-  const [altSaved, setAltSaved] = useState<Record<string, boolean>>({});
-  const [altErrors, setAltErrors] = useState<Record<string, string>>({});
-
-  const handleSaveAlt = useCallback(
-    async (id: string) => {
-      const draft = altDraft[id] ?? "";
-      try {
-        await updateMediaAlt(id, draft);
-        setItems((prev) =>
-          prev.map((item) =>
-            item.meta.id === id
-              ? {
-                  ...item,
-                  meta: { ...item.meta, alt: draft.trim() || undefined },
-                }
-              : item
-          )
-        );
-        setAltErrors((prev) => ({ ...prev, [id]: "" }));
-        setAltSaved((prev) => ({ ...prev, [id]: true }));
-        setTimeout(
-          () => setAltSaved((prev) => ({ ...prev, [id]: false })),
-          2000
-        );
-      } catch {
-        setAltErrors((prev) => ({
-          ...prev,
-          [id]: i18n.t("options.images.errors.failedToSaveDescription"),
-        }));
-      }
-    },
-    [altDraft]
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const [mediaList, snippets] = await Promise.all([
-          listMedia(),
-          getSnippets(),
-        ]);
-
-        if (cancelled) return;
-
-        const refMap: Record<string, string[]> = {};
-        for (const snippet of snippets) {
-          for (const id of extractImageIds(snippet.content)) {
-            if (!refMap[id]) refMap[id] = [];
-            if (!refMap[id].includes(snippet.label)) {
-              refMap[id].push(snippet.label);
-            }
-          }
-        }
-
-        const resolved: ImageItem[] = await Promise.all(
-          mediaList.map(async (meta) => {
-            try {
-              const entry = await getMedia(meta.id);
-              if (entry?.blob) {
-                const url = URL.createObjectURL(entry.blob);
-                objectUrlsRef.current.push(url);
-                return {
-                  meta,
-                  objectUrl: url,
-                  referencingSnippets: refMap[meta.id] ?? [],
-                };
-              }
-            } catch {
-              /* unreadable media entry — fall through with a null object URL */
-            }
-            return {
-              meta,
-              objectUrl: null,
-              referencingSnippets: refMap[meta.id] ?? [],
-            };
-          })
-        );
-
-        if (!cancelled) {
-          setItems(resolved);
-          setAltDraft(
-            Object.fromEntries(
-              resolved.map((item) => [item.meta.id, item.meta.alt ?? ""])
-            )
-          );
-          setLoading(false);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          captureError(err, { action: "imagesSection.load" });
-          setLoadError(i18n.t("options.images.errors.failedToLoad"));
-          setLoading(false);
-        }
-      }
-    }
-
-    load();
-
-    return () => {
-      cancelled = true;
-      for (const url of objectUrlsRef.current) {
-        URL.revokeObjectURL(url);
-      }
-      objectUrlsRef.current = [];
-    };
-  }, []);
-
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteMedia(id);
-      const item = items.find((i) => i.meta.id === id);
-      if (item?.objectUrl) {
-        URL.revokeObjectURL(item.objectUrl);
-        objectUrlsRef.current = objectUrlsRef.current.filter(
-          (u) => u !== item.objectUrl
-        );
-      }
-      setItems((prev) => prev.filter((i) => i.meta.id !== id));
-      setConfirmDeleteId(null);
-    } catch (err) {
-      captureError(err, { action: "imagesSection.delete", imageId: id });
-      setDeleteErrors((prev) => ({
-        ...prev,
-        [id]: i18n.t("options.images.errors.failedToDelete"),
-      }));
-      setConfirmDeleteId(null);
-    }
+  const handleSaveAlt = async (id: string) => {
+    const saved = await saveAlt(id);
+    if (!saved) return;
+    // The "Saved" flash, on a timer. Kept here rather than in the store because it
+    // is a presentation concern with no state of its own beyond the flag, and a
+    // store holding a timer would keep it alive past unmount.
+    setTimeout(() => clearAltSaved(id), 2000);
   };
 
-  const totalBytes = items.reduce((sum, item) => sum + item.meta.size, 0);
+  // The load owns its object URLs now, and so does the teardown.
+  //
+  // `disposeObjectUrls` revokes every URL the store created rather than the ones
+  // a `useRef` happened to be holding when the component went away. The ref could
+  // not: a load that resolved after unmount created URLs nobody would ever revoke,
+  // pinning the blobs in memory for the life of the document.
+  useEffect(() => {
+    void loadMediaLibrary();
+    return () => disposeObjectUrls();
+  }, []);
+
+  const totalBytes = totalMediaBytes(items);
+
   const totalKB = (totalBytes / 1024).toFixed(1);
   const maxKB = (MEDIA_LIMITS.MAX_TOTAL_SIZE / 1024).toFixed(0);
   const totalPercent = Math.min(
@@ -176,9 +64,7 @@ export function ImagesSection() {
     Math.round((totalBytes / MEDIA_LIMITS.MAX_TOTAL_SIZE) * 100)
   );
 
-  const confirmItem = confirmDeleteId
-    ? items.find((i) => i.meta.id === confirmDeleteId)
-    : null;
+  const confirmItem = findImageItem(items, confirmDeleteId);
 
   return (
     <div className="space-y-4">
@@ -251,7 +137,7 @@ export function ImagesSection() {
       {loadError && (
         <InlineError
           message={loadError}
-          onDismiss={() => setLoadError(null)}
+          onDismiss={dismissLoadError}
           className="rounded-lg border border-red-200 dark:border-red-800"
         />
       )}
@@ -338,10 +224,7 @@ export function ImagesSection() {
                       type="text"
                       value={altDraft[item.meta.id] ?? ""}
                       onChange={(e) =>
-                        setAltDraft((prev) => ({
-                          ...prev,
-                          [item.meta.id]: e.target.value,
-                        }))
+                        setAltDraft(item.meta.id, e.target.value)
                       }
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleSaveAlt(item.meta.id);
@@ -384,7 +267,7 @@ export function ImagesSection() {
                   size="sm"
                   variant="ghost"
                   className="shrink-0 h-8 text-xs text-muted-foreground hover:text-destructive"
-                  onClick={() => setConfirmDeleteId(item.meta.id)}
+                  onClick={() => requestDelete(item.meta.id)}
                   aria-label={`${i18n.t("options.images.deleteButton")} ${item.meta.id}`}
                 >
                   <Icon icon={Trash2} className="mr-1" />
@@ -430,7 +313,7 @@ export function ImagesSection() {
 
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                     <button
-                      onClick={() => setConfirmDeleteId(item.meta.id)}
+                      onClick={() => requestDelete(item.meta.id)}
                       aria-label={`${i18n.t("options.images.deleteButton")} ${item.meta.id}`}
                       className="h-8 w-8 rounded-full bg-background/90 flex items-center justify-center text-destructive hover:bg-background transition-colors shadow-sm"
                     >
@@ -469,10 +352,7 @@ export function ImagesSection() {
                       type="text"
                       value={altDraft[item.meta.id] ?? ""}
                       onChange={(e) =>
-                        setAltDraft((prev) => ({
-                          ...prev,
-                          [item.meta.id]: e.target.value,
-                        }))
+                        setAltDraft(item.meta.id, e.target.value)
                       }
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleSaveAlt(item.meta.id);
@@ -520,7 +400,7 @@ export function ImagesSection() {
         <div
           className="fixed inset-0 z-50 bg-black/40 dark:bg-black/60 flex items-center justify-center p-4"
           onKeyDown={(e) => {
-            if (e.key === "Escape") setConfirmDeleteId(null);
+            if (e.key === "Escape") cancelDelete();
           }}
         >
           <div
@@ -554,17 +434,13 @@ export function ImagesSection() {
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setConfirmDeleteId(null)}
-              >
+              <Button size="sm" variant="outline" onClick={cancelDelete}>
                 {i18n.t("common.cancel")}
               </Button>
               <Button
                 size="sm"
                 variant="destructive"
-                onClick={() => handleDelete(confirmItem.meta.id)}
+                onClick={() => void removeMedia(confirmItem.meta.id)}
               >
                 {i18n.t("options.images.deleteButton")}
               </Button>

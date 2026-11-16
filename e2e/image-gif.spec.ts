@@ -9,7 +9,7 @@
  *    confirm dialog and only navigates if the user confirms
  * 3. Media blob → data URL bridge: background validates sender origin and
  *    rejects requests from non-extension senders
- * 4. Image alt text is carried through the MEDIA_GET_DATA_URL message and
+ * 4. Image alt text is carried through the media:get message and
  *    injected into the <img alt="..."> attribute in contenteditable insertion
  * 5. Width-suffixed placeholder {{image:uuid:200}} is correctly recognised in
  *    the options page "Images" section (not shown as "not used in any snippets")
@@ -118,30 +118,73 @@ test.describe("Image / GIF feature tests", () => {
   // -------------------------------------------------------------------------
   // 1. selectNewest: popup auto-selects the most-recently-updated snippet
   // -------------------------------------------------------------------------
-  test("background handles MEDIA_GET_DATA_URL from extension-origin sender", async ({
+  test("background refuses MEDIA_GET from extension-origin sender when the id is unknown", async ({
     context,
     extensionId,
   }) => {
-    // Send the message from an extension page (popup.html).
-    // sender.id will equal browser.runtime.id so the guard passes.
+    // Sent from an extension page (popup.html), so `sender.id` equals
+    // `runtime.id` and the guard passes — the request reaches the handler.
+    //
+    // The handler now *rejects* rather than answering `{dataUrl: null}`, so the
+    // thing asserted is that it got far enough to produce a named failure. A
+    // silent drop and a refusal look identical from the outside unless the
+    // failure names itself, which is the point of the typed error.
+    const popupPage = await getExtPage(context, extensionId);
+
+    const result = await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      return new Promise<{ ok: boolean; name?: string; message?: string }>(
+        (resolve) => {
+          ext.runtime.sendMessage(
+            {
+              id: 1,
+              type: "media:get",
+              data: { mediaId: "nonexistent-guard-test" },
+              timestamp: Date.now(),
+            },
+            (resp: unknown) => {
+              const envelope = resp as
+                | { res?: unknown; err?: { name?: string; message?: string } }
+                | undefined;
+              resolve({
+                ok: Boolean(envelope?.res),
+                name: envelope?.err?.name,
+                message: envelope?.err?.message,
+              });
+            }
+          );
+        }
+      );
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.name).toBe("MediaNotFoundError");
+    expect(result.message).toContain("nonexistent-guard-test");
+
+    await popupPage.close();
+  });
+
+  test("background ignores a MEDIA_GET-shaped message that is not in the protocol format", async ({
+    context,
+    extensionId,
+  }) => {
+    // An already-open tab can still be running the previous build, which sent
+    // `{ type, mediaId }` with no `data` and no `timestamp`. It must not be
+    // mistaken for a valid `media:get`, and must not produce a response that
+    // reads as success.
     const popupPage = await getExtPage(context, extensionId);
 
     const response = await popupPage.evaluate(async () => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       return new Promise<unknown>((resolve) => {
         ext.runtime.sendMessage(
-          { type: "media-get-data-url", mediaId: "nonexistent-guard-test" },
+          { type: "media:get", mediaId: "legacy-shape" },
           (resp: unknown) => resolve(resp)
         );
       });
     });
 
-    // The handler should have processed the request (not silently dropped it)
-    // and returned {dataUrl: null} because the media ID doesn't exist.
-    // No `expect(typeof response).toBe("object")` here — that pattern is
-    // unfailable and was deleted from messaging.spec.ts for exactly that reason.
-    expect(response).not.toBeUndefined();
-    expect((response as Record<string, unknown>)["dataUrl"]).toBeNull();
+    expect(response).toBeUndefined();
 
     await popupPage.close();
   });

@@ -1,0 +1,12 @@
+{
+  ";pw": "Kind regards,\n%clip%",
+  ";date": "Date: %d(YYYY-MM-DD)",
+  ";usdate": "Date: %d(MM/DD/YYYY)",
+  ";longdate": "Date: %d(MMMM D, YYYY)",
+  ";feat": "feat(%scope%): %clip%",
+  ";fix": "fix(%scope%): %clip%",
+  ";shrug": "¯\\_(ツ)_/¯",
+  ";tableflip": "(╯°□°）╯︵ ┻━┻",
+  ";lenny": "( ͡° ͜ʖ ͡°)",
+  ";unsupported": "Dear %name%, your balance is %balance% as of %d(YYYY)."
+}

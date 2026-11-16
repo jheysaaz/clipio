@@ -14,7 +14,8 @@ import {
   imagePlaceholderGlobal,
   gifPlaceholderGlobal,
 } from "@/lib/media-placeholders";
-import { markdownToHtml, markdownToPlainText } from "./markdown";
+import { markdownToPlainText } from "./markdown";
+import { markdownToHtmlWithBlocks } from "./markdown-blocks";
 import { buildGifUrl } from "./giphy";
 
 // ---------------------------------------------------------------------------
@@ -274,7 +275,10 @@ export function processSnippetContent(
     // Convert markdown → HTML ({{cursor}} survives escaping intact)
     // markdownToHtml already handles {{gif:id}} → <img src="giphy-url">
     // and {{image:id}} → <img data-clipio-media="id"> (no src yet)
-    processedContent = markdownToHtml(processedContent);
+    // Block-aware: the line-by-line variant rendered `**bold**` but inserted
+    // `#`, `- ` and `> ` as literal characters, so a snippet with a heading, a
+    // list or a blockquote arrived as its own source. See markdown-blocks.ts.
+    processedContent = markdownToHtmlWithBlocks(processedContent);
 
     // 4. Image placeholders — inject actual object URL src into <img data-clipio-media="id">
     if (resolveMedia) {
@@ -283,7 +287,7 @@ export function processSnippetContent(
         (match, id: string) => {
           const resolved = resolveMedia(id);
           if (!resolved) return ""; // omit unresolvable images
-          // Preserve the style attribute (may carry width:NNNpx) from markdownToHtml output
+          // Preserve the style attribute (may carry width:NNNpx) from the markdown converter's output
           const styleMatch = match.match(/style="([^"]*)"/);
           const style = styleMatch
             ? styleMatch[1]

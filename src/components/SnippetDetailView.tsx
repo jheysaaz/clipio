@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Copy,
   Check,
@@ -21,6 +21,8 @@ import { Badge } from "@/components/ui/badge";
 import type { Snippet } from "@/types";
 import { InlineError } from "@/components/ui/inline-error";
 import { getRelativeTime } from "@/lib/date-utils";
+import { editSnippet, isWriteRefusal } from "@/store/snippets";
+import { createAutosave, TAG_AUTOSAVE_DELAY_MS } from "@/lib/autosave";
 import {
   getSnippetUsageCount,
   incrementSnippetUsage,
@@ -28,6 +30,17 @@ import {
 import { i18n } from "#i18n";
 import { captureError } from "@/lib/sentry";
 import { copyMarkdownAsRichText } from "@/lib/copy-markdown-as-rich-text";
+
+/**
+ * One tag write: the record as it stood when the edit was made, and the tags to
+ * put on it.
+ *
+ * The record is captured rather than read at write time on purpose. `persist` is
+ * a whole-record upsert, so writing "the current snippet plus these tags" after
+ * the user has moved on to another snippet would write one snippet's tags onto
+ * another snippet's record.
+ */
+type TagChange = { base: Snippet; tags: string[] };
 
 interface SnippetDetailViewProps {
   snippet: Snippet;
@@ -66,6 +79,71 @@ export default function SnippetDetailView({
   const hasChanges = editedContent.trim() !== snippet.content || tagsChanged;
 
   const snippetIdRef = useRef(snippet.id);
+
+  /**
+   * The values a write must see when it runs.
+   *
+   * Both writers are asynchronous — one behind a debounce timer, one behind a
+   * promise — so a callback that closed over this render's state would write a
+   * snapshot that is one edit out of date by the time it ran. Synced on every
+   * commit, and read only from timers and promise continuations, so every read
+   * sees the last committed value.
+   */
+  const writeStateRef = useRef({
+    snippet,
+    content: editedContent,
+    tags: editedTags,
+  });
+  useEffect(() => {
+    writeStateRef.current = {
+      snippet,
+      content: editedContent,
+      tags: editedTags,
+    };
+  });
+
+  /**
+   * Tags are saved without being asked.
+   *
+   * Debounced, because a tag input commits per keystroke and a write per
+   * character is the same instability the popup sidebar had. Flushed when the
+   * tag input closes and when the pane goes away, because both are windows the
+   * popup can vanish inside — and it does, on every window blur.
+   *
+   * Written through `editSnippet` rather than the `onUpdate` prop on purpose.
+   * `onUpdate` is the user-initiated Save and its parent raises a "Snippet
+   * updated" toast for every call; an autosave firing that per debounce would
+   * claim a save the user never made, repeatedly. The store call is the same one
+   * that prop ends up calling, minus the toast.
+   */
+  const tagAutosave = useMemo(
+    () =>
+      createAutosave<TagChange>(async ({ base, tags }) => {
+        try {
+          await editSnippet({
+            ...base,
+            tags,
+            updatedAt: new Date().toISOString(),
+          });
+        } catch (error) {
+          // The same inline error copy and save uses. Failing quietly here is
+          // the worst outcome available: the tag badge is on screen, so the
+          // user has every reason to believe it is stored.
+          //
+          // A refusal carries the explanation the store worked out — storage
+          // over quota, naming the limit — and is not reported: the user hit a
+          // documented ceiling, which is not an exception. `editSnippet`
+          // reports a genuine failure to Sentry itself, so it is not reported
+          // again here; that would file the same incident twice.
+          setActionError(
+            isWriteRefusal(error)
+              ? error.userMessage
+              : i18n.t("snippetDetail.errors.failedToSave")
+          );
+        }
+      }, TAG_AUTOSAVE_DELAY_MS),
+    []
+  );
 
   // Reset the editor when a *different* snippet is selected. Guarded on the id,
   // so a same-id content change (e.g. the parent echoing back a save) does not
@@ -107,6 +185,54 @@ export default function SnippetDetailView({
     onHasChangesRef.current?.(hasChanges);
   }, [hasChanges]);
 
+  /**
+   * Schedule a tag write whenever the local tags differ from the stored ones.
+   *
+   * Keyed on the difference, not on `editedTags` alone. Once a write lands and
+   * the parent echoes the new tags back, this runs again with nothing left to
+   * save — and it has to *discard* rather than do nothing, or the timer armed for
+   * the previous edit would fire and write the same tags a second time.
+   *
+   * Declared after the `writeStateRef` sync above, which is what makes reading
+   * that ref here safe: effect callbacks run in declaration order.
+   */
+  useEffect(() => {
+    if (!tagsChanged) {
+      tagAutosave.discard();
+      return;
+    }
+    tagAutosave.schedule({
+      base: writeStateRef.current.snippet,
+      tags: editedTags,
+    });
+  }, [tagAutosave, editedTags, snippet.tags, tagsChanged]);
+
+  /**
+   * Leaving the tag input means a tag was committed, so write it now.
+   *
+   * Driven off `isAddingTag` rather than off `onBlur` because the commit is a
+   * state update: flushing inside the handler would write the tags from *before*
+   * the one just typed. After the commit, the effect above has scheduled the new
+   * value and this flushes exactly that.
+   *
+   * Covers Enter, Escape and blur alike — all three close the input, and all
+   * three mean the user is no longer looking at the field.
+   */
+  useEffect(() => {
+    if (isAddingTag) return;
+    void tagAutosave.flush();
+  }, [isAddingTag, tagAutosave]);
+
+  // A tag committed in the last few hundred milliseconds must not be lost because
+  // the pane went away. The popup closes on every window blur, so that is the
+  // common case rather than the rare one, and the badge was already on screen.
+  useEffect(
+    () => () => {
+      void tagAutosave.flush();
+    },
+    [tagAutosave]
+  );
+
   const handleCopy = async () => {
     try {
       await copyMarkdownAsRichText(editedContent);
@@ -128,19 +254,44 @@ export default function SnippetDetailView({
 
     setIsSaving(true);
     try {
+      // Save is the last writer, so it has to be the *only* remaining one.
+      //
+      // The pending tag autosave is dropped because this call carries the same
+      // tags — leaving it armed would write them a second time. One already in
+      // flight cannot be dropped (the store write is not cancellable) but it can
+      // be waited out, and that wait is load-bearing: it was built from the
+      // record as it stood before this edit, so letting it land after this write
+      // would put the old body back with no error anywhere.
+      tagAutosave.discard();
+      await tagAutosave.settle();
+
+      const { snippet: base, content, tags } = writeStateRef.current;
       const updated: Snippet = {
-        ...snippet,
-        content: editedContent.trim(),
-        tags: editedTags,
+        ...base,
+        content: content.trim(),
+        tags,
         updatedAt: new Date().toISOString(),
       };
       await onUpdate(updated);
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2000);
     } catch (error) {
-      console.error("Error saving snippet:", error);
-      captureError(error, { action: "saveSnippet", snippetId: snippet.id });
-      setActionError(i18n.t("snippetDetail.errors.failedToSave"));
+      if (isWriteRefusal(error)) {
+        // An expected refusal with an explanation already worked out — storage
+        // over quota, naming the limit. Shown as-is and *not* reported: a user
+        // hitting the quota ceiling is not an exception, and filing one on every
+        // occurrence buried the signal this report exists to raise.
+        //
+        // Before this, the store's message was thrown as a bare `Error`, caught
+        // here, filed to Sentry as localised user-facing copy, and then replaced
+        // with a generic "please try again" — so the limit detail was computed and
+        // thrown away in the same breath.
+        setActionError(error.userMessage);
+      } else {
+        console.error("Error saving snippet:", error);
+        captureError(error, { action: "saveSnippet", snippetId: snippet.id });
+        setActionError(i18n.t("snippetDetail.errors.failedToSave"));
+      }
     } finally {
       setIsSaving(false);
     }
@@ -151,9 +302,15 @@ export default function SnippetDetailView({
     try {
       await onDelete(snippet.id);
     } catch (error) {
-      console.error("Error deleting snippet:", error);
-      captureError(error, { action: "deleteSnippet", snippetId: snippet.id });
-      setActionError(i18n.t("snippetDetail.errors.failedToDelete"));
+      // Same split as the save path: a refusal is an explained outcome, not an
+      // exception. See the note there.
+      if (isWriteRefusal(error)) {
+        setActionError(error.userMessage);
+      } else {
+        console.error("Error deleting snippet:", error);
+        captureError(error, { action: "deleteSnippet", snippetId: snippet.id });
+        setActionError(i18n.t("snippetDetail.errors.failedToDelete"));
+      }
     } finally {
       setIsDeleting(false);
       setShowDeleteDialog(false);
