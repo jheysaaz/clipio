@@ -9,3 +9,8 @@ allowBuilds:
 onlyBuiltDependencies:
   - esbuild
   - spawn-sync
+
+overrides:
+  # typescript-eslint 8.x still resolves minimatch 10, which Dependabot flags
+  # (GHSA-g3hv-75wg-m249, patched in 11.0.1). The API used is unchanged.
+  minimatch@^10.2.2: 11.0.8
