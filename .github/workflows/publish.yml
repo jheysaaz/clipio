@@ -27,19 +27,19 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: latest
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: "26"
           cache: "pnpm"
 
       - name: Install dependencies
@@ -52,7 +52,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage/
@@ -65,17 +65,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: latest
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: "26"
           cache: "pnpm"
 
       - name: Install dependencies
@@ -95,7 +95,7 @@ jobs:
           E2E_SKIP_BUILD: "1"
 
       - name: Upload Playwright report on failure
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report
@@ -103,7 +103,7 @@ jobs:
           retention-days: 7
 
       - name: Upload Playwright traces on failure
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: test-results
@@ -117,17 +117,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: latest
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: "26"
           cache: "pnpm"
 
       - name: Install dependencies
@@ -149,7 +149,7 @@ jobs:
       # files were found" for a zip that plainly exists, which is what killed
       # the v1.6.0 and v1.6.1 releases.
       - name: Upload Chrome ZIP artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: chrome-zip
           path: .output/*-chrome.zip
@@ -166,7 +166,7 @@ jobs:
           WXT_SENTRY_DSN: ${{ secrets.WXT_SENTRY_DSN }}
 
       - name: Upload Firefox ZIP artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: firefox-zip
           path: |
@@ -183,30 +183,30 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: latest
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: "26"
           cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Download Chrome ZIP
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: chrome-zip
           path: .output/
 
       - name: Download Firefox ZIPs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: firefox-zip
           path: .output/
@@ -281,22 +281,22 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download Chrome ZIP
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: chrome-zip
           path: release-assets/
 
       - name: Download Firefox ZIPs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: firefox-zip
           path: release-assets/
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: release-assets/*
