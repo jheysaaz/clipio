@@ -130,8 +130,8 @@ export function SettingsSidebar({
       className="relative flex h-full select-none flex-col border-r border-border bg-muted/20"
     >
       {/* Search */}
-      <div className="px-3 pb-2 pt-3">
-        <div className="relative">
+      <div className="flex items-center gap-2 px-3 pb-2 pt-3">
+        <div className="relative flex-1">
           <Icon
             icon={Search}
             className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"

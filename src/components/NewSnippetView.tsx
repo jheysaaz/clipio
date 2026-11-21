@@ -106,6 +106,7 @@ export default function NewSnippetView({
         </Button>
         <div className="flex-1" />
         <Button
+          data-testid="snippet-create-cancel"
           variant="ghost"
           size="icon"
           onClick={onCancel}
@@ -189,6 +190,12 @@ export default function NewSnippetView({
               {errors.shortcut}
             </p>
           )}
+          <p
+            data-testid="snippet-shortcut-tip"
+            className="text-xs text-muted-foreground"
+          >
+            {i18n.t("newSnippet.shortcutTip")}
+          </p>
         </div>
 
         {/* Content Field */}
@@ -199,7 +206,10 @@ export default function NewSnippetView({
           <Label className="text-xs font-medium">
             {i18n.t("newSnippet.content")}
           </Label>
-          <div className="min-h-50 border border-border rounded-md p-2">
+          <div
+            data-testid="snippet-content-editor"
+            className="min-h-50 border border-border rounded-md p-2"
+          >
             <RichTextEditor
               value={draftSnippet.content}
               onChange={(value) =>
@@ -210,6 +220,12 @@ export default function NewSnippetView({
               className="text-sm"
             />
           </div>
+          <p
+            data-testid="snippet-placeholder-tip"
+            className="text-xs text-muted-foreground"
+          >
+            {i18n.t("newSnippet.placeholderTip")}
+          </p>
         </div>
       </div>
 

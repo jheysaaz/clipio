@@ -12,6 +12,7 @@ import {
 import "@/store/settings";
 import { initSentry, captureError } from "@/lib/sentry";
 import { Toaster } from "@/components/ui/toaster";
+import { OnboardingLoader } from "@/components/onboarding/OnboardingLoader";
 import { i18n } from "#i18n";
 
 initSentry("options");
@@ -72,6 +73,7 @@ function App() {
       onError={(error) => captureError(error, { action: "ReactErrorBoundary" })}
     >
       <RouterProvider router={router} />
+      <OnboardingLoader surface="options" />
       <Toaster />
     </ErrorBoundary>
   );

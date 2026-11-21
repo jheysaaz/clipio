@@ -84,8 +84,10 @@ newSnippet:
   shortcutError: Shortcut cannot contain spaces
   shortcutErrorDuplicate: 'Shortcut "$1" is already used by "$2". Choose a different shortcut.'
   shortcutErrorPrefix: 'Shortcut "$1" conflicts with "$2" — one may prevent the other from expanding.'
+  shortcutTip: Type the trigger and this shortcut on any page to expand the snippet.
   content: Content
   contentPlaceholder: Enter your snippet content...
+  placeholderTip: "Type / in the editor for commands like Clipboard, Today, Place Cursor and Pick Date."
   footer: New snippet
 
 snippetDetail:
@@ -495,3 +497,52 @@ background:
   reviewPrompt:
     title: "Enjoying Clipio?"
     message: "You've been using Clipio for a while. A quick review helps others discover it!"
+
+onboarding:
+  skip: Skip
+  back: Back
+  next: Next
+  done: Done
+  continue: Continue in settings
+  progress: "Step $1 of $2"
+  popup:
+    search:
+      title: Find snippets fast
+      description: Search your library here, then press Enter to insert the first match.
+    add:
+      title: Save what you repeat
+      description: Create snippets for text, shortcuts and images you use all the time. The next step opens the editor for you.
+    name:
+      title: Name the snippet
+      description: Use a clear name so this snippet is easy to find when you search later.
+    shortcut:
+      title: Pick a shortcut
+      description: Add a short suffix without spaces, such as `sig`, to expand this snippet from any text field.
+    shortcutTip:
+      title: Use it anywhere
+      description: On a web page, type the trigger prefix followed by your shortcut and press Space.
+    content:
+      title: Write the content
+      description: Type or paste anything you reuse often. The editor keeps formatting, links and images.
+    placeholders:
+      title: Add dynamic placeholders
+      description: Type / in the editor to insert commands such as Clipboard, Today, Place Cursor and Pick Date.
+    save:
+      title: Create the snippet
+      description: Create saves it to your library. For this tour, Next leaves the form without saving your sample draft.
+    library:
+      title: Find it again
+      description: Select a snippet here to copy, edit or insert it into a page.
+    settings:
+      title: Continue in settings
+      description: The tour finishes in Options, where you can manage your library and settings.
+  options:
+    search:
+      title: Search every setting
+      description: Type here to find a setting and change it without leaving the results.
+    nav:
+      title: Browse by purpose
+      description: Library, behaviour, appearance and system settings are grouped here.
+    library:
+      title: Manage your library
+      description: Import, export and storage controls all live in this section.

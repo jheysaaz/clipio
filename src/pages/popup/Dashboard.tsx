@@ -690,6 +690,7 @@ export default function Dashboard() {
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar */}
         <div
+          data-testid="snippet-library"
           style={{ width: sidebarOpen ? sidebarWidth : 0 }}
           className="flex flex-col border-r bg-muted/50 relative shrink-0 transition-[width] duration-200 ease-in-out overflow-hidden min-w-0 min-h-0"
         >
@@ -720,6 +721,7 @@ export default function Dashboard() {
               <Input
                 ref={searchInputRef}
                 type="text"
+                data-testid="snippet-search"
                 placeholder={i18n.t("dashboard.searchPlaceholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}

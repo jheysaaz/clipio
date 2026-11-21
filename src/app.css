@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "driver.js/dist/driver.css";
 @import "./assets/styles/fonts.css";
 @plugin "tailwindcss-animate";
 
@@ -290,4 +291,114 @@
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 0;
+}
+
+/**
+ * Guided onboarding popover.
+ *
+ * Driver.js ships its own neutral skin, so everything user-visible here is
+ * re-pointed at the shadcn tokens. The popover is deliberately compact: the
+ * popup is only 680x460 and loses focus the moment the user clicks away.
+ */
+.clipio-onboarding-popover.driver-popover {
+  font-family: var(--font-ui);
+  color: var(--popover-foreground);
+  background-color: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  min-width: 230px;
+  max-width: 280px;
+  padding: 12px;
+}
+
+.clipio-onboarding-popover .driver-popover-arrow {
+  border-color: var(--popover);
+}
+
+.clipio-onboarding-popover.driver-popover-arrow-side-left {
+  border-right-color: var(--popover);
+}
+
+.clipio-onboarding-popover.driver-popover-arrow-side-right {
+  border-left-color: var(--popover);
+}
+
+.clipio-onboarding-popover.driver-popover-arrow-side-top {
+  border-bottom-color: var(--popover);
+}
+
+.clipio-onboarding-popover.driver-popover-arrow-side-bottom {
+  border-top-color: var(--popover);
+}
+
+.clipio-onboarding-popover .driver-popover-title {
+  color: var(--popover-foreground);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.clipio-onboarding-popover .driver-popover-description {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.clipio-onboarding-popover .driver-popover-footer {
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.clipio-onboarding-popover .driver-popover-progress-text {
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.clipio-onboarding-popover .driver-popover-navigation-btns {
+  gap: 4px;
+}
+
+.clipio-onboarding-popover .driver-popover-footer-btn {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background-color: var(--secondary);
+  color: var(--secondary-foreground);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  transition: opacity 0.15s ease-in-out;
+}
+
+.clipio-onboarding-popover .driver-popover-footer-btn:hover {
+  opacity: 0.8;
+}
+
+.clipio-onboarding-popover .driver-popover-footer-btn:focus-visible {
+  border-color: var(--ring);
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.clipio-onboarding-popover [data-testid="onboarding-skip"],
+.clipio-onboarding-popover .driver-popover-prev-btn {
+  background-color: transparent;
+  color: var(--muted-foreground);
+}
+
+.clipio-onboarding-popover .driver-popover-next-btn {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
 }

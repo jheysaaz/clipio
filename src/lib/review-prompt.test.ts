@@ -49,7 +49,6 @@ vi.mock("~/storage/items", () => ({
   lastSentryErrorAtItem: mockLastSentryErrorAtItem,
   // Other items not used by review-prompt
   giphyApiKeyItem: { getValue: vi.fn(), setValue: vi.fn() },
-  onboardingCompletedItem: { getValue: vi.fn(), setValue: vi.fn() },
 }));
 
 // ---------------------------------------------------------------------------

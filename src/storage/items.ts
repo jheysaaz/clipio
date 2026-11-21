@@ -11,6 +11,10 @@
 
 import { storage } from "wxt/utils/storage";
 import { DEFAULT_SIDEBAR_WIDTH } from "@/config/constants";
+import {
+  NOT_STARTED_ONBOARDING,
+  type OnboardingProgress,
+} from "@/lib/onboarding-progress";
 import type { Snippet } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -268,13 +272,15 @@ export const dismissedUpdateVersionItem = storage.defineItem<string>(
 // ---------------------------------------------------------------------------
 
 /**
- * Set to true once the onboarding redirect has been triggered on first install.
- * Prevents re-opening the onboarding page on subsequent installs. Development
- * builds never open it at all (see the onInstalled handler in background.ts).
+ * Persisted progress for the in-extension guided tour. The popup hands off to
+ * the options page through this item, because opening Options closes the popup
+ * and no overlay can survive the jump.
  */
-export const onboardingCompletedItem = storage.defineItem<boolean>(
-  "local:onboardingCompleted",
-  { defaultValue: false }
+export const guidedOnboardingStateItem = storage.defineItem<OnboardingProgress>(
+  "local:guidedOnboarding",
+  {
+    defaultValue: NOT_STARTED_ONBOARDING,
+  }
 );
 
 // ---------------------------------------------------------------------------

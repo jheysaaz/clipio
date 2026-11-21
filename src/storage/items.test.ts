@@ -79,7 +79,7 @@ const EXPECTED: Record<string, unknown> = {
   "local:latestVersion": null,
   "local:latestVersionCheckedAt": null,
   "local:dismissedUpdateVersion": "",
-  "local:onboardingCompleted": false,
+  "local:guidedOnboarding": { status: "not_started" },
   "local:extensionInstalledAt": null,
   "local:totalSnippetInsertions": 0,
   "local:reviewPromptState": "pending",
