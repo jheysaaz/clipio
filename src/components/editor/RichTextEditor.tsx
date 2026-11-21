@@ -7,7 +7,12 @@ import {
   forwardRef,
 } from "react";
 import { cn } from "@/lib/utils";
-import { createPlateEditor, Plate, PlateContent } from "platejs/react";
+import {
+  createPlateEditor,
+  ParagraphPlugin,
+  Plate,
+  PlateContent,
+} from "platejs/react";
 import {
   editorSelectionStore,
   setSlashQuery,
@@ -64,7 +69,7 @@ import {
   CodeLeaf,
 } from "./leaves";
 import { LinkElementComponent } from "./LinkElement";
-import { BLOCK_PLUGINS } from "./BlockElements";
+import { BLOCK_PLUGINS, ParagraphElement } from "./BlockElements";
 import { FloatingToolbar } from "./FloatingToolbar";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import { GifPicker } from "./GifPicker";
@@ -158,6 +163,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
           StrikethroughPlugin,
           CodePlugin,
           LinkPlugin.withComponent(LinkElementComponent),
+          ParagraphPlugin.withComponent(ParagraphElement),
           ClipboardPlaceholderPlugin.withComponent(ClipboardPlaceholderElement),
           DatePlaceholderPlugin.withComponent(DatePlaceholderElement),
           CursorPlaceholderPlugin.withComponent(CursorPlaceholderElement),

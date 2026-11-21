@@ -604,6 +604,31 @@ test.describe("Popup (Dashboard)", () => {
     await expect(popupPage.getByTestId("snippet-list-item")).toHaveCount(1);
   });
 
+  test("shows a saved blank line between paragraphs in the editor", async ({
+    popupPage,
+  }) => {
+    // The stored markdown keeps the blank line — insertion into a page already
+    // preserves it — but the editor used to render the two paragraphs as bare
+    // Slate divs with no gap, so reopening looked like one flat block.
+    const snippet = makeSnippet({
+      label: "Newsletter",
+      shortcut: "/news",
+      content:
+        "GitHub Education November 2026 Newsletter\n\nNovember brings exciting opportunities.",
+    });
+    await seedAndReload(popupPage, [snippet]);
+
+    await popupPage.getByTestId("snippet-list-item").click();
+    await expect(popupPage.getByTestId("snippet-copy")).toBeVisible();
+
+    const paragraphs = popupPage.getByTestId("clipio-editor-paragraph");
+    await expect(paragraphs).toHaveCount(2);
+    const gap = await paragraphs
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).marginBottom));
+    expect(gap).toBeGreaterThan(0);
+  });
+
   test("copies snippet to clipboard", async ({ popupPage }) => {
     await seedAndReload(popupPage, [helloSnippet()]);
 

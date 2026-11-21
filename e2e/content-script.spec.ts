@@ -22,6 +22,7 @@ import {
   clipboardSnippet,
   markdownSnippet,
   multilineSnippet,
+  makeSnippet,
 } from "./helpers/snippets.js";
 import { waitForContentScriptReady } from "./helpers/content-script.js";
 
@@ -280,6 +281,36 @@ test.describe("Content Script Expansion", () => {
     expect(markerCount).toBe(0);
   });
 
+  test("places the caret at the end without a cursor placeholder", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    // The {{cursor}} path has a marker to position the selection. A snippet
+    // without one still has to leave the caret after the inserted text — the
+    // auto-expansion contenteditable path never had that fallback.
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    const ce = testPage.locator('[data-testid="contenteditable-field"]');
+    await ce.click();
+    await testPage.keyboard.type("/hello", { delay: 30 });
+    await expect(ce).toContainText("Hello, World!", {
+      timeout: EXPANSION_TIMEOUT,
+    });
+
+    const caretOffset = await ce.evaluate((el) => {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return -1;
+      const range = selection.getRangeAt(0);
+      if (!el.contains(range.endContainer)) return -2;
+      const before = range.cloneRange();
+      before.selectNodeContents(el);
+      before.setEnd(range.endContainer, range.endOffset);
+      return before.toString().length;
+    });
+
+    expect(caretOffset).toBe("Hello, World!".length);
+  });
+
   test("inserts clipboard content with {{clipboard}}", async ({
     testPage,
     storageHelper,
@@ -490,5 +521,85 @@ test.describe("Content Script Expansion", () => {
 
     await testPage.keyboard.press("Enter");
     await expect(input).toHaveValue(/Hello, World!/, { timeout: 5_000 });
+  });
+
+  test("picks up a snippet created in the popup without a page reload", async ({
+    testPage,
+    popupPage,
+    storageHelper,
+  }) => {
+    // The content script reads cachedSnippets, not storage.sync, and is told
+    // about changes through the storage watch. Adding in the popup must reach
+    // an already-open tab — reloading the page would hide a broken watch.
+    await storageHelper.clearAll();
+    await testPage.reload();
+    await testPage.waitForLoadState("domcontentloaded");
+    await waitForContentScriptReady(testPage);
+
+    await popupPage.reload();
+    await expect(popupPage.getByTestId("add-snippet")).toBeVisible();
+    await popupPage.getByTestId("add-snippet").click();
+    await popupPage.getByTestId("snippet-label-input").fill("Live add");
+    await popupPage.getByTestId("snippet-shortcut-input").fill("/live");
+    await popupPage
+      .locator('[contenteditable="true"]')
+      .first()
+      .fill("Live update content");
+    await popupPage.getByTestId("snippet-create-save").click();
+
+    await expect
+      .poll(async () => (await storageHelper.readSyncSnippets()).length, {
+        timeout: EXPANSION_TIMEOUT,
+      })
+      .toBe(1);
+
+    const input = testPage.locator('[data-testid="text-input"]');
+    await input.click();
+    await testPage.keyboard.type("/live", { delay: 30 });
+    await expect(input).toHaveValue(/Live update content/, {
+      timeout: EXPANSION_TIMEOUT,
+    });
+  });
+
+  test("picks up an edit made in the popup without a page reload", async ({
+    testPage,
+    popupPage,
+    storageHelper,
+  }) => {
+    // Same watch, other direction: an existing shortcut must serve the new
+    // content after the popup saves, not the text the page cached at startup.
+    const snippet = makeSnippet({
+      label: "Live edit",
+      shortcut: "/edit",
+      content: "Original content",
+    });
+    await storageHelper.seedSnippets([snippet]);
+    await testPage.reload();
+    await testPage.waitForLoadState("domcontentloaded");
+    await waitForContentScriptReady(testPage);
+
+    await popupPage.reload();
+    await expect(popupPage.getByTestId("snippet-list-item")).toBeVisible();
+    await popupPage.getByTestId("snippet-list-item").click();
+    await popupPage
+      .locator('[contenteditable="true"]')
+      .first()
+      .fill("Updated content");
+    await expect(popupPage.getByTestId("snippet-save")).toBeEnabled();
+    await popupPage.getByTestId("snippet-save").click();
+
+    await expect
+      .poll(async () => (await storageHelper.readSyncSnippets())[0]?.content, {
+        timeout: EXPANSION_TIMEOUT,
+      })
+      .toBe("Updated content");
+
+    const input = testPage.locator('[data-testid="text-input"]');
+    await input.click();
+    await testPage.keyboard.type("/edit", { delay: 30 });
+    await expect(input).toHaveValue(/Updated content/, {
+      timeout: EXPANSION_TIMEOUT,
+    });
+    expect(await input.inputValue()).not.toContain("Original content");
   });
 });

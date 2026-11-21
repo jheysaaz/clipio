@@ -724,6 +724,10 @@ export default defineContentScript({
       const fragment = document.createDocumentFragment();
       if (textBefore) fragment.appendChild(document.createTextNode(textBefore));
       while (tempDiv.firstChild) fragment.appendChild(tempDiv.firstChild);
+      // Capture the last expanded node before appending textAfter. Without a
+      // cursor marker there is no element to anchor the selection to, so the
+      // fallback positions the caret after this node.
+      const lastInsertedNode = fragment.lastChild;
       if (textAfter) fragment.appendChild(document.createTextNode(textAfter));
 
       const parent = textNode.parentNode;
@@ -740,6 +744,17 @@ export default defineContentScript({
           sel.addRange(cursorRange);
         }
         cursorMarker.remove();
+      } else if (lastInsertedNode?.parentNode) {
+        // No {{cursor}} marker: leave the caret at the end of the insertion,
+        // before any text that already followed the trigger.
+        const sel = window.getSelection();
+        if (sel) {
+          const cursorRange = document.createRange();
+          cursorRange.setStartAfter(lastInsertedNode);
+          cursorRange.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(cursorRange);
+        }
       }
 
       justExpanded = true;

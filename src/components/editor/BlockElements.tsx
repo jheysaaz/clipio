@@ -184,6 +184,27 @@ export function TableCellElement(props: PlateElementProps) {
   );
 }
 
+/**
+ * Paragraph blocks need their own spacing.
+ *
+ * A blank line in the markdown is represented as a block boundary, not as an
+ * empty Slate node: `parseBlocks` skips blank lines and `serializeToMarkdown`
+ * joins blocks with `\n\n`. Plate's default paragraph renders as a bare div,
+ * so reopening a saved snippet showed those blocks glued together even though
+ * the stored text — and the text inserted into a page — kept the blank line.
+ */
+export function ParagraphElement(props: PlateElementProps) {
+  return (
+    <div
+      {...props.attributes}
+      data-testid="clipio-editor-paragraph"
+      className="mb-3 last:mb-0"
+    >
+      {props.children}
+    </div>
+  );
+}
+
 /** Renderer for each block type. */
 const BLOCK_COMPONENTS: Record<
   string,
