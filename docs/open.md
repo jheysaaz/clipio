@@ -81,6 +81,12 @@ now checks the seven secrets first and, when they are absent, skips submission
 with a notice instead of failing the run — so a tag cut without credentials still
 produces a GitHub release with the Chrome, Firefox and sources zips attached.
 
+Chrome's four are the v2 service-account set (`CHROME_EXTENSION_ID`,
+`CHROME_PUBLISHER_ID`, `CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL`,
+`CHROME_SERVICE_ACCOUNT_PRIVATE_KEY`). `wxt submit` (publish-extension v6) retired
+the v1.1 refresh-token flow on 2026-10-15, so the old client/secret/token secrets
+cannot submit an update even if they are still set.
+
 Two tags never got that far. v1.6.0 died on a flaky e2e (`waitForEvent("page")`,
 removed later with the old About panel). v1.6.1 died on `upload-artifact`'s
 hidden-file default: `.output/` is a hidden directory and v4.4+ excludes hidden

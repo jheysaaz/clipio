@@ -187,6 +187,19 @@ jobs:
     name: Submit to Stores
     runs-on: ubuntu-latest
     needs: zip
+    # `wxt submit` is publish-browser-extension v6. Since v5, Chrome uses the
+    # v2 API with a service account; the v1.1 client/secret/refresh-token trio
+    # is deprecated and stopped working on 2026-10-15. Keep every credential
+    # at job level so the check and both submit modes cannot drift apart.
+    env:
+      CHROME_API_VERSION: v2
+      CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+      CHROME_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+      CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL: ${{ secrets.CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL }}
+      CHROME_SERVICE_ACCOUNT_PRIVATE_KEY: ${{ secrets.CHROME_SERVICE_ACCOUNT_PRIVATE_KEY }}
+      FIREFOX_EXTENSION_ID: ${{ secrets.FIREFOX_EXTENSION_ID }}
+      FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
+      FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
 
     steps:
       - name: Checkout code
@@ -223,24 +236,18 @@ jobs:
       # instead of failing a run whose GitHub release already succeeded.
       - name: Check store credentials
         id: creds
-        env:
-          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
-          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
-          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
-          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
-          FIREFOX_EXTENSION_ID: ${{ secrets.FIREFOX_EXTENSION_ID }}
-          FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
-          FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
         run: |
           missing=""
-          for name in CHROME_EXTENSION_ID CHROME_CLIENT_ID CHROME_CLIENT_SECRET \
-                      CHROME_REFRESH_TOKEN FIREFOX_EXTENSION_ID FIREFOX_JWT_ISSUER \
+          for name in CHROME_EXTENSION_ID CHROME_PUBLISHER_ID \
+                      CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL \
+                      CHROME_SERVICE_ACCOUNT_PRIVATE_KEY \
+                      FIREFOX_EXTENSION_ID FIREFOX_JWT_ISSUER \
                       FIREFOX_JWT_SECRET; do
             [ -n "${!name}" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Store submission skipped — missing secrets:$missing"
+            echo "::notice::Store submission skipped — missing secrets:$missing (see README > Required GitHub Secrets)"
           else
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           fi
@@ -252,14 +259,6 @@ jobs:
             --chrome-zip .output/*-chrome.zip \
             --firefox-zip .output/*-firefox.zip \
             --firefox-sources-zip .output/*-sources.zip
-        env:
-          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
-          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
-          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
-          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
-          FIREFOX_EXTENSION_ID: ${{ secrets.FIREFOX_EXTENSION_ID }}
-          FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
-          FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
 
       - name: Submit to stores
         if: steps.creds.outputs.enabled == 'true' && (github.event_name == 'push' || inputs.dry_run != true)
@@ -268,14 +267,6 @@ jobs:
             --chrome-zip .output/*-chrome.zip \
             --firefox-zip .output/*-firefox.zip \
             --firefox-sources-zip .output/*-sources.zip
-        env:
-          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
-          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
-          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
-          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
-          FIREFOX_EXTENSION_ID: ${{ secrets.FIREFOX_EXTENSION_ID }}
-          FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
-          FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
 
   github-release:
     name: Create GitHub Release

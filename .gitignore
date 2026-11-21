@@ -34,8 +34,10 @@ release/
 .wxt
 
 # Environment variables
+# `wxt submit init` writes .env.submit with store credentials.
 .env
 .env.*.local
+.env.submit
 
 # Test coverage
 coverage/
