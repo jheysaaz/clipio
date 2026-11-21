@@ -40,6 +40,23 @@ const server = http.createServer((req, res) => {
   });
 });
 
+// A failed listen emits 'error'. Without a listener Node throws it as an
+// unhandled exception, which buried the one useful fact — the port is taken —
+// under a stack trace. Report it once and exit with a distinct code so the
+// supervisor does not restart us into the same failure forever.
+server.on("error", (error) => {
+  if (error.code === "EADDRINUSE") {
+    console.error(
+      `[dev-qa-server] Port ${port} is already in use. Stop the other dev/E2E server ` +
+        `(lsof -tiTCP:${port} -sTCP:LISTEN | xargs kill) and try again.`
+    );
+    process.exitCode = 2;
+    return;
+  }
+  console.error("[dev-qa-server] Failed to start:", error);
+  process.exitCode = 1;
+});
+
 server.listen(port, () => {
   console.log(
     `Dev QA server listening on http://localhost:${port}/manual-qa.html`

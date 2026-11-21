@@ -68,6 +68,7 @@ export default defineConfig([
         setTimeout: "readonly",
         clearTimeout: "readonly",
         fetch: "readonly",
+        AbortSignal: "readonly",
       },
     },
     rules: {
