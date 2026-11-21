@@ -23,7 +23,6 @@ import {
   Settings,
   Clipboard,
   ArrowDownUp,
-  CircleHelp,
 } from "lucide-react";
 import { Icon } from "@/components/ui/icon";
 import SnippetListItem from "@/components/SnippetListItem";
@@ -70,7 +69,6 @@ import {
 } from "@/config/constants";
 import { selectNewest } from "@/lib/snippet-utils";
 import { blankSnippetDraft } from "@/lib/trigger-prefix";
-import { ONBOARDING_REPLAY_EVENT } from "@/lib/onboarding-progress";
 import {
   nudgeSidebarWidth,
   setSidebarWidth,
@@ -692,6 +690,7 @@ export default function Dashboard() {
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar */}
         <div
+          data-testid="snippet-library"
           style={{ width: sidebarOpen ? sidebarWidth : 0 }}
           className="flex flex-col border-r bg-muted/50 relative shrink-0 transition-[width] duration-200 ease-in-out overflow-hidden min-w-0 min-h-0"
         >
@@ -853,7 +852,7 @@ export default function Dashboard() {
             </div>
           </ScrollArea>
 
-          {/* Add Snippet + tour replay + Settings */}
+          {/* Add Snippet + Settings */}
           <div className="px-2 py-2 border-t flex items-center gap-1.5">
             <Button
               data-testid="add-snippet"
@@ -862,23 +861,6 @@ export default function Dashboard() {
             >
               <Icon icon={Plus} size="lg" className="mr-1.5" />
               {i18n.t("dashboard.addSnippet")}
-            </Button>
-            <Button
-              data-testid="onboarding-replay-popup"
-              variant="outline"
-              size="icon"
-              onClick={() =>
-                window.dispatchEvent(
-                  new CustomEvent(ONBOARDING_REPLAY_EVENT, {
-                    detail: { surface: "popup" },
-                  })
-                )
-              }
-              className="h-8 w-8 shrink-0 rounded-lg"
-              title={i18n.t("onboarding.replay")}
-              aria-label={i18n.t("onboarding.replay")}
-            >
-              <Icon icon={CircleHelp} />
             </Button>
             <Button
               data-testid="settings-button"

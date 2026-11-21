@@ -8,17 +8,24 @@ import {
   isOptionsHandoff,
   normalizeOnboardingProgress,
   onboardingAtStep,
-  replayOnboarding,
   skipOnboarding,
   stepCountFor,
 } from "./onboarding-progress";
 
 describe("onboarding step registry", () => {
-  it("defines three stable steps for each surface", () => {
-    expect(ONBOARDING_STEPS.popup).toHaveLength(3);
+  it("defines the expanded popup walkthrough and the options portion", () => {
+    expect(ONBOARDING_STEPS.popup).toHaveLength(10);
     expect(ONBOARDING_STEPS.options).toHaveLength(3);
-    expect(stepCountFor("popup")).toBe(3);
+    expect(stepCountFor("popup")).toBe(10);
     expect(stepCountFor("options")).toBe(3);
+  });
+
+  it("opens and closes the create form where the walkthrough needs it", () => {
+    expect(ONBOARDING_STEPS.popup[1]?.nextAction).toBe("open-create");
+    expect(ONBOARDING_STEPS.popup[7]?.nextAction).toBe("close-create");
+    expect(
+      ONBOARDING_STEPS.popup.filter((step) => step.nextAction)
+    ).toHaveLength(2);
   });
 
   it("uses distinct stable selectors for every step", () => {
@@ -156,16 +163,6 @@ describe("autoStartOnboarding", () => {
   it("does not auto-start after completion or skip", () => {
     expect(autoStartOnboarding({ status: "completed" }, "popup")).toBeNull();
     expect(autoStartOnboarding({ status: "skipped" }, "options")).toBeNull();
-  });
-});
-
-describe("replayOnboarding", () => {
-  it("restarts the requested surface from its first step", () => {
-    expect(replayOnboarding("options")).toEqual({
-      status: "in_progress",
-      surface: "options",
-      step: 0,
-    });
   });
 });
 

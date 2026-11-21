@@ -29,6 +29,20 @@ export type OnboardingCopyKey =
   | "onboarding.popup.search.description"
   | "onboarding.popup.add.title"
   | "onboarding.popup.add.description"
+  | "onboarding.popup.name.title"
+  | "onboarding.popup.name.description"
+  | "onboarding.popup.shortcut.title"
+  | "onboarding.popup.shortcut.description"
+  | "onboarding.popup.shortcutTip.title"
+  | "onboarding.popup.shortcutTip.description"
+  | "onboarding.popup.content.title"
+  | "onboarding.popup.content.description"
+  | "onboarding.popup.placeholders.title"
+  | "onboarding.popup.placeholders.description"
+  | "onboarding.popup.save.title"
+  | "onboarding.popup.save.description"
+  | "onboarding.popup.library.title"
+  | "onboarding.popup.library.description"
   | "onboarding.popup.settings.title"
   | "onboarding.popup.settings.description"
   | "onboarding.options.search.title"
@@ -38,6 +52,13 @@ export type OnboardingCopyKey =
   | "onboarding.options.library.title"
   | "onboarding.options.library.description";
 
+/**
+ * A UI transition the tour performs when leaving a step. The other surface of
+ * the tour (React) owns the DOM click; this registry only names the intention,
+ * so the pure decisions stay testable without a document.
+ */
+export type OnboardingStepAction = "open-create" | "close-create";
+
 export type OnboardingStep = {
   /** Stable selector of the element the step highlights. */
   element: string;
@@ -45,6 +66,8 @@ export type OnboardingStep = {
   titleKey: OnboardingCopyKey;
   descriptionKey: OnboardingCopyKey;
   side: OnboardingPopoverSide;
+  /** Optional transition needed before the next step's element can exist. */
+  nextAction?: OnboardingStepAction;
 };
 
 export const ONBOARDING_STEPS: Record<
@@ -63,6 +86,50 @@ export const ONBOARDING_STEPS: Record<
       titleKey: "onboarding.popup.add.title",
       descriptionKey: "onboarding.popup.add.description",
       side: "top",
+      nextAction: "open-create",
+    },
+    {
+      element: '[data-testid="snippet-label-input"]',
+      titleKey: "onboarding.popup.name.title",
+      descriptionKey: "onboarding.popup.name.description",
+      side: "right",
+    },
+    {
+      element: '[data-testid="snippet-shortcut-input"]',
+      titleKey: "onboarding.popup.shortcut.title",
+      descriptionKey: "onboarding.popup.shortcut.description",
+      side: "right",
+    },
+    {
+      element: '[data-testid="snippet-shortcut-tip"]',
+      titleKey: "onboarding.popup.shortcutTip.title",
+      descriptionKey: "onboarding.popup.shortcutTip.description",
+      side: "right",
+    },
+    {
+      element: '[data-testid="snippet-content-editor"]',
+      titleKey: "onboarding.popup.content.title",
+      descriptionKey: "onboarding.popup.content.description",
+      side: "left",
+    },
+    {
+      element: '[data-testid="snippet-placeholder-tip"]',
+      titleKey: "onboarding.popup.placeholders.title",
+      descriptionKey: "onboarding.popup.placeholders.description",
+      side: "right",
+    },
+    {
+      element: '[data-testid="snippet-create-save"]',
+      titleKey: "onboarding.popup.save.title",
+      descriptionKey: "onboarding.popup.save.description",
+      side: "left",
+      nextAction: "close-create",
+    },
+    {
+      element: '[data-testid="snippet-library"]',
+      titleKey: "onboarding.popup.library.title",
+      descriptionKey: "onboarding.popup.library.description",
+      side: "right",
     },
     {
       element: '[data-testid="settings-button"]',
@@ -92,10 +159,6 @@ export const ONBOARDING_STEPS: Record<
     },
   ],
 };
-
-export const ONBOARDING_REPLAY_EVENT = "clipio:onboarding-replay";
-
-export type OnboardingReplayDetail = { surface: OnboardingSurface };
 
 export const NOT_STARTED_ONBOARDING: OnboardingProgress = {
   status: "not_started",
@@ -175,13 +238,6 @@ export function autoStartOnboarding(
   }
 
   return null;
-}
-
-/** Replay always begins at the first step of the surface the user asked for. */
-export function replayOnboarding(
-  surface: OnboardingSurface
-): InProgressOnboarding {
-  return onboardingAtStep(surface, 0);
 }
 
 /** Finishing the popup hands off; finishing Options completes the whole flow. */

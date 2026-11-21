@@ -11,7 +11,7 @@ import { popupHistory, popupRouteTree } from "@/routes/popup";
 import "@/store/settings";
 import { initSentry, captureError } from "@/lib/sentry";
 import { Toaster } from "@/components/ui/toaster";
-import { OnboardingTour } from "@/components/onboarding/OnboardingTour";
+import { OnboardingLoader } from "@/components/onboarding/OnboardingLoader";
 
 initSentry("popup");
 
@@ -43,7 +43,7 @@ function App() {
       onError={(error) => captureError(error, { action: "ReactErrorBoundary" })}
     >
       <RouterProvider router={router} />
-      <OnboardingTour surface="popup" />
+      <OnboardingLoader surface="popup" />
       <Toaster />
     </ErrorBoundary>
   );

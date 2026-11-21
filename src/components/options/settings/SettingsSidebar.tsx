@@ -22,14 +22,11 @@ import {
   Cloud,
   Code,
   Info,
-  CircleHelp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
-import { ONBOARDING_REPLAY_EVENT } from "@/lib/onboarding-progress";
 import { SidebarResizer } from "./SidebarResizer";
 import { cn } from "@/lib/utils";
 import { currentPlatform } from "@/lib/shortcuts";
@@ -132,7 +129,7 @@ export function SettingsSidebar({
       // content rather than a menu.
       className="relative flex h-full select-none flex-col border-r border-border bg-muted/20"
     >
-      {/* Search + tour replay */}
+      {/* Search */}
       <div className="flex items-center gap-2 px-3 pb-2 pt-3">
         <div className="relative flex-1">
           <Icon
@@ -197,23 +194,6 @@ export function SettingsSidebar({
             <span className="font-mono text-[9px] leading-none">K</span>
           </span>
         </div>
-        <Button
-          data-testid="onboarding-replay-options"
-          variant="ghost"
-          size="icon-sm"
-          onClick={() =>
-            window.dispatchEvent(
-              new CustomEvent(ONBOARDING_REPLAY_EVENT, {
-                detail: { surface: "options" },
-              })
-            )
-          }
-          className="h-9 w-9 shrink-0"
-          title={i18n.t("onboarding.replay")}
-          aria-label={i18n.t("onboarding.replay")}
-        >
-          <Icon icon={CircleHelp} />
-        </Button>
       </div>
 
       <nav

@@ -2,11 +2,12 @@
  * The in-extension guided tour.
  *
  * Driver.js owns the overlay and the popover DOM; this component owns the
- * decisions and persistence. The popup and the options page each mount their own
- * instance, and the persisted progress tells the second one where to resume.
+ * decisions and persistence. A loader decides whether a surface needs a tour,
+ * then mounts this component only for as long as the tour is active. Closing it
+ * tears down the overlay and its listeners immediately.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   driver,
   type Config,
@@ -18,86 +19,70 @@ import { i18n } from "#i18n";
 import { buttonVariants } from "@/components/ui/button";
 import { captureError } from "@/lib/sentry";
 import {
-  ONBOARDING_REPLAY_EVENT,
   ONBOARDING_STEPS,
-  autoStartOnboarding,
   finishOnboarding,
   isOptionsHandoff,
-  normalizeOnboardingProgress,
   onboardingAtStep,
-  replayOnboarding,
   skipOnboarding,
+  type InProgressOnboarding,
   type OnboardingProgress,
-  type OnboardingReplayDetail,
+  type OnboardingStepAction,
   type OnboardingSurface,
 } from "@/lib/onboarding-progress";
 import { guidedOnboardingStateItem } from "@/storage/items";
 
-type ActiveTour = { step: number; run: number };
+export type OnboardingTourProps = {
+  surface: OnboardingSurface;
+  /** The resume point chosen by the loader, already normalised. */
+  start: InProgressOnboarding;
+  /** Unmount the tour after it has been skipped or completed. */
+  onClose: () => void;
+};
 
-export function OnboardingTour({ surface }: { surface: OnboardingSurface }) {
-  const instanceRef = useRef<ReturnType<typeof driver> | null>(null);
-  const startedRef = useRef(false);
-  const [active, setActive] = useState<ActiveTour | null>(null);
+type DriverInstance = ReturnType<typeof driver>;
 
-  useEffect(() => {
-    // StrictMode mounts effects twice in development; the second mount must not
-    // start a second tour over the first one.
-    if (startedRef.current) return;
-    startedRef.current = true;
+export function OnboardingTour({
+  surface,
+  start,
+  onClose,
+}: OnboardingTourProps) {
+  const instanceRef = useRef<DriverInstance | null>(null);
+  const closedRef = useRef(false);
 
-    void guidedOnboardingStateItem
-      .getValue()
-      .then((stored) => {
-        const start = autoStartOnboarding(
-          normalizeOnboardingProgress(stored),
-          surface
-        );
-        if (!start) return;
+  const closeTour = useCallback(() => {
+    if (closedRef.current) return;
+    closedRef.current = true;
+    onClose();
+  }, [onClose]);
 
-        void persistOnboarding(start);
-        setActive({ step: start.step, run: 1 });
-      })
-      .catch((error: unknown) => {
-        captureError(error, { action: "onboarding.load" });
-      });
-  }, [surface]);
+  const skipTour = useCallback(() => {
+    void persistOnboarding(skipOnboarding()).then(closeTour);
+  }, [closeTour]);
 
   useEffect(() => {
-    function handleReplay(event: Event) {
-      const detail = (event as CustomEvent<OnboardingReplayDetail>).detail;
-      if (!detail || detail.surface !== surface) return;
-
-      const next = replayOnboarding(surface);
-      void persistOnboarding(next);
-      setActive((current) => ({
-        step: next.step,
-        run: (current?.run ?? 0) + 1,
-      }));
-    }
-
-    window.addEventListener(ONBOARDING_REPLAY_EVENT, handleReplay);
-    return () =>
-      window.removeEventListener(ONBOARDING_REPLAY_EVENT, handleReplay);
-  }, [surface]);
+    void persistOnboarding(start);
+  }, [start]);
 
   useEffect(() => {
-    if (!active) return;
-
-    const instance = driver(buildConfig(surface, instanceRef));
+    const instance = driver(
+      buildConfig(surface, instanceRef, closeTour, skipTour)
+    );
     instanceRef.current = instance;
-    instance.drive(active.step);
+    instance.drive(start.step);
 
     return () => {
       instanceRef.current = null;
       instance.destroy();
     };
-  }, [active, surface]);
+  }, [surface, start.step, closeTour, skipTour]);
 
   return null;
 }
 
-function stepsFor(surface: OnboardingSurface): DriveStep[] {
+function stepsFor(
+  surface: OnboardingSurface,
+  instanceRef: { current: DriverInstance | null }
+): DriveStep[] {
   const definitions = ONBOARDING_STEPS[surface];
 
   return definitions.map((step, index) => {
@@ -106,6 +91,14 @@ function stepsFor(surface: OnboardingSurface): DriveStep[] {
       description: i18n.t(step.descriptionKey),
       side: step.side,
     };
+
+    const action = step.nextAction;
+    if (action) {
+      popover.onNextClick = () => {
+        runStepAction(action);
+        instanceRef.current?.moveNext();
+      };
+    }
 
     // The popup's last button hands off to Options; Options gets a plain Done.
     if (surface === "popup" && index === definitions.length - 1) {
@@ -116,12 +109,22 @@ function stepsFor(surface: OnboardingSurface): DriveStep[] {
   });
 }
 
+function runStepAction(action: OnboardingStepAction): void {
+  const selector =
+    action === "open-create"
+      ? '[data-testid="add-snippet"]'
+      : '[data-testid="snippet-create-cancel"]';
+  document.querySelector<HTMLElement>(selector)?.click();
+}
+
 function buildConfig(
   surface: OnboardingSurface,
-  instanceRef: { current: ReturnType<typeof driver> | null }
+  instanceRef: { current: DriverInstance | null },
+  closeTour: () => void,
+  skipTour: () => void
 ): Config {
   return {
-    steps: stepsFor(surface),
+    steps: stepsFor(surface, instanceRef),
     popoverClass: "clipio-onboarding-popover",
     popoverOffset: 8,
     stagePadding: 4,
@@ -140,7 +143,7 @@ function buildConfig(
     prevBtnText: i18n.t("onboarding.back"),
     doneBtnText: i18n.t("onboarding.done"),
     onPopoverRender: (popover, opts) => {
-      decoratePopover(popover, surface, opts.index, instanceRef.current);
+      decoratePopover(popover, surface, opts.index, skipTour);
     },
     onHighlightStarted: (_element, _step, opts) => {
       if (typeof opts.index === "number") {
@@ -163,19 +166,18 @@ function buildConfig(
             }
           );
         }
+        closeTour();
       });
-      instanceRef.current?.destroy();
     },
     onDestroyStarted: (_element, _step, opts) => {
-      // Escape and overlay clicks are a skip, not an interruption. `api` is
-      // our own cleanup, and `replaced` is a replay starting a fresh instance.
+      // Escape and overlay clicks are a skip, not an interruption. `api` is our
+      // own teardown, which runs after the loader has already closed the tour.
       if (
         opts.reason === "escape" ||
         opts.reason === "overlay" ||
         opts.reason === "close"
       ) {
-        void persistOnboarding(skipOnboarding());
-        instanceRef.current?.destroy();
+        skipTour();
       }
     },
   };
@@ -185,7 +187,7 @@ function decoratePopover(
   popover: PopoverDOM,
   surface: OnboardingSurface,
   step: number | undefined,
-  instance: ReturnType<typeof driver> | null
+  onSkip: () => void
 ) {
   popover.wrapper.dataset.testid = "onboarding-popover";
   popover.wrapper.dataset.surface = surface;
@@ -211,10 +213,7 @@ function decoratePopover(
   skipButton.dataset.testid = "onboarding-skip";
   skipButton.className = buttonVariants({ variant: "ghost", size: "xs" });
   skipButton.textContent = i18n.t("onboarding.skip");
-  skipButton.onclick = () => {
-    void persistOnboarding(skipOnboarding());
-    instance?.destroy();
-  };
+  skipButton.onclick = onSkip;
   popover.footerButtons.prepend(skipButton);
 }
 

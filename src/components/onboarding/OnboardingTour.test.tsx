@@ -2,10 +2,10 @@ import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Config, DestroyReason, HookOpts, PopoverDOM } from "driver.js";
 
-import { OnboardingTour } from "./OnboardingTour";
-import { ONBOARDING_REPLAY_EVENT } from "@/lib/onboarding-progress";
+import { OnboardingTour, type OnboardingTourProps } from "./OnboardingTour";
 import { captureError } from "@/lib/sentry";
 import { guidedOnboardingStateItem } from "@/storage/items";
+import type { InProgressOnboarding } from "@/lib/onboarding-progress";
 import { resetBrowserMocks } from "../../../tests/mocks/browser";
 
 const mocks = vi.hoisted(() => ({
@@ -19,6 +19,18 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("driver.js", () => ({ driver: mocks.driver }));
+
+const POPUP_START: InProgressOnboarding = {
+  status: "in_progress",
+  surface: "popup",
+  step: 0,
+};
+
+const OPTIONS_START: InProgressOnboarding = {
+  status: "in_progress",
+  surface: "options",
+  step: 2,
+};
 
 async function storedProgress(): Promise<unknown> {
   const result = await browser.storage.local.get("guidedOnboarding");
@@ -69,6 +81,27 @@ function fakePopover(): PopoverDOM {
   return popover;
 }
 
+function addAnchor(testId: string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.dataset.testid = testId;
+  document.body.append(button);
+  return button;
+}
+
+function renderTour(
+  overrides: Partial<OnboardingTourProps> = {}
+): ReturnType<typeof render> & { onClose: ReturnType<typeof vi.fn> } {
+  const onClose = vi.fn();
+  const result = render(
+    <OnboardingTour
+      surface={overrides.surface ?? "popup"}
+      start={overrides.start ?? POPUP_START}
+      onClose={overrides.onClose ?? onClose}
+    />
+  );
+  return { ...result, onClose };
+}
+
 describe("OnboardingTour", () => {
   let openOptionsPage: ReturnType<typeof vi.fn>;
 
@@ -88,43 +121,24 @@ describe("OnboardingTour", () => {
   afterEach(() => {
     delete (browser.runtime as unknown as { openOptionsPage?: unknown })
       .openOptionsPage;
+    document.body.innerHTML = "";
     vi.restoreAllMocks();
   });
 
-  it("auto-starts the first-run popup tour and persists its first step", async () => {
-    const { unmount } = render(<OnboardingTour surface="popup" />);
+  it("drives the supplied start and persists it", async () => {
+    const { unmount } = renderTour();
 
     await waitFor(() => expect(mocks.driver).toHaveBeenCalledTimes(1));
-    expect(lastConfig().steps).toHaveLength(3);
+    expect(lastConfig().steps).toHaveLength(10);
     expect(mocks.instance.drive).toHaveBeenCalledWith(0);
-    expect(await storedProgress()).toEqual({
-      status: "in_progress",
-      surface: "popup",
-      step: 0,
-    });
+    expect(await storedProgress()).toEqual(POPUP_START);
 
     unmount();
     expect(mocks.instance.destroy).toHaveBeenCalledTimes(1);
   });
 
-  it("does not auto-start a fresh flow on the options page", async () => {
-    render(<OnboardingTour surface="options" />);
-
-    await waitFor(() =>
-      expect(guidedOnboardingStateItem.getValue).toHaveBeenCalled()
-    );
-    expect(mocks.driver).not.toHaveBeenCalled();
-    expect(await storedProgress()).toEqual({ status: "not_started" });
-  });
-
   it("resumes a handed-off options tour at its saved step", async () => {
-    await seedProgress({
-      status: "in_progress",
-      surface: "options",
-      step: 2,
-    });
-
-    render(<OnboardingTour surface="options" />);
+    renderTour({ surface: "options", start: OPTIONS_START });
 
     await waitFor(() => expect(mocks.driver).toHaveBeenCalledTimes(1));
     expect(mocks.instance.drive).toHaveBeenCalledWith(2);
@@ -132,7 +146,7 @@ describe("OnboardingTour", () => {
   });
 
   it("stamps stable test ids and themed button classes on the popover", async () => {
-    render(<OnboardingTour surface="popup" />);
+    renderTour();
     await waitFor(() => expect(mocks.driver).toHaveBeenCalledTimes(1));
 
     const popover = fakePopover();
@@ -158,8 +172,44 @@ describe("OnboardingTour", () => {
     ).not.toBeNull();
   });
 
-  it("skips and stops the tour from the custom Skip button", async () => {
-    render(<OnboardingTour surface="popup" />);
+  it("opens the create form before advancing to its first field", async () => {
+    const addButton = addAnchor("add-snippet");
+    const click = vi.spyOn(addButton, "click");
+    renderTour();
+    await waitFor(() => expect(mocks.driver).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      lastConfig().steps?.[1]?.popover?.onNextClick?.(
+        undefined,
+        {},
+        hookOpts(1)
+      );
+    });
+
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(mocks.instance.moveNext).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the create form before returning to the library", async () => {
+    const cancelButton = addAnchor("snippet-create-cancel");
+    const click = vi.spyOn(cancelButton, "click");
+    renderTour();
+    await waitFor(() => expect(mocks.driver).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      lastConfig().steps?.[7]?.popover?.onNextClick?.(
+        undefined,
+        {},
+        hookOpts(7)
+      );
+    });
+
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(mocks.instance.moveNext).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips and closes the tour from the custom Skip button", async () => {
+    const { onClose } = renderTour();
     await waitFor(() => expect(mocks.driver).toHaveBeenCalledTimes(1));
 
     const popover = fakePopover();
@@ -176,21 +226,18 @@ describe("OnboardingTour", () => {
     await waitFor(async () =>
       expect(await storedProgress()).toEqual({ status: "skipped" })
     );
-    expect(mocks.instance.destroy).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("treats Escape and overlay dismissal as a skip but not API cleanup", async () => {
-    render(<OnboardingTour surface="popup" />);
+    const { onClose } = renderTour();
     await waitFor(() => expect(mocks.driver).toHaveBeenCalledTimes(1));
 
     act(() => {
       lastConfig().onDestroyStarted?.(undefined, {}, hookOpts(0, "api"));
     });
-    expect(await storedProgress()).toEqual({
-      status: "in_progress",
-      surface: "popup",
-      step: 0,
-    });
+    expect(await storedProgress()).toEqual(POPUP_START);
+    expect(onClose).not.toHaveBeenCalled();
 
     act(() => {
       lastConfig().onDestroyStarted?.(undefined, {}, hookOpts(0, "overlay"));
@@ -198,16 +245,11 @@ describe("OnboardingTour", () => {
     await waitFor(async () =>
       expect(await storedProgress()).toEqual({ status: "skipped" })
     );
-    expect(mocks.instance.destroy).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("saves the highlighted step as the user moves in either direction", async () => {
-    await seedProgress({
-      status: "in_progress",
-      surface: "options",
-      step: 2,
-    });
-    render(<OnboardingTour surface="options" />);
+    renderTour({ surface: "options", start: OPTIONS_START });
 
     await waitFor(() => expect(mocks.driver).toHaveBeenCalledTimes(1));
     act(() => {
@@ -229,12 +271,12 @@ describe("OnboardingTour", () => {
     expect(mocks.instance.movePrevious).toHaveBeenCalledTimes(1);
   });
 
-  it("hands off from the popup to Options before opening the options page", async () => {
-    render(<OnboardingTour surface="popup" />);
+  it("hands off from the popup to Options before closing the tour", async () => {
+    const { onClose } = renderTour();
     await waitFor(() => expect(mocks.driver).toHaveBeenCalledTimes(1));
 
     act(() => {
-      lastConfig().onDoneClick?.(undefined, {}, hookOpts(2));
+      lastConfig().onDoneClick?.(undefined, {}, hookOpts(9));
     });
 
     await waitFor(async () =>
@@ -245,16 +287,14 @@ describe("OnboardingTour", () => {
       })
     );
     await waitFor(() => expect(openOptionsPage).toHaveBeenCalledTimes(1));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("completes the flow on the options page without opening it again", async () => {
-    await seedProgress({
-      status: "in_progress",
+    const { onClose } = renderTour({
       surface: "options",
-      step: 2,
+      start: OPTIONS_START,
     });
-    render(<OnboardingTour surface="options" />);
-
     await waitFor(() => expect(mocks.driver).toHaveBeenCalledTimes(1));
     act(() => {
       lastConfig().onDoneClick?.(undefined, {}, hookOpts(2));
@@ -264,51 +304,7 @@ describe("OnboardingTour", () => {
       expect(await storedProgress()).toEqual({ status: "completed" })
     );
     expect(openOptionsPage).not.toHaveBeenCalled();
-  });
-
-  it("replays only the surface named in the event", async () => {
-    render(<OnboardingTour surface="popup" />);
-    await waitFor(() => expect(mocks.driver).toHaveBeenCalledTimes(1));
-
-    act(() => {
-      window.dispatchEvent(
-        new CustomEvent(ONBOARDING_REPLAY_EVENT, {
-          detail: { surface: "options" },
-        })
-      );
-    });
-    expect(mocks.driver).toHaveBeenCalledTimes(1);
-
-    act(() => {
-      window.dispatchEvent(
-        new CustomEvent(ONBOARDING_REPLAY_EVENT, {
-          detail: { surface: "popup" },
-        })
-      );
-    });
-
-    await waitFor(() => expect(mocks.driver).toHaveBeenCalledTimes(2));
-    expect(mocks.instance.drive).toHaveBeenLastCalledWith(0);
-    expect(await storedProgress()).toEqual({
-      status: "in_progress",
-      surface: "popup",
-      step: 0,
-    });
-  });
-
-  it("reports a storage read failure instead of swallowing it", async () => {
-    vi.spyOn(guidedOnboardingStateItem, "getValue").mockRejectedValueOnce(
-      new Error("storage unavailable")
-    );
-
-    render(<OnboardingTour surface="popup" />);
-
-    await waitFor(() =>
-      expect(captureError).toHaveBeenCalledWith(expect.any(Error), {
-        action: "onboarding.load",
-      })
-    );
-    expect(mocks.driver).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("reports a failed progress write instead of breaking the tour", async () => {
@@ -316,7 +312,7 @@ describe("OnboardingTour", () => {
       new Error("storage full")
     );
 
-    render(<OnboardingTour surface="popup" />);
+    const { onClose } = renderTour();
     await waitFor(() => expect(mocks.driver).toHaveBeenCalledTimes(1));
 
     const popover = fakePopover();
@@ -332,5 +328,6 @@ describe("OnboardingTour", () => {
         action: "onboarding.persist",
       })
     );
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

@@ -81,8 +81,10 @@ newSnippet:
   shortcutError: El atajo no puede contener espacios
   shortcutErrorDuplicate: 'El atajo "$1" ya está en uso por "$2". Elige un atajo diferente.'
   shortcutErrorPrefix: 'El atajo "$1" entra en conflicto con "$2" — uno puede impedir que el otro se expanda.'
+  shortcutTip: Escribe el desencadenante y este atajo en cualquier página para expandir el fragmento.
   content: Contenido
   contentPlaceholder: Escribe el contenido de tu fragmento...
+  placeholderTip: "Escribe / en el editor para ver comandos como Portapapeles, Hoy, Colocar cursor y Elegir fecha."
   footer: Nuevo fragmento
 
 snippetDetail:
@@ -491,7 +493,6 @@ background:
     message: "Llevas un tiempo usando Clipio. ¡Una reseña rápida ayuda a que otros lo descubran!"
 
 onboarding:
-  replay: Hacer el recorrido
   skip: Omitir
   back: Atrás
   next: Siguiente
@@ -504,7 +505,28 @@ onboarding:
       description: Busca aquí en tu biblioteca y pulsa Enter para insertar el primer resultado.
     add:
       title: Guarda lo que repites
-      description: Crea fragmentos con texto, atajos e imágenes que usas constantemente.
+      description: Crea fragmentos con texto, atajos e imágenes que usas constantemente. El siguiente paso abre el editor por ti.
+    name:
+      title: Nombra el fragmento
+      description: Usa un nombre claro para encontrarlo fácilmente cuando busques más tarde.
+    shortcut:
+      title: Elige un atajo
+      description: Añade un sufijo corto sin espacios, como `firma`, para expandir el fragmento desde cualquier campo de texto.
+    shortcutTip:
+      title: Úsalo en cualquier lugar
+      description: En una página web, escribe el desencadenante seguido de tu atajo y pulsa Espacio.
+    content:
+      title: Escribe el contenido
+      description: Escribe o pega cualquier texto que repitas a menudo. El editor conserva el formato, los enlaces y las imágenes.
+    placeholders:
+      title: Añade marcadores dinámicos
+      description: Escribe / en el editor para insertar comandos como Portapapeles, Hoy, Colocar cursor y Elegir fecha.
+    save:
+      title: Crea el fragmento
+      description: Crear lo guarda en tu biblioteca. En este recorrido, Siguiente sale del formulario sin guardar el borrador de ejemplo.
+    library:
+      title: Encuéntralo de nuevo
+      description: Selecciona un fragmento aquí para copiarlo, editarlo o insertarlo en una página.
     settings:
       title: Continuar en ajustes
       description: El recorrido termina en Opciones, donde puedes gestionar tu biblioteca y tus ajustes.
