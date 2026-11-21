@@ -4,7 +4,6 @@ import {
   UPDATE_CHECK_INTERVAL_MINUTES,
   REVIEW_CHECK_ALARM_NAME,
   REVIEW_CHECK_DELAY_HOURS,
-  ONBOARDING_SUPPORTED_LOCALES,
   POPUP_VIEW_SESSION_KEY,
   TIMING,
 } from "@/config/constants";
@@ -13,7 +12,6 @@ import {
   syncDataLostItem,
   blockedSitesItem,
   latestVersionItem,
-  onboardingCompletedItem,
   extensionInstalledAtItem,
 } from "@/storage/items";
 import { initSentry, captureError, captureMessage } from "@/lib/sentry";
@@ -347,55 +345,14 @@ export default defineBackground(() => {
   // On install / update
   // ---------------------------------------------------------------------------
   browser.runtime.onInstalled.addListener((details) => {
-    // On first install: record the install timestamp (for review-prompt eligibility)
-    // and redirect to the onboarding page if the website is reachable.
+    // On first install: record the install timestamp for review-prompt
+    // eligibility. Onboarding is now fully in-extension; the popup starts the
+    // guided tour on first use and hands off to Options from there.
     if (details.reason === "install") {
       const installedAt = new Date().toISOString();
       extensionInstalledAtItem.setValue(installedAt).catch((err: unknown) => {
         captureError(err, { action: "onInstalled.recordInstalledAt" });
       });
-
-      onboardingCompletedItem
-        .getValue()
-        .then((completed) => {
-          // development builds (pnpm dev) must never open the onboarding
-          // page — it is a production funnel only: no HEAD reachability probe,
-          // no tab opened, no completed-flag write in dev.
-          if ((import.meta.env.MODE as string) !== "production") return;
-          if (completed) return;
-          const websiteUrl = import.meta.env.WXT_WEBSITE_URL as
-            string | undefined;
-          if (!websiteUrl) return;
-
-          const rawLocale =
-            typeof browser.i18n?.getUILanguage === "function"
-              ? browser.i18n.getUILanguage()
-              : "en";
-          const locale = (
-            ONBOARDING_SUPPORTED_LOCALES as readonly string[]
-          ).includes(rawLocale)
-            ? rawLocale
-            : "en";
-
-          const onboardingUrl = `${websiteUrl}/${locale}/onboarding?ext`;
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 5_000);
-          fetch(onboardingUrl, { method: "HEAD", signal: controller.signal })
-            .then((res) => {
-              clearTimeout(timeout);
-              if (!res.ok) return;
-              return browser.tabs.create({ url: onboardingUrl }).then(() => {
-                onboardingCompletedItem.setValue(true).catch(() => {});
-              });
-            })
-            .catch(() => {
-              // Fail silently — no Sentry, no notification
-              clearTimeout(timeout);
-            });
-        })
-        .catch(() => {
-          // Fail silently
-        });
     }
 
     // Redirect to a farewell / recovery reminder page when uninstalled.

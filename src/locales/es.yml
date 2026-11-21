@@ -489,3 +489,32 @@ background:
   reviewPrompt:
     title: "¿Disfrutas Clipio?"
     message: "Llevas un tiempo usando Clipio. ¡Una reseña rápida ayuda a que otros lo descubran!"
+
+onboarding:
+  replay: Hacer el recorrido
+  skip: Omitir
+  back: Atrás
+  next: Siguiente
+  done: Listo
+  continue: Continuar en ajustes
+  progress: "Paso $1 de $2"
+  popup:
+    search:
+      title: Encuentra fragmentos al instante
+      description: Busca aquí en tu biblioteca y pulsa Enter para insertar el primer resultado.
+    add:
+      title: Guarda lo que repites
+      description: Crea fragmentos con texto, atajos e imágenes que usas constantemente.
+    settings:
+      title: Continuar en ajustes
+      description: El recorrido termina en Opciones, donde puedes gestionar tu biblioteca y tus ajustes.
+  options:
+    search:
+      title: Busca cualquier ajuste
+      description: Escribe aquí para encontrar un ajuste y cambiarlo sin salir de los resultados.
+    nav:
+      title: Explora por propósito
+      description: Aquí se agrupan biblioteca, comportamiento, apariencia y ajustes del sistema.
+    library:
+      title: Gestiona tu biblioteca
+      description: La importación, la exportación y el almacenamiento están en esta sección.

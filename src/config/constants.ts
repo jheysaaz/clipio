@@ -131,13 +131,14 @@ export const REVIEW_MIN_INSERTIONS = 20 as const;
 export const REVIEW_ERROR_SNOOZE_HOURS = 24 as const;
 
 // ---------------------------------------------------------------------------
-// Onboarding
+// Website locales
 // ---------------------------------------------------------------------------
 
 /**
- * Locale codes supported by the clipio.xyz onboarding page.
- * Used to select the correct /{locale}/onboarding path.
- * Any browser locale not in this list falls back to "en".
+ * Locale codes supported by the clipio.xyz website.
+ * Used to select the correct /{locale}/uninstall path. The name is historical:
+ * this list originally served the external onboarding page that no longer
+ * exists. Any browser locale not in this list falls back to "en".
  */
 export const ONBOARDING_SUPPORTED_LOCALES = ["en", "es"] as const;
 

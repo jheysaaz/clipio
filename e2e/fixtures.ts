@@ -48,6 +48,9 @@ export type StorageHelper = {
   getLocal: (key: string) => Promise<unknown>;
 };
 
+/** `fresh` opts a test into the first-run guided tour. */
+export type OnboardingState = "completed" | "fresh";
+
 export type ClipioFixtures = {
   context: BrowserContext;
   extensionId: string;
@@ -55,6 +58,9 @@ export type ClipioFixtures = {
   optionsPage: Page;
   testPage: Page;
   storageHelper: StorageHelper;
+  onboardingState: OnboardingState;
+  /** Auto fixture that seeds onboarding before any app page is opened. */
+  onboardingFixture: void;
 };
 
 // ---------------------------------------------------------------------------
@@ -86,10 +92,66 @@ async function getExtensionId(context: BrowserContext): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Guided-onboarding state
+// ---------------------------------------------------------------------------
+
+/**
+ * Seed the extension's own storage from the service worker, not from a popup
+ * or options page: those pages start the tour on load, so using one to prepare
+ * state would race with the code under test.
+ */
+export async function seedOnboardingState(
+  context: BrowserContext,
+  state: OnboardingState
+): Promise<void> {
+  const worker =
+    context.serviceWorkers()[0] ??
+    (await context.waitForEvent("serviceworker", { timeout: 10_000 }));
+
+  await worker.evaluate(async (next: OnboardingState) => {
+    const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+    if (next === "fresh") {
+      await ext.storage.local.remove("guidedOnboarding");
+    } else {
+      await ext.storage.local.set({
+        guidedOnboarding: { status: "completed" },
+      });
+    }
+  }, state);
+}
+
+/** Read the persisted tour progress without opening another app page. */
+export async function readOnboardingState(
+  context: BrowserContext
+): Promise<unknown> {
+  const worker =
+    context.serviceWorkers()[0] ??
+    (await context.waitForEvent("serviceworker", { timeout: 10_000 }));
+
+  return worker.evaluate(async () => {
+    const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+    const result = await ext.storage.local.get("guidedOnboarding");
+    return result.guidedOnboarding;
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Test fixture definition
 // ---------------------------------------------------------------------------
 
 export const test = base.extend<ClipioFixtures>({
+  // Existing specs assume the tour has already been seen. Specs that exercise
+  // onboarding opt out with `test.use({ onboardingState: "fresh" })`.
+  onboardingState: "completed",
+
+  onboardingFixture: [
+    async ({ context, onboardingState }, use) => {
+      await seedOnboardingState(context, onboardingState);
+      await use();
+    },
+    { auto: true },
+  ],
+
   // Persistent Chromium context with the extension loaded.
   // We create a fresh context per test to guarantee isolation.
   // eslint-disable-next-line no-empty-pattern
@@ -123,7 +185,7 @@ export const test = base.extend<ClipioFixtures>({
   },
 
   // Popup page: chrome-extension://{id}/popup.html
-  popupPage: async ({ context, extensionId }, use) => {
+  popupPage: async ({ context, extensionId, onboardingFixture }, use) => {
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/popup.html`);
     // Wait for React to hydrate
@@ -133,7 +195,7 @@ export const test = base.extend<ClipioFixtures>({
   },
 
   // Options page: chrome-extension://{id}/options.html
-  optionsPage: async ({ context, extensionId }, use) => {
+  optionsPage: async ({ context, extensionId, onboardingFixture }, use) => {
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/options.html`);
     await page.waitForLoadState("domcontentloaded");
@@ -162,7 +224,10 @@ export const test = base.extend<ClipioFixtures>({
   },
 
   // Storage helper utilities
-  storageHelper: async ({ context, extensionId }, use) => {
+  storageHelper: async (
+    { context, extensionId, onboardingState, onboardingFixture },
+    use
+  ) => {
     // Get a background page or open the popup temporarily to access storage
     // We execute storage operations via an extension page which has full access
     const getExtPage = async (): Promise<Page> => {
@@ -255,6 +320,11 @@ export const test = base.extend<ClipioFixtures>({
         } finally {
           await page.close();
         }
+
+        // The tour is not snippet state, so clearing snippet storage must not
+        // put a popup that reloads next back into the first-run flow. Restore
+        // whatever state this test asked for (completed by default).
+        await seedOnboardingState(context, onboardingState);
       },
 
       setLocal: async (key: string, value: unknown) => {
