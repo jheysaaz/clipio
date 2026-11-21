@@ -11,6 +11,13 @@ on:
         type: boolean
         default: false
 
+# Gate, E2E, Zip and Submit only read the checkout and pass artifacts between
+# themselves. `github-release` overrides this with `contents: write`, which it
+# needs to attach the zips; keeping the default read-only everywhere else is
+# what CodeQL's actions/missing-workflow-permissions asks for.
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false

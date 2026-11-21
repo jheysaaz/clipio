@@ -1,3 +1,5 @@
+import { decodeHtmlEntities, stripHtmlTags } from "./html-text";
+
 /**
  * Verifying that a snippet actually landed in the target field.
  *
@@ -81,10 +83,11 @@ export function plainTextFromHtml(html: string): string {
   text = text.replace(CLOSE_BLOCK, "\n");
 
   // Anything still angled is a tag we do not model; drop it rather than
-  // letting it become visible text.
-  text = text.replace(/<[^>]*>/g, "");
+  // letting it become visible text. Shared with the sidebar preview so the
+  // repeated-replacement fix for nested tags exists in one place.
+  text = stripHtmlTags(text);
 
-  text = decodeEntities(text);
+  text = decodeHtmlEntities(text);
 
   // The caret marker is a zero-width placeholder, and a stray bullet from a
   // leading list marker would leave the comparison off by one character.
@@ -95,24 +98,6 @@ export function plainTextFromHtml(html: string): string {
   text = text.replace(/\n{2,}/g, "\n");
 
   return text.trim();
-}
-
-/** Decode the five entities the markdown converter can emit, plus numerics. */
-function decodeEntities(text: string): string {
-  return text
-    .replace(/&#(\d+);/g, (_, code: string) =>
-      String.fromCodePoint(Number(code))
-    )
-    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) =>
-      String.fromCodePoint(parseInt(code, 16))
-    )
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&");
 }
 
 /**

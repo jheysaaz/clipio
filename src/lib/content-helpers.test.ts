@@ -469,6 +469,24 @@ describe("processSnippetContent — image & gif placeholders", () => {
     expect(result.content).not.toContain("data-clipio-media");
   });
 
+  it("escapes a quote in the resolved image src so it cannot close the attribute", () => {
+    // A resolver is ours, but its value is interpolated into a raw HTML string
+    // that is later assigned to innerHTML. Only the alt used to be escaped
+    // (CodeQL #12); a quote in src could inject a second attribute.
+    const result = processSnippetContent(
+      "{{image:abc-123-def}}",
+      true,
+      noClipboard,
+      () => ({
+        src: 'blob:x" onload="alert(1)',
+      })
+    );
+    expect(result.content).toContain(
+      'src="blob:x&quot; onload=&quot;alert(1)"'
+    );
+    expect(result.content).not.toContain('onload="alert(1)"');
+  });
+
   it("omits image from HTML when resolveMedia returns null", () => {
     const result = processSnippetContent(
       "before {{image:abc-123-def}} after",

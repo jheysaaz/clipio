@@ -54,6 +54,13 @@ describe("getContentPreview — other placeholders and markdown", () => {
     expect(getContentPreview("one\ntwo\r\nthree")).toBe("one two three");
   });
 
+  it("decodes an entity once, not the entity its decode produced", () => {
+    // The old chain of replaces decoded `&amp;` and then decoded the `&lt;`
+    // it had just created, so this preview showed `<`. That double-unescape
+    // is what CodeQL #13 flagged.
+    expect(getContentPreview("&amp;lt;")).toBe("&lt;");
+  });
+
   it("truncates a long preview", () => {
     const preview = getContentPreview("x".repeat(400));
     expect(preview.length).toBeLessThan(400);

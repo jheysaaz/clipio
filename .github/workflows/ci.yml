@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Every job here only reads the checkout and uploads an artifact. Without an
+# explicit block the GITHUB_TOKEN inherits the repository default, which can be
+# write — CodeQL flagged all three jobs for it (actions/missing-workflow-permissions).
+permissions:
+  contents: read
+
 # A new push to a PR supersedes the previous run. Without this, queued runs can
 # report against a commit that is no longer the branch head, which reads as a
 # failure that nothing reproduces.

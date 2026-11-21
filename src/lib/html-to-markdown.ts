@@ -22,6 +22,8 @@
 // getSnippets() inside the service worker. `findTagEnd` below is a single
 // forward pass instead, so the whole conversion is O(n).
 
+import { escapeMarkdownTableCell } from "./markdown-table";
+
 /** Matches an ASCII letter — the first char of a tag name. */
 function isTagNameStart(ch: string | undefined): boolean {
   return ch !== undefined && /[a-z]/i.test(ch);
@@ -286,7 +288,7 @@ function convertTableRange(
   const line = (cells: string[]) => {
     const padded = [...cells];
     while (padded.length < columns) padded.push("");
-    return `| ${padded.map((c) => c.replace(/\|/g, "\\|")).join(" | ")} |`;
+    return `| ${padded.map(escapeMarkdownTableCell).join(" | ")} |`;
   };
 
   const body = rows.map(line);

@@ -1,5 +1,6 @@
 import { stripInlineMarkdownMarks } from "@/lib/markdown";
 import { stripMediaPlaceholders } from "@/lib/media-placeholders";
+import { decodeHtmlEntities, stripHtmlTags } from "@/lib/html-text";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import type { Snippet } from "@/types";
@@ -25,25 +26,22 @@ function stripMarkdown(content: string): string {
   // decisions rather than markdown mechanics — notably `{{date:…}}` becomes
   // "{{today}}" here, and a link keeps its label rather than becoming its URL.
   text = stripInlineMarkdownMarks(text);
-  // Convert placeholders to readable text
-  text = text.replace(/\{\{clipboard\}\}/g, "{{clipboard}}");
+  // Convert placeholders to readable text. `{{clipboard}}` and `{{cursor}}`
+  // need no mapping: they already read the way we want them to. The old
+  // identity `.replace()` calls for them were no-ops (CodeQL #8/#9).
   text = text.replace(/\{\{date:([a-z]+)\}\}/g, "{{today}}");
-  text = text.replace(/\{\{cursor\}\}/g, "{{cursor}}");
   text = text.replace(/\{\{datepicker:(\d{4}-\d{2}-\d{2})\}\}/g, "{{date}}");
   // Via the shared parser, which understands the optional width suffix. The
   // hand-typed regexes here did not, so a resized image — written as
   // `{{image:<id>:200}}` the moment the user drags it — was left in place and
   // the raw placeholder was displayed next to the snippet label.
   text = stripMediaPlaceholders(text);
-  // Also handle any legacy HTML tags
-  text = text.replace(/<[^>]*>/g, "");
-  // Decode common HTML entities
-  text = text
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"');
+  // Legacy HTML tags and entities, via the shared primitives. The tag strip
+  // repeats until stable and the entity decode reads its input once, so the
+  // pattern CodeQL flagged exists in one place rather than two: see
+  // src/lib/html-text.ts.
+  text = stripHtmlTags(text);
+  text = decodeHtmlEntities(text);
   return text;
 }
 

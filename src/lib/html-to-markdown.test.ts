@@ -178,6 +178,15 @@ describe("htmlToMarkdownPortable — br and lists", () => {
     expect(out).toContain("b");
     expect(out).not.toBe("ab");
   });
+
+  it("doubles a backslash before a pipe in a cell", () => {
+    // Escaping only the pipe would make the source `\|` render as a backslash
+    // followed by a live delimiter, splitting one cell into two (CodeQL #11).
+    const out = htmlToMarkdownPortable(
+      "<table><tr><td>a\\|b</td><td>c</td></tr></table>"
+    );
+    expect(out.split("\n")[0]).toBe("| a\\\\\\|b | c |");
+  });
 });
 
 describe("htmlToMarkdownPortable — unknown and hostile markup", () => {

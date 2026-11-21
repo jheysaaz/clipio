@@ -73,6 +73,19 @@ const gifNode = (giphyId: string, width?: number): TElement =>
     children: [{ text: "" }],
   }) as TElement;
 
+const tdNode = (content: string, align?: string): TElement =>
+  ({
+    type: "td",
+    ...(align ? { align } : {}),
+    children: [{ text: content }],
+  }) as TElement;
+
+const tableNode = (...rows: TElement[]): TElement =>
+  ({ type: "table", children: rows }) as TElement;
+
+const trNode = (...cells: TElement[]): TElement =>
+  ({ type: "tr", children: cells }) as TElement;
+
 // ---------------------------------------------------------------------------
 // serializeToMarkdown
 // ---------------------------------------------------------------------------
@@ -182,6 +195,16 @@ describe("serializeToMarkdown", () => {
       p([text("Hello "), clipboardNode(), text(" world")]),
     ]);
     expect(result).toBe("Hello {{clipboard}} world");
+  });
+
+  it("escapes backslashes before pipes in table cells, aligned or not", () => {
+    // Doubling only the pipe would leave the source backslash as an escape
+    // for the delimiter, so one cell would be read as two (CodeQL #10). The
+    // aligned cell used to skip escaping altogether.
+    const out = serializeToMarkdown([
+      tableNode(trNode(tdNode("a\\|b", "center"), tdNode("c"))),
+    ]);
+    expect(out.split("\n")[0]).toBe("| a\\\\\\|b | c |");
   });
 });
 

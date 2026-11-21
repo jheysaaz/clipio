@@ -4,6 +4,7 @@ import {
   formatImagePlaceholder,
   formatGifPlaceholder,
 } from "@/lib/media-placeholders";
+import { escapeMarkdownTableCell } from "@/lib/markdown-table";
 import {
   CLIPBOARD_PLACEHOLDER,
   DATE_PLACEHOLDER,
@@ -216,17 +217,17 @@ function serializeTable(element: TElement): string {
   const columns = widths.length > 0 ? Math.max(...widths) : 0;
   if (columns === 0) return "";
 
-  const renderRow = (cells: string[], aligns?: (string | null)[]) => {
+  const renderRow = (cells: string[]) => {
     const padded = [...cells];
     while (padded.length < columns) padded.push("");
-    return `| ${padded
-      .map((c, i) => (aligns?.[i] ? c : c.replace(/\|/g, "\\|")))
-      .join(" | ")} |`;
+    // Always escape. The previous alignment check skipped escaping for any
+    // cell with an `align`, so a pipe in an aligned cell split the table.
+    return `| ${padded.map(escapeMarkdownTableCell).join(" | ")} |`;
   };
 
   const out: string[] = [];
   const head = rows[0];
-  out.push(renderRow(head.cells, head.aligns));
+  out.push(renderRow(head.cells));
 
   // The delimiter row is what keeps two cells from becoming one string. It is
   // never optional.
@@ -245,7 +246,7 @@ function serializeTable(element: TElement): string {
     }).join(" | ")} |`
   );
 
-  for (const row of rows.slice(1)) out.push(renderRow(row.cells, row.aligns));
+  for (const row of rows.slice(1)) out.push(renderRow(row.cells));
 
   return out.join("\n");
 }

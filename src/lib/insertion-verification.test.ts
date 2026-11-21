@@ -52,6 +52,17 @@ describe("plainTextFromHtml", () => {
     expect(plainTextFromHtml("it&#39;s")).toBe("it's");
   });
 
+  it("decodes an entity only once", () => {
+    // A chained decoder turned this into `<` by decoding its own output.
+    expect(plainTextFromHtml("&amp;lt;")).toBe("&lt;");
+  });
+
+  it("drops no tag after a nested tag has been removed", () => {
+    // The output is compared against innerText, so a surviving tag would make
+    // a successful insertion look like a failure.
+    expect(plainTextFromHtml("<span>a<em>b</em>c</span>")).toBe("abc");
+  });
+
   it("drops tags it does not model rather than showing them", () => {
     expect(plainTextFromHtml("<span>text</span>")).toBe("text");
     expect(plainTextFromHtml("<a href='#'>link</a>")).toBe("link");

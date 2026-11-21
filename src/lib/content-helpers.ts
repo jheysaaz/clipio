@@ -295,7 +295,10 @@ export function processSnippetContent(
           const altAttr = resolved.alt
             ? ` alt="${escapeHtmlAttr(resolved.alt)}"`
             : "";
-          return `<img src="${resolved.src}"${altAttr} style="${style}" />`;
+          // Every interpolated value is attribute-escaped, not just the alt.
+          // A quote in a resolved src or a captured style used to be able to
+          // close the attribute early (CodeQL #12).
+          return `<img src="${escapeHtmlAttr(resolved.src)}"${altAttr} style="${escapeHtmlAttr(style)}" />`;
         }
       );
     }
