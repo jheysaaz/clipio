@@ -74,12 +74,14 @@ Now one-shot. The reasoning is recorded in `REVIEW_CHECK_DELAY_HOURS`.
 Re-prompting would need a cooldown and a state reset — a product decision, not a
 config change.
 
-### Chrome / Firefox store credentials not yet configured
+### Firefox store credentials not yet configured
 
-`Submit to Stores` is the only part of publishing blocked on this. The workflow
-now checks the seven secrets first and, when they are absent, skips submission
-with a notice instead of failing the run — so a tag cut without credentials still
-produces a GitHub release with the Chrome, Firefox and sources zips attached.
+`Submit to Stores` no longer treats the stores as one all-or-nothing step. The
+workflow checks each store's secrets separately: a complete set is submitted,
+an incomplete one is skipped with a notice, and the GitHub release is created
+either way with the Chrome, Firefox and sources ZIPs attached. Chrome's four
+v2 service-account secrets are configured; Firefox's three are not, so tag
+pushes currently publish to Chrome only.
 
 Chrome's four are the v2 service-account set (`CHROME_EXTENSION_ID`,
 `CHROME_PUBLISHER_ID`, `CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL`,

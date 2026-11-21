@@ -189,8 +189,10 @@ jobs:
     needs: zip
     # `wxt submit` is publish-browser-extension v6. Since v5, Chrome uses the
     # v2 API with a service account; the v1.1 client/secret/refresh-token trio
-    # is deprecated and stopped working on 2026-10-15. Keep every credential
-    # at job level so the check and both submit modes cannot drift apart.
+    # is deprecated and stopped working on 2026-10-15. Credentials live at job
+    # level so the checks and all four submit steps read the same names. The
+    # CLI only configures a store when its ZIP is passed, so a Chrome-only
+    # invocation ignores Firefox credentials and vice versa.
     env:
       CHROME_API_VERSION: v2
       CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
@@ -238,50 +240,67 @@ jobs:
           name: firefox-zip
           path: .output/
 
-      # The release must not be hostage to store credentials: submitting is
-      # optional and, when the secrets are absent, the job says so and stops
-      # instead of failing a run whose GitHub release already succeeded.
+      # Store submission is optional per store: a tag cut with only one store's
+      # credentials must still publish the other, and the release never waits
+      # on either one. Each invocation passes only its own ZIP(s), so the CLI
+      # ignores the other store's credentials even though they are job env.
       - name: Check store credentials
         id: creds
         run: |
-          missing=""
-          for name in CHROME_EXTENSION_ID CHROME_PUBLISHER_ID \
-                      CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL \
-                      CHROME_SERVICE_ACCOUNT_PRIVATE_KEY \
-                      FIREFOX_EXTENSION_ID FIREFOX_JWT_ISSUER \
-                      FIREFOX_JWT_SECRET; do
-            [ -n "${!name}" ] || missing="$missing $name"
-          done
-          if [ -n "$missing" ]; then
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Store submission skipped — missing secrets:$missing (see README > Required GitHub Secrets)"
-          else
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          fi
+          check_store() {
+            store="$1"
+            label="$2"
+            shift 2
+            missing=""
+            for name in "$@"; do
+              [ -n "${!name}" ] || missing="$missing $name"
+            done
+            if [ -n "$missing" ]; then
+              echo "${store}=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::$label submission skipped — missing secrets:$missing (see README > Required GitHub Secrets)"
+            else
+              echo "${store}=true" >> "$GITHUB_OUTPUT"
+            fi
+          }
 
-      - name: Submit to stores (dry run)
-        if: steps.creds.outputs.enabled == 'true' && github.event_name == 'workflow_dispatch' && inputs.dry_run == true
+          check_store chrome Chrome \
+            CHROME_EXTENSION_ID CHROME_PUBLISHER_ID \
+            CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL \
+            CHROME_SERVICE_ACCOUNT_PRIVATE_KEY
+          check_store firefox Firefox \
+            FIREFOX_EXTENSION_ID FIREFOX_JWT_ISSUER FIREFOX_JWT_SECRET
+
+      - name: Submit to Chrome (dry run)
+        if: steps.creds.outputs.chrome == 'true' && github.event_name == 'workflow_dispatch' && inputs.dry_run == true
         run: |
           for name in CHROME_CANCEL_PENDING CHROME_DEPLOY_PERCENTAGE \
                       CHROME_PUBLISH_TYPE CHROME_SKIP_REVIEW \
                       CHROME_SKIP_SUBMIT_REVIEW; do
             [ -n "${!name}" ] || unset "$name"
           done
+          pnpm wxt submit --dry-run --chrome-zip .output/*-chrome.zip
+
+      - name: Submit to Chrome
+        if: steps.creds.outputs.chrome == 'true' && (github.event_name == 'push' || inputs.dry_run != true)
+        run: |
+          for name in CHROME_CANCEL_PENDING CHROME_DEPLOY_PERCENTAGE \
+                      CHROME_PUBLISH_TYPE CHROME_SKIP_REVIEW \
+                      CHROME_SKIP_SUBMIT_REVIEW; do
+            [ -n "${!name}" ] || unset "$name"
+          done
+          pnpm wxt submit --chrome-zip .output/*-chrome.zip
+
+      - name: Submit to Firefox (dry run)
+        if: steps.creds.outputs.firefox == 'true' && github.event_name == 'workflow_dispatch' && inputs.dry_run == true
+        run: |
           pnpm wxt submit --dry-run \
-            --chrome-zip .output/*-chrome.zip \
             --firefox-zip .output/*-firefox.zip \
             --firefox-sources-zip .output/*-sources.zip
 
-      - name: Submit to stores
-        if: steps.creds.outputs.enabled == 'true' && (github.event_name == 'push' || inputs.dry_run != true)
+      - name: Submit to Firefox
+        if: steps.creds.outputs.firefox == 'true' && (github.event_name == 'push' || inputs.dry_run != true)
         run: |
-          for name in CHROME_CANCEL_PENDING CHROME_DEPLOY_PERCENTAGE \
-                      CHROME_PUBLISH_TYPE CHROME_SKIP_REVIEW \
-                      CHROME_SKIP_SUBMIT_REVIEW; do
-            [ -n "${!name}" ] || unset "$name"
-          done
           pnpm wxt submit \
-            --chrome-zip .output/*-chrome.zip \
             --firefox-zip .output/*-firefox.zip \
             --firefox-sources-zip .output/*-sources.zip
 

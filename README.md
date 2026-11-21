@@ -167,6 +167,8 @@ Triggered automatically on a version tag push matching `v<major>.<minor>.<patch>
 
 When triggered manually via `workflow_dispatch`, a **Dry Run** option is available. Enabling it validates credentials and ZIPs against the store APIs without submitting anything.
 
+Chrome and Firefox are checked independently. A store with a complete credential set is submitted; a store with missing secrets is skipped with a notice. Missing credentials for one store never block the other store or the GitHub Release.
+
 Jobs run in this order:
 
 ```
@@ -185,14 +187,14 @@ format-check
      submit     github-release
 ```
 
-| Job              | What it does                                                                         |
-| ---------------- | ------------------------------------------------------------------------------------ |
-| `format-check`   | Prettier format check                                                                |
-| `unit-tests`     | Type check + unit tests                                                              |
-| `e2e-tests`      | Build + Playwright E2E tests                                                         |
-| `zip`            | Builds production ZIPs for Chrome and Firefox (with Sentry source maps)              |
-| `submit`         | Submits to Chrome Web Store and Firefox Addon Store via `wxt submit`                 |
-| `github-release` | Creates a GitHub Release with auto-generated notes and ZIPs attached (tag push only) |
+| Job              | What it does                                                                                    |
+| ---------------- | ----------------------------------------------------------------------------------------------- |
+| `format-check`   | Prettier format check                                                                           |
+| `unit-tests`     | Type check + unit tests                                                                         |
+| `e2e-tests`      | Build + Playwright E2E tests                                                                    |
+| `zip`            | Builds production ZIPs for Chrome and Firefox (with Sentry source maps)                         |
+| `submit`         | Submits each available store independently via `wxt submit`; skips one with missing credentials |
+| `github-release` | Creates a GitHub Release with auto-generated notes and ZIPs attached (tag push only)            |
 
 ## Publishing
 
@@ -233,6 +235,8 @@ Optional v2 controls are forwarded when set: `CHROME_SKIP_SUBMIT_REVIEW` (upload
 | `FIREFOX_JWT_ISSUER`   | API key (JWT issuer)                    | [addons.mozilla.org/developers/addon/api/key](https://addons.mozilla.org/en-US/developers/addon/api/key/) |
 | `FIREFOX_JWT_SECRET`   | API secret (JWT secret)                 | Same page as JWT issuer                                                                                   |
 
+Each store is gated on its own credential set. With only the Chrome secrets, Chrome is submitted and Firefox is skipped with a notice; with only the Firefox secrets, the reverse. With neither, both are skipped and the GitHub Release is still created with all three ZIPs attached.
+
 #### Sentry (optional, for source map upload during production builds)
 
 | Secret              | Description                                   | Where to get it                                              |
@@ -250,14 +254,14 @@ Optional v2 controls are forwarded when set: `CHROME_SKIP_SUBMIT_REVIEW` (upload
 
 ### Publishing a New Version
 
-1. Bump the version in `package.json` and `wxt.config.ts` (if the manifest version is separate).
+1. Bump `version` in `package.json` — WXT derives both manifests from it; `wxt.config.ts` has no separate version.
 2. Commit and push the version bump.
 3. Tag the commit with the new version:
    ```sh
-   git tag v1.4.0
-   git push origin v1.4.0
+   git tag v1.7.0
+   git push origin v1.7.0
    ```
-4. The publish workflow triggers automatically, runs all tests, builds the ZIPs, submits to both stores, and creates a GitHub Release.
+4. The publish workflow triggers automatically, runs all tests, builds the ZIPs, submits to whichever stores have complete credentials, and creates a GitHub Release with all three ZIPs attached.
 
 To do a dry run first (recommended when setting up for the first time):
 
@@ -267,15 +271,15 @@ To do a dry run first (recommended when setting up for the first time):
 
 ## Documentation
 
-| Where                            | What                                                     |
-| -------------------------------- | -------------------------------------------------------- |
-| [`AGENTS.md`](./AGENTS.md)       | How to work on this codebase — commands, rules, boundaries |
-| [`docs/architecture.md`](./docs/architecture.md) | How it is put together                        |
-| [`docs/decisions/`](./docs/decisions/) | Decisions and the reasoning behind them            |
-| [`docs/open.md`](./docs/open.md) | Known gaps. A state, not a log — items are deleted when fixed |
+| Where                                            | What                                                          |
+| ------------------------------------------------ | ------------------------------------------------------------- |
+| [`AGENTS.md`](./AGENTS.md)                       | How to work on this codebase — commands, rules, boundaries    |
+| [`docs/architecture.md`](./docs/architecture.md) | How it is put together                                        |
+| [`docs/decisions/`](./docs/decisions/)           | Decisions and the reasoning behind them                       |
+| [`docs/open.md`](./docs/open.md)                 | Known gaps. A state, not a log — items are deleted when fixed |
 
 Module behaviour is specified by its tests, not by a parallel prose document. A
-test can fail; a paragraph describing it cannot. When the *reason* behind a choice
+test can fail; a paragraph describing it cannot. When the _reason_ behind a choice
 matters — why something was rejected, what would justify revisiting it — that
 goes in `docs/decisions/`, where it does not rot against the code.
 
