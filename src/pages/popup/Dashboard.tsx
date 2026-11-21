@@ -27,6 +27,7 @@ import {
 import { Icon } from "@/components/ui/icon";
 import SnippetListItem from "@/components/SnippetListItem";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import { ActivationChecklist } from "@/components/onboarding/ActivationChecklist";
 const SnippetDetailView = lazy(() => import("~/components/SnippetDetailView"));
 const NewSnippetView = lazy(() => import("~/components/NewSnippetView"));
 import { InlineError } from "@/components/ui/inline-error";
@@ -685,6 +686,10 @@ export default function Dashboard() {
           ])}
         </WarningBanner>
       )}
+
+      {/* First-success loop. Hidden until the tour is over, and gone for good
+          once the user dismisses it or has done all three things. */}
+      <ActivationChecklist snippets={snippets} />
 
       {/* Master-Detail Layout */}
       <div className="flex-1 flex overflow-hidden">

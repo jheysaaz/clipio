@@ -546,3 +546,12 @@ onboarding:
     library:
       title: Manage your library
       description: Import, export and storage controls all live in this section.
+
+activation:
+  title: Get started with Clipio
+  progress: "$1 of $2 done"
+  dismiss: Dismiss setup checklist
+  steps:
+    create: Create your first snippet
+    shortcut: Give it a shortcut
+    insert: Use it on a page

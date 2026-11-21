@@ -283,6 +283,18 @@ export const guidedOnboardingStateItem = storage.defineItem<OnboardingProgress>(
   }
 );
 
+/**
+ * Whether the user closed the first-success checklist.
+ *
+ * The checklist itself is derived from the library and insertion counters, so
+ * this is the only flag it owns. One-way on purpose: once dismissed it stays
+ * dismissed for this install, rather than reappearing on the next popup open.
+ */
+export const activationDismissedItem = storage.defineItem<boolean>(
+  "local:activationDismissed",
+  { defaultValue: false }
+);
+
 // ---------------------------------------------------------------------------
 // Review prompt
 // ---------------------------------------------------------------------------

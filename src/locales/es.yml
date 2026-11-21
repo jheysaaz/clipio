@@ -540,3 +540,12 @@ onboarding:
     library:
       title: Gestiona tu biblioteca
       description: La importación, la exportación y el almacenamiento están en esta sección.
+
+activation:
+  title: Empieza a usar Clipio
+  progress: "$1 de $2 completados"
+  dismiss: Cerrar lista de primeros pasos
+  steps:
+    create: Crea tu primer fragmento
+    shortcut: Dale un atajo
+    insert: Úsalo en una página
