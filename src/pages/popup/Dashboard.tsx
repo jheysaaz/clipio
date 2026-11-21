@@ -366,7 +366,11 @@ export default function Dashboard() {
         captureError(err, { action: "loadContextMenuDraft" });
       }
     })();
-  }, []);
+    // Both are stable for the popup's life: `setDraft` is a module-level store
+    // action, and `startCreating` is a `useCallback` over the router's stable
+    // `navigate`. Listed explicitly so the rule does not have to infer that;
+    // a re-run would be harmless anyway, since the draft is consumed on read.
+  }, [setDraftSnippet, startCreating]);
 
   /**
    * Honour the route a context-menu action asked for.
@@ -580,7 +584,7 @@ export default function Dashboard() {
         selectSnippet(filteredSnippets[newIndex].id);
       }
     },
-    [filteredSnippets, selectedSnippet, isCreating]
+    [filteredSnippets, selectedSnippet, isCreating, selectSnippet]
   );
 
   useEffect(() => {
