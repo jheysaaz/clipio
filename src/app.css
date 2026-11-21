@@ -11,6 +11,28 @@
  */
 @layer base {
   :root {
+    /* Opts every Clipio page out of Chromium's Auto Dark Mode for Web Contents
+       (chrome://flags/#enable-force-dark, also "force dark"). The browser
+       repaints whatever it classifies as light, and it does not reliably stop at
+       the dark theme: with the flag on, this app measured
+
+         light theme  99.1% of pixels changed
+         dark theme    1.1% of pixels changed, e.g. a 39,39,42 border repainted
+                            73,73,75
+
+       so the extension's own palette was not the last word on what the user saw.
+       `only light` is the documented per-page opt-out and the only declaration
+       that reliably stops the filter; `color-scheme: dark` does not (measured
+       above), which is why the dark theme cannot simply declare itself dark.
+
+       The cost: UA-rendered surfaces (scrollbars, the native `<input
+       type="date">` popup) follow the light scheme even in the dark theme. That
+       is deliberate and cheap here — every Clipio surface is painted from the
+       tokens below, and the measured difference across both pages and both
+       themes was a single pixel. Re-declaring `color-scheme: dark` on `.dark`
+       would buy those surfaces back and hand force dark the page again;
+       src/app.css.test.ts fails the moment that happens. */
+    color-scheme: only light;
     --background: oklch(1 0 0);
     --foreground: oklch(0.141 0.005 285.82);
     --card: oklch(1 0 0);
