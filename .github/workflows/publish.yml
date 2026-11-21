@@ -197,6 +197,13 @@ jobs:
       CHROME_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
       CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL: ${{ secrets.CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL }}
       CHROME_SERVICE_ACCOUNT_PRIVATE_KEY: ${{ secrets.CHROME_SERVICE_ACCOUNT_PRIVATE_KEY }}
+      # Optional v2 controls. An empty string fails the CLI's validation, so
+      # each submit step unsets the ones that are not configured.
+      CHROME_CANCEL_PENDING: ${{ secrets.CHROME_CANCEL_PENDING }}
+      CHROME_DEPLOY_PERCENTAGE: ${{ secrets.CHROME_DEPLOY_PERCENTAGE }}
+      CHROME_PUBLISH_TYPE: ${{ secrets.CHROME_PUBLISH_TYPE }}
+      CHROME_SKIP_REVIEW: ${{ secrets.CHROME_SKIP_REVIEW }}
+      CHROME_SKIP_SUBMIT_REVIEW: ${{ secrets.CHROME_SKIP_SUBMIT_REVIEW }}
       FIREFOX_EXTENSION_ID: ${{ secrets.FIREFOX_EXTENSION_ID }}
       FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
       FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
@@ -255,6 +262,11 @@ jobs:
       - name: Submit to stores (dry run)
         if: steps.creds.outputs.enabled == 'true' && github.event_name == 'workflow_dispatch' && inputs.dry_run == true
         run: |
+          for name in CHROME_CANCEL_PENDING CHROME_DEPLOY_PERCENTAGE \
+                      CHROME_PUBLISH_TYPE CHROME_SKIP_REVIEW \
+                      CHROME_SKIP_SUBMIT_REVIEW; do
+            [ -n "${!name}" ] || unset "$name"
+          done
           pnpm wxt submit --dry-run \
             --chrome-zip .output/*-chrome.zip \
             --firefox-zip .output/*-firefox.zip \
@@ -263,6 +275,11 @@ jobs:
       - name: Submit to stores
         if: steps.creds.outputs.enabled == 'true' && (github.event_name == 'push' || inputs.dry_run != true)
         run: |
+          for name in CHROME_CANCEL_PENDING CHROME_DEPLOY_PERCENTAGE \
+                      CHROME_PUBLISH_TYPE CHROME_SKIP_REVIEW \
+                      CHROME_SKIP_SUBMIT_REVIEW; do
+            [ -n "${!name}" ] || unset "$name"
+          done
           pnpm wxt submit \
             --chrome-zip .output/*-chrome.zip \
             --firefox-zip .output/*-firefox.zip \

@@ -223,6 +223,8 @@ It writes a `.env.submit` file (gitignored). Use the same values as repository s
 
 The workflow sets `CHROME_API_VERSION=v2` for both submit modes. To create the service account and grant it access, follow Google's [Chrome Web Store service-account guide](https://developer.chrome.com/docs/webstore/service-accounts).
 
+Optional v2 controls are forwarded when set: `CHROME_SKIP_SUBMIT_REVIEW` (upload without sending for review), `CHROME_PUBLISH_TYPE`, `CHROME_DEPLOY_PERCENTAGE`, `CHROME_CANCEL_PENDING` and `CHROME_SKIP_REVIEW`. Unset ones are omitted rather than passed as empty strings, which the CLI rejects.
+
 #### Firefox Addon Store
 
 | Secret                 | Description                             | Where to get it                                                                                           |
