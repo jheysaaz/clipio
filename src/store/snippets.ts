@@ -50,7 +50,11 @@ import {
 import { lastViewedSnippetIdItem, syncDataLostItem } from "@/storage/items";
 import { selectNewest } from "@/lib/snippet-utils";
 import { isExternalLocalSnippetChange } from "@/lib/sync-change";
-import { clearDraftPreviews } from "@/store/write-queue";
+import {
+  clearCommittedFields,
+  clearDraftPreviews,
+  rememberCommittedFields,
+} from "@/store/write-queue";
 import { getWriterId } from "@/storage/writer-id";
 import { captureError } from "@/lib/sentry";
 import { i18n } from "#i18n";
@@ -264,6 +268,7 @@ export async function refreshSnippets(): Promise<void> {
     // An external writer replaces the record underneath any local preview, so
     // the preview must not keep shadowing the new content.
     clearDraftPreviews();
+    clearCommittedFields();
     snippetsStore.setState((prev) => ({
       ...prev,
       snippets: list,
@@ -333,13 +338,63 @@ export async function initialiseSnippets(): Promise<void> {
 const SNIPPET_KEY_PREFIX = "snip:";
 
 /**
- * Merge a re-read list into the store without disturbing local UI state.
+ * Take only the write bookkeeping from our own commit.
  *
- * The re-read *is* the truth — it is the same call the manager would make — so it
- * replaces the list wholesale rather than being merged. What it must not touch
- * is anything the user is currently looking at: a dismissed recovery banner, an
- * error they have not acted on yet.
+ * A full refresh here would replace the fields under an open editor. The popup
+ * still needs the new revision and timestamp, though: without them the next
+ * autosave stages an old `baseRev` and conflicts with our own write.
  */
+function applySelfWriteMetadata(
+  changes: Parameters<typeof isExternalLocalSnippetChange>[0],
+  writerId: string
+): void {
+  let nextSnippets: Snippet[] | null = null;
+  for (const [key, change] of Object.entries(changes)) {
+    if (!key.startsWith(SNIPPET_KEY_PREFIX)) continue;
+    const id = key.slice(SNIPPET_KEY_PREFIX.length);
+    const value = change.newValue as Snippet | undefined;
+    const previous = change.oldValue as Snippet | undefined;
+    const current = snippetsStore.state.snippets.find((item) => item.id === id);
+
+    if (!value) {
+      if (previous?.updatedBy !== writerId || !current) continue;
+      nextSnippets = (nextSnippets ?? snippetsStore.state.snippets).filter(
+        (item) => item.id !== id
+      );
+      clearCommittedFields(id);
+      continue;
+    }
+    if (value.updatedBy !== writerId || !current) continue;
+
+    if (
+      current.rev !== value.rev ||
+      current.updatedAt !== value.updatedAt ||
+      current.updatedBy !== value.updatedBy
+    ) {
+      const list = (nextSnippets ?? snippetsStore.state.snippets).slice();
+      const index = list.findIndex((item) => item.id === id);
+      if (index >= 0) {
+        list[index] = {
+          ...list[index],
+          rev: value.rev,
+          updatedAt: value.updatedAt,
+          updatedBy: value.updatedBy,
+        };
+        nextSnippets = list;
+      }
+    }
+    rememberCommittedFields(id, {
+      label: value.label,
+      shortcut: value.shortcut,
+      content: value.content,
+      tags: [...(value.tags ?? [])],
+    });
+  }
+  if (nextSnippets) {
+    snippetsStore.setState((prev) => ({ ...prev, snippets: nextSnippets! }));
+  }
+}
+
 /**
  * Re-read when a snippet key changes in any storage area.
  *
@@ -365,27 +420,35 @@ if (typeof browser !== "undefined" && browser.storage?.onChanged) {
       key.startsWith(SNIPPET_KEY_PREFIX)
     );
     if (!touched) return;
+    let selfWriterId: string | null = null;
 
     void Promise.resolve()
       .then(() => {
         // In local mode the queue's own commits fire this listener. Re-reading
-        // from them would replace the list under an open editor after every
-        // autosave; an edit from Options or another context carries a different
-        // writer id and must be picked up. Sync changes need no writer lookup.
+        // from them would replace the list under an open editor; an edit from
+        // Options or another context carries a different writer id and still
+        // refreshes the list. Sync changes need no writer lookup.
         if (areaName === "local") {
-          return getWriterId().then((writerId) =>
-            isExternalLocalSnippetChange(
+          return getWriterId().then((writerId) => {
+            selfWriterId = writerId;
+            return isExternalLocalSnippetChange(
               changes as Parameters<typeof isExternalLocalSnippetChange>[0],
               areaName,
               writerId
-            )
-          );
+            );
+          });
         }
         return true;
       })
       .then((external) => {
-        if (!external) return;
-        return refreshSnippets();
+        if (external) return refreshSnippets();
+        if (selfWriterId) {
+          applySelfWriteMetadata(
+            changes as Parameters<typeof isExternalLocalSnippetChange>[0],
+            selfWriterId
+          );
+        }
+        return undefined;
       })
       .catch((error: unknown) => {
         // `refreshSnippets` handles its own failures, so reaching here means
