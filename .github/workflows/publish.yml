@@ -96,6 +96,9 @@ jobs:
         env:
           SENTRY_AUTH_TOKEN: ""
 
+      - name: Check bundle size
+        run: pnpm check:bundle-size
+
       - name: Run E2E tests
         run: pnpm test:e2e
         env:
