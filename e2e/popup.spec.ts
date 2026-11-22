@@ -833,6 +833,45 @@ test.describe("Popup — edits autosave", () => {
     ).not.toContainText("autosaved");
   });
 
+  test("the sidebar preview follows the draft before it commits", async ({
+    popupPage,
+  }) => {
+    const { older } = await seedTwo(popupPage);
+    await popupPage.locator(`#snippet-${older.id}`).click();
+
+    // The URL changes before the keyed detail view swaps in; wait for the
+    // target's content so the keystrokes do not land in the outgoing editor.
+    const editor = popupPage.locator('[contenteditable="true"]');
+    await expect(editor).toContainText(older.content);
+    await editor.click();
+    await popupPage.keyboard.type(" autosaved");
+
+    // The authoritative record is intentionally not overwritten by our own
+    // writes, so the row can only show this by reading the staged draft.
+    await expect(popupPage.locator(`#snippet-${older.id}`)).toContainText(
+      "autosaved"
+    );
+  });
+
+  test("undo restores the value the editor opened with, without switching snippets", async ({
+    popupPage,
+  }) => {
+    const { older } = await seedTwo(popupPage);
+    await popupPage.locator(`#snippet-${older.id}`).click();
+    await editSelectedSnippet(popupPage, older, " autosaved");
+
+    // Undo the staged draft before anything is committed. The restored value is
+    // the one the editor mounted with — the exact case the old external-value
+    // guard skipped because it compared against the initial value.
+    const undo = popupPage.getByTestId("snippet-undo");
+    await expect(undo).toBeEnabled();
+    await undo.click();
+
+    const editor = popupPage.locator('[contenteditable="true"]');
+    await expect(editor).toContainText("older body");
+    await expect(editor).not.toContainText("autosaved");
+  });
+
   test("browser Back does not lose an edit", async ({
     popupPage,
     extensionId,

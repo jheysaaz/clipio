@@ -24,6 +24,7 @@ import type { Snippet } from "@/types";
 import { TIMING } from "@/config/constants";
 import { SnippetWriteRefused } from "@/store/snippets";
 import { captureError } from "@/lib/sentry";
+import { draftPreviewsStore } from "@/store/write-queue";
 
 const snippet: Snippet = {
   id: "3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b",
@@ -61,6 +62,7 @@ describe("SnippetListItem", () => {
     onUpdate.mockClear();
     onUpdate.mockResolvedValue(undefined);
     vi.mocked(captureError).mockClear();
+    draftPreviewsStore.setState(() => ({}));
   });
 
   afterEach(() => {
@@ -74,6 +76,30 @@ describe("SnippetListItem", () => {
 
     expect(screen.getByText("Address")).toBeInTheDocument();
     expect(screen.getByText("/addr")).toBeInTheDocument();
+    expect(screen.getByText("123 Fake Street")).toBeInTheDocument();
+  });
+
+  it("previews the staged draft while the editor is being typed into", () => {
+    draftPreviewsStore.setState(() => ({
+      [snippet.id]: {
+        label: snippet.label,
+        shortcut: snippet.shortcut,
+        content: "typed but not committed",
+        tags: [],
+      },
+    }));
+
+    renderItem();
+
+    // The authoritative record is deliberately not overwritten by our own
+    // commits, so the row must read the staged draft to show live content.
+    expect(screen.getByText("typed but not committed")).toBeInTheDocument();
+    expect(screen.queryByText("123 Fake Street")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the stored content once no draft is staged", () => {
+    renderItem();
+
     expect(screen.getByText("123 Fake Street")).toBeInTheDocument();
   });
 

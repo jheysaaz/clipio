@@ -50,6 +50,7 @@ import {
 import { lastViewedSnippetIdItem, syncDataLostItem } from "@/storage/items";
 import { selectNewest } from "@/lib/snippet-utils";
 import { isExternalLocalSnippetChange } from "@/lib/sync-change";
+import { clearDraftPreviews } from "@/store/write-queue";
 import { getWriterId } from "@/storage/writer-id";
 import { captureError } from "@/lib/sentry";
 import { i18n } from "#i18n";
@@ -260,6 +261,9 @@ export async function refreshSnippets(): Promise<void> {
       lastViewedSnippetIdItem.getValue(),
     ]);
     if (isStale()) return;
+    // An external writer replaces the record underneath any local preview, so
+    // the preview must not keep shadowing the new content.
+    clearDraftPreviews();
     snippetsStore.setState((prev) => ({
       ...prev,
       snippets: list,

@@ -2,11 +2,13 @@ import { stripInlineMarkdownMarks } from "@/lib/markdown";
 import { stripMediaPlaceholders } from "@/lib/media-placeholders";
 import { decodeHtmlEntities, stripHtmlTags } from "@/lib/html-text";
 import { useState, useRef, useEffect } from "react";
+import { useStore } from "@tanstack/react-store";
 import { Button } from "@/components/ui/button";
 import type { Snippet } from "@/types";
 import { cn } from "@/lib/utils";
 import { TIMING } from "@/config/constants";
 import { isWriteRefusal } from "@/store/snippets";
+import { draftPreviewsStore } from "@/store/write-queue";
 import { captureError } from "@/lib/sentry";
 import { i18n } from "#i18n";
 import { toast } from "sonner";
@@ -76,8 +78,14 @@ export default function SnippetListItem({
   const inputRef = useRef<HTMLInputElement>(null);
   // Timer for deferring the row's onClick so a double-click can cancel it.
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveFields = useStore(draftPreviewsStore)[snippet.id];
 
-  const contentPreview = getContentPreview(snippet.content);
+  // The authoritative record is intentionally not overwritten by our own
+  // commits, so reading only `snippet.content` froze the preview at the value the
+  // popup loaded. The staged draft is what the user is looking at right now.
+  const contentPreview = getContentPreview(
+    liveFields?.content ?? snippet.content
+  );
 
   useEffect(() => {
     if (editingField && inputRef.current) {
