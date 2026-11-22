@@ -77,7 +77,7 @@ import {
   useSidebarWidth,
   setSidebarOpen as storeSetSidebarOpen,
 } from "@/store/sidebar";
-import { openReleasePage } from "@/lib/update-checker";
+import { openReleasePage, shouldShowUpdateAlert } from "@/lib/update-checker";
 import {
   LIST_ROUTE,
   NEW_ROUTE,
@@ -413,22 +413,57 @@ export default function Dashboard() {
     })();
   }, [navigate]);
 
-  // Check for available update banner
+  // Check for available update banner. The background checker writes these
+  // items asynchronously, so a one-shot read can miss a release found after the
+  // popup opens. Watch both items so the banner reacts to changes in place.
+  const updateReleaseRef = useRef<{
+    version: string;
+    htmlUrl: string;
+    publishedAt: string;
+  } | null>(null);
   useEffect(() => {
+    let mounted = true;
+    const apply = (
+      release: typeof updateReleaseRef.current,
+      dismissed: string
+    ) => {
+      updateReleaseRef.current = release;
+      setUpdateRelease(release);
+      setShowUpdateBanner(shouldShowUpdateAlert(release, dismissed));
+    };
+
     (async () => {
       try {
         const [release, dismissed] = await Promise.all([
           latestVersionItem.getValue(),
           dismissedUpdateVersionItem.getValue(),
         ]);
-        if (release && release.version !== dismissed) {
-          setUpdateRelease(release);
-          setShowUpdateBanner(true);
-        }
+        if (mounted) apply(release, dismissed ?? "");
       } catch (err) {
         captureError(err, { action: "loadUpdateBanner" });
       }
     })();
+
+    const unwatchRelease = latestVersionItem.watch((release) => {
+      if (!mounted) return;
+      void dismissedUpdateVersionItem
+        .getValue()
+        .then((dismissed) => {
+          if (mounted) apply(release, dismissed ?? "");
+        })
+        .catch((err: unknown) => {
+          captureError(err, { action: "loadUpdateBanner.watch" });
+        });
+    });
+    const unwatchDismissed = dismissedUpdateVersionItem.watch((dismissed) => {
+      if (mounted) apply(updateReleaseRef.current, dismissed ?? "");
+    });
+
+    return () => {
+      mounted = false;
+      unwatchRelease();
+      unwatchDismissed();
+    };
   }, []);
 
   /**
