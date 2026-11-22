@@ -24,7 +24,7 @@ function snippet(overrides: Partial<Snippet> = {}): Snippet {
 function input(overrides: Partial<ActivationInput> = {}): ActivationInput {
   return {
     snippets: [],
-    totalInsertions: 0,
+    usageCounts: {},
     onboarding: { status: "completed" },
     dismissed: false,
     isLoaded: true,
@@ -47,42 +47,116 @@ describe("activationChecklist", () => {
     expect(doneIds(result)).toEqual([]);
   });
 
-  it("marks creation and shortcut independently", () => {
-    const withoutShortcut = activationChecklist(
-      input({ snippets: [snippet({ shortcut: "" })] })
+  it("marks creation and placeholder independently", () => {
+    const withoutPlaceholder = activationChecklist(
+      input({ snippets: [snippet()] })
     );
-    expect(doneIds(withoutShortcut)).toEqual(["create"]);
+    expect(doneIds(withoutPlaceholder)).toEqual(["create"]);
 
-    const trimmed = activationChecklist(
-      input({ snippets: [snippet({ shortcut: "   " })] })
+    const withPlaceholder = activationChecklist(
+      input({ snippets: [snippet({ content: "Paste {{clipboard}}" })] })
     );
-    expect(doneIds(trimmed)).toEqual(["create"]);
-
-    const withShortcut = activationChecklist(input({ snippets: [snippet()] }));
-    expect(doneIds(withShortcut)).toEqual(["create", "shortcut"]);
+    expect(doneIds(withPlaceholder)).toEqual(["create", "placeholder"]);
   });
 
-  it("does not treat a non-string shortcut as assigned", () => {
+  it("does not treat non-string content as a placeholder", () => {
     const corrupt = snippet();
-    (corrupt as { shortcut: unknown }).shortcut = 42;
+    (corrupt as { content: unknown }).content = 42;
 
     expect(
       doneIds(activationChecklist(input({ snippets: [corrupt] })))
     ).toEqual(["create"]);
   });
 
+  it.each([
+    "{{clipboard}}",
+    "{{cursor}}",
+    "{{date:iso}}",
+    "{{datepicker:2026-01-01}}",
+    "Hello {{cursor}} world",
+  ])("recognises the user-facing placeholder %s", (content) => {
+    expect(
+      doneIds(activationChecklist(input({ snippets: [snippet({ content })] })))
+    ).toContain("placeholder");
+  });
+
+  it.each([
+    "{{image:media-id}}",
+    "{{gif:giphy-id}}",
+    "{{raw_html:payload}}",
+    "{{date:ISO}}",
+    "{{datepicker:01/01/2026}}",
+    "{{clipboard }}",
+  ])("does not mistake %s for a user-facing placeholder", (content) => {
+    expect(
+      doneIds(activationChecklist(input({ snippets: [snippet({ content })] })))
+    ).not.toContain("placeholder");
+  });
+
   it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, "1", null])(
     "does not count %s as an insertion",
     (value) => {
       expect(
-        doneIds(activationChecklist(input({ totalInsertions: value })))
+        doneIds(
+          activationChecklist(
+            input({
+              snippets: [snippet()],
+              usageCounts: { s1: value as number },
+            })
+          )
+        )
       ).not.toContain("insert");
     }
   );
 
+  it("counts an insertion recorded for a snippet still in the library", () => {
+    expect(
+      doneIds(
+        activationChecklist(
+          input({
+            snippets: [snippet()],
+            usageCounts: { s1: 1 },
+          })
+        )
+      )
+    ).toEqual(["create", "insert"]);
+  });
+
+  it("counts a legacy usage count stored on the snippet", () => {
+    expect(
+      doneIds(
+        activationChecklist(input({ snippets: [snippet({ usageCount: 3 })] }))
+      )
+    ).toContain("insert");
+  });
+
+  it("does not count a corrupt legacy usage count", () => {
+    const corrupt = snippet({ usageCount: Number.NaN });
+    (corrupt as { usageCount: unknown }).usageCount = "many";
+
+    expect(
+      doneIds(
+        activationChecklist(input({ snippets: [corrupt], usageCounts: {} }))
+      )
+    ).not.toContain("insert");
+  });
+
+  it("forgets the insertion step when its snippet has been deleted", () => {
+    const result = activationChecklist(
+      input({ snippets: [], usageCounts: { "deleted-snippet": 4 } })
+    );
+
+    expect(result.visible).toBe(true);
+    expect(result.doneCount).toBe(0);
+    expect(doneIds(result)).toEqual([]);
+  });
+
   it("hides once all three steps are done", () => {
     const result = activationChecklist(
-      input({ snippets: [snippet()], totalInsertions: 1 })
+      input({
+        snippets: [snippet({ content: "Today: {{date:iso}}" })],
+        usageCounts: { s1: 1 },
+      })
     );
 
     expect(result.complete).toBe(true);

@@ -223,7 +223,7 @@ describe("SettingsSidebar", () => {
   it("renders the first-success card beneath the nav when it is due", async () => {
     await browser.storage.local.set({
       guidedOnboarding: { status: "completed" },
-      totalSnippetInsertions: 0,
+      snippetUsageCount: {},
       activationDismissed: false,
     });
 

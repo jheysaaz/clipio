@@ -592,5 +592,5 @@ activation:
   dismiss: Cerrar lista de primeros pasos
   steps:
     create: Crea tu primer fragmento
-    shortcut: Dale un atajo
+    placeholder: Usa un marcador
     insert: Úsalo en una página

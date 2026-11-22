@@ -26,8 +26,8 @@ function stepLabel(id: ActivationStepId): string {
   switch (id) {
     case "create":
       return i18n.t("activation.steps.create");
-    case "shortcut":
-      return i18n.t("activation.steps.shortcut");
+    case "placeholder":
+      return i18n.t("activation.steps.placeholder");
     case "insert":
       return i18n.t("activation.steps.insert");
   }
@@ -46,7 +46,7 @@ export function ActivationChecklist({ snippets }: ActivationChecklistProps) {
 
   const checklist = activationChecklist({
     snippets,
-    totalInsertions: state.totalInsertions,
+    usageCounts: state.usageCounts,
     onboarding: state.onboarding,
     dismissed: state.dismissed,
     isLoaded: state.isLoaded,
@@ -58,10 +58,10 @@ export function ActivationChecklist({ snippets }: ActivationChecklistProps) {
     <section
       data-testid="activation-checklist"
       aria-label={i18n.t("activation.title")}
-      className="shrink-0 border-t border-border bg-muted/40 px-3 py-3"
+      className="mx-2 mb-2 shrink-0 rounded-lg border border-border bg-card p-3 shadow-sm"
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-[11px] font-medium leading-tight text-foreground">
+        <p className="text-sm font-medium leading-snug text-foreground">
           {i18n.t("activation.title")}
         </p>
         <Button
@@ -72,14 +72,14 @@ export function ActivationChecklist({ snippets }: ActivationChecklistProps) {
           aria-label={i18n.t("activation.dismiss")}
           title={i18n.t("activation.dismiss")}
           onClick={() => void dismissActivation()}
-          className="-mr-1 -mt-1 h-6 w-6 shrink-0"
+          className="-mr-1 -mt-1 h-7 w-7 shrink-0"
         >
-          <Icon icon={X} size="sm" />
+          <Icon icon={X} size="md" />
         </Button>
       </div>
       <p
         data-testid="activation-progress"
-        className="mt-0.5 text-[10px] text-muted-foreground"
+        className="mt-0.5 text-xs text-muted-foreground"
       >
         {i18n.t("activation.progress", [checklist.doneCount, checklist.total])}
       </p>
@@ -89,11 +89,11 @@ export function ActivationChecklist({ snippets }: ActivationChecklistProps) {
             key={step.id}
             data-testid={`activation-step-${step.id}`}
             data-done={step.done ? "true" : "false"}
-            className="flex items-center gap-1.5 text-[11px] leading-tight text-muted-foreground"
+            className="flex items-center gap-2 text-xs leading-snug text-muted-foreground"
           >
             <Icon
               icon={step.done ? Check : Circle}
-              size="sm"
+              size="md"
               className={
                 step.done ? "text-primary" : "text-muted-foreground/50"
               }

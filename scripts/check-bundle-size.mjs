@@ -52,9 +52,16 @@ const posix = (p) => p.split(sep).join("/");
  * all-JavaScript and shared-chunk totals move by only 256 bytes. The popup budget
  * is left high — a ratchet, not a target. All affected sizes were measured twice
  * from clean builds and did not vary.
+ *
+ * Raised a fifth time for the checklist's final copy and derivation changes:
+ * bigger text, per-snippet usage counts (instead of a lifetime insertion
+ * counter), and the "Use a placeholder" step. The options entry grows by 186
+ * bytes and the aggregate by 173; the popup, background and content budgets did
+ * not move. All affected sizes were measured twice from clean builds and did
+ * not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_721_881 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_722_054 },
   { name: "background entry", pattern: "background.js", maxBytes: 217_475 },
   {
     name: "content script entry",
@@ -69,14 +76,14 @@ const BUDGETS = [
   {
     name: "options entry chunk",
     pattern: "chunks/options-*.js",
-    maxBytes: 187_803,
+    maxBytes: 187_989,
   },
   {
     // Shared chunks are included here even when their individual hashed names
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_587_536,
+    maxBytes: 1_587_709,
   },
 ];
 

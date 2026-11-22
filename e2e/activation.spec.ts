@@ -26,13 +26,14 @@ function step(page: Page, id: string) {
 }
 
 test.describe("activation after onboarding", () => {
-  test("tracks creation, shortcut and first insertion in the options rail", async ({
+  test("tracks creation, placeholder and first insertion in the options rail", async ({
     popupPage,
     optionsPage,
     storageHelper,
   }) => {
     await waitForOptionsReady(optionsPage);
     await setLocalItem(optionsPage, "totalSnippetInsertions", 0);
+    await setLocalItem(optionsPage, "snippetUsageCount", {});
     await setLocalItem(optionsPage, "activationDismissed", false);
     await optionsPage.reload();
     await waitForOptionsReady(optionsPage);
@@ -43,7 +44,7 @@ test.describe("activation after onboarding", () => {
       "data-done",
       "false"
     );
-    await expect(step(optionsPage, "shortcut")).toHaveAttribute(
+    await expect(step(optionsPage, "placeholder")).toHaveAttribute(
       "data-done",
       "false"
     );
@@ -57,7 +58,7 @@ test.describe("activation after onboarding", () => {
       {
         id: "s1",
         label: "Signature",
-        content: "Regards",
+        content: "Regards {{cursor}}",
         shortcut: "sig",
         tags: [],
         createdAt: "2026-01-01T00:00:00.000Z",
@@ -71,7 +72,7 @@ test.describe("activation after onboarding", () => {
       "data-done",
       "true"
     );
-    await expect(step(optionsPage, "shortcut")).toHaveAttribute(
+    await expect(step(optionsPage, "placeholder")).toHaveAttribute(
       "data-done",
       "true"
     );
@@ -81,10 +82,44 @@ test.describe("activation after onboarding", () => {
     );
 
     await setLocalItem(optionsPage, "totalSnippetInsertions", 1);
+    await setLocalItem(optionsPage, "snippetUsageCount", { s1: 1 });
     await optionsPage.reload();
     await waitForOptionsReady(optionsPage);
 
     await expect(checklist).toHaveCount(0);
+  });
+
+  test("starts over when the used snippet has been deleted", async ({
+    optionsPage,
+    storageHelper,
+  }) => {
+    // clearAll restores the completed tour but removes the library and its
+    // usage counts. Re-seed only the orphaned signals from the old setup: a
+    // lifetime insertion total and a usage count for a snippet that no longer
+    // exists. Neither may leave "use it on a page" checked.
+    await storageHelper.clearAll();
+    await setLocalItem(optionsPage, "activationDismissed", false);
+    await setLocalItem(optionsPage, "totalSnippetInsertions", 1);
+    await setLocalItem(optionsPage, "snippetUsageCount", {
+      "deleted-snippet": 1,
+    });
+    await optionsPage.reload();
+    await waitForOptionsReady(optionsPage);
+
+    const checklist = optionsPage.getByTestId("activation-checklist");
+    await expect(checklist).toBeVisible();
+    await expect(step(optionsPage, "create")).toHaveAttribute(
+      "data-done",
+      "false"
+    );
+    await expect(step(optionsPage, "placeholder")).toHaveAttribute(
+      "data-done",
+      "false"
+    );
+    await expect(step(optionsPage, "insert")).toHaveAttribute(
+      "data-done",
+      "false"
+    );
   });
 
   test("dismissal survives a reload", async ({ optionsPage }) => {

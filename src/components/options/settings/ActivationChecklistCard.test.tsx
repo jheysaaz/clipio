@@ -30,7 +30,7 @@ function snippet(): Snippet {
     id: "s1",
     label: "Signature",
     shortcut: "/sig",
-    content: "Regards",
+    content: "Regards {{cursor}}",
     tags: [],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -57,7 +57,7 @@ describe("ActivationChecklistCard", () => {
   it("loads the library and derives the card from it", async () => {
     await browser.storage.local.set({
       guidedOnboarding: { status: "completed" },
-      totalSnippetInsertions: 0,
+      snippetUsageCount: {},
       activationDismissed: false,
     });
 
@@ -71,7 +71,7 @@ describe("ActivationChecklistCard", () => {
       "data-done",
       "true"
     );
-    expect(screen.getByTestId("activation-step-shortcut")).toHaveAttribute(
+    expect(screen.getByTestId("activation-step-placeholder")).toHaveAttribute(
       "data-done",
       "true"
     );

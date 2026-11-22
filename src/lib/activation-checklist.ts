@@ -3,15 +3,19 @@
  *
  * The tour explains the product; this decides whether the user has actually
  * done the three things that make Clipio useful. It is deliberately derived
- * from state the extension already keeps — the library, the insertion counter
- * and the tour progress — so there is no second set of "did they?" flags to
- * drift out of sync with reality.
+ * from state the extension already keeps — the library, per-snippet usage
+ * counts and the tour progress — so there is no second set of "did they?" flags
+ * to drift out of sync with reality.
+ *
+ * The insertion step is tied to a snippet that is still in the library. A
+ * lifetime counter would stay true after every snippet was deleted, leaving a
+ * lone checked step above two unchecked ones.
  */
 
 import type { Snippet } from "@/types";
 import type { OnboardingProgress } from "./onboarding-progress";
 
-export type ActivationStepId = "create" | "shortcut" | "insert";
+export type ActivationStepId = "create" | "placeholder" | "insert";
 
 export type ActivationStep = {
   id: ActivationStepId;
@@ -29,19 +33,47 @@ export type ActivationChecklist = {
 
 export type ActivationInput = {
   snippets: readonly Snippet[];
-  totalInsertions: unknown;
+  /** Per-snippet insertion counts from local usage tracking. */
+  usageCounts: Readonly<Record<string, number>>;
   onboarding: OnboardingProgress;
   dismissed: unknown;
   /** False until the persisted state has been read, to avoid a flash. */
   isLoaded: boolean;
 };
 
-function hasShortcut(snippet: Snippet): boolean {
-  return typeof snippet.shortcut === "string" && snippet.shortcut.trim() !== "";
+/**
+ * The user-facing dynamic placeholders taught in the editor tip. Media tokens
+ * (`{{image:…}}`, `{{gif:…}}`) and the internal raw-HTML token are deliberately
+ * excluded: they are storage details, not the "make a reusable snippet dynamic"
+ * idea this step is checking for.
+ */
+const DYNAMIC_PLACEHOLDER =
+  /\{\{(?:clipboard|cursor|date:[a-z]+|datepicker:\d{4}-\d{2}-\d{2})\}\}/;
+
+function hasPlaceholder(snippet: Snippet): boolean {
+  return (
+    typeof snippet.content === "string" &&
+    DYNAMIC_PLACEHOLDER.test(snippet.content)
+  );
 }
 
-function hasInserted(value: unknown): boolean {
+function isPositiveCount(value: unknown): boolean {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function hasInserted(
+  snippets: readonly Snippet[],
+  usageCounts: Readonly<Record<string, number>>
+): boolean {
+  return snippets.some((snippet) => {
+    // Current insertions are recorded in `usageCountsItem`; older backups carry
+    // the count on the snippet itself. Either source counts only while the
+    // snippet it describes is still in the library.
+    return (
+      isPositiveCount(usageCounts[snippet.id]) ||
+      isPositiveCount(snippet.usageCount)
+    );
+  });
 }
 
 /**
@@ -59,10 +91,13 @@ export function activationChecklist(
   const steps: readonly ActivationStep[] = [
     { id: "create", done: input.snippets.length > 0 },
     {
-      id: "shortcut",
-      done: input.snippets.some(hasShortcut),
+      id: "placeholder",
+      done: input.snippets.some(hasPlaceholder),
     },
-    { id: "insert", done: hasInserted(input.totalInsertions) },
+    {
+      id: "insert",
+      done: hasInserted(input.snippets, input.usageCounts),
+    },
   ];
 
   const doneCount = steps.filter((step) => step.done).length;
