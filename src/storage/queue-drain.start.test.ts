@@ -29,10 +29,15 @@ vi.mock("./items", () => ({
     }),
     watch: mocks.watch,
   },
+  editorDraftsItem: {
+    getValue: vi.fn(async () => ({})),
+    setValue: vi.fn(async () => {}),
+  },
 }));
 
 vi.mock("./index", () => ({
   commitSnippetChange: (...args: unknown[]) => mocks.commit(...args),
+  getSnippets: vi.fn(async () => []),
 }));
 
 vi.mock("@/lib/sentry", () => ({
@@ -99,6 +104,11 @@ describe("startWriteQueue", () => {
     startWriteQueue();
 
     expect(mocks.watch).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(mocks.captureError).toHaveBeenCalledWith(expect.any(Error), {
+        action: "queue.reconcile.startup",
+      });
+    });
     await vi.waitFor(() => {
       expect(mocks.captureError).toHaveBeenCalledWith(expect.any(Error), {
         action: "queue.drain.startup",

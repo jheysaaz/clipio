@@ -9,6 +9,10 @@
  *
  * A quota refusal is terminal by design (ADR 0004). It leaves the draft intact
  * and marks the operation `refused`; it is never retried, chunked or diverted.
+ *
+ * `inFlight` is separate from `status`: an operation is still `pending` while the
+ * background owns it, but no other writer may coalesce into or drain it. That is
+ * what keeps a popup edit from being folded into a commit already in progress.
  */
 
 import type { SnippetEditReason } from "@/types";
@@ -31,6 +35,13 @@ export type QueuedChange = {
   status: QueueStatus;
   error?: string;
   createdAt: number;
+  /** Set while the background is committing this operation. */
+  inFlight?: boolean;
+  /**
+   * Timestamp of the draft this operation was built from. The background only
+   * deletes the draft on success if it has not been replaced meanwhile.
+   */
+  draftUpdatedAt?: string;
 };
 
 export type QueueState = {
@@ -96,7 +107,9 @@ export function recordSend(
  * One operation per snippet matters: a burst of edits is one commit carrying
  * the latest fields and the revision the burst started from. A refused
  * operation is kept untouched — silently replacing it would hide a quota
- * problem the user still needs to see.
+ * problem the user still needs to see. A *failed* operation is different: a new
+ * edit makes it usable again, so it must be restored to pending with fresh retry
+ * state instead of inheriting a terminal status the drain will never pick up.
  */
 export function enqueue(
   state: QueueState,
@@ -106,6 +119,7 @@ export function enqueue(
   const existing = state.operations.find(
     (op) =>
       op.snippetId === change.snippetId &&
+      !op.inFlight &&
       (op.status === "pending" || op.status === "failed")
   );
 
@@ -118,9 +132,15 @@ export function enqueue(
       attempts: 0,
       nextAttemptAt: now,
       status: "pending",
+      inFlight: false,
     };
     return { ...state, operations: [...state.operations, op] };
   }
+
+  // A conflict or exhausted retry is terminal only until the user edits again.
+  // Reusing its fields without resetting these would strand the new edit in an
+  // operation `nextDueOperation` can never select.
+  const retryingFailure = existing.status === "failed";
 
   return {
     ...state,
@@ -132,13 +152,40 @@ export function enqueue(
               ? { ...change.fields, tags: [...(change.fields.tags ?? [])] }
               : undefined,
             kind: change.kind,
-            baseRev: Math.min(op.baseRev, change.baseRev),
+            baseRev: retryingFailure
+              ? change.baseRev
+              : Math.min(op.baseRev, change.baseRev),
             updatedAt: change.updatedAt,
             updatedBy: change.updatedBy,
             reason: change.reason,
+            attempts: retryingFailure ? 0 : op.attempts,
+            nextAttemptAt: retryingFailure ? now : op.nextAttemptAt,
+            status: "pending",
             error: undefined,
+            inFlight: false,
+            draftUpdatedAt: change.draftUpdatedAt,
           }
         : op
+    ),
+  };
+}
+
+/** Claim an operation so no other writer can touch it while it is committing. */
+export function markInFlight(state: QueueState, opId: string): QueueState {
+  return {
+    ...state,
+    operations: state.operations.map((op) =>
+      op.id === opId ? { ...op, inFlight: true } : op
+    ),
+  };
+}
+
+/** Give a claimed operation back after a restart could not confirm its commit. */
+export function releaseInFlight(state: QueueState, opId: string): QueueState {
+  return {
+    ...state,
+    operations: state.operations.map((op) =>
+      op.id === opId ? { ...op, inFlight: false } : op
     ),
   };
 }
@@ -150,7 +197,10 @@ export function nextDueOperation(
 ): QueuedChange | null {
   return (
     state.operations
-      .filter((op) => op.status === "pending" && op.nextAttemptAt <= now)
+      .filter(
+        (op) =>
+          op.status === "pending" && !op.inFlight && op.nextAttemptAt <= now
+      )
       .sort((a, b) => a.createdAt - b.createdAt)[0] ?? null
   );
 }
@@ -204,17 +254,28 @@ export function recordResult(
     operations: state.operations.map((item) => {
       if (item.id !== opId) return item;
       if (result.quota) {
-        return { ...item, status: "refused", error: result.error };
+        return {
+          ...item,
+          status: "refused",
+          error: result.error,
+          inFlight: false,
+        };
       }
       if (result.conflict) {
         // Retrying a stale edit would write it over newer data forever. The
         // draft stays put and the user decides whether to restore or discard.
-        return { ...item, status: "failed", error: result.error };
+        return {
+          ...item,
+          status: "failed",
+          error: result.error,
+          inFlight: false,
+        };
       }
       const attempts = item.attempts + 1;
       const exhausted = attempts >= policy.maxAttempts;
       return {
         ...item,
+        inFlight: false,
         attempts,
         status: exhausted ? "failed" : "pending",
         nextAttemptAt: exhausted

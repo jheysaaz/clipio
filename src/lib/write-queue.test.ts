@@ -5,10 +5,12 @@ import {
   clearRefused,
   emptyQueue,
   enqueue,
+  markInFlight,
   nextDueOperation,
   queueSummary,
   recordResult,
   recordSend,
+  releaseInFlight,
   type QueuePolicy,
   type QueueState,
 } from "./write-queue";
@@ -128,6 +130,60 @@ describe("enqueue", () => {
     fields.tags.push("b");
     expect(state.operations[0]?.fields?.tags).toEqual(["a"]);
   });
+
+  it("revives a failed operation instead of coalescing into a dead one", () => {
+    let state = enqueue(emptyQueue(), change(), 1000);
+    state = recordResult(
+      state,
+      "op1",
+      { ok: false, quota: false, conflict: true, error: "conflict" },
+      1100
+    );
+    state = enqueue(
+      state,
+      change({
+        id: "op2",
+        baseRev: 7,
+        fields: { label: "Retry", content: "retry", shortcut: "/r", tags: [] },
+        draftUpdatedAt: "2026-01-02T00:00:00.000Z",
+      }),
+      2000
+    );
+
+    expect(state.operations).toHaveLength(1);
+    expect(state.operations[0]).toMatchObject({
+      id: "op1",
+      status: "pending",
+      attempts: 0,
+      nextAttemptAt: 2000,
+      baseRev: 7,
+      error: undefined,
+      draftUpdatedAt: "2026-01-02T00:00:00.000Z",
+    });
+    expect(nextDueOperation(state, 2000)?.id).toBe("op1");
+  });
+
+  it("does not fold a new edit into an operation already being committed", () => {
+    const started = markInFlight(enqueue(emptyQueue(), change(), 1000), "op1");
+    const next = enqueue(
+      started,
+      change({ id: "op2", fields: { ...change().fields!, label: "Later" } }),
+      2000
+    );
+
+    expect(next.operations).toHaveLength(2);
+    expect(next.operations[0]).toMatchObject({
+      id: "op1",
+      inFlight: true,
+      fields: { label: "L" },
+    });
+    expect(next.operations[1]).toMatchObject({
+      id: "op2",
+      inFlight: false,
+      status: "pending",
+      fields: { label: "Later" },
+    });
+  });
 });
 
 describe("nextDueOperation", () => {
@@ -163,6 +219,15 @@ describe("nextDueOperation", () => {
       2000
     );
     expect(nextDueOperation(state, 3000)?.id).toBe("op1");
+  });
+
+  it("skips a claimed operation until it is released", () => {
+    const queued = enqueue(emptyQueue(), change(), 1000);
+    const claimed = markInFlight(queued, "op1");
+    expect(nextDueOperation(claimed, 3000)).toBeNull();
+
+    const released = releaseInFlight(claimed, "op1");
+    expect(nextDueOperation(released, 3000)?.id).toBe("op1");
   });
 });
 
@@ -250,6 +315,20 @@ describe("recordResult", () => {
       attempts: 0,
     });
     expect(nextDueOperation(state, 100_000)).toBeNull();
+  });
+
+  it("releases the in-flight claim when an outcome is recorded", () => {
+    let state = markInFlight(enqueue(emptyQueue(), change(), 1000), "op1");
+    state = recordResult(
+      state,
+      "op1",
+      { ok: false, quota: true, error: "quota" },
+      1100
+    );
+    expect(state.operations[0]).toMatchObject({
+      status: "refused",
+      inFlight: false,
+    });
   });
 
   it("stops retrying after the attempt limit", () => {
