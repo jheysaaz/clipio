@@ -52,6 +52,17 @@ const GLOBAL_STATE_INTEGRATION_NAMES = new Set([
   "FunctionToString",
 ]);
 
+/**
+ * Browser tracing starts web-vitals observers whose callbacks read `document`
+ * directly. MV3 service workers have no document, so installing it in the
+ * background produced an unhandled `ReferenceError` after Sentry enabled
+ * itself. Keep tracing in the document contexts, and guard on the global too
+ * so a misfiled context cannot start it in a worker.
+ */
+function supportsBrowserTracing(context: SentryContext): boolean {
+  return context !== "background" && typeof document !== "undefined";
+}
+
 /** Module-level extension scope; set by initSentry and used by capture helpers. */
 let extensionScope: Scope | undefined;
 
@@ -96,7 +107,10 @@ export function initSentry(
   const filtered = defaultIntegrations.filter(
     (integration) => !GLOBAL_STATE_INTEGRATION_NAMES.has(integration.name)
   );
-  const integrations = [...filtered, browserTracingIntegration()];
+  const integrations = [...filtered];
+  if (supportsBrowserTracing(context)) {
+    integrations.push(browserTracingIntegration());
+  }
 
   const transportFactory = transport ?? makeFetchTransport;
 
