@@ -48,6 +48,9 @@ test.describe("activation after onboarding", () => {
       "data-done",
       "false"
     );
+    await expect(step(optionsPage, "placeholder")).toContainText(
+      "Use a placeholder"
+    );
 
     // The popup is the surface the card was removed from. Wait for it to be
     // ready first, or an assertion before hydration would prove nothing.

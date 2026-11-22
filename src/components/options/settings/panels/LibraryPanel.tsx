@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
-import { Download, FileText } from "lucide-react";
+import { Download, FileText, MousePointerClick, Trophy } from "lucide-react";
 
 import { BackupManager } from "@/components/BackupManager";
 import { Button } from "@/components/ui/button";
@@ -25,31 +25,29 @@ import { toast } from "sonner";
 const ImportWizard = lazy(() => import("@/components/ImportWizard"));
 
 export function LibraryPanel() {
-  const [count, setCount] = useState<number | null>(null);
+  const [stats, setStats] = useState<{
+    count: number | null;
+    totalUses: number | null;
+    mostUsed: { label: string; count: number } | null;
+  }>({ count: null, totalUses: null, mostUsed: null });
   const [showWizard, setShowWizard] = useState(false);
-  const [topUsage, setTopUsage] = useState<
-    { id: string; label: string; shortcut: string; count: number }[]
-  >([]);
   const importButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     Promise.all([getSnippets(), usageCountsItem.getValue()])
       .then(([snippets, counts]) => {
-        setCount(snippets.length);
-        setTopUsage(
-          Object.entries(counts)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 5)
-            .map(([id, n]) => {
-              const snippet = snippets.find((s) => s.id === id);
-              return {
-                id,
-                label: snippet?.label ?? snippet?.shortcut ?? id,
-                shortcut: snippet?.shortcut ?? "",
-                count: n,
-              };
-            })
-        );
+        const top = Object.entries(counts).sort(([, a], [, b]) => b - a)[0];
+        const topSnippet = top ? snippets.find((s) => s.id === top[0]) : null;
+        setStats({
+          count: snippets.length,
+          totalUses: Object.values(counts).reduce((sum, n) => sum + n, 0),
+          mostUsed: top
+            ? {
+                label: topSnippet?.label ?? topSnippet?.shortcut ?? top[0],
+                count: top[1],
+              }
+            : null,
+        });
       })
       .catch((err) => captureError(err, { action: "libraryPanel.load" }));
   }, []);
@@ -76,88 +74,60 @@ export function LibraryPanel() {
 
   return (
     <div className="mb-6 space-y-8">
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      {/* Three figures answer three questions about the library: how much is
+          there, how much it gets used, and which snippet carries that use. A
+          grid keeps them comparable instead of stacking them as separate rows. */}
+      <dl className="grid grid-cols-3 gap-3" data-testid="library-stats">
+        <div
+          data-testid="stat-snippets"
+          className="min-w-0 rounded-lg border border-border/70 bg-muted/30 p-3"
+        >
+          <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Icon icon={FileText} className="text-muted-foreground" />
             {i18n.t("options.overview.snippets")}
-          </span>
-          <span className="text-sm tabular-nums text-foreground">
-            {count ?? "—"}
-          </span>
+          </dt>
+          <dd className="mt-1 text-lg font-medium tabular-nums text-foreground">
+            {stats.count ?? "—"}
+          </dd>
         </div>
-
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium text-foreground">
-            {i18n.t("options.copy.topUsageHeading")}
-          </h2>
+        <div
+          data-testid="stat-total-uses"
+          className="min-w-0 rounded-lg border border-border/70 bg-muted/30 p-3"
+        >
+          <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Icon icon={MousePointerClick} className="text-muted-foreground" />
+            {i18n.t("options.library.totalUses")}
+          </dt>
+          <dd className="mt-1 text-lg font-medium tabular-nums text-foreground">
+            {stats.totalUses ?? "—"}
+          </dd>
         </div>
-        {/* The wrapper is always rendered so `card-top-usage` is a stable
-            handle in both the populated and empty states — a testid that
-            appears only when there is data cannot assert the empty case. */}
-        <div data-testid="card-top-usage">
-          {topUsage.length === 0 ? (
-            <p
-              data-testid="top-usage-empty"
-              className="text-xs text-muted-foreground"
-            >
-              {i18n.t("options.copy.topUsageEmpty")}
-            </p>
-          ) : (
-            <ul className="space-y-1">
-              {topUsage.map(({ id, label, shortcut, count: n }) => (
-                <li
-                  key={id}
-                  className="flex items-center justify-between gap-3 py-1 text-sm"
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="truncate text-foreground">{label}</span>
-                    {shortcut && (
-                      <span className="shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
-                        {shortcut}
-                      </span>
-                    )}
-                  </div>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {i18n.t("options.library.uses", [String(n)])}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+        <div
+          data-testid="stat-most-used"
+          className="min-w-0 rounded-lg border border-border/70 bg-muted/30 p-3"
+        >
+          <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Icon icon={Trophy} className="text-muted-foreground" />
+            {i18n.t("options.library.mostUsed")}
+          </dt>
+          <dd className="mt-1 min-w-0">
+            {stats.mostUsed ? (
+              <>
+                <span className="block truncate text-sm font-medium text-foreground">
+                  {stats.mostUsed.label}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {i18n.t("options.library.uses", [
+                    String(stats.mostUsed.count),
+                  ])}
+                </span>
+              </>
+            ) : (
+              <span className="text-sm text-muted-foreground">—</span>
+            )}
+          </dd>
         </div>
-      </div>
-
-      {/*
-        Import and Export are separate groups rather than two adjacent rows.
-        They are opposite directions of data movement with different
-        consequences — one replaces what you have, the other is a safety copy —
-        and stacking them read as one undifferentiated block.
-      */}
-      <section className="space-y-2">
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="text-sm font-medium text-foreground">
-              {i18n.t("options.importExport.exportCard.title")}
-            </h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {i18n.t("options.importExport.exportCard.description")}
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            data-testid="export-json"
-            onClick={handleExport}
-            className="h-8 shrink-0"
-          >
-            <Icon icon={Download} className="mr-1.5" />
-            {i18n.t("options.importExport.exportCard.button")}
-          </Button>
-        </div>
-      </section>
-
-      <BackupManager />
+      </dl>
 
       {/* The anchor `/library/import` scrolls to and focuses. `tabIndex={-1}`
           makes it programmatically focusable without adding a tab stop, since
@@ -213,6 +183,38 @@ export function LibraryPanel() {
           ))}
         </div>
       </section>
+
+      {/*
+        Import and Export are separate groups rather than two adjacent rows.
+        They are opposite directions of data movement with different
+        consequences — one replaces what you have, the other is a safety copy —
+        and stacking them read as one undifferentiated block. Import leads,
+        since filling a new library is the action people reach for first.
+      */}
+      <section className="space-y-2">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="text-sm font-medium text-foreground">
+              {i18n.t("options.importExport.exportCard.title")}
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {i18n.t("options.importExport.exportCard.description")}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="export-json"
+            onClick={handleExport}
+            className="h-8 shrink-0"
+          >
+            <Icon icon={Download} className="mr-1.5" />
+            {i18n.t("options.importExport.exportCard.button")}
+          </Button>
+        </div>
+      </section>
+
+      <BackupManager />
 
       {showWizard && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 dark:bg-black/60">

@@ -138,7 +138,9 @@ describe("registry shape", () => {
 
 describe("lookups", () => {
   it("finds a setting by id", () => {
-    expect(getSetting("confetti")?.control).toBe("switch");
+    const confetti = getSetting("confetti");
+    expect(confetti?.control).toBe("switch");
+    expect(confetti?.preview?.testId).toBe("confetti-preview");
   });
 
   it("returns undefined for an unknown setting", () => {

@@ -11,6 +11,7 @@ import {
   sanitizeReleaseUrl,
   openReleasePage,
   shouldCheckForUpdate,
+  DEFAULT_GITHUB_REPO,
   type ReleaseInfo,
 } from "./update-checker";
 import { UPDATE_CHECK_MIN_INTERVAL_HOURS } from "@/config/constants";
@@ -225,20 +226,29 @@ describe("shouldShowUpdateAlert", () => {
 // checkForUpdate — early return cases
 // ---------------------------------------------------------------------------
 
-describe("checkForUpdate — no-ops", () => {
-  it("returns early when WXT_GITHUB_REPO is not set", async () => {
+describe("checkForUpdate — repository fallback", () => {
+  it("uses the shipped repository when WXT_GITHUB_REPO is unset", async () => {
     vi.stubEnv("WXT_GITHUB_REPO", "");
-    global.fetch = vi.fn();
+    mockFetchStatus(404);
+
     await checkForUpdate();
-    expect(global.fetch).not.toHaveBeenCalled();
-    expect(mockLatestVersionItem.setValue).not.toHaveBeenCalled();
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining(`/repos/${DEFAULT_GITHUB_REPO}/releases/latest`),
+      expect.anything()
+    );
   });
 
-  it("returns early when WXT_GITHUB_REPO is whitespace", async () => {
+  it("uses the shipped repository when the env value is whitespace", async () => {
     vi.stubEnv("WXT_GITHUB_REPO", "  ");
-    global.fetch = vi.fn();
+    mockFetchStatus(404);
+
     await checkForUpdate();
-    expect(mockLatestVersionItem.setValue).not.toHaveBeenCalled();
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining(`/repos/${DEFAULT_GITHUB_REPO}/releases/latest`),
+      expect.anything()
+    );
   });
 });
 

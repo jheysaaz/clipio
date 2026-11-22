@@ -288,6 +288,44 @@ describe("SettingControl", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("renders a declared preview action that runs without writing the setting", async () => {
+    const run = vi.fn();
+    const entry = makeEntry({
+      control: "switch",
+      useValue: vi.fn().mockResolvedValue(false),
+      preview: {
+        labelKey: "options.row.preview",
+        icon: SunIcon,
+        testId: "test-preview",
+        run,
+      },
+    });
+    render(<SettingControl entry={entry} />);
+    await settle();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: i18n.t("options.row.preview") })
+    );
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(entry.setValue).not.toHaveBeenCalled();
+    const preview = screen.getByTestId("test-preview");
+    // The icon is decorative: the button's accessible name stays the label.
+    expect(
+      preview.querySelector('[data-testid="mock-icon"]')
+    ).toBeInTheDocument();
+  });
+
+  it("does not render a preview action on rows that do not declare one", async () => {
+    const entry = makeEntry({ useValue: vi.fn().mockResolvedValue("value") });
+    render(<SettingControl entry={entry} />);
+    await settle();
+
+    expect(
+      screen.queryByRole("button", { name: i18n.t("options.row.preview") })
+    ).not.toBeInTheDocument();
+  });
+
   it("routes theme changes through the theme store instead of writing storage", async () => {
     const entry = makeEntry({
       id: "theme",
@@ -421,6 +459,34 @@ describe("SettingControl", () => {
 
     expect(entry.setValue).toHaveBeenCalledWith("Mod+K");
     expect(screen.getByRole("status")).not.toBeEmptyDOMElement();
+  });
+
+  it("hides reset when a shortcut is semantically the default", async () => {
+    const entry = makeEntry({
+      control: "shortcut",
+      defaultValue: "Mod+Shift+Space",
+      reset: vi.fn().mockResolvedValue(undefined),
+      useValue: vi.fn().mockResolvedValue("Ctrl+Shift+Space"),
+    });
+    render(<SettingControl entry={entry} />);
+    await settle();
+
+    // `Ctrl` and `Mod` parse to the same chord; a clean install must not look
+    // dirty just because storage uses a different spelling.
+    expect(screen.getByTestId("setting-test-setting-reset")).toBeDisabled();
+  });
+
+  it("keeps reset enabled when a shortcut is genuinely changed", async () => {
+    const entry = makeEntry({
+      control: "shortcut",
+      defaultValue: "Mod+Shift+Space",
+      reset: vi.fn().mockResolvedValue(undefined),
+      useValue: vi.fn().mockResolvedValue("Mod+Shift+K"),
+    });
+    render(<SettingControl entry={entry} />);
+    await settle();
+
+    expect(screen.getByTestId("setting-test-setting-reset")).toBeEnabled();
   });
 
   it("masks a secret text field and highlights search matches", async () => {

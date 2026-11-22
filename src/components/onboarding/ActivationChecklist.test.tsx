@@ -60,6 +60,7 @@ describe("ActivationChecklist", () => {
     expect(doneState("activation-step-create")).toBe("false");
     expect(doneState("activation-step-placeholder")).toBe("false");
     expect(doneState("activation-step-insert")).toBe("false");
+    expect(screen.getByText("Use a placeholder")).toBeVisible();
   });
 
   it("derives the create and placeholder steps from the library", async () => {

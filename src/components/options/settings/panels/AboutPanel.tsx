@@ -9,7 +9,11 @@ import { ExternalLink, Heart, MessageSquareText, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { latestVersionItem, dismissedUpdateVersionItem } from "@/storage/items";
-import { openReleasePage } from "@/lib/update-checker";
+import {
+  openReleasePage,
+  shouldShowUpdateAlert,
+  type ReleaseInfo,
+} from "@/lib/update-checker";
 import { getStoreReviewUrl, isChromiumBrowser } from "@/lib/review-prompt";
 import { FeedbackModal } from "@/components/options/FeedbackModal";
 import { i18n } from "#i18n";
@@ -22,25 +26,45 @@ export function AboutPanel() {
   const [currentVersion] = useState(
     () => browser.runtime.getManifest().version
   );
-  const [latest, setLatest] = useState<{
-    version: string;
-    htmlUrl: string;
-  } | null>(null);
+  const [latest, setLatest] = useState<ReleaseInfo | null>(null);
   const [dismissed, setDismissed] = useState("");
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     latestVersionItem
       .getValue()
-      .then((v) => setLatest(v))
+      .then((v) => {
+        if (mounted) setLatest(v);
+      })
       .catch(console.warn);
     dismissedUpdateVersionItem
       .getValue()
-      .then((v) => setDismissed(v ?? ""))
+      .then((v) => {
+        if (mounted) setDismissed(v ?? "");
+      })
       .catch(console.warn);
+
+    // The background checker writes these items whenever a check completes,
+    // often while this panel is open. A one-shot read left the indicator stale
+    // until the options page was reloaded.
+    const unwatchLatest = latestVersionItem.watch((v) => {
+      if (mounted) setLatest(v);
+    });
+    const unwatchDismissed = dismissedUpdateVersionItem.watch((v) => {
+      if (mounted) setDismissed(v ?? "");
+    });
+    return () => {
+      mounted = false;
+      unwatchLatest();
+      unwatchDismissed();
+    };
   }, []);
 
-  const updateAvailable = latest !== null && latest.version !== dismissed;
+  // One nullable value instead of a boolean plus a second null check in JSX:
+  // the render branch below then has a single condition with no unreachable arm.
+  const updateRelease =
+    latest && shouldShowUpdateAlert(latest, dismissed) ? latest : null;
 
   return (
     <div className="mb-6 space-y-5" data-testid="panel-about">
@@ -56,19 +80,19 @@ export function AboutPanel() {
         <p className="text-sm text-foreground" data-testid="about-version">
           {i18n.t("options.about.version", [currentVersion])}
         </p>
-        {updateAvailable ? (
+        {updateRelease ? (
           <div
             data-testid="version-update-available"
             className="flex items-center gap-3"
           >
             <span className="text-xs text-amber-600 dark:text-amber-400">
-              {i18n.t("options.about.updateAvailable", [latest.version])}
+              {i18n.t("options.about.updateAvailable", [updateRelease.version])}
             </span>
             <Button
               size="sm"
               variant="outline"
               className="h-8"
-              onClick={() => void openReleasePage(latest.htmlUrl)}
+              onClick={() => void openReleasePage(updateRelease.htmlUrl)}
             >
               <Icon icon={ExternalLink} className="mr-1.5" />
               {i18n.t("options.copy.viewRelease")}

@@ -12,6 +12,7 @@ import {
   syncDataLostItem,
   blockedSitesItem,
   latestVersionItem,
+  latestVersionCheckedAtItem,
   extensionInstalledAtItem,
 } from "@/storage/items";
 import { initSentry, captureError, captureMessage } from "@/lib/sentry";
@@ -380,11 +381,20 @@ export default defineBackground(() => {
       }
     }
 
-    // On extension update: clear the cached latest-version so the checker
-    // re-fetches against the new installed version, and log to Sentry.
+    // On extension update: clear the cached release *and* the throttle
+    // timestamp. Clearing only the release left the new version invisible for
+    // up to a day, because the checker saw a recent successful check and
+    // refused to fetch again. Re-check immediately so the About panel and popup
+    // banner react in this session rather than after the next restart.
     if (details.reason === "update") {
-      latestVersionItem.setValue(null).catch((err: unknown) => {
-        captureError(err, { action: "onInstalled.clearLatestVersion" });
+      void (async () => {
+        await Promise.all([
+          latestVersionItem.setValue(null),
+          latestVersionCheckedAtItem.setValue(null),
+        ]);
+        await checkForUpdate();
+      })().catch((err: unknown) => {
+        captureError(err, { action: "onInstalled.refreshUpdateState" });
       });
       captureMessage("Extension updated", "info", {
         previousVersion: details.previousVersion,

@@ -129,8 +129,6 @@ options:
   copy:
     extensionVersion: Versión de la extensión
     extensionVersionHint: Versión instalada actualmente y actualizaciones disponibles.
-    topUsageHeading: Los 5 más usados
-    topUsageEmpty: Todavía no hay datos de uso.
     viewRelease: Ver la publicación
     upToDate: Actualizado
   notFound:
@@ -169,6 +167,7 @@ options:
     resetToDefault: Restablecer al valor predeterminado
     saveFailed: No se pudo guardar
     managedInSection: Se gestiona en su sección
+    preview: Vista previa
   shortcut:
     recorder: Grabar un atajo de teclado
     pressKeys: Pulsa las teclas…
@@ -231,6 +230,8 @@ options:
     exported: Fragmentos exportados
     exportedWithMedia: Fragmentos e imágenes exportados
     uses: "$1 usos"
+    totalUses: Usos totales
+    mostUsed: Más usado
   theme:
     light: Claro
     dark: Oscuro
