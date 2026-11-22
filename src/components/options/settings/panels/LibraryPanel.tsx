@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import { Download, FileText } from "lucide-react";
 
+import { BackupManager } from "@/components/BackupManager";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { exportSnippets, getSnippets } from "@/storage";
@@ -155,6 +156,8 @@ export function LibraryPanel() {
           </Button>
         </div>
       </section>
+
+      <BackupManager />
 
       {/* The anchor `/library/import` scrolls to and focuses. `tabIndex={-1}`
           makes it programmatically focusable without adding a tab stop, since

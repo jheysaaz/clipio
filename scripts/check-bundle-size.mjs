@@ -39,9 +39,15 @@ const posix = (p) => p.split(sep).join("/");
  * content script (insertion recording) and to the popup/shared chunks (context
  * loading and ranking). The options entry did not grow. Sizes were measured
  * twice from clean builds and did not vary.
+ *
+ * Raised a third time for full backups: the options UI, ZIP envelope handling,
+ * per-key settings validation and the restore preview add code to the options
+ * entry and the shared chunks. The popup moved by seven bytes in the same clean
+ * builds despite no popup source change, so its exact budget moved too. All
+ * four affected sizes were measured twice from clean builds and did not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_703_863 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_721_625 },
   { name: "background entry", pattern: "background.js", maxBytes: 217_475 },
   {
     name: "content script entry",
@@ -51,19 +57,19 @@ const BUDGETS = [
   {
     name: "popup entry chunk",
     pattern: "chunks/popup-*.js",
-    maxBytes: 63_438,
+    maxBytes: 63_445,
   },
   {
     name: "options entry chunk",
     pattern: "chunks/options-*.js",
-    maxBytes: 165_218,
+    maxBytes: 184_452,
   },
   {
     // Shared chunks are included here even when their individual hashed names
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_569_518,
+    maxBytes: 1_587_280,
   },
 ];
 

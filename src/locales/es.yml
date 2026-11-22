@@ -294,6 +294,51 @@ options:
         n: "✓ $1 fragmentos importados correctamente."
     modal:
       title: Importar Fragmentos
+  backup:
+    title: Copia de seguridad completa
+    description: "Descarga o restaura una instantánea completa: fragmentos, imágenes y ajustes. Los secretos, registros y datos de uso locales nunca se incluyen."
+    create: Copiar
+    restore: Restaurar
+    fileLabel: Elige un archivo de copia de seguridad
+    created: Copia de seguridad descargada
+    failedCreate: No se pudo crear la copia de seguridad.
+    dialogTitle: Revisar copia de seguridad
+    doneTitle: Restauración completada
+    cancel: Cancelar
+    confirm: Restaurar los fragmentos seleccionados
+    close: Cerrar
+    loading: Leyendo la copia de seguridad…
+    restoring: Restaurando…
+    previewIntro: Revisa los cambios. No se escribirá nada hasta que confirmes.
+    summary:
+      source: Formato de copia
+      sourceValue: "v$1"
+      exported: Exportada
+      snippets: Fragmentos
+      snippetValue: "$1 en total · $2 nuevos"
+      conflicts: Conflictos
+      media: Imágenes
+      mediaValue: "$1"
+      rejected: "Se omitieron $1 registro(s) no válidos; no se restaurarán."
+    missingMedia: "Faltan $1 imagen(es) referenciadas en esta copia."
+    settingsTitle: Cambios en los ajustes
+    noChanges: No cambiarán los ajustes.
+    skippedSetting: "$1 omitido: $2"
+    conflictsTitle: Fragmentos en conflicto
+    conflictRow: "$1 (atajo existente $2)"
+    resolutionLabel: Resolución de conflictos
+    resolutionSkip: "Omitir (no restaurar)"
+    resolutionOverwrite: Sobrescribir el existente
+    resolutionRename: Restaurar con un nuevo atajo
+    doneSummary: "Se restauraron $1 fragmento(s), $2 ajuste(s) y $3 imagen(es)."
+    doneSkipped: "No se pudieron restaurar $1 ajuste(s)."
+    errors:
+      fileTooLarge: Este archivo de copia es demasiado grande.
+      unsupportedVersion: Esta copia se creó con una versión no compatible de Clipio.
+      invalidJson: El manifiesto de la copia no es un JSON válido.
+      missingManifest: "Este ZIP no es una copia de Clipio: no se encontró el manifiesto."
+      parseFailed: Este archivo no se pudo leer como una copia de Clipio.
+      restoreFailed: No se pudo restaurar la copia de seguridad.
   errors:
     failedExport: Error al exportar los fragmentos.
   images:

@@ -300,6 +300,51 @@ options:
       supported: "Supported:"
     modal:
       title: Import Snippets
+  backup:
+    title: Full backup
+    description: Download or restore a complete snapshot — snippets, images and settings. Secrets, logs and local usage data are never included.
+    create: Back up
+    restore: Restore
+    fileLabel: Choose a backup file
+    created: Backup downloaded
+    failedCreate: Failed to create backup.
+    dialogTitle: Review backup
+    doneTitle: Restore complete
+    cancel: Cancel
+    confirm: Restore selected snippets
+    close: Close
+    loading: Reading backup…
+    restoring: Restoring…
+    previewIntro: Review what will change. Nothing is written until you confirm.
+    summary:
+      source: Backup format
+      sourceValue: "v$1"
+      exported: Exported
+      snippets: Snippets
+      snippetValue: "$1 total · $2 new"
+      conflicts: Conflicts
+      media: Images
+      mediaValue: "$1"
+      rejected: "$1 invalid record(s) were skipped and are not restored."
+    missingMedia: "$1 image(s) referenced by this backup are missing from the file."
+    settingsTitle: Settings changes
+    noChanges: No settings will change.
+    skippedSetting: "$1 skipped: $2"
+    conflictsTitle: Conflicting snippets
+    conflictRow: "$1 (existing shortcut $2)"
+    resolutionLabel: Conflict resolution
+    resolutionSkip: "Skip (don't restore)"
+    resolutionOverwrite: Overwrite existing
+    resolutionRename: Restore with new shortcut
+    doneSummary: "Restored $1 snippet(s), $2 setting(s) and $3 image(s)."
+    doneSkipped: "$1 setting(s) could not be restored."
+    errors:
+      fileTooLarge: This backup file is too large.
+      unsupportedVersion: This backup was made by an unsupported version of Clipio.
+      invalidJson: The backup manifest is not valid JSON.
+      missingManifest: This ZIP is not a Clipio backup — no backup manifest was found.
+      parseFailed: This file could not be read as a Clipio backup.
+      restoreFailed: The backup could not be restored.
   errors:
     failedExport: Failed to export snippets.
   images:
