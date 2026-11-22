@@ -19,7 +19,7 @@ export type ActivationStep = {
 };
 
 export type ActivationChecklist = {
-  /** Whether the popup should render the checklist right now. */
+  /** Whether the options rail should render the checklist right now. */
   visible: boolean;
   complete: boolean;
   doneCount: number;
@@ -48,10 +48,10 @@ function hasInserted(value: unknown): boolean {
  * Derive the checklist from current state.
  *
  * Hidden while the tour is still running: an overlay explaining the search box
- * and a strip asking the user to use it are two voices making the same request.
- * Hidden before the tour has started too, because the popup auto-starts it and
- * showing the checklist for the few milliseconds before that resolves would be
- * a flash of UI that immediately disappears.
+ * and a card asking the user to use it are two voices making the same request.
+ * Hidden before the tour has started too, because the tour auto-starts on both
+ * surfaces and showing the checklist for the few milliseconds before that
+ * resolves would be a flash of UI that immediately disappears.
  */
 export function activationChecklist(
   input: ActivationInput

@@ -27,6 +27,7 @@ import type { LucideIcon } from "lucide-react";
 
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
+import { ActivationChecklistCard } from "./ActivationChecklistCard";
 import { SidebarResizer } from "./SidebarResizer";
 import { cn } from "@/lib/utils";
 import { currentPlatform } from "@/lib/shortcuts";
@@ -251,6 +252,10 @@ export function SettingsSidebar({
             </div>
           ))}
       </nav>
+
+      {/* The first-success checklist lives in the rail rather than across the
+          top of every popup view. It renders only while it has work to show. */}
+      <ActivationChecklistCard />
 
       <SidebarResizer
         width={width}

@@ -6,7 +6,7 @@
  * driven through the DOM here rather than inferred from the registry tests.
  */
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { i18n } from "#i18n";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
@@ -17,6 +17,9 @@ vi.mock("@/lib/shortcuts", () => ({ currentPlatform: mocks.currentPlatform }));
 
 import { SettingsSidebar } from "./SettingsSidebar";
 import { searchRegistryEntries } from "./search";
+import { resetActivationForTests } from "@/store/activation";
+import { resetSnippetsStoreForTests } from "@/store/snippets";
+import { resetBrowserMocks } from "../../../../tests/mocks/browser";
 
 type Props = ComponentProps<typeof SettingsSidebar>;
 
@@ -43,16 +46,22 @@ function searchInput() {
 
 beforeEach(() => {
   mocks.currentPlatform.mockReturnValue("mac");
+  resetBrowserMocks();
+  resetActivationForTests();
+  resetSnippetsStoreForTests();
 });
 
 afterEach(() => {
   mocks.currentPlatform.mockReset();
+  resetActivationForTests();
+  resetSnippetsStoreForTests();
 });
 
 describe("SettingsSidebar", () => {
   it("renders the registry nav in groups and marks the active section", () => {
     renderSidebar();
 
+    expect(screen.queryByTestId("activation-checklist")).toBeNull();
     expect(
       screen.getByRole("navigation", {
         name: i18n.t("options.a11y.optionsNav"),
@@ -209,5 +218,23 @@ describe("SettingsSidebar", () => {
     );
 
     expect(hint()).toHaveTextContent("Ctrl");
+  });
+
+  it("renders the first-success card beneath the nav when it is due", async () => {
+    await browser.storage.local.set({
+      guidedOnboarding: { status: "completed" },
+      totalSnippetInsertions: 0,
+      activationDismissed: false,
+    });
+
+    renderSidebar();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("activation-checklist")).toBeVisible()
+    );
+    expect(screen.getByTestId("options-nav")).toContainElement(
+      screen.getByTestId("options-nav-library")
+    );
+    expect(screen.getByTestId("activation-dismiss")).toBeVisible();
   });
 });

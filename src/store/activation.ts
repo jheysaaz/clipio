@@ -4,8 +4,9 @@
  * The checklist has almost no state of its own: whether the user created a
  * snippet comes from the library, whether they inserted one comes from the
  * insertion counter, and whether the tour is still talking comes from its
- * progress item. This store only makes those three values reactive in the
- * popup and owns the one thing that is genuinely an action — dismissal.
+ * progress item. This store only makes those three values reactive wherever
+ * the checklist is mounted, and owns the one thing that is genuinely an action
+ * — dismissal.
  */
 
 import { createStore } from "@tanstack/store";
@@ -80,10 +81,10 @@ export async function dismissActivation(): Promise<void> {
   }
 }
 
-// The popup is short-lived, but these items can change while it is open: the
-// tour writes its state on skip, and a content script counts an insertion in a
-// completely different document. Storage's own change event is the only way
-// the strip reacts to either without polling.
+// These items can change while the options page is open: the tour writes its
+// state on skip, and a content script counts an insertion in a completely
+// different document. Storage's own change event is the only way the card
+// reacts to either without polling.
 guidedOnboardingStateItem.watch((stored) => {
   const onboarding = normalizeOnboardingProgress(stored);
   activationStore.setState((prev) => ({ ...prev, onboarding }));
