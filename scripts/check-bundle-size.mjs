@@ -32,21 +32,26 @@ const posix = (p) => p.split(sep).join("/");
  *
  * Raised once from 2_698_488 / 217_315 / 1_566_549 when the IndexedDB schema
  * and backfill seams were exported for direct tests. That added 100 bytes to
- * background.js and 102 bytes to the shared OnboardingLoader chunk; the sizes
- * were measured twice from clean builds and did not vary.
+ * background.js and 102 bytes to the shared OnboardingLoader chunk.
+ *
+ * Raised again for context-aware ranking: a local hostname-only usage store,
+ * the popup's current-site lookup, and the tie-break comparator add code to the
+ * content script (insertion recording) and to the popup/shared chunks (context
+ * loading and ranking). The options entry did not grow. Sizes were measured
+ * twice from clean builds and did not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_698_690 },
-  { name: "background entry", pattern: "background.js", maxBytes: 217_415 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_703_863 },
+  { name: "background entry", pattern: "background.js", maxBytes: 217_475 },
   {
     name: "content script entry",
     pattern: "content-scripts/content.js",
-    maxBytes: 914_624,
+    maxBytes: 916_870,
   },
   {
     name: "popup entry chunk",
     pattern: "chunks/popup-*.js",
-    maxBytes: 60_644,
+    maxBytes: 63_438,
   },
   {
     name: "options entry chunk",
@@ -58,7 +63,7 @@ const BUDGETS = [
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_566_651,
+    maxBytes: 1_569_518,
   },
 ];
 

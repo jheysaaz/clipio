@@ -150,6 +150,8 @@ const SUPPRESSED_PREFIXES = [
   "[Clipio]",
   "Failed to get usage counts",
   "Failed to increment",
+  "Failed to read context usage",
+  "Failed to record context usage",
   "Failed to reset",
   "Failed to clear",
 ];

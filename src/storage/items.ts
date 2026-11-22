@@ -11,6 +11,7 @@
 
 import { storage } from "wxt/utils/storage";
 import { DEFAULT_SIDEBAR_WIDTH } from "@/config/constants";
+import type { ContextUsage } from "@/lib/context-usage";
 import {
   NOT_STARTED_ONBOARDING,
   type OnboardingProgress,
@@ -168,6 +169,18 @@ export const lastViewedSnippetIdItem = storage.defineItem<string | null>(
 /** Per-snippet usage counts: { [snippetId]: count }. */
 export const usageCountsItem = storage.defineItem<Record<string, number>>(
   "local:snippetUsageCount",
+  { defaultValue: {} }
+);
+
+/**
+ * Local-only recency and site-relevance signals for popup ranking.
+ *
+ * Site values here are bare hostnames, never full URLs. This item is
+ * deliberately separate from `usageCountsItem` (which is a plain count) and
+ * from synced data: it describes where the user worked, not what they wrote.
+ */
+export const snippetContextUsageItem = storage.defineItem<ContextUsage>(
+  "local:snippetContextUsage",
   { defaultValue: {} }
 );
 
