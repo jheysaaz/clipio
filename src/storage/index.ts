@@ -35,6 +35,9 @@ export const updateSnippet = (snippet: import("~/types").Snippet) =>
   manager.updateSnippet(snippet);
 export const deleteSnippet = (id: string) => manager.deleteSnippet(id);
 export const getStorageStatus = () => manager.getStorageStatus();
+export const commitSnippetChange = (change: import("./types").SnippetCommit) =>
+  manager.commitChange(change);
+export { getHistory, restoreVersion } from "./history";
 export const exportSnippets = () => manager.exportSnippets();
 export const importSnippets = (file: File) => manager.importSnippets(file);
 export const bulkSaveSnippets = (snippets: import("~/types").Snippet[]) =>

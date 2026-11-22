@@ -12,6 +12,9 @@
 import { storage } from "wxt/utils/storage";
 import { DEFAULT_SIDEBAR_WIDTH } from "@/config/constants";
 import type { ContextUsage } from "@/lib/context-usage";
+import type { DraftMap } from "@/lib/snippet-draft";
+import type { UndoStacks } from "@/lib/undo-stack";
+import type { QueueState } from "@/lib/write-queue";
 import {
   NOT_STARTED_ONBOARDING,
   type OnboardingProgress,
@@ -33,6 +36,42 @@ export const cachedSnippetsItem = storage.defineItem<Snippet[]>(
   "local:cachedSnippets",
   { defaultValue: [] }
 );
+
+/**
+ * In-progress editor drafts, keyed by snippet id (including provisional ids).
+ * Local-only: never synced, exported, imported, indexed or cached.
+ */
+export const editorDraftsItem = storage.defineItem<DraftMap>(
+  "local:editorDrafts",
+  { defaultValue: {} }
+);
+
+/**
+ * Pending writes owned by the background worker. Local-only and deliberately
+ * excluded from the backup settings allowlist and the content-script cache.
+ */
+export const writeQueueItem = storage.defineItem<QueueState>(
+  "local:writeQueue",
+  { defaultValue: { operations: [], sentAt: [] } }
+);
+
+/**
+ * Local-only undo/redo cursors. The long-term record is version history; these
+ * stacks only remember step direction across popup closes.
+ */
+export const undoStacksItem = storage.defineItem<UndoStacks>(
+  "local:undoStacks",
+  { defaultValue: {} }
+);
+
+/**
+ * Stable id used as the final `updatedBy` tie-break in LWW resolution.
+ * Created on first use and never backed up: it identifies this install, not
+ * the user's snippets.
+ */
+export const writerIdItem = storage.defineItem<string>("local:writerId", {
+  defaultValue: "unknown",
+});
 
 /** Which storage backend is currently active. */
 export const storageModeItem = storage.defineItem<"sync" | "local">(

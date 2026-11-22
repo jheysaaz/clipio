@@ -552,7 +552,6 @@ describe("removeSnippet", () => {
   it("rethrows so the caller cannot report a failure as a success", async () => {
     snippetsStore.setState((prev) => ({ ...prev, snippets: [makeSnippet()] }));
     storage.deleteSnippet.mockRejectedValue(new Error("locked"));
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
 
     await expect(removeSnippet("s1")).rejects.toThrow("locked");
     // The library is untouched: a failed delete must not look like a delete.

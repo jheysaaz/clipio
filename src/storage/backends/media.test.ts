@@ -24,7 +24,7 @@ import {
   isWithinFileSizeLimit,
 } from "./media";
 import type { MediaEntry } from "./media";
-import { MEDIA_LIMITS } from "@/config/constants";
+import { IDB_CONFIG, MEDIA_LIMITS } from "@/config/constants";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -141,10 +141,11 @@ describe("saveMedia", () => {
     const fakeDB = new IDBFactory();
     (globalThis as unknown as Record<string, unknown>).indexedDB = fakeDB;
 
-    // Open DB at v3 (with hash index) to avoid triggering a v2→v3 upgrade
-    // and the associated backfill which can hang in happy-dom.
+    // Open at the current schema with every store present. Leaving a lower-version
+    // connection open would block production's openDB when it upgrades to v4, and
+    // a v2→v3 media backfill can hang in happy-dom.
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const req = fakeDB.open("clipio-backup", 3);
+      const req = fakeDB.open("clipio-backup", IDB_CONFIG.VERSION);
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains("snippets"))
@@ -153,6 +154,10 @@ describe("saveMedia", () => {
           const ms = db.createObjectStore("media", { keyPath: "id" });
           ms.createIndex("hash", "hash", { unique: false });
         }
+        if (!db.objectStoreNames.contains(IDB_CONFIG.HISTORY_STORE_NAME))
+          db.createObjectStore(IDB_CONFIG.HISTORY_STORE_NAME, {
+            keyPath: "id",
+          });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -719,9 +724,10 @@ describe("saveMedia (deduplication)", () => {
     const fakeDB = new IDBFactory();
     (globalThis as unknown as Record<string, unknown>).indexedDB = fakeDB;
 
-    // Open at v3 with media store + hash index
+    // Open at the current schema so production's openDB never has to upgrade
+    // while this connection is still open.
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const req = fakeDB.open("clipio-backup", 3);
+      const req = fakeDB.open("clipio-backup", IDB_CONFIG.VERSION);
       req.onupgradeneeded = () => {
         const d = req.result;
         if (!d.objectStoreNames.contains("snippets"))
@@ -730,6 +736,8 @@ describe("saveMedia (deduplication)", () => {
           const ms = d.createObjectStore("media", { keyPath: "id" });
           ms.createIndex("hash", "hash", { unique: false });
         }
+        if (!d.objectStoreNames.contains(IDB_CONFIG.HISTORY_STORE_NAME))
+          d.createObjectStore(IDB_CONFIG.HISTORY_STORE_NAME, { keyPath: "id" });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -927,7 +935,7 @@ describe("restoreMediaEntry — validates an untrusted import", () => {
     const nearlyFull = MEDIA_LIMITS.MAX_TOTAL_SIZE - 1;
     // "idb" is not resolvable from the test environment, so use the raw API.
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const req = indexedDB.open("clipio-backup", 3);
+      const req = indexedDB.open("clipio-backup", IDB_CONFIG.VERSION);
       req.onupgradeneeded = () => {
         const d = req.result;
         if (!d.objectStoreNames.contains("snippets")) {
@@ -936,6 +944,9 @@ describe("restoreMediaEntry — validates an untrusted import", () => {
         if (!d.objectStoreNames.contains("media")) {
           const ms = d.createObjectStore("media", { keyPath: "id" });
           ms.createIndex("hash", "hash", { unique: false });
+        }
+        if (!d.objectStoreNames.contains(IDB_CONFIG.HISTORY_STORE_NAME)) {
+          d.createObjectStore(IDB_CONFIG.HISTORY_STORE_NAME, { keyPath: "id" });
         }
       };
       req.onsuccess = () => resolve(req.result);

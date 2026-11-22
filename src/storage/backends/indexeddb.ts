@@ -17,6 +17,7 @@
  *   v1 → creates "snippets" object store
  *   v2 → adds "media" object store
  *   v3 → adds non-unique "hash" index on "media" store (content-hash dedup)
+ *   v4 → adds "history" store (local-only snippet version history)
  */
 
 import { IDB_CONFIG } from "@/config/constants";
@@ -69,6 +70,16 @@ export function applySchemaUpgrades(
     if (mediaStore && !mediaStore.indexNames.contains("hash")) {
       mediaStore.createIndex("hash", "hash", { unique: false });
     }
+  }
+
+  // v4: local-only version history. It lives in the same database as the
+  // shadow backup, but is never part of that backup's snippet list, export,
+  // import or content-script cache.
+  if (
+    oldVersion < 4 &&
+    !db.objectStoreNames.contains(IDB_CONFIG.HISTORY_STORE_NAME)
+  ) {
+    db.createObjectStore(IDB_CONFIG.HISTORY_STORE_NAME, { keyPath: "id" });
   }
 }
 

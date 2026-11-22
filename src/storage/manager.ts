@@ -16,8 +16,15 @@ import { LocalBackend, updateContentScriptCache } from "./backends/local";
 import { IndexedDBBackend } from "./backends/indexeddb";
 import { StorageQuotaError } from "./types";
 import { checkQuota } from "./quota-preflight";
-import type { StorageMode, StorageStatus } from "./types";
+import type {
+  CommitResult,
+  SnippetCommit,
+  StorageMode,
+  StorageStatus,
+} from "./types";
 import type { Snippet } from "@/types";
+import { compareLww, snippetRev } from "@/lib/lww";
+import { recordHistory } from "./history";
 import {
   buildClipioExport,
   buildClipioExportV2,
@@ -374,6 +381,73 @@ export class StorageManager {
   }
 
   /**
+   * Commit one queued change against the record as it exists *now*.
+   *
+   * This is the only path that understands revisions. It preserves fields the
+   * editor never touches (usage, createdAt), refuses an edit made from an older
+   * revision, and writes a local history snapshot of the state being replaced.
+   * Quota refusals still come from `withQuotaPreflight` unchanged (ADR 0004).
+   */
+  async commitChange(change: SnippetCommit): Promise<CommitResult> {
+    const stored =
+      (await this.readActive()).find((s) => s.id === change.snippetId) ?? null;
+    const storedRev = stored ? snippetRev(stored) : 0;
+    const fields = change.fields;
+    const candidate: Snippet = stored
+      ? {
+          ...stored,
+          ...(fields ?? {}),
+          tags: fields?.tags ? [...fields.tags] : stored.tags,
+          rev: storedRev + 1,
+          updatedAt: change.updatedAt,
+          updatedBy: change.updatedBy,
+        }
+      : {
+          id: change.snippetId,
+          label: fields?.label ?? "",
+          content: fields?.content ?? "",
+          shortcut: fields?.shortcut ?? "",
+          tags: fields?.tags ? [...fields.tags] : [],
+          usageCount: 0,
+          createdAt: change.updatedAt,
+          updatedAt: change.updatedAt,
+          rev: storedRev + 1,
+          updatedBy: change.updatedBy,
+        };
+
+    const isEditorChange =
+      change.reason === "edit" || change.reason === "delete";
+    const stale = isEditorChange && change.baseRev < storedRev;
+    if (stored && (stale || compareLww(candidate, stored) <= 0)) {
+      // The loser is the queued edit, not the stored record. Keeping it in
+      // local history is what makes a conflict recoverable without syncing it.
+      void recordHistory(candidate, "conflict").catch((error: unknown) =>
+        captureError(error, { action: "history.conflict" })
+      );
+      return { ok: false, conflict: stored };
+    }
+
+    if (change.kind === "delete") {
+      if (!stored) return { ok: true, snippet: null };
+      await this.applyRemoval([change.snippetId]);
+    } else {
+      await this.applyUpsert([candidate]);
+    }
+
+    // Only after the authoritative write succeeded. A quota refusal must not
+    // leave a history entry claiming the snippet changed when it did not.
+    if (stored) {
+      void recordHistory(stored, change.reason).catch((error: unknown) =>
+        captureError(error, { action: "history.commit" })
+      );
+    }
+    return {
+      ok: true,
+      snippet: change.kind === "delete" ? null : candidate,
+    };
+  }
+
+  /**
    * Delete a snippet by id.
    *
    * Previously this read the whole store, filtered it, and wrote the list back.
@@ -395,6 +469,13 @@ export class StorageManager {
   async bulkSaveSnippets(snippets: Snippet[]): Promise<void> {
     void debugLog("storage", "snippet:bulkSave", { count: snippets.length });
     await this.persistSnippets(snippets);
+    // Import and backup recovery bypass the single-snippet queue. Recording the
+    // imported state here is what makes them undoable in the local editor too.
+    for (const snippet of snippets) {
+      void recordHistory(snippet, "import").catch((error: unknown) =>
+        captureError(error, { action: "history.import", snippetId: snippet.id })
+      );
+    }
   }
 
   /**

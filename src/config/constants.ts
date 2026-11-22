@@ -17,6 +17,8 @@ export const IDB_CONFIG = {
   DB_NAME: "clipio-backup",
   STORE_NAME: "snippets",
   MEDIA_STORE_NAME: "media",
+  /** Local-only version history. Never syncs, exports or feeds the cache. */
+  HISTORY_STORE_NAME: "history",
   /**
    * IndexedDB schema version — an internal DB revision, NOT an extension
    * release version. Migration history with the extension release that
@@ -24,8 +26,9 @@ export const IDB_CONFIG = {
    *   1 — snippets store             (shipped in 1.2.0)
    *   2 — media store                (shipped in 1.4.0)
    *   3 — hash index on media store  (shipped in 1.4.1)
+   *   4 — local history store        (autosave)
    */
-  VERSION: 3,
+  VERSION: 4,
 } as const;
 
 export const MEDIA_LIMITS = {

@@ -79,7 +79,7 @@ function makeUpgradeHarness(
   };
 }
 
-const { STORE_NAME, MEDIA_STORE_NAME } = IDB_CONFIG;
+const { STORE_NAME, MEDIA_STORE_NAME, HISTORY_STORE_NAME } = IDB_CONFIG;
 
 describe("applySchemaUpgrades — v1", () => {
   it("creates the snippets store on a database with no stores at all", () => {
@@ -106,7 +106,11 @@ describe("applySchemaUpgrades — v1", () => {
       STORE_NAME,
       expect.anything()
     );
-    expect(h.stores).toEqual([STORE_NAME, MEDIA_STORE_NAME]);
+    expect(h.stores).toEqual([
+      STORE_NAME,
+      MEDIA_STORE_NAME,
+      HISTORY_STORE_NAME,
+    ]);
   });
 });
 
@@ -116,10 +120,13 @@ describe("applySchemaUpgrades — v2", () => {
 
     applySchemaUpgrades(h.db, 1, h.request, h.request);
 
-    expect(h.dbFake.createObjectStore).toHaveBeenCalledTimes(1);
     expect(h.dbFake.createObjectStore).toHaveBeenCalledWith(MEDIA_STORE_NAME, {
       keyPath: "id",
     });
+    expect(h.dbFake.createObjectStore).toHaveBeenCalledWith(
+      HISTORY_STORE_NAME,
+      { keyPath: "id" }
+    );
     expect(h.mediaStore.createIndex).toHaveBeenCalledWith("hash", "hash", {
       unique: false,
     });
@@ -130,7 +137,14 @@ describe("applySchemaUpgrades — v2", () => {
 
     applySchemaUpgrades(h.db, 2, h.request, h.request);
 
-    expect(h.dbFake.createObjectStore).not.toHaveBeenCalled();
+    expect(h.dbFake.createObjectStore).not.toHaveBeenCalledWith(
+      MEDIA_STORE_NAME,
+      expect.anything()
+    );
+    expect(h.dbFake.createObjectStore).toHaveBeenCalledWith(
+      HISTORY_STORE_NAME,
+      { keyPath: "id" }
+    );
     expect(h.mediaStore.createIndex).toHaveBeenCalledWith("hash", "hash", {
       unique: false,
     });
@@ -143,7 +157,14 @@ describe("applySchemaUpgrades — v2", () => {
 
     applySchemaUpgrades(h.db, 1, h.request, h.request);
 
-    expect(h.dbFake.createObjectStore).not.toHaveBeenCalled();
+    expect(h.dbFake.createObjectStore).not.toHaveBeenCalledWith(
+      MEDIA_STORE_NAME,
+      expect.anything()
+    );
+    expect(h.dbFake.createObjectStore).toHaveBeenCalledWith(
+      HISTORY_STORE_NAME,
+      { keyPath: "id" }
+    );
     expect(h.mediaStore.createIndex).not.toHaveBeenCalled();
   });
 });
@@ -182,13 +203,44 @@ describe("applySchemaUpgrades — v3", () => {
     expect(h.request.transaction!.objectStore).not.toHaveBeenCalled();
     expect(h.mediaStore.createIndex).not.toHaveBeenCalled();
   });
+});
+
+describe("applySchemaUpgrades — v4", () => {
+  it("creates the local history store on v3 → v4", () => {
+    const h = makeUpgradeHarness([STORE_NAME, MEDIA_STORE_NAME], ["hash"]);
+
+    applySchemaUpgrades(h.db, 3, h.request, h.request);
+
+    expect(h.dbFake.createObjectStore).toHaveBeenCalledWith(
+      HISTORY_STORE_NAME,
+      { keyPath: "id" }
+    );
+    expect(h.stores).toContain(HISTORY_STORE_NAME);
+  });
+
+  it("does not recreate the history store when it already exists", () => {
+    const h = makeUpgradeHarness(
+      [STORE_NAME, MEDIA_STORE_NAME, HISTORY_STORE_NAME],
+      ["hash"]
+    );
+
+    applySchemaUpgrades(h.db, 3, h.request, h.request);
+
+    expect(h.dbFake.createObjectStore).not.toHaveBeenCalledWith(
+      HISTORY_STORE_NAME,
+      expect.anything()
+    );
+  });
 
   it("does nothing when the database is already at the configured version", () => {
-    const h = makeUpgradeHarness([STORE_NAME, MEDIA_STORE_NAME], ["hash"]);
+    const h = makeUpgradeHarness(
+      [STORE_NAME, MEDIA_STORE_NAME, HISTORY_STORE_NAME],
+      ["hash"]
+    );
 
     applySchemaUpgrades(h.db, IDB_CONFIG.VERSION, h.request, h.request);
 
-    // All three version guards must be false: no writes to a schema this build
+    // Every version guard must be false: no writes to a schema this build
     // already understands.
     expect(h.dbFake.createObjectStore).not.toHaveBeenCalled();
     expect(h.request.transaction!.objectStore).not.toHaveBeenCalled();

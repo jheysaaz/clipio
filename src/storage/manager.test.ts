@@ -22,9 +22,13 @@ const {
   mockStorageModeReason,
   mockCaptureError,
   mockCaptureMessage,
+  mockRecordHistory,
 } = vi.hoisted(() => ({
   mockCaptureError: vi.fn(),
   mockCaptureMessage: vi.fn(),
+  mockRecordHistory: vi.fn(
+    async (_snapshot: unknown, _reason: unknown, _deps?: unknown) => {}
+  ),
   mockSyncBackend: {
     getSnippets: vi.fn(),
     saveSnippets: vi.fn(),
@@ -91,6 +95,11 @@ vi.mock("./items", () => ({
   storageModeItem: mockStorageMode,
   syncDataLostItem: mockSyncDataLost,
   storageModeReasonItem: mockStorageModeReason,
+}));
+
+vi.mock("./history", () => ({
+  recordHistory: (...args: Parameters<typeof mockRecordHistory>) =>
+    mockRecordHistory(...args),
 }));
 
 // debugLog is a no-op in tests — it's a separate unit with its own test file
@@ -180,6 +189,7 @@ describe("StorageManager", () => {
     mockIdbBackend.saveSnippets.mockResolvedValue(undefined);
     mockIdbBackend.getSnippets.mockResolvedValue([]);
     mockUpdateContentScriptCache.mockResolvedValue(undefined);
+    mockRecordHistory.mockResolvedValue(undefined);
     manager = new StorageManager();
   });
 
@@ -948,6 +958,127 @@ describe("StorageManager", () => {
       mockIdbBackend.clear.mockResolvedValue(undefined);
       await manager.clearIDBBackup();
       expect(mockIdbBackend.clear).toHaveBeenCalled();
+    });
+  });
+
+  // ── commitChange ──────────────────────────────────────────────────────────
+
+  describe("commitChange", () => {
+    const stored = makeSnippet({
+      id: "target",
+      label: "Old",
+      content: "old body",
+      rev: 4,
+      updatedAt: "2025-01-01T00:00:00Z",
+      usageCount: 12,
+    });
+
+    const base = (
+      overrides: Partial<Parameters<StorageManager["commitChange"]>[0]> = {}
+    ) => ({
+      snippetId: "target",
+      kind: "upsert" as const,
+      fields: {
+        label: "New",
+        content: "new body",
+        shortcut: "ts",
+        tags: ["work"],
+      },
+      baseRev: 4,
+      updatedAt: "2025-01-02T00:00:00Z",
+      updatedBy: "device-a",
+      reason: "edit" as const,
+      ...overrides,
+    });
+
+    it("bumps the revision while preserving fields the editor does not own", async () => {
+      mockSyncBackend.getSnippets.mockResolvedValue([stored]);
+      const result = await manager.commitChange(base());
+
+      expect(result.ok).toBe(true);
+      const written = mockSyncBackend.upsertSnippets.mock
+        .calls[0]![0] as Snippet[];
+      expect(written[0]).toMatchObject({
+        id: "target",
+        label: "New",
+        content: "new body",
+        tags: ["work"],
+        rev: 5,
+        updatedBy: "device-a",
+        usageCount: 12,
+        createdAt: stored.createdAt,
+      });
+    });
+
+    it("snapshots the replaced record after a successful write", async () => {
+      mockSyncBackend.getSnippets.mockResolvedValue([stored]);
+      await manager.commitChange(base());
+      expect(mockRecordHistory).toHaveBeenCalledWith(stored, "edit");
+    });
+
+    it("refuses an edit made from an older revision", async () => {
+      mockSyncBackend.getSnippets.mockResolvedValue([stored]);
+      const result = await manager.commitChange(base({ baseRev: 2 }));
+
+      expect(result).toEqual({ ok: false, conflict: stored });
+      expect(mockSyncBackend.upsertSnippets).not.toHaveBeenCalled();
+      expect(mockRecordHistory).toHaveBeenCalledWith(
+        expect.objectContaining({ rev: 5 }),
+        "conflict"
+      );
+    });
+
+    it("refuses an edit whose timestamp is older than the stored record", async () => {
+      mockSyncBackend.getSnippets.mockResolvedValue([
+        { ...stored, updatedAt: "2025-06-01T00:00:00Z" },
+      ]);
+      const result = await manager.commitChange(base());
+      expect(result.ok).toBe(false);
+    });
+
+    it("commits a delete and snapshots the removed record", async () => {
+      mockSyncBackend.getSnippets.mockResolvedValue([stored]);
+      const result = await manager.commitChange(
+        base({ kind: "delete", reason: "delete", fields: undefined })
+      );
+      expect(result).toEqual({ ok: true, snippet: null });
+      expect(mockSyncBackend.removeSnippetsById).toHaveBeenCalledWith([
+        "target",
+      ]);
+      expect(mockRecordHistory).toHaveBeenCalledWith(stored, "delete");
+    });
+
+    it("creates a snippet whose id has no stored record", async () => {
+      mockSyncBackend.getSnippets.mockResolvedValue([]);
+      const result = await manager.commitChange(base({ snippetId: "new-id" }));
+      expect(result.ok).toBe(true);
+      const written = mockSyncBackend.upsertSnippets.mock
+        .calls[0]![0] as Snippet[];
+      expect(written[0]).toMatchObject({
+        id: "new-id",
+        rev: 1,
+        label: "New",
+        usageCount: 0,
+      });
+    });
+
+    it("does not record history when the authoritative write is refused", async () => {
+      mockSyncBackend.getSnippets.mockResolvedValue([stored]);
+      mockSyncBackend.upsertSnippets.mockRejectedValue(
+        new StorageQuotaError("quota", [])
+      );
+      await expect(manager.commitChange(base())).rejects.toBeInstanceOf(
+        StorageQuotaError
+      );
+      expect(mockRecordHistory).not.toHaveBeenCalled();
+    });
+
+    it("allows a restore based on an older revision", async () => {
+      mockSyncBackend.getSnippets.mockResolvedValue([stored]);
+      const result = await manager.commitChange(
+        base({ baseRev: 1, reason: "restore" })
+      );
+      expect(result.ok).toBe(true);
     });
   });
 });

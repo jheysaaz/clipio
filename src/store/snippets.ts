@@ -49,6 +49,8 @@ import {
 } from "@/storage";
 import { lastViewedSnippetIdItem, syncDataLostItem } from "@/storage/items";
 import { selectNewest } from "@/lib/snippet-utils";
+import { isExternalLocalSnippetChange } from "@/lib/sync-change";
+import { getWriterId } from "@/storage/writer-id";
 import { captureError } from "@/lib/sentry";
 import { i18n } from "#i18n";
 
@@ -360,12 +362,33 @@ if (typeof browser !== "undefined" && browser.storage?.onChanged) {
     );
     if (!touched) return;
 
-    void refreshSnippets().catch((error: unknown) => {
-      // `refreshSnippets` handles its own failures, so reaching here means
-      // something threw outside its try — worth knowing about, and worth
-      // attributing to the area it came from.
-      captureError(error, { action: "snippets.refresh.listen", areaName });
-    });
+    void Promise.resolve()
+      .then(() => {
+        // In local mode the queue's own commits fire this listener. Re-reading
+        // from them would replace the list under an open editor after every
+        // autosave; an edit from Options or another context carries a different
+        // writer id and must be picked up. Sync changes need no writer lookup.
+        if (areaName === "local") {
+          return getWriterId().then((writerId) =>
+            isExternalLocalSnippetChange(
+              changes as Parameters<typeof isExternalLocalSnippetChange>[0],
+              areaName,
+              writerId
+            )
+          );
+        }
+        return true;
+      })
+      .then((external) => {
+        if (!external) return;
+        return refreshSnippets();
+      })
+      .catch((error: unknown) => {
+        // `refreshSnippets` handles its own failures, so reaching here means
+        // something threw outside its try — worth knowing about, and worth
+        // attributing to the area it came from.
+        captureError(error, { action: "snippets.refresh.listen", areaName });
+      });
   });
 }
 
