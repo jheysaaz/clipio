@@ -112,7 +112,8 @@ snippetDetail:
     undo: Undo
   syncStatus:
     saved: All changes saved
-    pending: Saving...
+    saving: Saving changes...
+    draft: New snippet
     failed: Changes not saved
     refused: Storage full — changes kept locally
   errors:

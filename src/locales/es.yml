@@ -109,7 +109,8 @@ snippetDetail:
     undo: Deshacer
   syncStatus:
     saved: Todos los cambios guardados
-    pending: Guardando...
+    saving: Guardando cambios...
+    draft: Fragmento nuevo
     failed: Los cambios no se guardaron
     refused: "Almacenamiento lleno: los cambios se conservan localmente"
   errors:

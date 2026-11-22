@@ -22,11 +22,10 @@ import {
 import { Icon } from "@/components/ui/icon";
 import SnippetListItem from "@/components/SnippetListItem";
 const SnippetDetailView = lazy(() => import("~/components/SnippetDetailView"));
-const NewSnippetView = lazy(() => import("~/components/NewSnippetView"));
 import { InlineError } from "@/components/ui/inline-error";
 import { toast } from "sonner";
 
-import type { Snippet } from "@/types";
+import type { Snippet, SnippetFormData } from "@/types";
 import { createSnippet } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +54,7 @@ import {
   contextMenuDraftItem,
   latestVersionItem,
   dismissedUpdateVersionItem,
+  editorDraftsItem,
 } from "@/storage/items";
 import { captureError } from "@/lib/sentry";
 import {
@@ -182,7 +182,29 @@ export default function Dashboard() {
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const draggingRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const provisionalCreateIdRef = useRef<string | null>(null);
+  /**
+   * One id for the whole create session. It is state, not a ref: the id appears
+   * in the JSX passed to the detail pane, and a ref read during render is both
+   * a lint error and a stale-value trap when the create route is entered
+   * directly. The id is not the authoritative record — the draft map is — it
+   * only gives autosave and Create the same key.
+   */
+  const [provisionalCreateId, setProvisionalCreateId] = useState<string | null>(
+    null
+  );
+
+  /**
+   * The new-snippet detail pane needs a Snippet-shaped value for the shared
+   * editor, but the record must not enter the library until Create. The route
+   * still addresses it as `#/new`; only the id is provisional.
+   */
+  const provisionalSnippet = useMemo<Snippet | null>(() => {
+    if (!isCreating) return null;
+    return {
+      ...createSnippet(draftSnippet, "unknown"),
+      id: provisionalCreateId ?? "new-provisional",
+    };
+  }, [isCreating, draftSnippet, provisionalCreateId]);
 
   // Edits are staged locally and committed by the background queue, so there is
   // no unsaved-changes dialog to guard navigation: the work survives a popup blur
@@ -291,6 +313,7 @@ export default function Dashboard() {
           // Prefilled from the configured trigger prefix, read fresh: a value
           // captured at module load is stale for the life of the popup, and
           // "change it in Options, reopen the popup" is exactly the case.
+          setProvisionalCreateId(null);
           setDraftSnippet(await blankSnippetDraft(draft));
           startCreating();
           return;
@@ -308,6 +331,7 @@ export default function Dashboard() {
                 action: "loadContextMenuDraft.clearSession",
               });
             });
+          setProvisionalCreateId(null);
           setDraftSnippet(await blankSnippetDraft(sessionDraft));
           startCreating();
         }
@@ -462,44 +486,70 @@ export default function Dashboard() {
   // CRUD helpers
   // -------------------------------------------------------------------------
 
-  const ensureProvisionalCreateId = () => {
-    if (!provisionalCreateIdRef.current) {
-      provisionalCreateIdRef.current = crypto.randomUUID();
-    }
-    return provisionalCreateIdRef.current;
-  };
+  const ensureProvisionalCreateId = useCallback(() => {
+    if (provisionalCreateId) return provisionalCreateId;
+    const id = crypto.randomUUID();
+    setProvisionalCreateId(id);
+    return id;
+  }, [provisionalCreateId]);
 
   /**
-   * Autosave for the create form. One provisional id is kept for the whole form
-   * session, so typing a name cannot create several snippets, and the explicit
-   * Create button commits the same record it has been staging all along.
+   * Autosave for the new snippet. Only stage: the background must not commit a
+   * record until the user presses Create, otherwise an abandoned create leaves a
+   * snippet behind and Create can add a second one with the same id.
    */
   const handleAutoSaveNewSnippet = useCallback(
-    async (draft: typeof draftSnippet) => {
+    async (draft: SnippetFormData) => {
       const id = ensureProvisionalCreateId();
       await stageProvisionalDraft(id, draft);
-      await flushDraft(id, snippetsStore.state.snippets);
     },
-    // `ensureProvisionalCreateId` only touches a ref, so it is safe to call from a
-    // stable callback; the store singleton is stable too.
-    []
+    [ensureProvisionalCreateId]
   );
 
-  // Async because the shortcut default comes from storage. Not pre-filled in
-  // `NewSnippetView` on mount instead: this sets the draft *before* navigating, so
-  // the form mounts with a non-empty shortcut and a mount-time prefill would be
-  // skipped — and if it were not, it would be a second writer racing the draft it
-  // was handed.
+  /**
+   * Start a create session, resuming a draft left by a popup that closed on blur.
+   *
+   * The id travels with the draft. A fresh id here would stage the recovered
+   * fields under a second record, which is exactly how one create turned into two
+   * snippets.
+   */
+  const createSessionDraft = async (
+    content?: string
+  ): Promise<{ id: string; draft: SnippetFormData }> => {
+    if (content === undefined) {
+      const drafts = await editorDraftsItem.getValue();
+      const recovered = Object.values(drafts ?? {}).find((item) => item.isNew);
+      if (recovered) {
+        return {
+          id: recovered.id,
+          draft: {
+            label: recovered.fields.label,
+            shortcut: recovered.fields.shortcut,
+            content: recovered.fields.content,
+            tags: [...(recovered.fields.tags ?? [])],
+          },
+        };
+      }
+    }
+    return {
+      id: crypto.randomUUID(),
+      draft: await blankSnippetDraft(content ?? ""),
+    };
+  };
+
+  // Async because the shortcut default comes from storage. Set before navigating
+  // so the detail pane mounts with a non-empty shortcut.
   const handleAddSnippet = async () => {
-    provisionalCreateIdRef.current = null;
-    setDraftSnippet(await blankSnippetDraft());
+    const session = await createSessionDraft();
+    setProvisionalCreateId(session.id);
+    setDraftSnippet(session.draft);
     startCreating();
   };
 
   const handleCancelCreate = async () => {
-    const id = provisionalCreateIdRef.current;
+    const id = provisionalCreateId;
     if (id) await discardDraft(id);
-    provisionalCreateIdRef.current = null;
+    setProvisionalCreateId(null);
     setDraftSnippet(await blankSnippetDraft());
     const newest = selectNewest(snippets);
     if (newest) selectSnippet(newest.id);
@@ -559,7 +609,7 @@ export default function Dashboard() {
       draft: { ...EMPTY_DRAFT },
       createError: null,
     }));
-    provisionalCreateIdRef.current = null;
+    setProvisionalCreateId(null);
     selectSnippet(id);
     toast.success(i18n.t("dashboard.toast.snippetSaved"));
   };
@@ -941,33 +991,7 @@ export default function Dashboard() {
 
         {/* Right Content - Detail */}
         <div className="flex-1 flex flex-col bg-background">
-          {isCreating ? (
-            <Suspense
-              fallback={
-                <div className="flex items-center justify-center flex-1">
-                  <Icon
-                    icon={Loader2}
-                    size="xl"
-                    className="animate-spin text-muted-foreground"
-                  />
-                </div>
-              }
-            >
-              <NewSnippetView
-                draftSnippet={draftSnippet}
-                onDraftChange={setDraftSnippet}
-                onAutoSave={handleAutoSaveNewSnippet}
-                onSave={handleSaveNewSnippet}
-                onCancel={handleCancelCreate}
-                isSaving={isSaving}
-                createError={createError}
-                onClearCreateError={dismissCreateError}
-                sidebarOpen={sidebarOpen}
-                onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-                existingSnippets={snippets}
-              />
-            </Suspense>
-          ) : selectedSnippet ? (
+          {(isCreating || selectedSnippet) && (
             <Suspense
               fallback={
                 <div className="flex items-center justify-center flex-1">
@@ -980,15 +1004,29 @@ export default function Dashboard() {
               }
             >
               <SnippetDetailView
-                key={selectedSnippet.id}
-                snippet={selectedSnippet}
+                key={isCreating ? "new" : selectedSnippet!.id}
+                snippet={(isCreating ? provisionalSnippet : selectedSnippet)!}
+                isNew={isCreating}
+                draft={isCreating ? draftSnippet : undefined}
+                onDraftChange={setDraftSnippet}
+                onAutoSave={handleAutoSaveNewSnippet}
+                onCreate={() => void handleSaveNewSnippet()}
+                onCancel={() => void handleCancelCreate()}
+                isCreating={isSaving}
+                createError={createError}
+                onClearCreateError={dismissCreateError}
+                existingSnippets={snippets}
                 onDelete={handleDeleteSnippet}
                 onUndoDelete={handleUndoDelete}
                 sidebarOpen={sidebarOpen}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
               />
             </Suspense>
-          ) : snippets.length === 0 && !loading ? (
+          )}
+          {!isCreating &&
+          !selectedSnippet &&
+          snippets.length === 0 &&
+          !loading ? (
             /* Empty state when no snippets exist */
             <>
               <div className="px-3 py-2 border-b flex items-center">

@@ -9,10 +9,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import SnippetDetailView from "./SnippetDetailView";
-import type { Snippet } from "@/types";
+import type { Snippet, SnippetFormData } from "@/types";
 import type { EditorFields } from "@/lib/snippet-draft";
 import { undoAvailabilityStore, writeQueueStore } from "@/store/write-queue";
 import { resetSnippetsStoreForTests, snippetsStore } from "@/store/snippets";
@@ -138,7 +139,12 @@ describe("SnippetDetailView autosave", () => {
     vi.clearAllMocks();
     // The stores are module singletons: a prior test's queue state must not
     // decide whether this test starts with Undo enabled.
-    writeQueueStore.setState(() => ({ pending: 0, failed: 0, refused: 0 }));
+    writeQueueStore.setState(() => ({
+      pending: 0,
+      failed: 0,
+      refused: 0,
+      saving: false,
+    }));
     undoAvailabilityStore.setState(() => ({
       snippetId: null,
       canUndo: false,
@@ -358,6 +364,7 @@ describe("SnippetDetailView autosave", () => {
       pending: 0,
       failed: 0,
       refused: 1,
+      saving: false,
       lastError: "sync is full",
     }));
     renderView();
@@ -542,5 +549,228 @@ describe("SnippetDetailView autosave", () => {
     expect(
       await screen.findByRole("button", { name: /delete snippet/i })
     ).toBeEnabled();
+  });
+});
+
+/**
+ * New snippets use the detail pane, not a second full-page form. These tests
+ * own the parts that differ: the identity fields, the explicit Create action,
+ * the actions that have nothing to act on yet, and the draft-only autosave.
+ */
+describe("SnippetDetailView — new snippet", () => {
+  const blank: SnippetFormData = {
+    label: "",
+    shortcut: "/",
+    content: "",
+    tags: [],
+  };
+  const valid: SnippetFormData = {
+    label: "Address",
+    shortcut: "/addr",
+    content: "123 Fake Street",
+    tags: [],
+  };
+  const onDraftChange = vi.fn();
+  const onAutoSave = vi.fn();
+  const onCreate = vi.fn();
+  const onCancel = vi.fn();
+  const newSnippet: Snippet = { ...snippet, id: "new", ...blank };
+
+  /**
+   * The form is controlled. A bare mock would reset each input to its old prop
+   * after every keystroke, so the "final" draft would be the last character only.
+   */
+  function NewHarness({
+    initial = blank,
+    ...props
+  }: Partial<React.ComponentProps<typeof SnippetDetailView>> & {
+    initial?: SnippetFormData;
+  }) {
+    const [draft, setDraft] = useState(initial);
+    return (
+      <SnippetDetailView
+        snippet={newSnippet}
+        isNew
+        draft={draft}
+        onDraftChange={(next) => {
+          onDraftChange(next);
+          setDraft(next);
+        }}
+        onAutoSave={onAutoSave}
+        onCreate={onCreate}
+        onCancel={onCancel}
+        onDelete={onDelete}
+        onToggleSidebar={onToggleSidebar}
+        {...props}
+      />
+    );
+  }
+
+  function renderNew(
+    props: Partial<React.ComponentProps<typeof SnippetDetailView>> & {
+      initial?: SnippetFormData;
+    } = {}
+  ) {
+    return render(<NewHarness {...props} />);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    writeQueueStore.setState(() => ({
+      pending: 0,
+      failed: 0,
+      refused: 0,
+      saving: false,
+    }));
+    undoAvailabilityStore.setState(() => ({
+      snippetId: "new",
+      canUndo: true,
+      canRedo: true,
+    }));
+    q.undoLastEdit.mockResolvedValue({ ok: false, fields: null });
+    q.redoLastEdit.mockResolvedValue({ ok: false, fields: null });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("shows the identity fields and the editor in one pane", () => {
+    renderNew();
+
+    expect(screen.getByTestId("snippet-label-input")).toBeInTheDocument();
+    expect(screen.getByTestId("snippet-shortcut-input")).toBeInTheDocument();
+    expect(screen.getByTestId("snippet-content-editor")).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Content" })
+    ).toBeInTheDocument();
+  });
+
+  it("disables actions that have no record to act on yet", () => {
+    renderNew();
+
+    expect(screen.getByTestId("snippet-delete")).toBeDisabled();
+    expect(screen.queryByTestId("snippet-undo")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("snippet-redo")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /copy to clipboard/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /insert command/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("gates Create on the identity and content fields being present", () => {
+    const { rerender } = renderNew();
+    expect(screen.getByTestId("snippet-create-save")).toBeDisabled();
+
+    rerender(<NewHarness key="valid" initial={valid} />);
+    expect(screen.getByTestId("snippet-create-save")).toBeEnabled();
+  });
+
+  it("calls Create and Cancel through the top bar", async () => {
+    const user = userEvent.setup();
+    renderNew({ initial: valid });
+
+    await user.click(screen.getByTestId("snippet-create-save"));
+    await user.click(screen.getByTestId("snippet-create-cancel"));
+
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a shortcut with spaces instead of staging it", () => {
+    renderNew();
+
+    // One change event, not per-character typing: a rejected keystroke cannot
+    // update the controlled value, so a subsequent keystroke would silently
+    // clear the error we are asserting on.
+    fireEvent.change(screen.getByTestId("snippet-shortcut-input"), {
+      target: { value: "/a b" },
+    });
+
+    expect(screen.getByText(/cannot contain spaces/i)).toBeInTheDocument();
+    expect(screen.getByTestId("snippet-shortcut-input")).toHaveAttribute(
+      "aria-invalid",
+      "true"
+    );
+    expect(onDraftChange).not.toHaveBeenCalledWith(
+      expect.objectContaining({ shortcut: expect.stringContaining(" ") })
+    );
+  });
+
+  it("reports a shortcut that belongs to an existing snippet", () => {
+    renderNew({ existingSnippets: [snippet] });
+
+    fireEvent.change(screen.getByTestId("snippet-shortcut-input"), {
+      target: { value: "/addr" },
+    });
+
+    expect(screen.getByText(/already used/i)).toBeInTheDocument();
+    expect(screen.getByTestId("snippet-create-save")).toBeDisabled();
+  });
+
+  it("propagates content edits into the draft with the identity preserved", async () => {
+    const user = userEvent.setup();
+    renderNew({ initial: valid });
+
+    await user.click(screen.getByRole("textbox", { name: "Content" }));
+    await user.keyboard("!");
+
+    expect(onDraftChange).toHaveBeenCalledWith(
+      expect.objectContaining({ label: "Address", shortcut: "/addr" })
+    );
+  });
+
+  it("stages a non-empty draft after the debounce, not on mount", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderNew();
+
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY * 2);
+    expect(onAutoSave).not.toHaveBeenCalled();
+
+    await user.type(screen.getByTestId("snippet-label-input"), "A");
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
+
+    expect(onAutoSave).toHaveBeenCalledWith(
+      expect.objectContaining({ label: "A", shortcut: "/" })
+    );
+  });
+
+  it("stages the last typed draft when the pane closes mid-debounce", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { unmount } = renderNew();
+
+    await user.type(screen.getByTestId("snippet-label-input"), "Draft");
+    unmount();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(onAutoSave).toHaveBeenCalledWith(
+      expect.objectContaining({ label: "Draft" })
+    );
+  });
+
+  it("shows the saving status while a draft is staged", () => {
+    writeQueueStore.setState(() => ({
+      pending: 0,
+      failed: 0,
+      refused: 0,
+      saving: true,
+    }));
+    renderNew();
+
+    expect(screen.getByTestId("snippet-sync-status")).toHaveTextContent(
+      "Saving changes..."
+    );
+  });
+
+  it("does not claim the new snippet is saved before anything is staged", () => {
+    renderNew();
+
+    expect(screen.getByTestId("snippet-sync-status")).toHaveTextContent(
+      "New snippet"
+    );
   });
 });

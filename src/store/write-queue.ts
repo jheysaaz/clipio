@@ -45,6 +45,8 @@ export type SyncStatus = {
   pending: number;
   failed: number;
   refused: number;
+  /** A draft is staged locally and has not been committed yet. */
+  saving: boolean;
   lastError?: string;
 };
 
@@ -52,7 +54,36 @@ export const writeQueueStore = new Store<SyncStatus>({
   pending: 0,
   failed: 0,
   refused: 0,
+  saving: false,
 });
+
+/**
+ * The fields of drafts staged in this document, keyed by snippet id.
+ *
+ * The authoritative store deliberately ignores our own commits (see
+ * `src/store/snippets.ts`), so a snippet's `content` there stays at the value the
+ * popup loaded until an external writer changes it. The sidebar needs what the
+ * user is typing *now*, which is exactly the staged draft.
+ */
+export const draftPreviewsStore = new Store<Record<string, EditorFields>>({});
+
+function setDraftPreview(snippetId: string, fields: EditorFields): void {
+  draftPreviewsStore.setState((prev) => ({ ...prev, [snippetId]: fields }));
+}
+
+function removeDraftPreview(snippetId: string): void {
+  draftPreviewsStore.setState((prev) => {
+    if (!(snippetId in prev)) return prev;
+    const next = { ...prev };
+    delete next[snippetId];
+    return next;
+  });
+}
+
+/** Forget previews after an authoritative re-read replaces the library. */
+export function clearDraftPreviews(): void {
+  draftPreviewsStore.setState(() => ({}));
+}
 
 export const undoAvailabilityStore = new Store<{
   snippetId: string | null;
@@ -69,31 +100,56 @@ async function publishUndoAvailability(snippetId: string): Promise<void> {
   }));
 }
 
+let cachedQueue: QueueState = emptyQueue();
+const stagedDraftIds = new Set<string>();
+
 async function readQueue(): Promise<QueueState> {
-  return (await writeQueueItem.getValue()) ?? emptyQueue();
+  cachedQueue = (await writeQueueItem.getValue()) ?? emptyQueue();
+  return cachedQueue;
 }
 
 async function writeQueue(state: QueueState): Promise<void> {
+  cachedQueue = state;
   await writeQueueItem.setValue(state);
-  publish(state);
+  publish();
 }
 
-function publish(state: QueueState): void {
-  const summary = queueSummary(state);
+function publish(): void {
+  const summary = queueSummary(cachedQueue);
   const lastError =
-    [...state.operations].reverse().find((op) => op.error)?.error ?? undefined;
-  writeQueueStore.setState((prev) => ({ ...prev, ...summary, lastError }));
+    [...cachedQueue.operations].reverse().find((op) => op.error)?.error ??
+    undefined;
+  writeQueueStore.setState(() => ({
+    ...summary,
+    saving: stagedDraftIds.size > 0,
+    lastError,
+  }));
 }
 
-/** Refresh the status shown in the top bar from the authoritative queue. */
+/** Refresh the status shown in the top bar from the authoritative stores. */
 export async function refreshSyncStatus(): Promise<void> {
-  publish(await readQueue());
+  const [, drafts] = await Promise.all([
+    readQueue(),
+    editorDraftsItem.getValue(),
+  ]);
+  stagedDraftIds.clear();
+  for (const [id, draft] of Object.entries(drafts ?? {})) {
+    stagedDraftIds.add(id);
+    setDraftPreview(id, draft.fields);
+  }
+  // Previews for already-committed edits are kept: this document deliberately
+  // ignores its own commits in the authoritative store, so clearing a preview on
+  // every queue change would make the sidebar snap back to stale content.
+  publish();
 }
 
 /** Save editor fields locally without committing them yet. */
 export async function stageDraft(draft: EditorDraft): Promise<void> {
   const drafts = await editorDraftsItem.getValue();
   await editorDraftsItem.setValue({ ...drafts, [draft.id]: draft });
+  stagedDraftIds.add(draft.id);
+  setDraftPreview(draft.id, draft.fields);
+  publish();
 }
 
 /**
@@ -141,6 +197,8 @@ export async function flushDraft(
   const remaining = { ...drafts };
   delete remaining[snippetId];
   await editorDraftsItem.setValue(remaining);
+  stagedDraftIds.delete(snippetId);
+  publish();
   return { ok: true, isNew: draft.isNew };
 }
 
@@ -200,6 +258,7 @@ export async function undoLastEdit(
   if (!fields) return { ok: false, fields: null };
   await undoStacksItem.setValue(next);
   await enqueueRestore(snippet, fields);
+  setDraftPreview(snippet.id, fields);
   // The restore itself records history, so undo needs no extra snapshot here.
   await publishUndoAvailability(snippet.id);
   return { ok: true, fields };
@@ -215,6 +274,7 @@ export async function redoLastEdit(
   if (!fields) return { ok: false, fields: null };
   await undoStacksItem.setValue(next);
   await enqueueRestore(snippet, fields);
+  setDraftPreview(snippet.id, fields);
   await publishUndoAvailability(snippet.id);
   return { ok: true, fields };
 }
@@ -247,6 +307,9 @@ export async function discardUnflushedDraft(snippetId: string): Promise<void> {
     const remaining = { ...drafts };
     delete remaining[snippetId];
     await editorDraftsItem.setValue(remaining);
+    stagedDraftIds.delete(snippetId);
+    removeDraftPreview(snippetId);
+    publish();
   }
   await writeQueue(clearRefused(await readQueue(), snippetId));
 }

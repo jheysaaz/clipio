@@ -73,9 +73,17 @@ const posix = (p) => p.split(sep).join("/");
  * without waiting for another storage write. That adds 646 bytes to
  * background.js and therefore to the all-JavaScript total; no other budget
  * moved. Both sizes were measured twice from clean builds and did not vary.
+ *
+ * Raised an eighth time because the create form now lives in the detail pane
+ * instead of a second full-page view. Removing NewSnippetView and its own
+ * validation code is offset by sharing the detail pane's editor with the
+ * create flow: the popup chunk shrinks further, while the options chunk and
+ * shared chunks grow slightly because they already import that pane. Three
+ * budgets move up by 28/260/28 bytes; all were measured twice from clean
+ * builds and did not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_753_042 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_753_070 },
   { name: "background entry", pattern: "background.js", maxBytes: 224_510 },
   {
     name: "content script entry",
@@ -90,14 +98,14 @@ const BUDGETS = [
   {
     name: "options entry chunk",
     pattern: "chunks/options-*.js",
-    maxBytes: 201_182,
+    maxBytes: 201_442,
   },
   {
     // Shared chunks are included here even when their individual hashed names
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_610_285,
+    maxBytes: 1_610_313,
   },
 ];
 

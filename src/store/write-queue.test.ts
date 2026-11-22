@@ -52,6 +52,7 @@ import {
   undoAvailabilityStore,
   undoLastEdit,
   writeQueueStore,
+  draftPreviewsStore,
 } from "./write-queue";
 import {
   emitStorageChange,
@@ -81,7 +82,13 @@ function reset() {
   state.drafts = {};
   state.queue = emptyQueue();
   state.undo = {};
-  writeQueueStore.setState(() => ({ pending: 0, failed: 0, refused: 0 }));
+  writeQueueStore.setState(() => ({
+    pending: 0,
+    failed: 0,
+    refused: 0,
+    saving: false,
+  }));
+  draftPreviewsStore.setState(() => ({}));
 }
 
 describe("popup write queue", () => {
@@ -98,6 +105,23 @@ describe("popup write queue", () => {
     });
     // The queue is the background's authority: staging must not enqueue yet.
     expect(state.queue?.operations).toHaveLength(0);
+  });
+
+  it("publishes the staged fields as a live preview and a saving status", async () => {
+    await stageEdit(snippet, fields);
+
+    expect(draftPreviewsStore.state.s1).toEqual(fields);
+    expect(writeQueueStore.state.saving).toBe(true);
+  });
+
+  it("keeps the live preview after a commit but stops claiming it is saving", async () => {
+    await stageEdit(snippet, fields);
+    await flushDraft("s1", []);
+    // A queue change re-publishes status from the authoritative queue.
+    await refreshSyncStatus();
+
+    expect(writeQueueStore.state.saving).toBe(false);
+    expect(draftPreviewsStore.state.s1).toEqual(fields);
   });
 
   it("remembers the previous fields so undo has a target", async () => {
@@ -365,7 +389,12 @@ describe("popup write queue", () => {
   });
 
   it("ignores storage changes outside the local queue key", () => {
-    writeQueueStore.setState(() => ({ pending: 9, failed: 0, refused: 0 }));
+    writeQueueStore.setState(() => ({
+      pending: 9,
+      failed: 0,
+      refused: 0,
+      saving: false,
+    }));
 
     emitStorageChange({ other: { oldValue: undefined, newValue: 1 } }, "sync");
 
