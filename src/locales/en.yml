@@ -132,8 +132,6 @@ options:
   copy:
     extensionVersion: Extension Version
     extensionVersionHint: Current installed version and available updates.
-    topUsageHeading: Top 5 Usage
-    topUsageEmpty: No usage data yet.
     viewRelease: View release
     upToDate: Up to date
   # Accessible names for controls that carry no visible text. Read by screen
@@ -175,6 +173,7 @@ options:
     resetToDefault: Reset to default
     saveFailed: Could not save
     managedInSection: Managed in its section
+    preview: Preview
   shortcut:
     recorder: Record a keyboard shortcut
     pressKeys: Press keys…
@@ -237,6 +236,8 @@ options:
     exported: Snippets exported
     exportedWithMedia: Snippets + images exported
     uses: "$1 uses"
+    totalUses: Total uses
+    mostUsed: Most used
   theme:
     light: Light
     dark: Dark

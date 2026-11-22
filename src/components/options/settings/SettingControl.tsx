@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Icon } from "@/components/ui/icon";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
@@ -146,6 +147,16 @@ export function SettingControl({
 
   const canReset = !!entry.reset && loaded && !isDefaultValue(entry, value);
 
+  const control = (
+    <Control
+      entry={entry}
+      value={value}
+      loaded={loaded}
+      onChange={persist}
+      status={status}
+    />
+  );
+
   return (
     <SettingRow
       title={i18n.t(entry.titleKey)}
@@ -165,13 +176,24 @@ export function SettingControl({
             : status
       }
     >
-      <Control
-        entry={entry}
-        value={value}
-        loaded={loaded}
-        onChange={persist}
-        status={status}
-      />
+      {entry.preview ? (
+        <div className="flex w-full items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            data-testid={entry.preview.testId}
+            onClick={entry.preview.run}
+            className="text-muted-foreground"
+          >
+            {entry.preview.icon && <Icon icon={entry.preview.icon} size="sm" />}
+            {i18n.t(entry.preview.labelKey)}
+          </Button>
+          {control}
+        </div>
+      ) : (
+        control
+      )}
     </SettingRow>
   );
 }

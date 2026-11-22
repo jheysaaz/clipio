@@ -34,8 +34,8 @@ vi.mock("@/lib/review-prompt", () => ({
   getStoreReviewUrl: mocks.getStoreReviewUrl,
 }));
 vi.mock("@/components/options/FeedbackModal", () => ({
-  FeedbackModal: ({ open }: { open: boolean }) =>
-    open ? <div data-testid="mock-feedback-open" /> : null,
+  FeedbackModal: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
+    open ? <div data-testid="mock-feedback-open" onClick={onClose} /> : null,
 }));
 
 import { AboutPanel } from "./AboutPanel";
@@ -122,12 +122,15 @@ describe("AboutPanel", () => {
     expect(screen.getByTestId("panel-about")).toBeInTheDocument();
   });
 
-  it("opens the feedback modal from the feedback button", () => {
+  it("opens and closes the feedback modal", () => {
     render(<AboutPanel />);
 
     expect(screen.queryByTestId("mock-feedback-open")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("about-feedback"));
     expect(screen.getByTestId("mock-feedback-open")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("mock-feedback-open"));
+    expect(screen.queryByTestId("mock-feedback-open")).not.toBeInTheDocument();
   });
 
   it("opens the donation page", () => {

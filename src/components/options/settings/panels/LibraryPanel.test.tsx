@@ -74,7 +74,7 @@ beforeEach(() => {
 });
 
 describe("LibraryPanel", () => {
-  it("renders the snippet count and a usage list sorted and labelled", async () => {
+  it("shows the three analytics side by side, with totals and a labelled top snippet", async () => {
     mocks.getSnippets.mockResolvedValue([
       { id: "a", label: "Greeting", shortcut: "/g" },
       { id: "b", label: "", shortcut: "/b" },
@@ -88,27 +88,59 @@ describe("LibraryPanel", () => {
     render(<LibraryPanel />);
 
     await waitFor(() =>
-      expect(screen.getByTestId("card-top-usage")).not.toHaveTextContent(
-        i18n.t("options.copy.topUsageEmpty")
-      )
+      expect(screen.getByTestId("stat-snippets")).toHaveTextContent("2")
     );
-    expect(screen.getByText("2")).toBeInTheDocument();
+    const stats = screen.getByTestId("library-stats");
+    // All three figures share one row of equally sized, bordered containers.
+    expect(stats).toHaveClass("grid", "grid-cols-3");
+    expect(stats.children).toHaveLength(3);
+    for (const tile of stats.children) {
+      expect(tile).toHaveClass(
+        "rounded-lg",
+        "border",
+        "border-border/70",
+        "bg-muted/30",
+        "p-3"
+      );
+    }
+    expect(stats).toHaveTextContent(i18n.t("options.overview.snippets"));
+    expect(screen.getByTestId("stat-total-uses")).toHaveTextContent("8");
+    expect(stats).toHaveTextContent(i18n.t("options.library.totalUses"));
+    const mostUsed = screen.getByTestId("stat-most-used");
+    expect(stats).toHaveTextContent(i18n.t("options.library.mostUsed"));
+    expect(mostUsed).toHaveTextContent("Greeting");
+    expect(mostUsed).toHaveTextContent(i18n.t("options.library.uses", ["5"]));
     expect(screen.getByTestId("backup-manager-mock")).toBeInTheDocument();
-    const rows = screen.getAllByRole("listitem");
-    expect(rows[0]).toHaveTextContent("Greeting");
-    expect(rows[0]).toHaveTextContent("/g");
-    expect(rows[1]).toHaveTextContent("missing");
-    expect(rows[2]).toHaveTextContent("/b");
-    expect(rows[0]).toHaveTextContent(i18n.t("options.library.uses", ["5"]));
   });
 
-  it("keeps stable empty-state handles while loading has not settled", () => {
+  it("places import ahead of export in the panel", () => {
     render(<LibraryPanel />);
 
-    expect(screen.getByTestId("card-top-usage")).toContainElement(
-      screen.getByTestId("top-usage-empty")
+    const importSection = document.getElementById("import-anchor");
+    const exportButton = screen.getByTestId("export-json");
+    expect(importSection).toBeInTheDocument();
+    expect(
+      importSection!.compareDocumentPosition(exportButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("keeps placeholders in every tile until the library reads settle", () => {
+    render(<LibraryPanel />);
+
+    for (const id of ["stat-snippets", "stat-total-uses", "stat-most-used"]) {
+      expect(screen.getByTestId(id)).toHaveTextContent("—");
+    }
+  });
+
+  it("shows zero uses and no top snippet when there is no usage data", async () => {
+    render(<LibraryPanel />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("stat-total-uses")).toHaveTextContent("0")
     );
-    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getByTestId("stat-snippets")).toHaveTextContent("0");
+    expect(screen.getByTestId("stat-most-used")).toHaveTextContent("—");
   });
 
   it("captures a failed library read instead of leaving the panel blank", async () => {
