@@ -81,10 +81,18 @@ const posix = (p) => p.split(sep).join("/");
  * shared chunks grow slightly because they already import that pane. Three
  * budgets move up by 28/260/28 bytes; all were measured twice from clean
  * builds and did not vary.
+ *
+ * Raised a ninth time for the queue review fixes: the cross-context Web Lock,
+ * in-flight claims and startup reconciliation in the background, the popup's
+ * per-snippet outcomes and commit waiting, and self-write metadata handling.
+ * The background grows 1,266 bytes, the options entry 2, the shared chunks
+ * 3,035, and the all-JavaScript total 4,301. The content and popup budgets did
+ * not move. All raised sizes were measured twice from clean builds and did not
+ * vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_753_070 },
-  { name: "background entry", pattern: "background.js", maxBytes: 224_510 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_757_371 },
+  { name: "background entry", pattern: "background.js", maxBytes: 225_776 },
   {
     name: "content script entry",
     pattern: "content-scripts/content.js",
@@ -98,14 +106,14 @@ const BUDGETS = [
   {
     name: "options entry chunk",
     pattern: "chunks/options-*.js",
-    maxBytes: 201_442,
+    maxBytes: 201_444,
   },
   {
     // Shared chunks are included here even when their individual hashed names
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_610_313,
+    maxBytes: 1_613_348,
   },
 ];
 
