@@ -49,8 +49,3 @@ export function compareLww(a: Snippet, b: Snippet): number {
 
   return snippetWriter(a).localeCompare(snippetWriter(b));
 }
-
-/** True when `candidate` is newer than `stored` under the LWW ordering. */
-export function isNewer(candidate: Snippet, stored: Snippet): boolean {
-  return compareLww(candidate, stored) > 0;
-}

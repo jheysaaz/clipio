@@ -2,11 +2,9 @@ import { describe, it, expect } from "vitest";
 import type { Snippet } from "@/types";
 import {
   draftFromForm,
-  draftFromSnippet,
   fieldsFromForm,
   fieldsFromSnippet,
   hasMalformedMediaPlaceholder,
-  updateDraftFields,
   validateEditorFields,
 } from "./snippet-draft";
 
@@ -123,25 +121,5 @@ describe("draft construction", () => {
       baseRev: 0,
       updatedAt: "2026-02-01T00:00:00.000Z",
     });
-  });
-
-  it("keeps the base revision when drafting an existing snippet", () => {
-    const draft = draftFromSnippet(snippet({ rev: 9 }), 9);
-    expect(draft.baseRev).toBe(9);
-    expect(draft.isNew).toBe(false);
-  });
-
-  it("updates fields without losing the base revision or aliasing tags", () => {
-    const draft = draftFromSnippet(snippet(), 4);
-    const nextFields = { ...fields(), tags: ["new"] };
-    const next = updateDraftFields(
-      draft,
-      nextFields,
-      "2026-03-01T00:00:00.000Z"
-    );
-    nextFields.tags!.push("later");
-    expect(next.baseRev).toBe(4);
-    expect(next.fields.tags).toEqual(["new"]);
-    expect(next.updatedAt).toBe("2026-03-01T00:00:00.000Z");
   });
 });

@@ -105,20 +105,6 @@ export function validateEditorFields(
   return { ok: true };
 }
 
-/** Make a draft from a snippet as it currently stands. */
-export function draftFromSnippet(
-  snippet: Snippet,
-  baseRev: number
-): EditorDraft {
-  return {
-    id: snippet.id,
-    fields: fieldsFromSnippet(snippet),
-    baseRev,
-    updatedAt: new Date().toISOString(),
-    isNew: false,
-  };
-}
-
 /** Make a provisional draft for a snippet that has not been written yet. */
 export function draftFromForm(
   id: string,
@@ -131,18 +117,5 @@ export function draftFromForm(
     baseRev: 0,
     updatedAt: now,
     isNew: true,
-  };
-}
-
-/** Replace a draft's fields without losing the revision it was based on. */
-export function updateDraftFields(
-  draft: EditorDraft,
-  fields: EditorFields,
-  now = new Date().toISOString()
-): EditorDraft {
-  return {
-    ...draft,
-    fields: { ...fields, tags: [...(fields.tags ?? [])] },
-    updatedAt: now,
   };
 }

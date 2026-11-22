@@ -1,12 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Snippet } from "@/types";
-import {
-  LEGACY_WRITER_ID,
-  compareLww,
-  isNewer,
-  snippetRev,
-  snippetWriter,
-} from "./lww";
+import { LEGACY_WRITER_ID, compareLww, snippetRev, snippetWriter } from "./lww";
 
 function snippet(overrides: Partial<Snippet> = {}): Snippet {
   return {
@@ -56,8 +50,7 @@ describe("compareLww", () => {
       updatedBy: "z",
     });
     expect(compareLww(a, b)).toBeGreaterThan(0);
-    expect(isNewer(a, b)).toBe(true);
-    expect(isNewer(b, a)).toBe(false);
+    expect(compareLww(b, a)).toBeLessThan(0);
   });
 
   it("breaks an equal timestamp by revision", () => {
@@ -77,7 +70,6 @@ describe("compareLww", () => {
     const a = snippet();
     const b = snippet({ id: "different" });
     expect(compareLww(a, b)).toBe(0);
-    expect(isNewer(a, b)).toBe(false);
   });
 
   it("does not mutate either record", () => {
