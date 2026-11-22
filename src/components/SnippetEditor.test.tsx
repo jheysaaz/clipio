@@ -572,7 +572,7 @@ describe("autosave status", () => {
     renderView();
 
     expect(screen.getByTestId("snippet-sync-status")).toHaveTextContent(
-      "Saved ✓"
+      "Saved"
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(399);
@@ -589,11 +589,11 @@ describe("autosave status", () => {
     );
   });
 
-  it("shows Saved ✓ once the queue settles", () => {
+  it("shows Saved once the queue settles", () => {
     renderView();
 
     expect(screen.getByTestId("snippet-sync-status")).toHaveTextContent(
-      "Saved ✓"
+      "Saved"
     );
     expect(screen.getByTestId("snippet-sync-status")).toHaveClass(
       "text-muted-foreground"

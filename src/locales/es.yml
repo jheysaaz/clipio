@@ -75,7 +75,7 @@ snippetEditor:
   shortcutErrorPrefix: 'El atajo "$1" entra en conflicto con "$2" — uno puede impedir que el otro se expanda.'
   content: Contenido del fragmento
   contentPlaceholder: "Escribe / para ver comandos…"
-  addTagLabel: "+ Etiqueta"
+  addTagLabel: "Etiqueta"
   removeTag: "Quitar etiqueta $1"
   more: Más acciones
   moreTooltip: "Más acciones (Alt+O)"
@@ -105,7 +105,7 @@ snippetDetail:
     message: '$1 eliminado'
     undo: Deshacer
   syncStatus:
-    saved: "Guardado ✓"
+    saved: "Guardado"
     saving: "Guardando…"
     draft: Borrador
     failed: "No se pudo guardar · Reintentar"

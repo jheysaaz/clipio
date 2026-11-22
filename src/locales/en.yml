@@ -78,7 +78,7 @@ snippetEditor:
   shortcutErrorPrefix: 'Shortcut "$1" conflicts with "$2" — one may prevent the other from expanding.'
   content: Snippet content
   contentPlaceholder: "Type / for commands…"
-  addTagLabel: "+ Tag"
+  addTagLabel: "Tag"
   removeTag: "Remove $1 tag"
   more: More actions
   moreTooltip: "More actions (Alt+O)"
@@ -108,7 +108,7 @@ snippetDetail:
     message: '$1 deleted'
     undo: Undo
   syncStatus:
-    saved: "Saved ✓"
+    saved: "Saved"
     saving: "Saving…"
     draft: Draft
     failed: "Couldn't save · Retry"

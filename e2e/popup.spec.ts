@@ -596,7 +596,7 @@ test.describe("Popup (Dashboard)", () => {
     // The background clears the staged draft; the one status slot must follow it
     // out of `Saving…` instead of staying stuck after a successful create.
     await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText(
-      "Saved ✓",
+      "Saved",
       { timeout: 10_000 }
     );
   });
@@ -685,7 +685,7 @@ test.describe("Popup (Dashboard)", () => {
     await expect(popupPage.getByTestId("snippet-copy")).toBeEnabled();
     await expect(popupPage.getByTestId("snippet-more")).toBeEnabled();
     await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText(
-      "Saved ✓"
+      "Saved"
     );
     await expect(popupPage.getByTestId("snippet-undo")).toHaveAttribute(
       "title",
@@ -800,7 +800,7 @@ test.describe("Popup (Dashboard)", () => {
     await expect
       .poll(() => readSyncSnippets(popupPage), { timeout: 10_000 })
       .toEqual([expect.objectContaining({ content: "Autosaved body" })]);
-    await expect(status).toHaveText("Saved ✓", { timeout: 10_000 });
+    await expect(status).toHaveText("Saved", { timeout: 10_000 });
   });
 
   test("shows a saved blank line between paragraphs in the editor", async ({
