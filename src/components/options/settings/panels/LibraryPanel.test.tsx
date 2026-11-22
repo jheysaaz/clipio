@@ -41,6 +41,11 @@ vi.mock("@/pages/options/LibraryImportPanel", () => ({
   IMPORT_PANEL_ANCHOR: "import-anchor",
 }));
 vi.mock("sonner", () => ({ toast: mocks.toast }));
+// The backup controls own their own storage and dialog tests. Here they are a
+// stable landmark so this suite only decides that the panel renders them.
+vi.mock("@/components/BackupManager", () => ({
+  BackupManager: () => <div data-testid="backup-manager-mock" />,
+}));
 vi.mock("@/components/ImportWizard", () => ({
   default: ({
     onClose,
@@ -88,6 +93,7 @@ describe("LibraryPanel", () => {
       )
     );
     expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByTestId("backup-manager-mock")).toBeInTheDocument();
     const rows = screen.getAllByRole("listitem");
     expect(rows[0]).toHaveTextContent("Greeting");
     expect(rows[0]).toHaveTextContent("/g");

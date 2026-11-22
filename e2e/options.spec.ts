@@ -292,6 +292,97 @@ test.describe("Options Page", () => {
       .toBe(initial);
   });
 
+  test("backups round-trip with a dry-run conflict preview before any write", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+
+    const original = makeSnippets(1, () => ({
+      id: "backup-roundtrip",
+      label: "Backup me",
+      shortcut: "/backup-me",
+      content: "Original content",
+    }))[0]!;
+    await seedSnippets(optionsPage, [original]);
+    await optionsPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.local.set({ themeMode: "light" });
+    });
+
+    // The download is the backup; keeping the path lets the restore step feed
+    // the real bytes back through the file input, not a hand-built fixture.
+    const downloadPromise = optionsPage.waitForEvent("download");
+    await optionsPage.getByTestId("backup-create").click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(
+      /^clipio-backup-\d{4}-\d{2}-\d{2}\.clipio\.zip$/
+    );
+    const backupPath = await download.path();
+    expect(backupPath).not.toBeNull();
+
+    // Diverge after the backup so a conflict is genuinely present, and change
+    // a setting the backup also owns.
+    const changed = { ...original, content: "Changed content" };
+    await seedSnippets(optionsPage, [changed]);
+    await optionsPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.local.set({ themeMode: "dark" });
+    });
+
+    await optionsPage.getByTestId("backup-restore-open").click();
+    await optionsPage
+      .getByTestId("backup-file-input")
+      .setInputFiles(backupPath!);
+
+    // Preview first: the dialog is up, the conflict and setting are named, and
+    // nothing has been written yet. Selecting by testid keeps this independent
+    // of the translated copy.
+    const dialog = optionsPage.getByTestId("backup-preview-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(optionsPage.getByTestId("backup-conflict-count")).toHaveText(
+      "1"
+    );
+    await expect(
+      optionsPage.getByTestId("backup-setting-change")
+    ).toContainText("themeMode");
+    expect(await readSyncSnippets(optionsPage)).toEqual([
+      expect.objectContaining({ content: "Changed content" }),
+    ]);
+    expect(
+      await optionsPage.evaluate(async () => {
+        const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+        return (await ext.storage.local.get("themeMode")).themeMode;
+      })
+    ).toBe("dark");
+
+    await optionsPage
+      .getByTestId("backup-conflict-resolution")
+      .selectOption("overwrite");
+    await optionsPage.getByTestId("backup-restore-confirm").click();
+
+    await expect(optionsPage.getByTestId("backup-result")).toBeVisible();
+    await expect
+      .poll(
+        async () => (await readSyncSnippets(optionsPage)).map((s) => s.content),
+        { message: "backup snippets were not restored" }
+      )
+      .toEqual(["Original content"]);
+    await expect
+      .poll(
+        async () =>
+          optionsPage.evaluate(async () => {
+            const ext =
+              (globalThis as any).chrome ?? (globalThis as any).browser;
+            return (await ext.storage.local.get("themeMode")).themeMode;
+          }),
+        { message: "backup settings were not restored" }
+      )
+      .toBe("light");
+
+    await optionsPage.getByTestId("backup-dialog-close").click();
+    await expect(dialog).toHaveCount(0);
+  });
+
   test("options page has no critical accessibility violations", async ({
     optionsPage,
   }) => {
