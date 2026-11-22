@@ -42,6 +42,7 @@ import {
   dismissLoadError,
   dismissCreateError,
   findSnippet,
+  refreshSnippets,
   rememberSnippetView,
   resolveInitialSnippet,
   setDraft,
@@ -73,7 +74,6 @@ import {
   stageProvisionalDraft,
   waitForSnippetCommit,
 } from "@/store/write-queue";
-import { getWriterId } from "@/storage/writer-id";
 import { blankSnippetDraft } from "@/lib/trigger-prefix";
 import {
   nudgeSidebarWidth,
@@ -609,15 +609,12 @@ export default function Dashboard() {
       }
 
       // Only now, after the background has committed, is the provisional id a
-      // real record. Addressing it earlier made the route point at something a
-      // quota refusal could leave behind.
-      const provisional: Snippet = {
-        ...createSnippet(draftSnippet, await getWriterId()),
-        id,
-      };
+      // real record. Re-read rather than appending a local copy: the storage
+      // change may have refreshed the library already, and an append would show
+      // the same snippet twice with stale metadata.
+      await refreshSnippets();
       snippetsStore.setState((prev) => ({
         ...prev,
-        snippets: [...prev.snippets, provisional],
         draft: { ...EMPTY_DRAFT },
         createError: null,
       }));
@@ -681,10 +678,7 @@ export default function Dashboard() {
               );
               return;
             }
-            snippetsStore.setState((prev) => ({
-              ...prev,
-              snippets: [...prev.snippets, snippet],
-            }));
+            await refreshSnippets();
             selectSnippet(snippet.id);
           } catch (error) {
             captureError(error, {
