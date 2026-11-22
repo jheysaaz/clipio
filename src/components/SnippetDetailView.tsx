@@ -449,35 +449,167 @@ export default function SnippetDetailView({
     !isNew && (status.saving || status.pending > 0) && !statusIsError;
   const isNewSaving = isNew && status.saving && !statusIsError;
 
+  const tagEditor = (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="flex items-center gap-1 text-muted-foreground mr-1">
+        <Icon icon={Tag} size="sm" />
+        <span className="text-[10px] font-medium uppercase tracking-wide">
+          {i18n.t("snippetDetail.tags")}
+        </span>
+      </div>
+      {editedTags.map((tag) => (
+        <Badge
+          key={tag}
+          variant="outline"
+          className="text-[10px] px-2 py-0.5 h-5 font-normal border-border text-muted-foreground gap-1 group cursor-default hover:bg-accent transition-colors"
+        >
+          {tag}
+          <button
+            onClick={() => setEditedTags(editedTags.filter((t) => t !== tag))}
+            className="opacity-50 hover:opacity-100 transition-opacity -mr-0.5"
+            title={`Remove "${tag}"`}
+            aria-label={`Remove "${tag}"`}
+          >
+            <Icon icon={X} size="sm" stroke="emphasis" />
+          </button>
+        </Badge>
+      ))}
+      {isAddingTag ? (
+        <Input
+          ref={tagInputRef}
+          value={newTagInput}
+          onChange={(e) => setNewTagInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && newTagInput.trim()) {
+              const tag = newTagInput.trim().toLowerCase();
+              if (!editedTags.includes(tag)) {
+                setEditedTags([...editedTags, tag]);
+              }
+              setNewTagInput("");
+              setIsAddingTag(false);
+            } else if (e.key === "Escape") {
+              setNewTagInput("");
+              setIsAddingTag(false);
+            }
+          }}
+          onBlur={() => {
+            if (newTagInput.trim()) {
+              const tag = newTagInput.trim().toLowerCase();
+              if (!editedTags.includes(tag)) {
+                setEditedTags([...editedTags, tag]);
+              }
+            }
+            setNewTagInput("");
+            setIsAddingTag(false);
+          }}
+          placeholder={i18n.t("snippetDetail.tagPlaceholder")}
+          className="h-5 w-20 text-[10px] px-1.5 py-0 border-dashed"
+          autoFocus
+        />
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setIsAddingTag(true);
+            setTimeout(() => tagInputRef.current?.focus(), 0);
+          }}
+          className="h-5 px-2 text-[10px] text-muted-foreground hover:text-foreground border-dashed border-border hover:border-muted-foreground"
+          title={i18n.t("snippetDetail.addTagTitle")}
+        >
+          <Icon icon={Plus} size="sm" className="mr-0.5" />
+          {i18n.t("snippetDetail.addTag")}
+        </Button>
+      )}
+    </div>
+  );
+
+  const statusBadge = (
+    <span
+      data-testid="snippet-sync-status"
+      role="status"
+      aria-live="polite"
+      className={`flex items-center gap-1 px-1.5 text-[10px] font-medium ${
+        statusIsError
+          ? "text-destructive"
+          : statusIsSaving || isNewSaving
+            ? "text-primary"
+            : "text-muted-foreground"
+      }`}
+    >
+      {statusIsError ? (
+        <Icon icon={AlertCircle} size="sm" stroke="emphasis" />
+      ) : statusIsSaving || isNewSaving ? (
+        <Icon
+          icon={Loader2}
+          size="sm"
+          stroke="emphasis"
+          className="animate-spin"
+        />
+      ) : (
+        <Icon icon={Check} size="sm" stroke="emphasis" />
+      )}
+      {statusText(status, isNew)}
+    </span>
+  );
+
   return (
     <div className="flex flex-col h-full" onKeyDown={handleKeyDown}>
-      {/* Action bar — deliberately shorter than the footer, with grouped,
-          differentiated controls instead of a row of identical ghost icons. */}
-      <div className="px-2 py-0.5 border-b border-border flex items-center gap-0.5">
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={onToggleSidebar}
-          className="text-muted-foreground"
-          title={
-            sidebarOpen
-              ? i18n.t("common.hideSidebar")
-              : i18n.t("common.showSidebar")
-          }
-          aria-label={
-            sidebarOpen
-              ? i18n.t("common.hideSidebar")
-              : i18n.t("common.showSidebar")
-          }
-        >
-          {sidebarOpen ? (
-            <Icon icon={PanelLeftClose} stroke="emphasis" />
-          ) : (
-            <Icon icon={PanelLeft} stroke="emphasis" />
-          )}
-        </Button>
-        <Separator orientation="vertical" className="h-3.5 mx-0.5" />
-        {!isNew && (
+      {isNew ? (
+        /* One composer bar: leave, see the draft status, and commit explicitly. */
+        <div className="px-2 py-1 border-b border-border flex items-center gap-1.5">
+          <Button
+            data-testid="snippet-create-cancel"
+            variant="ghost"
+            size="icon-xs"
+            onClick={onCancel}
+            className="text-muted-foreground"
+            title={i18n.t("newSnippet.cancel")}
+            aria-label={i18n.t("newSnippet.cancel")}
+          >
+            <Icon icon={X} stroke="emphasis" />
+          </Button>
+          {statusBadge}
+          <div className="flex-1" />
+          <Button
+            data-testid="snippet-create-save"
+            variant="default"
+            size="xs"
+            onClick={onCreate}
+            disabled={!canCreate || isCreating}
+          >
+            <Icon icon={Save} size="sm" stroke="emphasis" />
+            {isCreating
+              ? i18n.t("newSnippet.creating")
+              : i18n.t("newSnippet.create")}
+          </Button>
+        </div>
+      ) : (
+        /* Existing snippets keep the grouped action bar. */
+        <div className="px-2 py-0.5 border-b border-border flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={onToggleSidebar}
+            className="text-muted-foreground"
+            title={
+              sidebarOpen
+                ? i18n.t("common.hideSidebar")
+                : i18n.t("common.showSidebar")
+            }
+            aria-label={
+              sidebarOpen
+                ? i18n.t("common.hideSidebar")
+                : i18n.t("common.showSidebar")
+            }
+          >
+            {sidebarOpen ? (
+              <Icon icon={PanelLeftClose} stroke="emphasis" />
+            ) : (
+              <Icon icon={PanelLeft} stroke="emphasis" />
+            )}
+          </Button>
+          <Separator orientation="vertical" className="h-3.5 mx-0.5" />
           <div className="flex items-center gap-0.5 rounded-md bg-muted/60 p-0.5">
             <Button
               variant="ghost"
@@ -504,121 +636,54 @@ export default function SnippetDetailView({
               <Icon icon={Redo2} stroke="emphasis" />
             </Button>
           </div>
-        )}
-        <span
-          data-testid="snippet-sync-status"
-          role="status"
-          aria-live="polite"
-          className={`flex items-center gap-1 px-1.5 text-[10px] font-medium ${
-            statusIsError
-              ? "text-destructive"
-              : statusIsSaving || isNewSaving
-                ? "text-primary"
-                : "text-muted-foreground"
-          }`}
-        >
-          {statusIsError ? (
-            <Icon icon={AlertCircle} size="sm" stroke="emphasis" />
-          ) : statusIsSaving || isNewSaving ? (
-            <Icon
-              icon={Loader2}
-              size="sm"
-              stroke="emphasis"
-              className="animate-spin"
-            />
-          ) : (
-            <Icon icon={Check} size="sm" stroke="emphasis" />
-          )}
-          {statusText(status, isNew)}
-        </span>
+          {statusBadge}
 
-        <div className="flex-1" />
+          <div className="flex-1" />
 
-        {isNew ? (
-          <>
-            <Button
-              data-testid="snippet-create-cancel"
-              variant="ghost"
-              size="icon-xs"
-              onClick={onCancel}
-              className="text-muted-foreground"
-              title={i18n.t("newSnippet.cancel")}
-              aria-label={i18n.t("newSnippet.cancel")}
-            >
-              <Icon icon={X} stroke="emphasis" />
-            </Button>
-            <Button
-              data-testid="snippet-create-save"
-              variant="default"
-              size="xs"
-              onClick={onCreate}
-              disabled={!canCreate || isCreating}
-              className="ml-0.5"
-            >
-              <Icon icon={Save} size="sm" stroke="emphasis" />
-              {isCreating
-                ? i18n.t("newSnippet.creating")
-                : i18n.t("newSnippet.create")}
-            </Button>
-            <Separator orientation="vertical" className="h-3.5 mx-0.5" />
-            <Button
-              variant="destructive"
-              size="icon-xs"
-              data-testid="snippet-delete"
-              disabled
-              title={i18n.t("snippetDetail.deleteSnippet")}
-              aria-label={i18n.t("snippetDetail.deleteSnippet")}
-            >
-              <Icon icon={Trash2} stroke="emphasis" />
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              data-testid="snippet-copy"
-              onClick={handleCopy}
-              className={copied ? "text-green-600" : "text-foreground"}
-              title={i18n.t("snippetDetail.copyToClipboard")}
-              aria-label={
-                copied
-                  ? i18n.t("snippetDetail.copiedLabel")
-                  : i18n.t("snippetDetail.copyToClipboard")
-              }
-              aria-pressed={copied}
-            >
-              {copied ? (
-                <Icon icon={Check} stroke="emphasis" />
-              ) : (
-                <Icon icon={Copy} stroke="emphasis" />
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => editorRef.current?.openCommandMenu()}
-              className="text-muted-foreground"
-              title={i18n.t("snippetDetail.insertCommand")}
-              aria-label={i18n.t("snippetDetail.insertCommand")}
-            >
-              <Icon icon={SquareSlash} stroke="emphasis" />
-            </Button>
-            <Separator orientation="vertical" className="h-3.5 mx-0.5" />
-            <Button
-              variant="destructive"
-              size="icon-xs"
-              data-testid="snippet-delete"
-              onClick={() => setShowDeleteDialog(true)}
-              disabled={isDeleting}
-              title={i18n.t("snippetDetail.deleteSnippet")}
-              aria-label={i18n.t("snippetDetail.deleteSnippet")}
-            >
-              <Icon icon={Trash2} stroke="emphasis" />
-            </Button>
-          </>
-        )}
-      </div>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            data-testid="snippet-copy"
+            onClick={handleCopy}
+            className={copied ? "text-green-600" : "text-foreground"}
+            title={i18n.t("snippetDetail.copyToClipboard")}
+            aria-label={
+              copied
+                ? i18n.t("snippetDetail.copiedLabel")
+                : i18n.t("snippetDetail.copyToClipboard")
+            }
+            aria-pressed={copied}
+          >
+            {copied ? (
+              <Icon icon={Check} stroke="emphasis" />
+            ) : (
+              <Icon icon={Copy} stroke="emphasis" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => editorRef.current?.openCommandMenu()}
+            className="text-muted-foreground"
+            title={i18n.t("snippetDetail.insertCommand")}
+            aria-label={i18n.t("snippetDetail.insertCommand")}
+          >
+            <Icon icon={SquareSlash} stroke="emphasis" />
+          </Button>
+          <Separator orientation="vertical" className="h-3.5 mx-0.5" />
+          <Button
+            variant="destructive"
+            size="icon-xs"
+            data-testid="snippet-delete"
+            onClick={() => setShowDeleteDialog(true)}
+            disabled={isDeleting}
+            title={i18n.t("snippetDetail.deleteSnippet")}
+            aria-label={i18n.t("snippetDetail.deleteSnippet")}
+          >
+            <Icon icon={Trash2} stroke="emphasis" />
+          </Button>
+        </div>
+      )}
 
       <InlineError
         message={
@@ -726,105 +791,35 @@ export default function SnippetDetailView({
             {i18n.t("newSnippet.placeholderTip")}
           </p>
         )}
-      </div>
-
-      <Separator />
-      <div className="px-2 py-1.5">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <div className="flex items-center gap-1 text-muted-foreground mr-1">
-            <Icon icon={Tag} size="sm" />
-            <span className="text-[10px] font-medium uppercase tracking-wide">
-              {i18n.t("snippetDetail.tags")}
-            </span>
+        {isNew && (
+          <div
+            className="mt-3 pt-3 border-t border-border/60"
+            data-testid="snippet-composer-tags"
+          >
+            {tagEditor}
           </div>
-          {editedTags.map((tag) => (
-            <Badge
-              key={tag}
-              variant="outline"
-              className="text-[10px] px-2 py-0.5 h-5 font-normal border-border text-muted-foreground gap-1 group cursor-default hover:bg-accent transition-colors"
-            >
-              {tag}
-              <button
-                onClick={() =>
-                  setEditedTags(editedTags.filter((t) => t !== tag))
-                }
-                className="opacity-50 hover:opacity-100 transition-opacity -mr-0.5"
-                title={`Remove "${tag}"`}
-                aria-label={`Remove "${tag}"`}
-              >
-                <Icon icon={X} size="sm" stroke="emphasis" />
-              </button>
-            </Badge>
-          ))}
-          {isAddingTag ? (
-            <Input
-              ref={tagInputRef}
-              value={newTagInput}
-              onChange={(e) => setNewTagInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newTagInput.trim()) {
-                  const tag = newTagInput.trim().toLowerCase();
-                  if (!editedTags.includes(tag)) {
-                    setEditedTags([...editedTags, tag]);
-                  }
-                  setNewTagInput("");
-                  setIsAddingTag(false);
-                } else if (e.key === "Escape") {
-                  setNewTagInput("");
-                  setIsAddingTag(false);
-                }
-              }}
-              onBlur={() => {
-                if (newTagInput.trim()) {
-                  const tag = newTagInput.trim().toLowerCase();
-                  if (!editedTags.includes(tag)) {
-                    setEditedTags([...editedTags, tag]);
-                  }
-                }
-                setNewTagInput("");
-                setIsAddingTag(false);
-              }}
-              placeholder={i18n.t("snippetDetail.tagPlaceholder")}
-              className="h-5 w-20 text-[10px] px-1.5 py-0 border-dashed"
-              autoFocus
-            />
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setIsAddingTag(true);
-                setTimeout(() => tagInputRef.current?.focus(), 0);
-              }}
-              className="h-5 px-2 text-[10px] text-muted-foreground hover:text-foreground border-dashed border-border hover:border-muted-foreground"
-              title={i18n.t("snippetDetail.addTagTitle")}
-            >
-              <Icon icon={Plus} size="sm" className="mr-0.5" />
-              {i18n.t("snippetDetail.addTag")}
-            </Button>
-          )}
-        </div>
+        )}
       </div>
 
-      <Separator />
-      <div className="px-3 py-1 flex items-center justify-between text-[10px] text-muted-foreground bg-muted/30">
-        <div className="flex items-center gap-1.5">
-          <span className="font-medium">{usageCount}</span>
-          <span>{i18n.t("snippetDetail.uses")}</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {isNew ? (
-            <span>{i18n.t("newSnippet.footer")}</span>
-          ) : (
-            <>
+      {!isNew && (
+        <>
+          <Separator />
+          <div className="px-2 py-1.5">{tagEditor}</div>
+          <Separator />
+          <div className="px-3 py-1 flex items-center justify-between text-[10px] text-muted-foreground bg-muted/30">
+            <div className="flex items-center gap-1.5">
+              <span className="font-medium">{usageCount}</span>
+              <span>{i18n.t("snippetDetail.uses")}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
               <span>{i18n.t("snippetDetail.updated")}</span>
               <span className="font-medium">
                 {getRelativeTime(snippet.updatedAt)}
               </span>
-            </>
-          )}
-        </div>
-      </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {!isNew && (
         <ConfirmDialog

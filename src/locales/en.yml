@@ -41,7 +41,6 @@ dashboard:
     action: Create your first snippet
   toast:
     snippetSaved: Snippet saved
-  detailPlaceholder: Select a snippet to view details
   snippetListLabel: Snippets
   warnings:
     quotaFull:
@@ -86,7 +85,6 @@ newSnippet:
   content: Content
   contentPlaceholder: Enter your snippet content...
   placeholderTip: "Type / in the editor for commands like Clipboard, Today, Place Cursor and Pick Date."
-  footer: New snippet
 
 snippetDetail:
   deleteSnippet: Delete snippet
@@ -113,7 +111,7 @@ snippetDetail:
   syncStatus:
     saved: All changes saved
     saving: Saving changes...
-    draft: New snippet
+    draft: Draft
     failed: Changes not saved
     refused: Storage full — changes kept locally
   errors:

@@ -13,8 +13,6 @@ import {
   Plus,
   Search,
   Loader2,
-  PanelLeftClose,
-  PanelLeft,
   Settings,
   Clipboard,
   ArrowDownUp,
@@ -1070,117 +1068,62 @@ export default function Dashboard() {
           !selectedSnippet &&
           snippets.length === 0 &&
           !loading ? (
-            /* Empty state when no snippets exist */
-            <>
-              <div className="px-3 py-2 border-b flex items-center">
+            /* Empty state when no snippets exist. The pane stands on its own:
+               no header strip holding a lone sidebar toggle, and no second
+               placeholder strip for "select a snippet" when there is nothing
+               to select. The list and its footer remain the navigation chrome. */
+            <div className="flex flex-col items-center justify-center flex-1 p-8 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
+                <Icon
+                  icon={Clipboard}
+                  size="3xl"
+                  className="text-muted-foreground"
+                />
+              </div>
+              <h3 className="text-sm font-medium text-foreground mb-1">
+                {i18n.t("dashboard.emptyState.heading")}
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4 max-w-50">
+                {i18n.t("dashboard.emptyState.body")}
+              </p>
+              <div className="flex flex-col gap-2 w-full max-w-44">
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSidebarOpen(!sidebarOpen)}
-                  className="h-8 w-8"
-                  title={
-                    sidebarOpen
-                      ? i18n.t("common.hideSidebar")
-                      : i18n.t("common.showSidebar")
-                  }
-                  aria-label={
-                    sidebarOpen
-                      ? i18n.t("common.hideSidebar")
-                      : i18n.t("common.showSidebar")
+                  data-testid="empty-create"
+                  onClick={handleAddSnippet}
+                  className="h-8 text-xs w-full"
+                >
+                  <Icon icon={Plus} size="sm" className="mr-1.5" />
+                  {i18n.t("dashboard.emptyState.action")}
+                </Button>
+                <Button
+                  data-testid="empty-import"
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-7 text-xs gap-1.5"
+                  onClick={() =>
+                    browser.tabs.create({
+                      // The import panel's own route, rather than the
+                      // `#import-export` hash this used to build — which named
+                      // no section and so fell through to Library by accident.
+                      url:
+                        browser.runtime.getURL("/options.html") +
+                        "#/library/import",
+                    })
                   }
                 >
-                  {sidebarOpen ? (
-                    <Icon icon={PanelLeftClose} />
-                  ) : (
-                    <Icon icon={PanelLeft} />
-                  )}
+                  <Icon icon={ArrowDownUp} size="sm" />
+                  {i18n.t("dashboard.importButton")}
                 </Button>
+                {/*
+                  No "Open settings" button here. The sidebar footer already
+                  carries a settings icon labelled "Settings & Import/Export",
+                  one click away and present in every state, so a third route
+                  to the same page was pure duplication — and it forced an e2e
+                  test to disambiguate by exact accessible name.
+                */}
               </div>
-              <div className="flex flex-col items-center justify-center flex-1 p-8 text-center">
-                <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
-                  <Icon
-                    icon={Clipboard}
-                    size="3xl"
-                    className="text-muted-foreground"
-                  />
-                </div>
-                <h3 className="text-sm font-medium text-foreground mb-1">
-                  {i18n.t("dashboard.emptyState.heading")}
-                </h3>
-                <p className="text-xs text-muted-foreground mb-4 max-w-50">
-                  {i18n.t("dashboard.emptyState.body")}
-                </p>
-                <div className="flex flex-col gap-2 w-full max-w-44">
-                  <Button
-                    data-testid="empty-create"
-                    onClick={handleAddSnippet}
-                    className="h-8 text-xs w-full"
-                  >
-                    <Icon icon={Plus} size="sm" className="mr-1.5" />
-                    {i18n.t("dashboard.emptyState.action")}
-                  </Button>
-                  <Button
-                    data-testid="empty-import"
-                    variant="outline"
-                    size="sm"
-                    className="w-full h-7 text-xs gap-1.5"
-                    onClick={() =>
-                      browser.tabs.create({
-                        // The import panel's own route, rather than the
-                        // `#import-export` hash this used to build — which named
-                        // no section and so fell through to Library by accident.
-                        url:
-                          browser.runtime.getURL("/options.html") +
-                          "#/library/import",
-                      })
-                    }
-                  >
-                    <Icon icon={ArrowDownUp} size="sm" />
-                    {i18n.t("dashboard.importButton")}
-                  </Button>
-                  {/*
-                    No "Open settings" button here. The sidebar footer already
-                    carries a settings icon labelled "Settings & Import/Export",
-                    one click away and present in every state, so a third route
-                    to the same page was pure duplication — and it forced an e2e
-                    test to disambiguate by exact accessible name.
-                  */}
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="px-3 py-2 border-b flex items-center">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSidebarOpen(!sidebarOpen)}
-                  className="h-8 w-8"
-                  title={
-                    sidebarOpen
-                      ? i18n.t("common.hideSidebar")
-                      : i18n.t("common.showSidebar")
-                  }
-                  aria-label={
-                    sidebarOpen
-                      ? i18n.t("common.hideSidebar")
-                      : i18n.t("common.showSidebar")
-                  }
-                >
-                  {sidebarOpen ? (
-                    <Icon icon={PanelLeftClose} />
-                  ) : (
-                    <Icon icon={PanelLeft} />
-                  )}
-                </Button>
-              </div>
-              <div className="flex items-center justify-center flex-1">
-                <p className="text-sm text-muted-foreground">
-                  {i18n.t("dashboard.detailPlaceholder")}
-                </p>
-              </div>
-            </>
-          )}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

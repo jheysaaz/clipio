@@ -39,7 +39,6 @@ dashboard:
     action: Crear tu primer fragmento
   toast:
     snippetSaved: Fragmento guardado
-  detailPlaceholder: Selecciona un fragmento para ver los detalles
   snippetListLabel: Fragmentos
   warnings:
     quotaFull:
@@ -83,7 +82,6 @@ newSnippet:
   content: Contenido
   contentPlaceholder: Escribe el contenido de tu fragmento...
   placeholderTip: "Escribe / en el editor para ver comandos como Portapapeles, Hoy, Colocar cursor y Elegir fecha."
-  footer: Nuevo fragmento
 
 snippetDetail:
   deleteSnippet: Eliminar fragmento
@@ -110,7 +108,7 @@ snippetDetail:
   syncStatus:
     saved: Todos los cambios guardados
     saving: Guardando cambios...
-    draft: Fragmento nuevo
+    draft: Borrador
     failed: Los cambios no se guardaron
     refused: "Almacenamiento lleno: los cambios se conservan localmente"
   errors:

@@ -664,10 +664,10 @@ describe("SnippetDetailView — new snippet", () => {
     ).toBeInTheDocument();
   });
 
-  it("disables actions that have no record to act on yet", () => {
+  it("does not render actions that have no record to act on yet", () => {
     renderNew();
 
-    expect(screen.getByTestId("snippet-delete")).toBeDisabled();
+    expect(screen.queryByTestId("snippet-delete")).not.toBeInTheDocument();
     expect(screen.queryByTestId("snippet-undo")).not.toBeInTheDocument();
     expect(screen.queryByTestId("snippet-redo")).not.toBeInTheDocument();
     expect(
@@ -676,6 +676,28 @@ describe("SnippetDetailView — new snippet", () => {
     expect(
       screen.queryByRole("button", { name: /insert command/i })
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps one composer bar with tags in the content, not duplicate footers", () => {
+    renderNew();
+
+    expect(screen.getByTestId("snippet-create-save")).toBeInTheDocument();
+    expect(screen.getByTestId("snippet-composer-tags")).toBeInTheDocument();
+    expect(screen.queryByText("uses")).not.toBeInTheDocument();
+    expect(screen.queryByText("Updated")).not.toBeInTheDocument();
+    expect(screen.queryByText("New snippet")).not.toBeInTheDocument();
+  });
+
+  it("stages a valid draft without creating the snippet", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderNew({ initial: valid });
+
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY * 2);
+
+    // Autosave only protects the draft; the record stays uncommitted until the
+    // user presses Create.
+    expect(onAutoSave).toHaveBeenCalled();
+    expect(onCreate).not.toHaveBeenCalled();
   });
 
   it("gates Create on the identity and content fields being present", () => {
@@ -784,11 +806,12 @@ describe("SnippetDetailView — new snippet", () => {
     );
   });
 
-  it("does not claim the new snippet is saved before anything is staged", () => {
+  it("calls an untouched draft a draft, not a saved new snippet", () => {
     renderNew();
 
     expect(screen.getByTestId("snippet-sync-status")).toHaveTextContent(
-      "New snippet"
+      "Draft"
     );
+    expect(screen.queryByText("New snippet")).not.toBeInTheDocument();
   });
 });
