@@ -7,12 +7,7 @@ import {
   lazy,
   Suspense,
 } from "react";
-import {
-  useNavigate,
-  useRouterState,
-  useBlocker,
-  type ShouldBlockFn,
-} from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { i18n } from "#i18n";
 import {
   Plus,
@@ -26,21 +21,20 @@ import {
 } from "lucide-react";
 import { Icon } from "@/components/ui/icon";
 import SnippetListItem from "@/components/SnippetListItem";
-import ConfirmDialog from "@/components/ConfirmDialog";
 const SnippetDetailView = lazy(() => import("~/components/SnippetDetailView"));
 const NewSnippetView = lazy(() => import("~/components/NewSnippetView"));
 import { InlineError } from "@/components/ui/inline-error";
 import { toast } from "sonner";
 
 import type { Snippet } from "@/types";
+import { createSnippet } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   initialiseSnippets,
-  addSnippet,
-  editSnippet,
-  removeSnippet,
+  EMPTY_DRAFT,
+  setIsSaving,
   restoreRecoveredSnippets,
   dismissRecoveryBanner,
   dismissRecoveryError,
@@ -53,6 +47,7 @@ import {
   resolveInitialSnippet,
   setDraft,
   useSnippets,
+  snippetsStore,
 } from "@/store/snippets";
 import { setSearchQuery, useSearch, useVisibleSnippets } from "@/store/search";
 import { WarningBanner } from "@/components/ui/warning-banner";
@@ -68,6 +63,16 @@ import {
   SIDEBAR_MIN_WIDTH,
 } from "@/config/constants";
 import { selectNewest } from "@/lib/snippet-utils";
+import { fieldsFromSnippet } from "@/lib/snippet-draft";
+import {
+  discardDraft,
+  enqueueDelete,
+  enqueueRestore,
+  flushDraft,
+  stageEdit,
+  stageProvisionalDraft,
+} from "@/store/write-queue";
+import { getWriterId } from "@/storage/writer-id";
 import { blankSnippetDraft } from "@/lib/trigger-prefix";
 import {
   nudgeSidebarWidth,
@@ -177,66 +182,11 @@ export default function Dashboard() {
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const draggingRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const provisionalCreateIdRef = useRef<string | null>(null);
 
-  // -------------------------------------------------------------------------
-  // The unsaved-changes guard
-  // -------------------------------------------------------------------------
-  //
-  // `useBlocker` is the router's own mechanism, so one code path guards every way
-  // out of a dirty editor: a sidebar click, an arrow key, "Add snippet", the
-  // browser's Back and Forward. It was a `pendingSnippet` store field consulted by
-  // the sidebar row alone, which left Back — the one a popup user actually reaches
-  // for — walking straight past it and dropping the edit.
-  //
-  // The popup's own navigation stays `replace`-only (ADR 0011). Blocking does not
-  // change that: a blocked navigation simply does not happen, so `history.length`
-  // still never grows.
-
-  const detailHasChanges = useRef(false);
-
-  /**
-   * Whether this navigation would throw away an edit.
-   *
-   * A ref, not state: it is written from the editor's own effect on every
-   * keystroke, and `useBlocker` re-registers its listener whenever this function's
-   * identity changes — so state here would tear the blocker down and rebuild it
-   * per character.
-   *
-   * `useCallback` for the same reason, and with no dependencies on purpose: the ref
-   * it reads is stable for the life of the popup.
-   *
-   * Only a *different* address is guarded. Re-selecting the snippet already open
-   * replaces the location with the one the router is already at, and a dialog
-   * warning about edits that are not going anywhere would be a lie.
-   */
-  const shouldBlockNavigation: ShouldBlockFn = useCallback(
-    ({ current, next }) =>
-      detailHasChanges.current && current.pathname !== next.pathname,
-    []
-  );
-
-  const blocker = useBlocker({
-    shouldBlockFn: shouldBlockNavigation,
-    // No `beforeunload`: the popup is torn down on blur, so there is no document
-    // unload for a prompt to be *about* — only one the user cannot answer.
-    enableBeforeUnload: false,
-    withResolver: true,
-  });
-
-  /**
-   * Let a blocked navigation happen.
-   *
-   * The dirty flag is cleared first, and it has to be. The editor is about to
-   * unmount without ever reporting `false` — `SnippetDetailView` only reports on a
-   * *change* — so leaving the flag set would re-arm the blocker against the very
-   * navigation being permitted, and against every one after it: navigating to
-   * `#/list` mounts no editor to correct it, and the next selection would raise the
-   * dialog again, about nothing.
-   */
-  const confirmBlockedNavigation = useCallback(() => {
-    detailHasChanges.current = false;
-    blocker.proceed?.();
-  }, [blocker]);
+  // Edits are staged locally and committed by the background queue, so there is
+  // no unsaved-changes dialog to guard navigation: the work survives a popup blur
+  // or a snippet switch without asking the user to choose between them.
 
   // ---------------------------------------------------------------------------
   // Sidebar resize
@@ -512,21 +462,66 @@ export default function Dashboard() {
   // CRUD helpers
   // -------------------------------------------------------------------------
 
+  const ensureProvisionalCreateId = () => {
+    if (!provisionalCreateIdRef.current) {
+      provisionalCreateIdRef.current = crypto.randomUUID();
+    }
+    return provisionalCreateIdRef.current;
+  };
+
+  /**
+   * Autosave for the create form. One provisional id is kept for the whole form
+   * session, so typing a name cannot create several snippets, and the explicit
+   * Create button commits the same record it has been staging all along.
+   */
+  const handleAutoSaveNewSnippet = useCallback(
+    async (draft: typeof draftSnippet) => {
+      const id = ensureProvisionalCreateId();
+      await stageProvisionalDraft(id, draft);
+      await flushDraft(id, snippetsStore.state.snippets);
+    },
+    // `ensureProvisionalCreateId` only touches a ref, so it is safe to call from a
+    // stable callback; the store singleton is stable too.
+    []
+  );
+
   // Async because the shortcut default comes from storage. Not pre-filled in
   // `NewSnippetView` on mount instead: this sets the draft *before* navigating, so
   // the form mounts with a non-empty shortcut and a mount-time prefill would be
   // skipped — and if it were not, it would be a second writer racing the draft it
   // was handed.
   const handleAddSnippet = async () => {
+    provisionalCreateIdRef.current = null;
     setDraftSnippet(await blankSnippetDraft());
     startCreating();
   };
 
   const handleCancelCreate = async () => {
+    const id = provisionalCreateIdRef.current;
+    if (id) await discardDraft(id);
+    provisionalCreateIdRef.current = null;
     setDraftSnippet(await blankSnippetDraft());
     const newest = selectNewest(snippets);
     if (newest) selectSnippet(newest.id);
     else showList();
+  };
+
+  const createErrorFor = (problem?: string): string => {
+    const message =
+      problem === "emptyLabel"
+        ? i18n.t("snippetDetail.errors.emptyLabel")
+        : problem === "emptyShortcut"
+          ? i18n.t("snippetDetail.errors.emptyShortcut")
+          : problem === "shortcutSpaces"
+            ? i18n.t("snippetDetail.errors.shortcutSpaces")
+            : problem === "shortcutConflict"
+              ? i18n.t("snippetDetail.errors.shortcutConflict")
+              : problem === "emptyContent"
+                ? i18n.t("snippetDetail.errors.emptyContent")
+                : problem === "malformedMedia"
+                  ? i18n.t("snippetDetail.errors.malformedMedia")
+                  : i18n.t("snippetDetail.errors.failedToSave");
+    return message;
   };
 
   const handleSaveNewSnippet = async () => {
@@ -537,33 +532,47 @@ export default function Dashboard() {
     )
       return;
 
-    // `addSnippet` owns the saving flag, the error and the draft reset, so the
-    // button cannot stay disabled after a refusal and the message cannot be shown
-    // against a draft that has already been cleared.
-    const result = await addSnippet(draftSnippet);
+    const id = ensureProvisionalCreateId();
+    setIsSaving(true);
+    await stageProvisionalDraft(id, draftSnippet);
+    const result = await flushDraft(id, snippetsStore.state.snippets);
+    setIsSaving(false);
     if (!result.ok) {
-      // The create view stays OPEN. Closing it here unmounts `NewSnippetView`,
-      // which is the component that renders `createError` — so the explanation was
-      // set and then immediately made invisible and the user watched their snippet
-      // silently not save. Keeping the form open also lets them shorten the
-      // snippet and retry without starting over.
+      // Keep the form open: it is the component that renders `createError`, and
+      // the user needs the typed text to fix the problem.
+      snippetsStore.setState((prev) => ({
+        ...prev,
+        createError: createErrorFor(result.error),
+      }));
       return;
     }
-    // Address the new snippet rather than only showing it: the id is now in the
-    // URL, so "copy link to this snippet" needs no work to start working.
-    selectSnippet(result.value.id);
+
+    // Optimistically address the new snippet. The background commits it to the
+    // authoritative store, but the route must work before that round trip ends.
+    const provisional: Snippet = {
+      ...createSnippet(draftSnippet, await getWriterId()),
+      id,
+    };
+    snippetsStore.setState((prev) => ({
+      ...prev,
+      snippets: [...prev.snippets, provisional],
+      draft: { ...EMPTY_DRAFT },
+      createError: null,
+    }));
+    provisionalCreateIdRef.current = null;
+    selectSnippet(id);
     toast.success(i18n.t("dashboard.toast.snippetSaved"));
   };
 
   const handleDeleteSnippet = async (snippetId: string) => {
-    // `removeSnippet` throws on failure; this propagates to the delete dialog,
-    // which shows a message rather than pretending it worked.
-    const { remaining } = await removeSnippet(snippetId);
-    // The snippet is gone, so there is nothing left for the unsaved-changes guard
-    // to protect — and the navigation below would otherwise be blocked by edits to
-    // a snippet that no longer exists, raising the dialog *after* the delete had
-    // already succeeded.
-    detailHasChanges.current = false;
+    const snippet = findSnippet(snippetsStore.state.snippets, snippetId);
+    if (!snippet) return;
+    await discardDraft(snippetId);
+    await enqueueDelete(snippet);
+    const remaining = snippetsStore.state.snippets.filter(
+      (s) => s.id !== snippetId
+    );
+    snippetsStore.setState((prev) => ({ ...prev, snippets: remaining }));
     // Deleting the addressed snippet has to move the address too, or the URL
     // would keep pointing at something that no longer exists.
     if (selectedSnippetId === snippetId) {
@@ -571,12 +580,34 @@ export default function Dashboard() {
       if (newest) selectSnippet(newest.id);
       else showList();
     }
-    toast.success(i18n.t("dashboard.toast.snippetDeleted"));
+  };
+
+  /** Offer a one-step restore for the snippet just deleted. */
+  const handleUndoDelete = (snippet: Snippet) => {
+    toast(i18n.t("snippetDetail.deleteToast.message", [snippet.label]), {
+      action: {
+        label: i18n.t("snippetDetail.deleteToast.undo"),
+        onClick: async () => {
+          await enqueueRestore(snippet, fieldsFromSnippet(snippet));
+          snippetsStore.setState((prev) => ({
+            ...prev,
+            snippets: [...prev.snippets, snippet],
+          }));
+          selectSnippet(snippet.id);
+        },
+      },
+    });
   };
 
   const handleUpdateSnippet = async (updated: Snippet) => {
-    await editSnippet(updated);
-    toast.success(i18n.t("dashboard.toast.snippetUpdated"));
+    // Inline rename is an edit like any other: stage it, then let the background
+    // commit it with the same LWW and history rules as the editor's autosave.
+    await stageEdit(updated, fieldsFromSnippet(updated));
+    await flushDraft(updated.id, snippetsStore.state.snippets);
+    snippetsStore.setState((prev) => ({
+      ...prev,
+      snippets: prev.snippets.map((s) => (s.id === updated.id ? updated : s)),
+    }));
   };
 
   // -------------------------------------------------------------------------
@@ -864,11 +895,8 @@ export default function Dashboard() {
                         selectedSnippet?.id === snippet.id && !isCreating
                       }
                       onClick={() => {
-                        // No dirty check here on purpose. `selectSnippet` goes
-                        // through the router, so `useBlocker` already intercepted
-                        // this if the editor had unsaved changes — a second guard
-                        // would be a second answer to the same question, and the
-                        // two could disagree.
+                        // No dirty check here on purpose. Edits are staged in
+                        // local storage, so switching snippets cannot lose them.
                         if (isCreating) {
                           setDraftSnippet({
                             label: "",
@@ -928,6 +956,7 @@ export default function Dashboard() {
               <NewSnippetView
                 draftSnippet={draftSnippet}
                 onDraftChange={setDraftSnippet}
+                onAutoSave={handleAutoSaveNewSnippet}
                 onSave={handleSaveNewSnippet}
                 onCancel={handleCancelCreate}
                 isSaving={isSaving}
@@ -954,12 +983,9 @@ export default function Dashboard() {
                 key={selectedSnippet.id}
                 snippet={selectedSnippet}
                 onDelete={handleDeleteSnippet}
-                onUpdate={handleUpdateSnippet}
+                onUndoDelete={handleUndoDelete}
                 sidebarOpen={sidebarOpen}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-                onHasChanges={(v) => {
-                  detailHasChanges.current = v;
-                }}
               />
             </Suspense>
           ) : snippets.length === 0 && !loading ? (
@@ -1076,26 +1102,6 @@ export default function Dashboard() {
           )}
         </div>
       </div>
-
-      {/*
-        Unsaved changes guard. Driven entirely by the router's blocker, so it opens
-        for a sidebar click, an arrow key, "Add snippet" or the browser's Back
-        alike — one dialog for one question, asked by the thing that actually knows
-        whether the navigation is going to happen.
-      */}
-      <ConfirmDialog
-        isOpen={blocker.status === "blocked"}
-        // `reset` keeps the user where they are, which is what "Keep editing"
-        // means. It is also what the alert dialog calls on Escape or an outside
-        // click, so every way out of this dialog other than Discard is a cancel.
-        onClose={() => blocker.reset?.()}
-        onConfirm={confirmBlockedNavigation}
-        title={i18n.t("snippetDetail.unsavedChanges.title")}
-        message={i18n.t("snippetDetail.unsavedChanges.message")}
-        confirmText={i18n.t("snippetDetail.unsavedChanges.discard")}
-        cancelText={i18n.t("snippetDetail.unsavedChanges.keepEditing")}
-        confirmVariant="danger"
-      />
     </div>
   );
 }

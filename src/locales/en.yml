@@ -41,8 +41,6 @@ dashboard:
     action: Create your first snippet
   toast:
     snippetSaved: Snippet saved
-    snippetDeleted: Snippet deleted
-    snippetUpdated: Snippet updated
   detailPlaceholder: Select a snippet to view details
   snippetListLabel: Snippets
   warnings:
@@ -94,9 +92,8 @@ snippetDetail:
   deleteSnippet: Delete snippet
   copyToClipboard: Copy to clipboard
   insertCommand: Insert command
-  saving: Saving...
-  save: Save
-  savedLabel: Saved
+  undo: Undo
+  redo: Redo
   copiedLabel: Copied!
   editorPlaceholder: "Start typing your snippet content here or use '/' for commands..."
   tags: Tags
@@ -107,20 +104,28 @@ snippetDetail:
   updated: Updated
   deleteDialog:
     title: Delete Snippet
-    message: 'Are you sure you want to delete "$1"? This action cannot be undone.'
+    message: 'Delete "$1"? You can undo this from the notification.'
     confirm: Delete
     cancel: Cancel
-  unsavedChanges:
-    title: Unsaved changes
-    message: You have unsaved changes. If you switch snippets now, your changes will be lost.
-    discard: Discard changes
-    keepEditing: Keep editing
+  deleteToast:
+    message: '$1 deleted'
+    undo: Undo
+  syncStatus:
+    saved: All changes saved
+    pending: Saving...
+    failed: Changes not saved
+    refused: Storage full — changes kept locally
   errors:
     failedToCopy: Failed to copy to clipboard
     failedToSave: Failed to save snippet. Please try again.
     failedToDelete: Failed to delete snippet. Please try again.
-  status:
-    saved: Snippet saved!
+    failedToStage: The edit is saved locally but could not be queued.
+    emptyLabel: A snippet needs a name before it can be saved.
+    emptyShortcut: A snippet needs a shortcut before it can be saved.
+    shortcutSpaces: A shortcut cannot contain spaces.
+    shortcutConflict: That shortcut belongs to another snippet.
+    emptyContent: A snippet needs content before it can be saved.
+    malformedMedia: One of the media placeholders is incomplete.
 
 confirmDialog:
   loading: Loading...

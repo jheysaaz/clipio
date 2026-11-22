@@ -1,14 +1,11 @@
 /**
- * Tests for src/components/SnippetDetailView.tsx
+ * Tests for the autosaving editor.
  *
- * The detail pane was at 0% coverage while holding the most failure-prone logic
- * in the app: a save that early-returns on no change, an async delete behind a
- * confirm dialog, three separate error surfaces, tag add/remove with duplicate
- * suppression, and a dirty-state report back to the parent.
- *
- * The paths worth pinning are the ones where a silent failure loses a user's
- * work — a rejected save that shows nothing, a delete that fires on cancel, or
- * a tag that quietly duplicates.
+ * Every assertion below is about a decision the component owns: when to stage
+ * an edit, when to enqueue it, what undo actually restores, and which failure is
+ * shown. The editor itself is replaced with a textarea because happy-dom cannot
+ * drive Plate, and the queue functions are mocked so a rendering test never
+ * writes to extension storage.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,64 +13,57 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import SnippetDetailView from "./SnippetDetailView";
 import type { Snippet } from "@/types";
+import type { EditorFields } from "@/lib/snippet-draft";
+import { undoAvailabilityStore, writeQueueStore } from "@/store/write-queue";
+import { resetSnippetsStoreForTests, snippetsStore } from "@/store/snippets";
 
-const copyMarkdownAsRichText = vi.fn();
-const getSnippetUsageCount = vi.fn();
-const incrementSnippetUsage = vi.fn();
-const editSnippet = vi.fn();
+const q = vi.hoisted(() => ({
+  stageEdit: vi.fn<typeof import("@/store/write-queue").stageEdit>(),
+  flushDraft: vi.fn<typeof import("@/store/write-queue").flushDraft>(),
+  undoLastEdit: vi.fn<typeof import("@/store/write-queue").undoLastEdit>(),
+  redoLastEdit: vi.fn<typeof import("@/store/write-queue").redoLastEdit>(),
+  discardUnflushedDraft:
+    vi.fn<typeof import("@/store/write-queue").discardUnflushedDraft>(),
+  refreshSyncStatus:
+    vi.fn<typeof import("@/store/write-queue").refreshSyncStatus>(),
+  refreshUndoAvailability:
+    vi.fn<typeof import("@/store/write-queue").refreshUndoAvailability>(),
+}));
 
-vi.mock("@/lib/sentry", () => ({ captureError: vi.fn() }));
-
-import { captureError } from "@/lib/sentry";
-import { SnippetWriteRefused } from "@/store/snippets";
-
-/**
- * `editSnippet` is the store's own writer and is what the tag autosave calls.
- *
- * Only that one function is replaced: `isWriteRefusal` and `SnippetWriteRefused`
- * are the component's error contract and have to stay real, so a test cannot
- * pass by both sides of the branch agreeing on a fabricated type.
- *
- * The real one reaches the storage manager, and the manager's IndexedDB refresh
- * fails in this environment — every autosave would log a stack trace and the
- * write would be a side effect of a rendering test.
- */
-vi.mock("@/store/snippets", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/store/snippets")>();
+vi.mock("@/store/write-queue", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/store/write-queue")>();
   return {
     ...actual,
-    editSnippet: (...args: unknown[]) => editSnippet(...args),
+    stageEdit: q.stageEdit,
+    flushDraft: q.flushDraft,
+    undoLastEdit: q.undoLastEdit,
+    redoLastEdit: q.redoLastEdit,
+    discardUnflushedDraft: q.discardUnflushedDraft,
+    refreshSyncStatus: q.refreshSyncStatus,
+    refreshUndoAvailability: q.refreshUndoAvailability,
   };
 });
 
+vi.mock("@/lib/sentry", () => ({ captureError: vi.fn() }));
+import { captureError } from "@/lib/sentry";
+import { SnippetWriteRefused } from "@/store/snippets";
+
 vi.mock("@/lib/copy-markdown-as-rich-text", () => ({
-  copyMarkdownAsRichText: (...args: unknown[]) =>
-    copyMarkdownAsRichText(...args),
+  copyMarkdownAsRichText: vi.fn(),
 }));
+import { copyMarkdownAsRichText } from "@/lib/copy-markdown-as-rich-text";
 
 vi.mock("@/storage/usage-tracking", () => ({
-  getSnippetUsageCount: (...args: unknown[]) => getSnippetUsageCount(...args),
-  incrementSnippetUsage: (...args: unknown[]) => incrementSnippetUsage(...args),
+  getSnippetUsageCount: vi.fn(),
+  incrementSnippetUsage: vi.fn(),
 }));
+import {
+  getSnippetUsageCount,
+  incrementSnippetUsage,
+} from "@/storage/usage-tracking";
 
-const editorCalls = vi.hoisted(() => ({
-  openCommandMenu: vi.fn(),
-}));
+const editorCalls = vi.hoisted(() => ({ openCommandMenu: vi.fn() }));
 
-/**
- * The editor is replaced with a textarea plus a ref and a copy-error trigger.
- *
- * RichTextEditor.tsx is excluded from coverage — it is Plate/Slate presentation,
- * exercised by the editor e2e specs. What this file owns is the wiring into it:
- * that content edits reach the draft, that the insert-command button reaches the
- * editor's imperative handle, and that a copy failure inside the editor surfaces
- * as an inline error. All three are unreachable against the real component,
- * because contenteditable does not drive Plate from happy-dom and the ref is
- * internal to it.
- *
- * The textarea carries the same aria-label the real editor does, so the existing
- * queries in this file are unaffected.
- */
 vi.mock("@/components/editor", async () => {
   const React = await import("react");
   type Props = {
@@ -81,7 +71,6 @@ vi.mock("@/components/editor", async () => {
     onChange: (next: string) => void;
     onCopyError?: () => void;
     ariaLabel?: string;
-    placeholder?: string;
   };
   const RichTextEditor = React.forwardRef(function RichTextEditor(
     { value, onChange, onCopyError, ariaLabel }: Props,
@@ -94,7 +83,7 @@ vi.mock("@/components/editor", async () => {
       <div>
         <textarea
           aria-label={ariaLabel ?? "Content"}
-          defaultValue={value}
+          value={value}
           onChange={(e) => onChange(e.target.value)}
         />
         <button type="button" onClick={() => onCopyError?.()}>
@@ -107,19 +96,26 @@ vi.mock("@/components/editor", async () => {
 });
 
 const onDelete = vi.fn();
-const onUpdate = vi.fn();
-const onHasChanges = vi.fn();
+const onUndoDelete = vi.fn();
 const onToggleSidebar = vi.fn();
 
 const snippet: Snippet = {
-  id: "3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b",
+  id: "s1",
   label: "Address",
   shortcut: "/addr",
   content: "123 Fake Street",
   tags: ["personal"],
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
+  rev: 1,
 } as Snippet;
+
+const fields: EditorFields = {
+  label: snippet.label,
+  shortcut: snippet.shortcut,
+  content: snippet.content,
+  tags: snippet.tags,
+};
 
 function renderView(
   props: Partial<React.ComponentProps<typeof SnippetDetailView>> = {}
@@ -128,252 +124,273 @@ function renderView(
     <SnippetDetailView
       snippet={snippet}
       onDelete={onDelete}
-      onUpdate={onUpdate}
-      onHasChanges={onHasChanges}
+      onUndoDelete={onUndoDelete}
       onToggleSidebar={onToggleSidebar}
       {...props}
     />
   );
 }
 
-/** The autosave window, as `autosave.ts` defines it. */
 const AUTOSAVE_DELAY = 600;
 
-/** A snippet with enough tags that two can be removed inside one window. */
-const tagged: Snippet = {
-  ...snippet,
-  tags: ["personal", "work", "urgent"],
-} as Snippet;
-
-function deferredSnippet() {
-  let release!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return { gate, release };
-}
-
-describe("SnippetDetailView", () => {
+describe("SnippetDetailView autosave", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getSnippetUsageCount.mockResolvedValue(3);
-    incrementSnippetUsage.mockResolvedValue(4);
-    copyMarkdownAsRichText.mockResolvedValue(undefined);
-    editSnippet.mockResolvedValue(undefined);
+    // The stores are module singletons: a prior test's queue state must not
+    // decide whether this test starts with Undo enabled.
+    writeQueueStore.setState(() => ({ pending: 0, failed: 0, refused: 0 }));
+    undoAvailabilityStore.setState(() => ({
+      snippetId: null,
+      canUndo: false,
+      canRedo: false,
+    }));
+    resetSnippetsStoreForTests();
+    snippetsStore.setState((prev) => ({ ...prev, snippets: [snippet] }));
+    vi.mocked(getSnippetUsageCount).mockResolvedValue(3);
+    vi.mocked(incrementSnippetUsage).mockResolvedValue(4);
+    vi.mocked(copyMarkdownAsRichText).mockResolvedValue(undefined);
     onDelete.mockResolvedValue(undefined);
-    onUpdate.mockResolvedValue(undefined);
-    vi.mocked(captureError).mockClear();
+    q.flushDraft.mockResolvedValue({ ok: true });
+    q.undoLastEdit.mockResolvedValue({ ok: false, fields: null });
+    q.redoLastEdit.mockResolvedValue({ ok: false, fields: null });
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   // --- display ---------------------------------------------------------
 
-  it("shows the usage count for the snippet", async () => {
+  it("renders the snippet content, tags and usage count", async () => {
     renderView();
 
-    // Loaded asynchronously, so this also proves the effect wired it up.
+    expect(screen.getByRole("textbox", { name: /content/i })).toHaveValue(
+      snippet.content
+    );
+    expect(screen.getByText("personal")).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByText("3", { exact: true })).toBeInTheDocument()
     );
   });
 
-  it("renders the existing tags", () => {
-    renderView();
-
-    expect(screen.getByText("personal")).toBeInTheDocument();
-  });
-
-  it("renders no usage count before the read resolves", () => {
-    getSnippetUsageCount.mockReturnValue(new Promise(() => {}));
-    renderView();
-
-    // Guards against a test that would pass if the count were hardcoded.
-    expect(screen.queryByText("3", { exact: true })).not.toBeInTheDocument();
-  });
-
   it("keeps working when the usage count cannot be read", async () => {
-    getSnippetUsageCount.mockRejectedValue(new Error("storage unavailable"));
+    vi.mocked(getSnippetUsageCount).mockRejectedValue(new Error("unavailable"));
     renderView();
 
-    // The failure is reported to Sentry rather than thrown, so the pane must
-    // still render the snippet.
     expect(
       await screen.findByRole("button", { name: /delete snippet/i })
     ).toBeEnabled();
+    expect(captureError).toHaveBeenCalled();
   });
 
-  // --- save gating -----------------------------------------------------
+  // --- staging ----------------------------------------------------------
 
-  it("disables save when nothing has changed", () => {
+  it("does not stage anything on mount", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     renderView();
 
-    expect(screen.getByTestId("snippet-save")).toBeDisabled();
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY * 2);
+
+    // An autosave that fires on mount bumps the revision of a snippet nobody
+    // touched, and records a history snapshot that cannot be explained.
+    expect(q.stageEdit).not.toHaveBeenCalled();
   });
 
-  it("does NOT call onUpdate when save is pressed with no changes", async () => {
-    const user = userEvent.setup();
+  it("stages the newest fields once a content burst settles", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderView();
 
-    await user.click(screen.getByTestId("snippet-save"));
+    await user.click(screen.getByRole("textbox", { name: /content/i }));
+    await user.keyboard("!");
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY - 100);
+    await user.keyboard("!");
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
 
-    // The button is disabled, and handleSave also early-returns on !hasChanges.
-    // Both must hold: a guard that only the disabled attribute protects would
-    // start saving the moment anything re-enabled the button.
-    expect(onUpdate).not.toHaveBeenCalled();
+    expect(q.stageEdit).toHaveBeenCalledTimes(1);
+    expect(q.stageEdit.mock.calls[0]![1]).toMatchObject({
+      content: "123 Fake Street!!",
+      tags: ["personal"],
+    });
   });
 
-  it("enables save once something actually changed", async () => {
-    const user = userEvent.setup();
-    renderView();
-
-    // Removing a tag is the cheapest real edit; typing into the Slate editor
-    // would test the editor, not this component.
-    await user.click(
-      screen.getByRole("button", { name: /remove "personal"/i })
-    );
-
-    expect(screen.getByTestId("snippet-save")).toBeEnabled();
-  });
-
-  it("disables save and reports progress while a save is in flight", async () => {
-    const user = userEvent.setup();
-    let release: (() => void) | undefined;
-    onUpdate.mockReturnValue(
-      new Promise<void>((resolve) => {
-        release = resolve;
-      })
-    );
-    renderView();
+  it("enqueues a staged edit when the pane closes", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { unmount } = renderView();
 
     await user.click(
       screen.getByRole("button", { name: /remove "personal"/i })
     );
-    await user.click(screen.getByTestId("snippet-save"));
+    // The debounce is still pending when the popup would disappear.
+    expect(q.flushDraft).not.toHaveBeenCalled();
+    unmount();
+    await vi.advanceTimersByTimeAsync(0);
 
-    // A second click while the first is pending must not fire a second save.
-    expect(screen.getByTestId("snippet-save")).toBeDisabled();
-    expect(await screen.findByText(/saving/i)).toBeInTheDocument();
-
-    release?.();
-    await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1));
+    expect(q.flushDraft).toHaveBeenCalledTimes(1);
   });
 
-  it("confirms a completed save to assistive tech", async () => {
-    const user = userEvent.setup();
+  it("reports a validation failure from the queue", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    q.flushDraft.mockResolvedValue({ ok: false, error: "emptyContent" });
     renderView();
 
     await user.click(
       screen.getByRole("button", { name: /remove "personal"/i })
     );
-    await user.click(screen.getByTestId("snippet-save"));
-
-    // The visible label changes, but a screen-reader user needs the polite live
-    // region too — that is the only announcement on save.
+    // Validation is reported when the queued draft is flushed, which is what a
+    // popup blur does. The debounce need not elapse first.
+    window.dispatchEvent(new Event("pagehide"));
     await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent(/saved/i)
+      expect(
+        screen.getByText("A snippet needs content before it can be saved.")
+      ).toBeInTheDocument()
     );
+    // The message is shown, not filed as an exception.
+    expect(captureError).not.toHaveBeenCalled();
   });
 
-  it("surfaces a save failure instead of failing silently", async () => {
-    const user = userEvent.setup();
-    onUpdate.mockRejectedValue(new Error("sync storage is full"));
+  // --- undo / redo ------------------------------------------------------
+
+  it("starts with undo and redo disabled", () => {
     renderView();
 
-    await user.click(
-      screen.getByRole("button", { name: /remove "personal"/i })
-    );
-    await user.click(screen.getByTestId("snippet-save"));
-
-    // The user's edit was rejected upstream. Showing nothing here is the worst
-    // outcome: the pane looks saved and the work is gone.
-    expect(
-      await screen.findByText("Failed to save snippet. Please try again.")
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("snippet-undo")).toBeDisabled();
+    expect(screen.getByTestId("snippet-redo")).toBeDisabled();
   });
 
-  it("shows the store's explanation for a quota refusal, and does not report it", async () => {
-    // The case the generic-message assertion above cannot distinguish.
-    //
-    // A refusal is not an exception: it is an expected condition with an
-    // explanation already worked out. Before this, `Dashboard` threw the
-    // localised string as a bare `Error`, this handler filed it to Sentry as
-    // user-facing copy, and then replaced it with "please try again" — so the
-    // limit detail the store had computed was thrown away, and every user who hit
-    // the quota ceiling produced an exception report.
+  it("enables undo after an edit is staged", async () => {
+    const { undoAvailabilityStore } = await import("@/store/write-queue");
+    undoAvailabilityStore.setState(() => ({
+      snippetId: "s1",
+      canUndo: true,
+      canRedo: false,
+    }));
+    renderView();
+
+    expect(screen.getByTestId("snippet-undo")).toBeEnabled();
+    expect(screen.getByTestId("snippet-redo")).toBeDisabled();
+  });
+
+  it("undoes to the fields returned by the queue", async () => {
+    const { undoAvailabilityStore } = await import("@/store/write-queue");
+    undoAvailabilityStore.setState(() => ({
+      snippetId: "s1",
+      canUndo: true,
+      canRedo: false,
+    }));
+    const restored: EditorFields = { ...fields, content: "before" };
+    q.undoLastEdit.mockResolvedValue({ ok: true, fields: restored });
     const user = userEvent.setup();
-    onUpdate.mockRejectedValue(
-      new SnippetWriteRefused(
-        "This snippet is 210.5 KB and sync allows 100.0 KB."
+    renderView();
+
+    await user.click(screen.getByTestId("snippet-undo"));
+
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: /content/i })).toHaveValue(
+        "before"
       )
     );
-    renderView();
-
-    await user.click(
-      screen.getByRole("button", { name: /remove "personal"/i })
-    );
-    await user.click(screen.getByTestId("snippet-save"));
-
-    expect(
-      await screen.findByText(
-        "This snippet is 210.5 KB and sync allows 100.0 KB."
-      )
-    ).toBeInTheDocument();
-    // Not the generic copy: the specific one replaced it.
-    expect(
-      screen.queryByText("Failed to save snippet. Please try again.")
-    ).not.toBeInTheDocument();
-    expect(captureError).not.toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ action: "saveSnippet" })
-    );
+    expect(q.discardUnflushedDraft).toHaveBeenCalledWith("s1");
+    expect(q.undoLastEdit.mock.calls[0]![1]).toMatchObject(fields);
   });
 
-  it("re-enables save after a failed save so the edit is not stranded", async () => {
+  it("redoes through the same queue path", async () => {
+    const { undoAvailabilityStore } = await import("@/store/write-queue");
+    undoAvailabilityStore.setState(() => ({
+      snippetId: "s1",
+      canUndo: false,
+      canRedo: true,
+    }));
+    q.redoLastEdit.mockResolvedValue({
+      ok: true,
+      fields: { ...fields, content: "after" },
+    });
     const user = userEvent.setup();
-    onUpdate.mockRejectedValue(new Error("sync storage is full"));
     renderView();
 
-    await user.click(
-      screen.getByRole("button", { name: /remove "personal"/i })
-    );
-    await user.click(screen.getByTestId("snippet-save"));
+    await user.click(screen.getByTestId("snippet-redo"));
 
-    // handleSave clears isSaving in a finally block. If it did not, the button
-    // would stay disabled and the user could never retry the save.
     await waitFor(() =>
-      expect(screen.getByTestId("snippet-save")).toBeEnabled()
+      expect(screen.getByRole("textbox", { name: /content/i })).toHaveValue(
+        "after"
+      )
     );
-    // And it must not claim success.
-    expect(screen.getByRole("status")).toHaveTextContent("");
+    expect(q.redoLastEdit).toHaveBeenCalledTimes(1);
   });
 
-  // --- delete flow -----------------------------------------------------
+  it("supports the keyboard shortcut for undo", async () => {
+    const { undoAvailabilityStore } = await import("@/store/write-queue");
+    undoAvailabilityStore.setState(() => ({
+      snippetId: "s1",
+      canUndo: true,
+      canRedo: false,
+    }));
+    q.undoLastEdit.mockResolvedValue({
+      ok: true,
+      fields: { ...fields, content: "before" },
+    });
+    const user = userEvent.setup();
+    renderView();
 
-  it("does not delete until the confirm dialog is confirmed", async () => {
+    // The shortcut is handled on the editor pane, so the key event must start
+    // inside it rather than on `document.body`.
+    await user.click(screen.getByRole("textbox", { name: /content/i }));
+    await user.keyboard("{Control>}z{/Control}");
+
+    await waitFor(() => expect(q.undoLastEdit).toHaveBeenCalledTimes(1));
+  });
+
+  // --- sync status ------------------------------------------------------
+
+  it("shows a compact saved status when the queue is empty", () => {
+    renderView();
+
+    expect(screen.getByTestId("snippet-sync-status")).toHaveTextContent(
+      "All changes saved"
+    );
+  });
+
+  it("surfaces a refusal rather than claiming success", async () => {
+    const { writeQueueStore } = await import("@/store/write-queue");
+    writeQueueStore.setState(() => ({
+      pending: 0,
+      failed: 0,
+      refused: 1,
+      lastError: "sync is full",
+    }));
+    renderView();
+
+    expect(screen.getByTestId("snippet-sync-status")).toHaveTextContent(
+      "Storage full"
+    );
+  });
+
+  // --- delete -----------------------------------------------------------
+
+  it("does not delete until the dialog is confirmed", async () => {
     const user = userEvent.setup();
     renderView();
 
     await user.click(screen.getByTestId("snippet-delete"));
 
-    // Opening the dialog must not delete anything.
     expect(onDelete).not.toHaveBeenCalled();
     expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
   });
 
-  it("deletes after the dialog is confirmed", async () => {
+  it("deletes and offers an undo after confirmation", async () => {
     const user = userEvent.setup();
     renderView();
 
     await user.click(screen.getByTestId("snippet-delete"));
     await user.click(await screen.findByRole("button", { name: /^delete$/i }));
 
-    await waitFor(() => expect(onDelete).toHaveBeenCalledWith(snippet.id));
+    await waitFor(() => expect(onDelete).toHaveBeenCalledWith("s1"));
+    expect(onUndoDelete).toHaveBeenCalledWith(snippet);
   });
 
-  it("does NOT delete when the dialog is cancelled", async () => {
+  it("does not delete when the dialog is cancelled", async () => {
     const user = userEvent.setup();
     renderView();
 
@@ -381,108 +398,54 @@ describe("SnippetDetailView", () => {
     await user.click(await screen.findByRole("button", { name: /cancel/i }));
 
     expect(onDelete).not.toHaveBeenCalled();
-    await waitFor(() =>
-      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
-    );
   });
 
-  it("surfaces a delete failure instead of failing silently", async () => {
+  it("surfaces a delete failure", async () => {
     const user = userEvent.setup();
-    onDelete.mockRejectedValue(new Error("sync quota exceeded"));
+    onDelete.mockRejectedValue(new Error("denied"));
     renderView();
 
     await user.click(screen.getByTestId("snippet-delete"));
     await user.click(await screen.findByRole("button", { name: /^delete$/i }));
 
-    // A rejected delete that showed nothing would leave the user believing the
-    // snippet was gone.
-    expect(await screen.findByText(/delete|failed|error/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText("Failed to delete snippet. Please try again.")
+    ).toBeInTheDocument();
   });
 
-  it("discards unsaved edits when a different snippet is selected", async () => {
+  it("shows the store's quota explanation without reporting it", async () => {
     const user = userEvent.setup();
-    const other: Snippet = {
-      ...snippet,
-      id: "other-id",
-      label: "Email",
-      tags: ["work"],
-    };
-    const { rerender } = renderView();
-
-    await user.click(
-      screen.getByRole("button", { name: /remove "personal"/i })
+    onDelete.mockRejectedValue(
+      new SnippetWriteRefused(
+        "This snippet is 210.5 KB and sync allows 100.0 KB."
+      )
     );
-    expect(screen.queryByText("personal")).not.toBeInTheDocument();
+    renderView();
 
-    rerender(
-      <SnippetDetailView
-        snippet={other}
-        onDelete={onDelete}
-        onUpdate={onUpdate}
-        onHasChanges={onHasChanges}
-        onToggleSidebar={onToggleSidebar}
-      />
-    );
+    await user.click(screen.getByTestId("snippet-delete"));
+    await user.click(await screen.findByRole("button", { name: /^delete$/i }));
 
-    // The component keeps editedContent/editedTags in local state. Without the
-    // reset on id change, selecting the next snippet would show the previous
-    // one's unsaved edits — and saving would write them onto the new snippet.
-    expect(await screen.findByText("work")).toBeInTheDocument();
-    expect(screen.queryByText("personal")).not.toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "This snippet is 210.5 KB and sync allows 100.0 KB."
+      )
+    ).toBeInTheDocument();
+    expect(captureError).not.toHaveBeenCalled();
   });
 
-  it("does not report changes again after switching snippets", async () => {
-    const user = userEvent.setup();
-    const other: Snippet = {
-      ...snippet,
-      id: "other-id",
-      label: "Email",
-      tags: [],
-    };
-    const { rerender } = renderView();
+  // --- tags and copy ----------------------------------------------------
 
-    await user.click(
-      screen.getByRole("button", { name: /remove "personal"/i })
-    );
-    onHasChanges.mockClear();
-
-    rerender(
-      <SnippetDetailView
-        snippet={other}
-        onDelete={onDelete}
-        onUpdate={onUpdate}
-        onHasChanges={onHasChanges}
-        onToggleSidebar={onToggleSidebar}
-      />
-    );
-
-    // Left true, the parent would keep the unsaved-changes guard armed for a
-    // snippet the user never edited.
-    await waitFor(() => expect(onHasChanges).toHaveBeenCalledWith(false));
-  });
-
-  // --- tags ------------------------------------------------------------
-
-  it("adds a tag on Enter, lowercased", async () => {
+  it("adds a tag on Enter and does not duplicate it", async () => {
     const user = userEvent.setup();
     renderView();
 
     await user.click(screen.getByRole("button", { name: /add tag/i }));
     await user.type(screen.getByPlaceholderText(/tag/i), "Work{Enter}");
-
     expect(await screen.findByText("work")).toBeInTheDocument();
-  });
-
-  it("does not add a duplicate tag", async () => {
-    const user = userEvent.setup();
-    renderView();
 
     await user.click(screen.getByRole("button", { name: /add tag/i }));
-    // "personal" already exists, so re-adding it must be a no-op rather than
-    // a second badge with the same key.
-    await user.type(screen.getByPlaceholderText(/tag/i), "personal{Enter}");
-
-    expect(screen.getAllByText("personal")).toHaveLength(1);
+    await user.type(screen.getByPlaceholderText(/tag/i), "work{Enter}");
+    expect(screen.getAllByText("work")).toHaveLength(1);
   });
 
   it("closes the tag input on Escape without adding the tag", async () => {
@@ -492,672 +455,92 @@ describe("SnippetDetailView", () => {
     await user.click(screen.getByRole("button", { name: /add tag/i }));
     await user.type(screen.getByPlaceholderText(/tag/i), "discarded{Escape}");
 
-    expect(screen.queryByPlaceholderText(/tag/i)).not.toBeInTheDocument();
     expect(screen.queryByText("discarded")).not.toBeInTheDocument();
   });
 
-  it("removes a tag when its remove button is pressed", async () => {
+  it("commits a typed tag when the input loses focus", async () => {
     const user = userEvent.setup();
     renderView();
 
-    await user.click(
-      screen.getByRole("button", { name: /remove "personal"/i })
-    );
+    await user.click(screen.getByRole("button", { name: /add tag/i }));
+    await user.type(screen.getByPlaceholderText(/tag/i), "Work");
+    await user.tab();
 
-    expect(screen.queryByText("personal")).not.toBeInTheDocument();
+    expect(await screen.findByText("work")).toBeInTheDocument();
   });
 
-  // --- dirty state reporting -------------------------------------------
-
-  it("reports no changes for an untouched snippet", async () => {
-    renderView();
-
-    await waitFor(() => expect(onHasChanges).toHaveBeenCalledWith(false));
-  });
-
-  it("reports changes once a tag is removed", async () => {
+  it("increments usage after a successful copy", async () => {
     const user = userEvent.setup();
     renderView();
-
-    await user.click(
-      screen.getByRole("button", { name: /remove "personal"/i })
-    );
-
-    // Dashboard uses this to arm the unsaved-changes guard.
-    await waitFor(() => expect(onHasChanges).toHaveBeenCalledWith(true));
-  });
-
-  it("does not crash when onHasChanges is not supplied", async () => {
-    renderView({ onHasChanges: undefined });
-
-    expect(
-      await screen.findByRole("button", { name: /delete snippet/i })
-    ).toBeEnabled();
-  });
-
-  it("calls the newest onHasChanges, not the one from first render", async () => {
-    const user = userEvent.setup();
-    // Two distinct identities for the same prop, as a parent re-creating an
-    // inline arrow on every render would pass. The component reaches the
-    // callback through a ref, so the *latest* one must be the one invoked.
-    const first = vi.fn();
-    const second = vi.fn();
-    const { rerender } = renderView({ onHasChanges: first });
-    await waitFor(() => expect(first).toHaveBeenCalledWith(false));
-
-    rerender(
-      <SnippetDetailView
-        snippet={snippet}
-        onDelete={onDelete}
-        onUpdate={onUpdate}
-        onHasChanges={second}
-        onToggleSidebar={onToggleSidebar}
-      />
-    );
-    second.mockClear();
-
-    await user.click(
-      screen.getByRole("button", { name: /remove "personal"/i })
-    );
-
-    // If the ref went stale, the report would land on the discarded `first`
-    // and the parent would never arm its unsaved-changes guard.
-    await waitFor(() => expect(second).toHaveBeenCalledWith(true));
-    expect(first).not.toHaveBeenCalledWith(true);
-  });
-
-  it("does not re-report dirty state when only the callback identity changes", async () => {
-    // The other half of the ref indirection, and the reason it exists.
-    // Satisfying `react-hooks/exhaustive-deps` the obvious way — putting
-    // `onHasChanges` straight into the dependency array — makes this component
-    // report once per parent render, because an inline arrow has a fresh
-    // identity every time. A parent that setState in response would then spin.
-    //
-    // This test fails under that fix, which is the point of writing it.
-    const parent = vi.fn();
-    const { rerender } = renderView({ onHasChanges: parent });
-    await waitFor(() => expect(parent).toHaveBeenCalledTimes(1));
-    parent.mockClear();
-
-    // Identical snippet and identical dirty state; only a new function identity.
-    const replacement = vi.fn();
-    rerender(
-      <SnippetDetailView
-        snippet={snippet}
-        onDelete={onDelete}
-        onUpdate={onUpdate}
-        onHasChanges={replacement}
-        onToggleSidebar={onToggleSidebar}
-      />
-    );
-
-    // Asserted on the *new* callback, not the original. The dirty state never
-    // changed, so a correct component reports nothing; one that re-ran on
-    // identity churn would call this immediately with `false`.
-    expect(replacement).not.toHaveBeenCalled();
-    expect(parent).not.toHaveBeenCalled();
-  });
-
-  it("does not refetch the usage count when only the content changes", async () => {
-    // The reset effect and the usage-count read are keyed on different things.
-    // Sharing one effect meant a same-id content change — the parent echoing a
-    // save back — refetched the count for a snippet whose count cannot have
-    // moved. Pinned because the two effects are easy to merge back together.
-    const edited: Snippet = { ...snippet, content: "999 Real Street" };
-    const { rerender } = renderView();
-    await waitFor(() => expect(getSnippetUsageCount).toHaveBeenCalledTimes(1));
-
-    rerender(
-      <SnippetDetailView
-        snippet={edited}
-        onDelete={onDelete}
-        onUpdate={onUpdate}
-        onHasChanges={onHasChanges}
-        onToggleSidebar={onToggleSidebar}
-      />
-    );
-
-    // Proof the rerender actually landed, so the count assertion below cannot
-    // pass vacuously: the id guard kept the *old* body in local state, so the
-    // component now correctly reports itself dirty against the new prop.
-    await waitFor(() => expect(onHasChanges).toHaveBeenCalledWith(true));
-    expect(getSnippetUsageCount).toHaveBeenCalledTimes(1);
-  });
-
-  // --- copy ------------------------------------------------------------
-
-  it("increments the usage count after a successful copy", async () => {
-    const user = userEvent.setup();
-    renderView();
-    await waitFor(() => expect(getSnippetUsageCount).toHaveBeenCalled());
 
     await user.click(screen.getByTestId("snippet-copy"));
 
     await waitFor(() =>
-      expect(incrementSnippetUsage).toHaveBeenCalledWith(snippet.id)
+      expect(incrementSnippetUsage).toHaveBeenCalledWith("s1")
     );
   });
 
-  it("shows an error when the copy fails", async () => {
+  it("shows a copy failure and clears it on dismiss", async () => {
     const user = userEvent.setup();
-    copyMarkdownAsRichText.mockRejectedValue(new Error("clipboard blocked"));
+    vi.mocked(copyMarkdownAsRichText).mockRejectedValue(new Error("blocked"));
     renderView();
 
     await user.click(screen.getByTestId("snippet-copy"));
-
     expect(
       await screen.findByText("Failed to copy to clipboard")
     ).toBeInTheDocument();
-  });
-
-  it("surfaces a copy failure that happens inside the editor", async () => {
-    // A different path from the toolbar copy button: the editor can fail to
-    // copy on its own, and it reports through onCopyError rather than by
-    // throwing. Nothing else routes that into the same inline error.
-    const user = userEvent.setup();
-    renderView();
-
-    await user.click(
-      screen.getByRole("button", { name: /simulate editor copy failure/i })
-    );
-
-    expect(
-      await screen.findByText("Failed to copy to clipboard")
-    ).toBeInTheDocument();
-  });
-
-  it("clears the inline error when it is dismissed", async () => {
-    const user = userEvent.setup();
-    copyMarkdownAsRichText.mockRejectedValue(new Error("clipboard blocked"));
-    renderView();
-    await user.click(screen.getByTestId("snippet-copy"));
-    await screen.findByText("Failed to copy to clipboard");
 
     await user.click(screen.getByRole("button", { name: "Dismiss error" }));
-
     expect(
       screen.queryByText("Failed to copy to clipboard")
     ).not.toBeInTheDocument();
   });
 
-  it("reverts the copied indicator after two seconds", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      renderView();
-
-      await user.click(screen.getByTestId("snippet-copy"));
-      // "Copied!" is the button's accessible name, not text — the icon swaps
-      // for a tick. Asserted by role+name so the test pins what a screen-reader
-      // user is told, which is the only version of this state they perceive.
-      await waitFor(() =>
-        expect(
-          screen.getByRole("button", { name: "Copied!" })
-        ).toBeInTheDocument()
-      );
-
-      // The timer callback is what puts the UI back. Without this the button
-      // would claim "Copied!" forever, which is a small lie the user acts on.
-      await vi.advanceTimersByTimeAsync(2000);
-      await waitFor(() =>
-        expect(
-          screen.queryByRole("button", { name: "Copied!" })
-        ).not.toBeInTheDocument()
-      );
-      expect(
-        screen.getByRole("button", { name: "Copy to clipboard" })
-      ).toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("reverts the saved indicator after two seconds", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      renderView();
-      await user.click(
-        screen.getByRole("button", { name: /remove "personal"/i })
-      );
-      await user.click(screen.getByTestId("snippet-save"));
-
-      await waitFor(() =>
-        expect(screen.getByText("Saved", { exact: true })).toBeInTheDocument()
-      );
-
-      await vi.advanceTimersByTimeAsync(2000);
-      await waitFor(() =>
-        expect(
-          screen.queryByText("Saved", { exact: true })
-        ).not.toBeInTheDocument()
-      );
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  // --- editor wiring ----------------------------------------------------
-
-  it("reaches the editor's command menu from the insert button", async () => {
+  it("reaches the editor command menu from the insert button", async () => {
     const user = userEvent.setup();
     renderView();
 
     await user.click(screen.getByRole("button", { name: /insert command/i }));
 
-    // The button is wired to editorRef.current?.openCommandMenu(). Asserting the
-    // editor was called is what proves the ref is attached — clicking with a
-    // null ref would silently no-op, which is the bug this guards.
     expect(editorCalls.openCommandMenu).toHaveBeenCalledTimes(1);
   });
 
-  it("turns an editor content edit into a dirty draft", async () => {
+  it("resets local fields when a different snippet is selected", async () => {
+    const other: Snippet = {
+      ...snippet,
+      id: "other",
+      content: "other body",
+      tags: ["work"],
+    };
     const user = userEvent.setup();
-    renderView();
+    const { rerender } = renderView();
 
-    await user.click(screen.getByRole("textbox", { name: /content/i }));
-    await user.keyboard("!");
-    await waitFor(() => expect(onHasChanges).toHaveBeenCalledWith(true));
+    await user.click(
+      screen.getByRole("button", { name: /remove "personal"/i })
+    );
+    rerender(
+      <SnippetDetailView
+        snippet={other}
+        onDelete={onDelete}
+        onUndoDelete={onUndoDelete}
+        onToggleSidebar={onToggleSidebar}
+      />
+    );
 
-    expect(screen.getByTestId("snippet-save")).toBeEnabled();
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: /content/i })).toHaveValue(
+        "other body"
+      )
+    );
+    expect(screen.getByText("work")).toBeInTheDocument();
+    expect(screen.queryByText("personal")).not.toBeInTheDocument();
   });
 
-  // --- tag input on blur ------------------------------------------------
-
-  it("adds the typed tag when the tag input loses focus", async () => {
-    // Blur is a real commit path, not a duplicate of Enter: a user who types a
-    // tag and clicks straight into the body never presses Enter, and losing the
-    // tag there would look like the field ignoring them.
-    const user = userEvent.setup();
-    renderView();
-
-    await user.click(screen.getByRole("button", { name: /add tag/i }));
-    const input = screen.getByPlaceholderText(/tag/i);
-    await user.type(input, "Work");
-    await user.tab();
-
-    expect(await screen.findByText("work")).toBeInTheDocument();
-  });
-
-  it("closes the tag input on blur without adding an empty tag", async () => {
-    const user = userEvent.setup();
-    renderView();
-
-    await user.click(screen.getByRole("button", { name: /add tag/i }));
-    // Whitespace only: trim() empties it, so nothing may be added.
-    await user.type(screen.getByPlaceholderText(/tag/i), "   ");
-    await user.tab();
-
-    expect(
-      screen.getByRole("button", { name: /add tag/i })
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "" })).not.toBeInTheDocument();
-  });
-
-  it("does not duplicate an existing tag when the input blurs", async () => {
-    const user = userEvent.setup();
-    renderView();
-
-    await user.click(screen.getByRole("button", { name: /add tag/i }));
-    await user.type(screen.getByPlaceholderText(/tag/i), "personal");
-    await user.tab();
-
-    // "personal" is already on the snippet. Case-insensitively, so "Personal"
-    // must not slip past as a second tag.
-    expect(screen.getAllByText("personal")).toHaveLength(1);
-  });
-
-  // --- snippet with no tags ---------------------------------------------
-
-  it("renders a snippet whose tags are missing entirely", () => {
-    // `snippet.tags || []` appears twice in this component. Legacy snippets and
-    // anything hand-edited in storage can arrive without the field, and the
-    // fallback is the only thing standing between that and a crash on render.
+  it("renders a snippet whose tags are missing entirely", async () => {
     renderView({ snippet: { ...snippet, tags: undefined } as Snippet });
 
     expect(
-      screen.getByRole("button", { name: /delete snippet/i })
+      await screen.findByRole("button", { name: /delete snippet/i })
     ).toBeEnabled();
-  });
-
-  it("still adds the first tag to a snippet that arrived with none", async () => {
-    const user = userEvent.setup();
-    renderView({ snippet: { ...snippet, tags: undefined } as Snippet });
-
-    await user.click(screen.getByRole("button", { name: /add tag/i }));
-    await user.type(screen.getByPlaceholderText(/tag/i), "Work{Enter}");
-
-    expect(await screen.findByText("work")).toBeInTheDocument();
-  });
-
-  // --- tag autosave -----------------------------------------------------
-  //
-  // Tags are written without the user pressing Save. Everything below is about
-  // that write being the right shape: one write per burst, the newest value,
-  // visible failure, and no fight with the Save button that shares the record.
-
-  it("writes a removed tag without being asked, once the burst settles", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      renderView({ snippet: tagged });
-
-      await user.click(
-        screen.getByRole("button", { name: /remove "urgent"/i })
-      );
-      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY - 100);
-      await user.click(screen.getByRole("button", { name: /remove "work"/i }));
-      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
-
-      // Two edits inside one window must be one write. A write per edit is the
-      // instability this debounce exists to prevent.
-      expect(editSnippet).toHaveBeenCalledTimes(1);
-      // And it must carry the state after both edits, not after the first.
-      expect(editSnippet.mock.calls[0]![0]).toMatchObject({
-        id: tagged.id,
-        tags: ["personal"],
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("writes nothing when the tags were not touched", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      renderView({ snippet: tagged });
-
-      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY * 5);
-
-      // The negative case: an autosave that fires on mount rewrites the record
-      // the user did not change, bumping its updatedAt for no reason.
-      expect(editSnippet).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("writes the tag as soon as the tag input closes", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      renderView();
-
-      await user.click(screen.getByRole("button", { name: /add tag/i }));
-      await user.type(screen.getByPlaceholderText(/tag/i), "Work{Enter}");
-
-      // No timer advanced: leaving the field is itself the commit point, and the
-      // popup can close in the middle of a debounce window.
-      expect(editSnippet).toHaveBeenCalledTimes(1);
-      expect(editSnippet.mock.calls[0]![0]).toMatchObject({
-        id: snippet.id,
-        tags: ["personal", "work"],
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("writes a tag committed by blurring the input away", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      renderView();
-
-      await user.click(screen.getByRole("button", { name: /add tag/i }));
-      await user.type(screen.getByPlaceholderText(/tag/i), "Work");
-      await user.tab();
-
-      expect(editSnippet).toHaveBeenCalledTimes(1);
-      expect(editSnippet.mock.calls[0]![0]).toMatchObject({
-        tags: ["personal", "work"],
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("writes a tag committed in the moment before the pane goes away", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      const { unmount } = renderView();
-
-      await user.click(
-        screen.getByRole("button", { name: /remove "personal"/i })
-      );
-      // Closed with the debounce still armed. The popup closes on every window
-      // blur, so an un-flushed tag is a tag the user was shown and then lost.
-      expect(editSnippet).not.toHaveBeenCalled();
-
-      unmount();
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(editSnippet).toHaveBeenCalledTimes(1);
-      expect(editSnippet.mock.calls[0]![0]).toMatchObject({ tags: [] });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("shows the store's explanation when an autosave is refused", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      editSnippet.mockRejectedValue(
-        new SnippetWriteRefused(
-          "This snippet is 210.5 KB and sync allows 100.0 KB."
-        )
-      );
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      renderView();
-
-      await user.click(
-        screen.getByRole("button", { name: /remove "personal"/i })
-      );
-      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
-
-      // The badge is gone from the screen, so nothing else tells the user their
-      // tag was not stored. Silence here reads as success.
-      expect(
-        await screen.findByText(
-          "This snippet is 210.5 KB and sync allows 100.0 KB."
-        )
-      ).toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("shows a generic error when an autosave fails outright", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      editSnippet.mockRejectedValue(new Error("context invalidated"));
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      renderView();
-
-      await user.click(
-        screen.getByRole("button", { name: /remove "personal"/i })
-      );
-      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
-
-      expect(
-        await screen.findByText("Failed to save snippet. Please try again.")
-      ).toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("leaves Save available to retry an autosave that failed", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      editSnippet.mockRejectedValue(new Error("context invalidated"));
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      renderView();
-
-      await user.click(
-        screen.getByRole("button", { name: /remove "personal"/i })
-      );
-      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
-      await screen.findByText("Failed to save snippet. Please try again.");
-
-      // The stored tags never changed, so the pane is still dirty and the
-      // explicit Save is the user's way to try again. Disabling it would strand
-      // the edit behind a background write that has already failed once.
-      expect(screen.getByTestId("snippet-save")).toBeEnabled();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  // --- autosave vs the explicit Save ------------------------------------
-  //
-  // Both write the same whole record, so the question is not "does each work" but
-  // "what happens when both run". Three answers are pinned below: Save absorbs
-  // the pending tag write, Save waits out an in-flight one, and Save's own
-  // payload is the newest tags either way.
-
-  it("lets Save carry the pending tag change instead of writing it twice", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      renderView({ snippet: tagged });
-
-      await user.click(
-        screen.getByRole("button", { name: /remove "urgent"/i })
-      );
-      await user.click(screen.getByTestId("snippet-save"));
-      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
-
-      // Exactly one write happened, and it went through Save.
-      expect(editSnippet).not.toHaveBeenCalled();
-      expect(onUpdate).toHaveBeenCalledTimes(1);
-      expect(onUpdate.mock.calls[0]![0]).toMatchObject({
-        id: tagged.id,
-        tags: ["personal", "work"],
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("makes Save wait for an autosave already in flight", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      const { gate, release } = deferredSnippet();
-      const order: string[] = [];
-      editSnippet.mockImplementation(async () => {
-        order.push("autosave");
-        await gate;
-      });
-      onUpdate.mockImplementation(async () => {
-        order.push("save");
-      });
-
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      renderView({ snippet: tagged });
-
-      await user.click(
-        screen.getByRole("button", { name: /remove "urgent"/i })
-      );
-      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
-      await user.click(screen.getByRole("textbox", { name: /content/i }));
-      await user.keyboard("!");
-      await user.click(screen.getByTestId("snippet-save"));
-
-      // The autosave was built from the record as it stood before the body edit.
-      // Letting Save land first would mean that stale record overwriting the
-      // body — a lost edit with no error anywhere.
-      expect(order).toEqual(["autosave"]);
-      expect(onUpdate).not.toHaveBeenCalled();
-
-      release();
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(order).toEqual(["autosave", "save"]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("has Save write the tags even when the autosave already stored them", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      const { rerender } = renderView({ snippet: tagged });
-
-      await user.click(
-        screen.getByRole("button", { name: /remove "urgent"/i })
-      );
-      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
-      expect(editSnippet).toHaveBeenCalledTimes(1);
-
-      // The parent echoes the stored tags back, as Dashboard does.
-      const echoed = {
-        ...tagged,
-        tags: ["personal", "work"],
-        updatedAt: "2026-01-02T00:00:00.000Z",
-      } as Snippet;
-      rerender(
-        <SnippetDetailView
-          snippet={echoed}
-          onDelete={onDelete}
-          onUpdate={onUpdate}
-          onHasChanges={onHasChanges}
-          onToggleSidebar={onToggleSidebar}
-        />
-      );
-
-      // A body edit makes the pane dirty again; the tags are unchanged.
-      await user.click(screen.getByRole("textbox", { name: /content/i }));
-      await user.keyboard("!");
-      await user.click(screen.getByTestId("snippet-save"));
-
-      // The echoed record is the base, not the pre-autosave one — otherwise the
-      // body edit would be saved on top of tags that no longer include "urgent".
-      expect(onUpdate.mock.calls[0]![0]).toMatchObject({
-        tags: ["personal", "work"],
-        content: "123 Fake Street!",
-      });
-      // And the echo must not have armed a second write of the same tags.
-      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY * 2);
-      expect(editSnippet).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("does not carry a pending tag onto the snippet selected next", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      const other = {
-        ...snippet,
-        id: "other-id",
-        label: "Email",
-        tags: ["work"],
-      } as Snippet;
-      const { rerender } = renderView({ snippet: tagged });
-
-      await user.click(
-        screen.getByRole("button", { name: /remove "urgent"/i })
-      );
-      rerender(
-        <SnippetDetailView
-          snippet={other}
-          onDelete={onDelete}
-          onUpdate={onUpdate}
-          onHasChanges={onHasChanges}
-          onToggleSidebar={onToggleSidebar}
-        />
-      );
-      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY * 2);
-
-      // The tag edit belonged to the snippet that was open. Writing it after the
-      // switch would tag the *next* snippet with the previous one's edit.
-      expect(editSnippet).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });

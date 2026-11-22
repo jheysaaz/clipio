@@ -1,15 +1,17 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useStore } from "@tanstack/react-store";
 import {
   Copy,
   Check,
   Trash2,
-  Save,
   PanelLeftClose,
   PanelLeft,
   Tag,
   X,
   Plus,
   SquareSlash,
+  Undo2,
+  Redo2,
 } from "lucide-react";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
@@ -21,8 +23,30 @@ import { Badge } from "@/components/ui/badge";
 import type { Snippet } from "@/types";
 import { InlineError } from "@/components/ui/inline-error";
 import { getRelativeTime } from "@/lib/date-utils";
-import { editSnippet, isWriteRefusal } from "@/store/snippets";
-import { createAutosave, TAG_AUTOSAVE_DELAY_MS } from "@/lib/autosave";
+import { isWriteRefusal } from "@/store/snippets";
+import {
+  createAutosave,
+  TAG_AUTOSAVE_DELAY_MS,
+  type AutosaveOutcome,
+} from "@/lib/autosave";
+import {
+  fieldsFromSnippet,
+  type DraftProblem,
+  type EditorFields,
+} from "@/lib/snippet-draft";
+import {
+  discardUnflushedDraft,
+  flushDraft,
+  redoLastEdit,
+  refreshSyncStatus,
+  refreshUndoAvailability,
+  stageEdit,
+  undoAvailabilityStore,
+  undoLastEdit,
+  writeQueueStore,
+  type SyncStatus,
+} from "@/store/write-queue";
+import { snippetsStore } from "@/store/snippets";
 import {
   getSnippetUsageCount,
   incrementSnippetUsage,
@@ -31,33 +55,38 @@ import { i18n } from "#i18n";
 import { captureError } from "@/lib/sentry";
 import { copyMarkdownAsRichText } from "@/lib/copy-markdown-as-rich-text";
 
-/**
- * One tag write: the record as it stood when the edit was made, and the tags to
- * put on it.
- *
- * The record is captured rather than read at write time on purpose. `persist` is
- * a whole-record upsert, so writing "the current snippet plus these tags" after
- * the user has moved on to another snippet would write one snippet's tags onto
- * another snippet's record.
- */
-type TagChange = { base: Snippet; tags: string[] };
-
 interface SnippetDetailViewProps {
   snippet: Snippet;
   onDelete: (snippetId: string) => void;
-  onUpdate: (updatedSnippet: Snippet) => void;
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
-  onHasChanges?: (hasChanges: boolean) => void;
+  /** Shown by the dashboard after a successful delete, so it can be undone. */
+  onUndoDelete?: (snippet: Snippet) => void;
+}
+
+const problemKeys = {
+  emptyLabel: "snippetDetail.errors.emptyLabel",
+  emptyShortcut: "snippetDetail.errors.emptyShortcut",
+  shortcutSpaces: "snippetDetail.errors.shortcutSpaces",
+  shortcutConflict: "snippetDetail.errors.shortcutConflict",
+  emptyContent: "snippetDetail.errors.emptyContent",
+  malformedMedia: "snippetDetail.errors.malformedMedia",
+} as const satisfies Record<DraftProblem, string>;
+
+/** The compact status line is the only place save state is announced now. */
+function statusText(status: SyncStatus): string {
+  if (status.refused > 0) return i18n.t("snippetDetail.syncStatus.refused");
+  if (status.failed > 0) return i18n.t("snippetDetail.syncStatus.failed");
+  if (status.pending > 0) return i18n.t("snippetDetail.syncStatus.pending");
+  return i18n.t("snippetDetail.syncStatus.saved");
 }
 
 export default function SnippetDetailView({
   snippet,
   onDelete,
-  onUpdate,
   sidebarOpen = true,
   onToggleSidebar,
-  onHasChanges,
+  onUndoDelete,
 }: SnippetDetailViewProps) {
   const [editedContent, setEditedContent] = useState(snippet.content);
   const [editedTags, setEditedTags] = useState<string[]>(snippet.tags || []);
@@ -66,103 +95,78 @@ export default function SnippetDetailView({
   const tagInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<RichTextEditorRef>(null);
   const [copied, setCopied] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [usageCount, setUsageCount] = useState(0);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
 
-  // Track if content or tags have changed
-  const tagsChanged =
-    JSON.stringify(editedTags) !== JSON.stringify(snippet.tags || []);
-  const hasChanges = editedContent.trim() !== snippet.content || tagsChanged;
+  const status = useStore(writeQueueStore);
+  const undoState = useStore(undoAvailabilityStore);
+  const controlsForThisSnippet = undoState.snippetId === snippet.id;
+  const canUndo = controlsForThisSnippet && undoState.canUndo;
+  const canRedo = controlsForThisSnippet && undoState.canRedo;
 
-  const snippetIdRef = useRef(snippet.id);
+  const snippetRef = useRef(snippet);
+  const fieldsRef = useRef<EditorFields>(fieldsFromSnippet(snippet));
+  const changedRef = useRef(false);
+  const loadedIdRef = useRef<string | null>(null);
 
-  /**
-   * The values a write must see when it runs.
-   *
-   * Both writers are asynchronous — one behind a debounce timer, one behind a
-   * promise — so a callback that closed over this render's state would write a
-   * snapshot that is one edit out of date by the time it ran. Synced on every
-   * commit, and read only from timers and promise continuations, so every read
-   * sees the last committed value.
-   */
-  const writeStateRef = useRef({
-    snippet,
-    content: editedContent,
-    tags: editedTags,
-  });
-  useEffect(() => {
-    writeStateRef.current = {
-      snippet,
+  const currentFields = useMemo<EditorFields>(
+    () => ({
+      label: snippet.label,
+      shortcut: snippet.shortcut,
       content: editedContent,
       tags: editedTags,
-    };
-  });
-
-  /**
-   * Tags are saved without being asked.
-   *
-   * Debounced, because a tag input commits per keystroke and a write per
-   * character is the same instability the popup sidebar had. Flushed when the
-   * tag input closes and when the pane goes away, because both are windows the
-   * popup can vanish inside — and it does, on every window blur.
-   *
-   * Written through `editSnippet` rather than the `onUpdate` prop on purpose.
-   * `onUpdate` is the user-initiated Save and its parent raises a "Snippet
-   * updated" toast for every call; an autosave firing that per debounce would
-   * claim a save the user never made, repeatedly. The store call is the same one
-   * that prop ends up calling, minus the toast.
-   */
-  const tagAutosave = useMemo(
-    () =>
-      createAutosave<TagChange>(async ({ base, tags }) => {
-        try {
-          await editSnippet({
-            ...base,
-            tags,
-            updatedAt: new Date().toISOString(),
-          });
-        } catch (error) {
-          // The same inline error copy and save uses. Failing quietly here is
-          // the worst outcome available: the tag badge is on screen, so the
-          // user has every reason to believe it is stored.
-          //
-          // A refusal carries the explanation the store worked out — storage
-          // over quota, naming the limit — and is not reported: the user hit a
-          // documented ceiling, which is not an exception. `editSnippet`
-          // reports a genuine failure to Sentry itself, so it is not reported
-          // again here; that would file the same incident twice.
-          setActionError(
-            isWriteRefusal(error)
-              ? error.userMessage
-              : i18n.t("snippetDetail.errors.failedToSave")
-          );
-        }
-      }, TAG_AUTOSAVE_DELAY_MS),
-    []
+    }),
+    [snippet.label, snippet.shortcut, editedContent, editedTags]
   );
 
-  // Reset the editor when a *different* snippet is selected. Guarded on the id,
-  // so a same-id content change (e.g. the parent echoing back a save) does not
-  // wipe local edits — and that guard is also why `snippet.content` and
-  // `snippet.tags` can safely be dependencies: when only they change, this
-  // returns immediately.
+  const hasChanges =
+    currentFields.content !== snippet.content ||
+    JSON.stringify(currentFields.tags) !== JSON.stringify(snippet.tags || []);
+
   useEffect(() => {
-    if (snippetIdRef.current === snippet.id) return;
-    snippetIdRef.current = snippet.id;
+    snippetRef.current = snippet;
+    fieldsRef.current = currentFields;
+    changedRef.current = hasChanges;
+  });
+
+  const persistFields = useCallback(
+    async (fields: EditorFields) => {
+      // Stage, never commit. The background owns the queue; this document can
+      // disappear on blur before a synchronous write would finish. Reading the
+      // store at write time also gives the edit the newest revision.
+      const stored = snippetsStore.state.snippets.find(
+        (item) => item.id === snippet.id
+      );
+      if (stored) await stageEdit(stored, fields);
+    },
+    [snippet.id]
+  );
+
+  const autosave = useMemo(
+    () => createAutosave<EditorFields>(persistFields, TAG_AUTOSAVE_DELAY_MS),
+    [persistFields]
+  );
+
+  /** Reset only when a different snippet is selected, never on a same-id echo. */
+  useEffect(() => {
+    if (loadedIdRef.current === snippet.id) return;
+    loadedIdRef.current = snippet.id;
+    autosave.discard();
     setEditedContent(snippet.content);
     setEditedTags(snippet.tags || []);
     setNewTagInput("");
     setIsAddingTag(false);
     setCopied(false);
-  }, [snippet.id, snippet.content, snippet.tags]);
+    setActionError(null);
+    void refreshUndoAvailability(snippet.id);
+    void refreshSyncStatus();
+    // Deliberately keyed on identity only: a same-id echo from our own write
+    // must not reset fields the user is still typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snippet.id, autosave]);
 
-  // Usage count is a separate concern keyed on the id alone. It used to share
-  // the reset effect above, which meant it refetched whenever the body text
-  // changed — an extra storage read per save.
   useEffect(() => {
     getSnippetUsageCount(snippet.id)
       .then(setUsageCount)
@@ -171,67 +175,89 @@ export default function SnippetDetailView({
       });
   }, [snippet.id]);
 
-  // `onHasChanges` is reached through a ref instead of being listed as a
-  // dependency. The parent passes an inline arrow, so depending on its identity
-  // would fire this on *every* render — and a parent that sets state in
-  // response would then loop forever.
-  const onHasChangesRef = useRef(onHasChanges);
   useEffect(() => {
-    onHasChangesRef.current = onHasChanges;
-  }, [onHasChanges]);
-
-  // Notify parent when dirty state changes
-  useEffect(() => {
-    onHasChangesRef.current?.(hasChanges);
-  }, [hasChanges]);
-
-  /**
-   * Schedule a tag write whenever the local tags differ from the stored ones.
-   *
-   * Keyed on the difference, not on `editedTags` alone. Once a write lands and
-   * the parent echoes the new tags back, this runs again with nothing left to
-   * save — and it has to *discard* rather than do nothing, or the timer armed for
-   * the previous edit would fire and write the same tags a second time.
-   *
-   * Declared after the `writeStateRef` sync above, which is what makes reading
-   * that ref here safe: effect callbacks run in declaration order.
-   */
-  useEffect(() => {
-    if (!tagsChanged) {
-      tagAutosave.discard();
+    if (!hasChanges) {
+      autosave.discard();
       return;
     }
-    tagAutosave.schedule({
-      base: writeStateRef.current.snippet,
-      tags: editedTags,
-    });
-  }, [tagAutosave, editedTags, snippet.tags, tagsChanged]);
+    autosave.schedule(currentFields);
+  }, [autosave, currentFields, hasChanges]);
 
-  /**
-   * Leaving the tag input means a tag was committed, so write it now.
-   *
-   * Driven off `isAddingTag` rather than off `onBlur` because the commit is a
-   * state update: flushing inside the handler would write the tags from *before*
-   * the one just typed. After the commit, the effect above has scheduled the new
-   * value and this flushes exactly that.
-   *
-   * Covers Enter, Escape and blur alike — all three close the input, and all
-   * three mean the user is no longer looking at the field.
-   */
+  /** Leave the tag input means the tag was committed: flush immediately. */
   useEffect(() => {
     if (isAddingTag) return;
-    void tagAutosave.flush();
-  }, [isAddingTag, tagAutosave]);
+    void (async () => {
+      const outcome = await autosave.flush();
+      if (outcome && !outcome.ok) {
+        setActionError(
+          outcome.error instanceof Error
+            ? outcome.error.message
+            : i18n.t("snippetDetail.errors.failedToStage")
+        );
+      }
+    })();
+  }, [isAddingTag, autosave]);
 
-  // A tag committed in the last few hundred milliseconds must not be lost because
-  // the pane went away. The popup closes on every window blur, so that is the
-  // common case rather than the rare one, and the badge was already on screen.
-  useEffect(
-    () => () => {
-      void tagAutosave.flush();
-    },
-    [tagAutosave]
-  );
+  const flushChanges = async (): Promise<AutosaveOutcome | null> => {
+    const outcome = await autosave.flush();
+    if (!changedRef.current) return outcome;
+    const result = await flushDraft(
+      snippetRef.current.id,
+      snippetsStore.state.snippets
+    );
+    if (!result.ok && result.error) {
+      const key = problemKeys[result.error as DraftProblem];
+      setActionError(
+        key ? i18n.t(key) : i18n.t("snippetDetail.errors.failedToStage")
+      );
+      return { ok: false, error: result.error };
+    }
+    changedRef.current = false;
+    return outcome;
+  };
+
+  /** The popup closes on blur, and the queued draft must survive that. */
+  useEffect(() => {
+    const flushOnHide = () => {
+      if (document.visibilityState === "hidden") void flushChanges();
+    };
+    const flushOnPageHide = () => void flushChanges();
+    document.addEventListener("visibilitychange", flushOnHide);
+    window.addEventListener("pagehide", flushOnPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", flushOnHide);
+      window.removeEventListener("pagehide", flushOnPageHide);
+      void flushChanges();
+    };
+    // flushChanges closes over refs for everything that can change, so its
+    // identity is deliberately not a dependency: the listeners must be installed
+    // once, not re-installed on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const step = async (direction: "undo" | "redo") => {
+    autosave.discard();
+    await discardUnflushedDraft(snippet.id);
+    const result =
+      direction === "undo"
+        ? await undoLastEdit(snippet, fieldsRef.current)
+        : await redoLastEdit(snippet, fieldsRef.current);
+    if (!result.ok || !result.fields) return;
+    setEditedContent(result.fields.content);
+    setEditedTags([...(result.fields.tags ?? [])]);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (!(event.metaKey || event.ctrlKey)) return;
+    const key = event.key.toLowerCase();
+    if (key === "z" && event.shiftKey) {
+      event.preventDefault();
+      void step("redo");
+    } else if (key === "z" || key === "y") {
+      event.preventDefault();
+      void step("undo");
+    }
+  };
 
   const handleCopy = async () => {
     try {
@@ -240,7 +266,6 @@ export default function SnippetDetailView({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
 
-      // Increment usage count
       const newCount = await incrementSnippetUsage(snippet.id);
       setUsageCount(newCount);
     } catch (err) {
@@ -249,61 +274,12 @@ export default function SnippetDetailView({
     }
   };
 
-  const handleSave = async () => {
-    if (!hasChanges) return;
-
-    setIsSaving(true);
-    try {
-      // Save is the last writer, so it has to be the *only* remaining one.
-      //
-      // The pending tag autosave is dropped because this call carries the same
-      // tags — leaving it armed would write them a second time. One already in
-      // flight cannot be dropped (the store write is not cancellable) but it can
-      // be waited out, and that wait is load-bearing: it was built from the
-      // record as it stood before this edit, so letting it land after this write
-      // would put the old body back with no error anywhere.
-      tagAutosave.discard();
-      await tagAutosave.settle();
-
-      const { snippet: base, content, tags } = writeStateRef.current;
-      const updated: Snippet = {
-        ...base,
-        content: content.trim(),
-        tags,
-        updatedAt: new Date().toISOString(),
-      };
-      await onUpdate(updated);
-      setIsSaved(true);
-      setTimeout(() => setIsSaved(false), 2000);
-    } catch (error) {
-      if (isWriteRefusal(error)) {
-        // An expected refusal with an explanation already worked out — storage
-        // over quota, naming the limit. Shown as-is and *not* reported: a user
-        // hitting the quota ceiling is not an exception, and filing one on every
-        // occurrence buried the signal this report exists to raise.
-        //
-        // Before this, the store's message was thrown as a bare `Error`, caught
-        // here, filed to Sentry as localised user-facing copy, and then replaced
-        // with a generic "please try again" — so the limit detail was computed and
-        // thrown away in the same breath.
-        setActionError(error.userMessage);
-      } else {
-        console.error("Error saving snippet:", error);
-        captureError(error, { action: "saveSnippet", snippetId: snippet.id });
-        setActionError(i18n.t("snippetDetail.errors.failedToSave"));
-      }
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
     try {
       await onDelete(snippet.id);
+      onUndoDelete?.(snippet);
     } catch (error) {
-      // Same split as the save path: a refusal is an explained outcome, not an
-      // exception. See the note there.
       if (isWriteRefusal(error)) {
         setActionError(error.userMessage);
       } else {
@@ -318,7 +294,7 @@ export default function SnippetDetailView({
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" onKeyDown={handleKeyDown}>
       {/* Action Bar */}
       <div className="px-3 py-2 border-b border-border flex items-center gap-1">
         <Button
@@ -344,6 +320,43 @@ export default function SnippetDetailView({
           )}
         </Button>
         <div className="flex-1" />
+        <Button
+          variant="ghost"
+          size="icon"
+          data-testid="snippet-undo"
+          onClick={() => void step("undo")}
+          disabled={!canUndo}
+          className="h-8 w-8"
+          title={i18n.t("snippetDetail.undo")}
+          aria-label={i18n.t("snippetDetail.undo")}
+        >
+          <Icon icon={Undo2} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          data-testid="snippet-redo"
+          onClick={() => void step("redo")}
+          disabled={!canRedo}
+          className="h-8 w-8"
+          title={i18n.t("snippetDetail.redo")}
+          aria-label={i18n.t("snippetDetail.redo")}
+        >
+          <Icon icon={Redo2} />
+        </Button>
+        <span
+          data-testid="snippet-sync-status"
+          role="status"
+          aria-live="polite"
+          className={`text-[10px] px-2 ${
+            status.refused > 0 || status.failed > 0
+              ? "text-destructive"
+              : "text-muted-foreground"
+          }`}
+        >
+          {statusText(status)}
+        </span>
+        <Separator orientation="vertical" className="h-5 mx-1" />
         <Button
           variant="ghost"
           size="icon"
@@ -386,36 +399,8 @@ export default function SnippetDetailView({
         >
           <Icon icon={SquareSlash} />
         </Button>
-        <Separator orientation="vertical" className="h-5 mx-1" />
-        {/* Screen-reader live region for save status */}
-        <span role="status" aria-live="polite" className="sr-only">
-          {isSaved ? i18n.t("snippetDetail.status.saved") : ""}
-        </span>
-        <Button
-          variant="default"
-          size="sm"
-          onClick={handleSave}
-          disabled={(!hasChanges && !isSaved) || isSaving}
-          className="h-8 text-xs"
-          data-testid="snippet-save"
-        >
-          {isSaved ? (
-            <>
-              <Icon icon={Check} className="text-green-300 mr-1.5" />
-              {i18n.t("snippetDetail.savedLabel")}
-            </>
-          ) : (
-            <>
-              <Icon icon={Save} className="mr-1.5" />
-              {isSaving
-                ? i18n.t("snippetDetail.saving")
-                : i18n.t("snippetDetail.save")}
-            </>
-          )}
-        </Button>
       </div>
 
-      {/* Inline error — co-located with action bar, always visible until dismissed */}
       <InlineError
         message={actionError}
         onDismiss={() => setActionError(null)}
@@ -434,16 +419,6 @@ export default function SnippetDetailView({
         />
       </div>
 
-      {/* The uninstall warning used to render here, between the editor and the
-          tags. It repeated on every surface — the detail pane, the snippet
-          list footer, and the options page — and it persisted across sessions
-          until dismissed, which made a one-time caution feel like a permanent
-          alarm. Chrome already asks the user to confirm removal, and the
-          export action lives in Library. Removed deliberately; the dismissal
-          flag is kept so an existing value stays harmless. */}
-
-      {/* Footer */}
-      {/* Tags Section */}
       <Separator />
       <div className="px-3 py-2.5">
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -522,7 +497,6 @@ export default function SnippetDetailView({
         </div>
       </div>
 
-      {/* Stats Section */}
       <Separator />
       <div className="px-3 py-1.5 flex items-center justify-between text-[10px] text-muted-foreground bg-muted/30">
         <div className="flex items-center gap-1.5">

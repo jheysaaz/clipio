@@ -39,8 +39,6 @@ dashboard:
     action: Crear tu primer fragmento
   toast:
     snippetSaved: Fragmento guardado
-    snippetDeleted: Fragmento eliminado
-    snippetUpdated: Fragmento actualizado
   detailPlaceholder: Selecciona un fragmento para ver los detalles
   snippetListLabel: Fragmentos
   warnings:
@@ -91,9 +89,8 @@ snippetDetail:
   deleteSnippet: Eliminar fragmento
   copyToClipboard: Copiar al portapapeles
   insertCommand: Insertar comando
-  saving: Guardando...
-  save: Guardar
-  savedLabel: Guardado
+  undo: Deshacer
+  redo: Rehacer
   copiedLabel: "¡Copiado!"
   editorPlaceholder: "Empieza a escribir el contenido del fragmento o usa '/' para comandos..."
   tags: Etiquetas
@@ -104,20 +101,28 @@ snippetDetail:
   updated: Actualizado
   deleteDialog:
     title: Eliminar fragmento
-    message: '¿Estás seguro de que quieres eliminar "$1"? Esta acción no se puede deshacer.'
+    message: '¿Eliminar "$1"? Puedes deshacerlo desde la notificación.'
     confirm: Eliminar
     cancel: Cancelar
-  unsavedChanges:
-    title: Cambios sin guardar
-    message: Tienes cambios sin guardar. Si cambias de fragmento ahora, perderás los cambios.
-    discard: Descartar cambios
-    keepEditing: Seguir editando
+  deleteToast:
+    message: '$1 eliminado'
+    undo: Deshacer
+  syncStatus:
+    saved: Todos los cambios guardados
+    pending: Guardando...
+    failed: Los cambios no se guardaron
+    refused: "Almacenamiento lleno: los cambios se conservan localmente"
   errors:
     failedToCopy: Error al copiar al portapapeles
     failedToSave: Error al guardar el fragmento. Por favor, inténtalo de nuevo.
     failedToDelete: Error al eliminar el fragmento. Por favor, inténtalo de nuevo.
-  status:
-    saved: "¡Fragmento guardado!"
+    failedToStage: El cambio se guardó localmente pero no se pudo poner en cola.
+    emptyLabel: El fragmento necesita un nombre antes de guardarse.
+    emptyShortcut: El fragmento necesita un atajo antes de guardarse.
+    shortcutSpaces: El atajo no puede contener espacios.
+    shortcutConflict: Ese atajo pertenece a otro fragmento.
+    emptyContent: El fragmento necesita contenido antes de guardarse.
+    malformedMedia: Uno de los marcadores de contenido multimedia está incompleto.
 
 confirmDialog:
   loading: Cargando...

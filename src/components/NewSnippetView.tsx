@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Save, X, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ import { i18n } from "#i18n";
 interface NewSnippetViewProps {
   draftSnippet: SnippetFormData;
   onDraftChange: (draft: SnippetFormData) => void;
+  /** Keep the provisional draft in local storage while the user is typing. */
+  onAutoSave?: (draft: SnippetFormData) => void;
   onSave: () => void;
   onCancel: () => void;
   isSaving: boolean;
@@ -27,6 +29,7 @@ interface NewSnippetViewProps {
 export default function NewSnippetView({
   draftSnippet,
   onDraftChange,
+  onAutoSave,
   onSave,
   onCancel,
   isSaving,
@@ -37,6 +40,43 @@ export default function NewSnippetView({
   existingSnippets = [],
 }: NewSnippetViewProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const draftRef = useRef(draftSnippet);
+
+  const hasContent =
+    draftSnippet.label.trim() ||
+    draftSnippet.shortcut.trim() ||
+    draftSnippet.content.trim() ||
+    (draftSnippet.tags?.length ?? 0) > 0;
+
+  /**
+   * New snippets autosave like existing ones. The draft is staged locally and
+   * the background queue commits it, so closing the popup mid-name does not throw
+   * the work away. The explicit Create button remains the way to finish and move
+   * to the new snippet.
+   */
+  useEffect(() => {
+    if (!onAutoSave || !hasContent) return;
+    const timer = setTimeout(() => onAutoSave(draftSnippet), 600);
+    return () => clearTimeout(timer);
+  }, [draftSnippet, hasContent, onAutoSave]);
+
+  useEffect(() => {
+    draftRef.current = draftSnippet;
+  }, [draftSnippet]);
+
+  useEffect(
+    () => () => {
+      if (
+        onAutoSave &&
+        (draftRef.current.label.trim() ||
+          draftRef.current.shortcut.trim() ||
+          draftRef.current.content.trim())
+      ) {
+        onAutoSave(draftRef.current);
+      }
+    },
+    [onAutoSave]
+  );
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>

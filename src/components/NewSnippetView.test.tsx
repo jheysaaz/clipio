@@ -10,13 +10,20 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import NewSnippetView from "./NewSnippetView";
 import type { Snippet, SnippetFormData } from "@/types";
 
 const onDraftChange = vi.fn();
+const onAutoSave = vi.fn();
 const onSave = vi.fn();
 const onCancel = vi.fn();
 const onClearCreateError = vi.fn();
@@ -377,5 +384,86 @@ describe("NewSnippetView", () => {
     await user.type(screen.getByTestId("snippet-label-input"), "A");
 
     expect(onDraftChange).toHaveBeenCalled();
+  });
+
+  // --- autosave ----------------------------------------------------------
+
+  it("does not autosave an empty create draft", async () => {
+    // The second half of `!onAutoSave || !hasContent`: with a callback present,
+    // an untouched form must not stage a new snippet for every popup open.
+    vi.useFakeTimers();
+    try {
+      renderView({ onAutoSave });
+      await act(async () => {
+        vi.advanceTimersByTime(2_000);
+      });
+      expect(onAutoSave).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("autosaves a non-empty create draft after the debounce", async () => {
+    vi.useFakeTimers();
+    try {
+      renderView({ onAutoSave });
+      fireEvent.change(screen.getByTestId("snippet-label-input"), {
+        target: { value: "A" },
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(599);
+      });
+      expect(onAutoSave).not.toHaveBeenCalled();
+
+      await act(async () => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(onAutoSave).toHaveBeenCalledWith(
+        expect.objectContaining({ label: "A" })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("treats tags alone as content worth autosaving", async () => {
+    // `tags?.length ?? 0` is the last arm of hasContent. A draft that only has
+    // tags still needs to survive a popup closing on blur.
+    vi.useFakeTimers();
+    try {
+      renderView({ initial: { ...emptyDraft, tags: ["one"] }, onAutoSave });
+      await act(async () => {
+        vi.advanceTimersByTime(600);
+      });
+      expect(onAutoSave).toHaveBeenCalledWith(
+        expect.objectContaining({ tags: ["one"] })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ["label", { ...emptyDraft, label: "A" }],
+    ["shortcut", { ...emptyDraft, shortcut: "/a" }],
+    ["content", { ...emptyDraft, content: "Body" }],
+  ])("flushes a %s-only draft when the form unmounts", (_field, initial) => {
+    // The debounce may not have fired before the popup closes. The unmount
+    // cleanup is the backstop that keeps the last typed draft local.
+    const { unmount } = renderView({
+      initial: initial as SnippetFormData,
+      onAutoSave,
+    });
+
+    unmount();
+
+    expect(onAutoSave).toHaveBeenCalledWith(initial);
+  });
+
+  it("does not flush an empty draft on unmount when no callback is supplied", () => {
+    const { unmount } = renderView();
+    unmount();
+    expect(onAutoSave).not.toHaveBeenCalled();
   });
 });
