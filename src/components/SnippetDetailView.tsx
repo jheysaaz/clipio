@@ -48,6 +48,7 @@ import {
   undoAvailabilityStore,
   undoLastEdit,
   writeQueueStore,
+  queueOutcomesStore,
   type SyncStatus,
 } from "@/store/write-queue";
 import { snippetsStore } from "@/store/snippets";
@@ -61,7 +62,7 @@ import { copyMarkdownAsRichText } from "@/lib/copy-markdown-as-rich-text";
 
 interface SnippetDetailViewProps {
   snippet: Snippet;
-  onDelete: (snippetId: string) => void;
+  onDelete: (snippetId: string) => void | Promise<void>;
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
   /** Shown by the dashboard after a successful delete, so it can be undone. */
@@ -138,6 +139,9 @@ export default function SnippetDetailView({
   const [editedContent, setEditedContent] = useState(form.content);
   const [editedTags, setEditedTags] = useState<string[]>(form.tags ?? []);
   const [newTagInput, setNewTagInput] = useState("");
+  const [dismissedOutcomeId, setDismissedOutcomeId] = useState<string | null>(
+    null
+  );
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [shortcutError, setShortcutError] = useState("");
   const tagInputRef = useRef<HTMLInputElement>(null);
@@ -149,6 +153,9 @@ export default function SnippetDetailView({
   const [isDeleting, setIsDeleting] = useState(false);
 
   const status = useStore(writeQueueStore);
+  const queuedOutcome = useStore(queueOutcomesStore)[snippet.id];
+  const outcome =
+    queuedOutcome?.opId === dismissedOutcomeId ? undefined : queuedOutcome;
   const undoState = useStore(undoAvailabilityStore);
   const controlsForThisSnippet = !isNew && undoState.snippetId === snippet.id;
   const canUndo = controlsForThisSnippet && undoState.canUndo;
@@ -243,6 +250,7 @@ export default function SnippetDetailView({
     setEditedContent(form.content);
     setEditedTags(form.tags ?? []);
     setNewTagInput("");
+    setDismissedOutcomeId(null);
     setShortcutError("");
     setIsAddingTag(false);
     setCopied(false);
@@ -351,6 +359,10 @@ export default function SnippetDetailView({
 
   const step = async (direction: "undo" | "redo") => {
     autosave.discard();
+    // `discard` stops the timer, not a write already in flight. Let it finish
+    // before removing the draft, or it can stage the stale value back after the
+    // restore and shadow the undone text.
+    await autosave.settle();
     await discardUnflushedDraft(snippet.id);
     const result =
       direction === "undo"
@@ -609,9 +621,22 @@ export default function SnippetDetailView({
       </div>
 
       <InlineError
-        message={isNew ? createError : actionError}
+        message={
+          isNew
+            ? createError
+            : (actionError ??
+              (outcome
+                ? (outcome.error ??
+                  i18n.t(
+                    outcome.status === "refused"
+                      ? "snippetDetail.syncStatus.refused"
+                      : "snippetDetail.syncStatus.failed"
+                  ))
+                : null))
+        }
         onDismiss={() => {
           setActionError(null);
+          if (outcome) setDismissedOutcomeId(outcome.opId);
           onClearCreateError?.();
         }}
       />

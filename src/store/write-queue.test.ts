@@ -39,18 +39,22 @@ vi.mock("@/storage/writer-id", () => ({
 }));
 
 import {
+  clearCommittedFields,
   discardDraft,
   discardUnflushedDraft,
   enqueueDelete,
   flushDraft,
+  queueOperationsStore,
+  queueOutcomesStore,
   refreshSyncStatus,
   refreshUndoAvailability,
   redoLastEdit,
+  rememberCommittedFields,
   stageEdit,
-  stageNewSnippetDraft,
   stageProvisionalDraft,
   undoAvailabilityStore,
   undoLastEdit,
+  waitForSnippetCommit,
   writeQueueStore,
   draftPreviewsStore,
 } from "./write-queue";
@@ -89,6 +93,9 @@ function reset() {
     saving: false,
   }));
   draftPreviewsStore.setState(() => ({}));
+  queueOperationsStore.setState(() => ({}));
+  queueOutcomesStore.setState(() => ({}));
+  clearCommittedFields();
 }
 
 describe("popup write queue", () => {
@@ -117,7 +124,9 @@ describe("popup write queue", () => {
   it("keeps the live preview after a commit but stops claiming it is saving", async () => {
     await stageEdit(snippet, fields);
     await flushDraft("s1", []);
-    // A queue change re-publishes status from the authoritative queue.
+    // The background removes only the draft it committed, then the queue change
+    // re-publishes status. The preview stays: our own commit is not a refresh.
+    state.drafts = {};
     await refreshSyncStatus();
 
     expect(writeQueueStore.state.saving).toBe(false);
@@ -136,6 +145,7 @@ describe("popup write queue", () => {
 
   it("flushes a valid draft into exactly one queued operation", async () => {
     await stageEdit(snippet, fields);
+    const draft = state.drafts.s1!;
     const result = await flushDraft("s1", [], "2026-01-02T00:00:00.000Z");
 
     expect(result).toEqual({ ok: true, isNew: false });
@@ -147,9 +157,11 @@ describe("popup write queue", () => {
       reason: "edit",
       updatedBy: "writer-1",
       updatedAt: "2026-01-02T00:00:00.000Z",
+      draftUpdatedAt: draft.updatedAt,
     });
-    // A queued draft is no longer unsaved.
-    expect(state.drafts.s1).toBeUndefined();
+    // The draft survives until the background knows the outcome, so a quota
+    // refusal or conflict can be fixed without retyping the edit.
+    expect(state.drafts.s1).toEqual(draft);
   });
 
   it("keeps an invalid draft local and does not queue it", async () => {
@@ -295,17 +307,16 @@ describe("popup write queue", () => {
     expect(state.queue?.operations).toHaveLength(1);
   });
 
-  it("stages a new snippet draft with a caller-independent id", async () => {
-    const draft = await stageNewSnippetDraft({
+  it("keeps a provisional create draft on the id the caller chose", async () => {
+    const draft = await stageProvisionalDraft("new-id", {
       label: "New",
       shortcut: "/new",
       content: "body",
       tags: [],
     });
 
-    expect(draft).toMatchObject({ baseRev: 0, isNew: true });
-    expect(draft.id).toMatch(/^[0-9a-f-]{36}$/i);
-    expect(state.drafts[draft.id]).toEqual(draft);
+    expect(draft).toMatchObject({ id: "new-id", baseRev: 0, isNew: true });
+    expect(state.drafts["new-id"]).toEqual(draft);
   });
 
   it("treats missing undo stacks as empty when staging an edit", async () => {
@@ -385,7 +396,11 @@ describe("popup write queue", () => {
     );
 
     await vi.waitFor(() => expect(writeQueueStore.state.refused).toBe(1));
-    expect(writeQueueStore.state.lastError).toBe("quota");
+    expect(queueOutcomesStore.state.s1).toMatchObject({
+      opId: "op-refused",
+      status: "refused",
+      error: "quota",
+    });
   });
 
   it("ignores storage changes outside the local queue key", () => {
@@ -399,6 +414,65 @@ describe("popup write queue", () => {
     emitStorageChange({ other: { oldValue: undefined, newValue: 1 } }, "sync");
 
     expect(writeQueueStore.state.pending).toBe(9);
+  });
+
+  it("steps undo through editor states, not the authoritative record", async () => {
+    await stageEdit(snippet, fields);
+    const later = { ...fields, label: "Later" };
+    await stageEdit(snippet, later);
+
+    expect(state.undo.s1.past).toEqual([fieldsFromSnippet(snippet), fields]);
+  });
+
+  it("uses remembered committed fields as the first undo target", async () => {
+    const committed = { ...fieldsFromSnippet(snippet), label: "Committed" };
+    rememberCommittedFields("s1", committed);
+
+    await stageEdit(snippet, fields);
+
+    expect(state.undo.s1.past).toEqual([committed]);
+  });
+
+  it("waits for a queued snippet to leave the queue before reporting success", async () => {
+    await stageEdit(snippet, fields);
+    await flushDraft("s1", []);
+
+    const pending = waitForSnippetCommit("s1");
+    queueOperationsStore.setState(() => ({}));
+
+    await expect(pending).resolves.toBeNull();
+  });
+
+  it("waits for a terminal outcome before reporting failure", async () => {
+    await stageEdit(snippet, fields);
+    await flushDraft("s1", []);
+
+    const pending = waitForSnippetCommit("s1");
+    queueOutcomesStore.setState(() => ({
+      s1: {
+        opId: "op-1",
+        snippetId: "s1",
+        status: "refused",
+        error: "quota",
+      },
+    }));
+
+    await expect(pending).resolves.toMatchObject({
+      status: "refused",
+      error: "quota",
+    });
+  });
+
+  it("keeps both operations when two snippets flush concurrently", async () => {
+    await stageEdit(snippet, fields);
+    await stageEdit({ ...snippet, id: "s2" }, fields);
+
+    await Promise.all([flushDraft("s1", []), flushDraft("s2", [])]);
+
+    expect(state.queue?.operations.map((op) => op.snippetId).sort()).toEqual([
+      "s1",
+      "s2",
+    ]);
   });
 
   it("does not subscribe to storage changes when no browser API exists", async () => {

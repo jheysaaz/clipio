@@ -23,8 +23,10 @@ import {
   emptyQueue,
   enqueue,
   queueSummary,
+  type QueuedChange,
   type QueueState,
 } from "@/lib/write-queue";
+import { withQueueLock } from "@/storage/queue-lock";
 import {
   canRedo,
   canUndo,
@@ -47,7 +49,6 @@ export type SyncStatus = {
   refused: number;
   /** A draft is staged locally and has not been committed yet. */
   saving: boolean;
-  lastError?: string;
 };
 
 export const writeQueueStore = new Store<SyncStatus>({
@@ -56,6 +57,29 @@ export const writeQueueStore = new Store<SyncStatus>({
   refused: 0,
   saving: false,
 });
+
+export type QueueOutcome = {
+  opId: string;
+  snippetId: string;
+  status: "failed" | "refused";
+  error?: string;
+};
+
+/**
+ * Terminal outcomes keyed by snippet id, for per-snippet UI recovery.
+ *
+ * `writeQueueStore` answers "are writes landing?"; it cannot answer "which
+ * record failed and why" without shadowing the queue's own state. Keeping the
+ * outcome here lets the detail pane show the error for the record on screen and
+ * lets the dashboard wait for a create/delete to actually commit.
+ */
+export const queueOutcomesStore = new Store<Record<string, QueueOutcome>>({});
+
+/** Live queue operations keyed by id, for observing commit progress. */
+export const queueOperationsStore = new Store<Record<string, QueuedChange>>({});
+
+/** The fields our own last commit wrote, keyed by snippet id. */
+const committedFieldsStore = new Store<Record<string, EditorFields>>({});
 
 /**
  * The fields of drafts staged in this document, keyed by snippet id.
@@ -83,6 +107,31 @@ function removeDraftPreview(snippetId: string): void {
 /** Forget previews after an authoritative re-read replaces the library. */
 export function clearDraftPreviews(): void {
   draftPreviewsStore.setState(() => ({}));
+}
+
+/** Remember the fields our own commit wrote, for the next edit's undo target. */
+export function rememberCommittedFields(
+  snippetId: string,
+  fields: EditorFields
+): void {
+  committedFieldsStore.setState((prev) => ({
+    ...prev,
+    [snippetId]: {
+      ...fields,
+      tags: [...(fields.tags ?? [])],
+    },
+  }));
+}
+
+/** Forget committed fields after a refresh or an abandoned snippet. */
+export function clearCommittedFields(snippetId?: string): void {
+  committedFieldsStore.setState((prev) => {
+    if (!snippetId) return {};
+    if (!(snippetId in prev)) return prev;
+    const next = { ...prev };
+    delete next[snippetId];
+    return next;
+  });
 }
 
 export const undoAvailabilityStore = new Store<{
@@ -114,16 +163,86 @@ async function writeQueue(state: QueueState): Promise<void> {
   publish();
 }
 
+/**
+ * Mutate the queue under the cross-context lock.
+ *
+ * The read and the write must be one transaction: with a bare read/write pair,
+ * the background's result can land after a popup enqueue and erase it.
+ */
+async function updateQueue(
+  change: (state: QueueState) => QueueState
+): Promise<QueueState> {
+  return withQueueLock(async () => {
+    const state = await readQueue();
+    const next = change(state);
+    if (next !== state) await writeQueue(next);
+    return next;
+  });
+}
+
 function publish(): void {
   const summary = queueSummary(cachedQueue);
-  const lastError =
-    [...cachedQueue.operations].reverse().find((op) => op.error)?.error ??
-    undefined;
   writeQueueStore.setState(() => ({
     ...summary,
     saving: stagedDraftIds.size > 0,
-    lastError,
   }));
+
+  const operations: Record<string, QueuedChange> = {};
+  const outcomes: Record<string, QueueOutcome> = {};
+  for (const op of cachedQueue.operations) {
+    operations[op.id] = op;
+    if (op.status === "failed" || op.status === "refused") {
+      outcomes[op.snippetId] = {
+        opId: op.id,
+        snippetId: op.snippetId,
+        status: op.status,
+        error: op.error,
+      };
+    }
+  }
+  queueOperationsStore.setState(() => operations);
+  queueOutcomesStore.setState(() => outcomes);
+}
+
+type CommitSettlement = { outcome: QueueOutcome | null };
+
+function settledOutcome(snippetId: string): CommitSettlement | null {
+  const outcome = queueOutcomesStore.state[snippetId];
+  if (outcome) return { outcome };
+  const stillQueued = Object.values(queueOperationsStore.state).some(
+    (op) => op.snippetId === snippetId
+  );
+  return stillQueued ? null : { outcome: null };
+}
+
+/**
+ * Wait until every queued operation for a snippet has committed or terminalised.
+ *
+ * Create, delete and undo-delete are addressed optimistically in the popup, but
+ * the authoritative write happens later in the background. Waiting by snippet
+ * rather than by the id returned from `enqueue` is deliberate: coalescing keeps
+ * the *existing* operation id, so a caller's fresh id may never appear in the
+ * queue. A null outcome means success — the queue removed the operation.
+ */
+export function waitForSnippetCommit(
+  snippetId: string
+): Promise<QueueOutcome | null> {
+  const settled = settledOutcome(snippetId);
+  if (settled) return Promise.resolve(settled.outcome);
+
+  return new Promise<QueueOutcome | null>((resolve) => {
+    const finish = () => {
+      const next = settledOutcome(snippetId);
+      if (!next) return;
+      unsubscribeOperations.unsubscribe();
+      unsubscribeOutcomes.unsubscribe();
+      resolve(next.outcome);
+    };
+    const unsubscribeOperations = queueOperationsStore.subscribe(finish);
+    const unsubscribeOutcomes = queueOutcomesStore.subscribe(finish);
+    // Recheck in case a commit landed between the first check and subscribing.
+    finish();
+  });
 }
 
 /** Refresh the status shown in the top bar from the authoritative stores. */
@@ -153,9 +272,11 @@ export async function stageDraft(draft: EditorDraft): Promise<void> {
 }
 
 /**
- * Validate a draft and hand it to the background queue. An invalid or refused
- * draft stays in local storage; a queued draft is removed so the editor no
- * longer claims it is unsaved.
+ * Validate a draft and hand it to the background queue.
+ *
+ * The draft stays in local storage until the background reports success. Terminal
+ * quota/conflict outcomes need the editable fields to still be there, and the
+ * background deletes only the exact draft the operation was built from.
  */
 export async function flushDraft(
   snippetId: string,
@@ -176,40 +297,20 @@ export async function flushDraft(
   }
 
   const writerId = await getWriterId();
-  const state = await readQueue();
-  const next = enqueue(
-    state,
-    {
-      id: `op-${crypto.randomUUID()}`,
-      snippetId,
-      kind: "upsert",
-      fields: draft.fields,
-      baseRev: draft.baseRev,
-      updatedAt: now,
-      updatedBy: writerId,
-      reason: "edit",
-      createdAt: Date.now(),
-    },
-    Date.now()
-  );
-  await writeQueue(next);
-
-  const remaining = { ...drafts };
-  delete remaining[snippetId];
-  await editorDraftsItem.setValue(remaining);
-  stagedDraftIds.delete(snippetId);
-  publish();
+  const change = {
+    id: `op-${crypto.randomUUID()}`,
+    snippetId,
+    kind: "upsert" as const,
+    fields: draft.fields,
+    baseRev: draft.baseRev,
+    updatedAt: now,
+    updatedBy: writerId,
+    reason: "edit" as const,
+    createdAt: Date.now(),
+    draftUpdatedAt: draft.updatedAt,
+  };
+  await updateQueue((state) => enqueue(state, change, Date.now()));
   return { ok: true, isNew: draft.isNew };
-}
-
-/** Start a provisional draft for a new snippet before its first commit. */
-export async function stageNewSnippetDraft(
-  form: Parameters<typeof draftFromForm>[1],
-  now?: string
-): Promise<EditorDraft> {
-  const draft = draftFromForm(crypto.randomUUID(), form, now);
-  await stageDraft(draft);
-  return draft;
 }
 
 /**
@@ -229,22 +330,42 @@ export async function stageProvisionalDraft(
   return draft;
 }
 
-/** Stage one debounced edit and remember the state it replaced. */
+function sameFields(a: EditorFields, b: EditorFields): boolean {
+  return (
+    a.label === b.label &&
+    a.shortcut === b.shortcut &&
+    a.content === b.content &&
+    JSON.stringify(a.tags ?? []) === JSON.stringify(b.tags ?? [])
+  );
+}
+
+/**
+ * Stage one debounced edit and remember the editor state it replaced.
+ *
+ * The in-memory snippet is deliberately not refreshed on our own commits, so it
+ * still holds the fields the popup loaded. Undo must step from the last *editor*
+ * state instead: the staged draft while one exists, then the fields our last
+ * commit wrote, and only the stored snippet as a fallback.
+ */
 export async function stageEdit(
   snippet: Snippet,
   fields: EditorFields
 ): Promise<void> {
+  const drafts = await editorDraftsItem.getValue();
+  const before =
+    drafts[snippet.id]?.fields ??
+    committedFieldsStore.state[snippet.id] ??
+    fieldsFromSnippet(snippet);
   await stageDraft({
     id: snippet.id,
-    baseRev: snippetRev(snippet),
+    baseRev: drafts[snippet.id]?.baseRev ?? snippetRev(snippet),
     fields,
     updatedAt: new Date().toISOString(),
     isNew: false,
   });
+  if (sameFields(before, fields)) return;
   const stacks = (await undoStacksItem.getValue()) ?? EMPTY_UNDO_STACKS;
-  await undoStacksItem.setValue(
-    pushUndo(stacks, snippet.id, fieldsFromSnippet(snippet))
-  );
+  await undoStacksItem.setValue(pushUndo(stacks, snippet.id, before));
   await publishUndoAvailability(snippet.id);
 }
 
@@ -311,12 +432,13 @@ export async function discardUnflushedDraft(snippetId: string): Promise<void> {
     removeDraftPreview(snippetId);
     publish();
   }
-  await writeQueue(clearRefused(await readQueue(), snippetId));
+  await updateQueue((state) => clearRefused(state, snippetId));
 }
 
 /** Abandon every trace of a snippet: its draft and its undo history. */
 export async function discardDraft(snippetId: string): Promise<void> {
   await discardUnflushedDraft(snippetId);
+  clearCommittedFields(snippetId);
   const stacks = (await undoStacksItem.getValue()) ?? EMPTY_UNDO_STACKS;
   await undoStacksItem.setValue(clearUndo(stacks, snippetId));
   await refreshUndoAvailability(snippetId);
@@ -328,22 +450,17 @@ export async function enqueueDelete(
   now = new Date().toISOString()
 ): Promise<void> {
   const writerId = await getWriterId();
-  await writeQueue(
-    enqueue(
-      await readQueue(),
-      {
-        id: `op-${crypto.randomUUID()}`,
-        snippetId: snippet.id,
-        kind: "delete",
-        baseRev: snippetRev(snippet),
-        updatedAt: now,
-        updatedBy: writerId,
-        reason: "delete",
-        createdAt: Date.now(),
-      },
-      Date.now()
-    )
-  );
+  const change = {
+    id: `op-${crypto.randomUUID()}`,
+    snippetId: snippet.id,
+    kind: "delete" as const,
+    baseRev: snippetRev(snippet),
+    updatedAt: now,
+    updatedBy: writerId,
+    reason: "delete" as const,
+    createdAt: Date.now(),
+  };
+  await updateQueue((state) => enqueue(state, change, Date.now()));
 }
 
 /**
@@ -356,23 +473,18 @@ export async function enqueueRestore(
   now = new Date().toISOString()
 ): Promise<void> {
   const writerId = await getWriterId();
-  await writeQueue(
-    enqueue(
-      await readQueue(),
-      {
-        id: `op-${crypto.randomUUID()}`,
-        snippetId: snippet.id,
-        kind: "upsert",
-        fields,
-        baseRev: snippetRev(snippet),
-        updatedAt: now,
-        updatedBy: writerId,
-        reason: "restore",
-        createdAt: Date.now(),
-      },
-      Date.now()
-    )
-  );
+  const change = {
+    id: `op-${crypto.randomUUID()}`,
+    snippetId: snippet.id,
+    kind: "upsert" as const,
+    fields,
+    baseRev: snippetRev(snippet),
+    updatedAt: now,
+    updatedBy: writerId,
+    reason: "restore" as const,
+    createdAt: Date.now(),
+  };
+  await updateQueue((state) => enqueue(state, change, Date.now()));
 }
 
 if (typeof browser !== "undefined" && browser.storage?.onChanged) {

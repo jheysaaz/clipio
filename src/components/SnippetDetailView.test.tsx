@@ -15,7 +15,11 @@ import userEvent from "@testing-library/user-event";
 import SnippetDetailView from "./SnippetDetailView";
 import type { Snippet, SnippetFormData } from "@/types";
 import type { EditorFields } from "@/lib/snippet-draft";
-import { undoAvailabilityStore, writeQueueStore } from "@/store/write-queue";
+import {
+  queueOutcomesStore,
+  undoAvailabilityStore,
+  writeQueueStore,
+} from "@/store/write-queue";
 import { resetSnippetsStoreForTests, snippetsStore } from "@/store/snippets";
 
 const q = vi.hoisted(() => ({
@@ -150,6 +154,7 @@ describe("SnippetDetailView autosave", () => {
       canUndo: false,
       canRedo: false,
     }));
+    queueOutcomesStore.setState(() => ({}));
     resetSnippetsStoreForTests();
     snippetsStore.setState((prev) => ({ ...prev, snippets: [snippet] }));
     vi.mocked(getSnippetUsageCount).mockResolvedValue(3);
@@ -365,13 +370,26 @@ describe("SnippetDetailView autosave", () => {
       failed: 0,
       refused: 1,
       saving: false,
-      lastError: "sync is full",
     }));
     renderView();
 
     expect(screen.getByTestId("snippet-sync-status")).toHaveTextContent(
       "Storage full"
     );
+  });
+
+  it("shows the failure for the snippet on screen", () => {
+    queueOutcomesStore.setState(() => ({
+      s1: {
+        opId: "op-1",
+        snippetId: "s1",
+        status: "refused",
+        error: "Storage is full",
+      },
+    }));
+    renderView();
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Storage is full");
   });
 
   // --- delete -----------------------------------------------------------

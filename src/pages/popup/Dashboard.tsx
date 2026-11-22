@@ -71,6 +71,7 @@ import {
   flushDraft,
   stageEdit,
   stageProvisionalDraft,
+  waitForSnippetCommit,
 } from "@/store/write-queue";
 import { getWriterId } from "@/storage/writer-id";
 import { blankSnippetDraft } from "@/lib/trigger-prefix";
@@ -584,51 +585,84 @@ export default function Dashboard() {
 
     const id = ensureProvisionalCreateId();
     setIsSaving(true);
-    await stageProvisionalDraft(id, draftSnippet);
-    const result = await flushDraft(id, snippetsStore.state.snippets);
-    setIsSaving(false);
-    if (!result.ok) {
-      // Keep the form open: it is the component that renders `createError`, and
-      // the user needs the typed text to fix the problem.
+    try {
+      await stageProvisionalDraft(id, draftSnippet);
+      const result = await flushDraft(id, snippetsStore.state.snippets);
+      if (!result.ok) {
+        // Keep the form open: it is the component that renders `createError`, and
+        // the user needs the typed text to fix the problem.
+        snippetsStore.setState((prev) => ({
+          ...prev,
+          createError: createErrorFor(result.error),
+        }));
+        return;
+      }
+
+      const outcome = await waitForSnippetCommit(id);
+      if (outcome) {
+        snippetsStore.setState((prev) => ({
+          ...prev,
+          createError:
+            outcome.error ?? i18n.t("snippetDetail.errors.failedToSave"),
+        }));
+        return;
+      }
+
+      // Only now, after the background has committed, is the provisional id a
+      // real record. Addressing it earlier made the route point at something a
+      // quota refusal could leave behind.
+      const provisional: Snippet = {
+        ...createSnippet(draftSnippet, await getWriterId()),
+        id,
+      };
       snippetsStore.setState((prev) => ({
         ...prev,
-        createError: createErrorFor(result.error),
+        snippets: [...prev.snippets, provisional],
+        draft: { ...EMPTY_DRAFT },
+        createError: null,
       }));
-      return;
+      setProvisionalCreateId(null);
+      selectSnippet(id);
+      toast.success(i18n.t("dashboard.toast.snippetSaved"));
+    } catch (error) {
+      captureError(error, { action: "dashboard.create" });
+      snippetsStore.setState((prev) => ({
+        ...prev,
+        createError: i18n.t("snippetDetail.errors.failedToSave"),
+      }));
+    } finally {
+      setIsSaving(false);
     }
-
-    // Optimistically address the new snippet. The background commits it to the
-    // authoritative store, but the route must work before that round trip ends.
-    const provisional: Snippet = {
-      ...createSnippet(draftSnippet, await getWriterId()),
-      id,
-    };
-    snippetsStore.setState((prev) => ({
-      ...prev,
-      snippets: [...prev.snippets, provisional],
-      draft: { ...EMPTY_DRAFT },
-      createError: null,
-    }));
-    setProvisionalCreateId(null);
-    selectSnippet(id);
-    toast.success(i18n.t("dashboard.toast.snippetSaved"));
   };
 
   const handleDeleteSnippet = async (snippetId: string) => {
     const snippet = findSnippet(snippetsStore.state.snippets, snippetId);
     if (!snippet) return;
-    await discardDraft(snippetId);
-    await enqueueDelete(snippet);
-    const remaining = snippetsStore.state.snippets.filter(
-      (s) => s.id !== snippetId
-    );
-    snippetsStore.setState((prev) => ({ ...prev, snippets: remaining }));
-    // Deleting the addressed snippet has to move the address too, or the URL
-    // would keep pointing at something that no longer exists.
-    if (selectedSnippetId === snippetId) {
-      const newest = selectNewest(remaining);
-      if (newest) selectSnippet(newest.id);
-      else showList();
+    try {
+      await discardDraft(snippetId);
+      await enqueueDelete(snippet);
+      const outcome = await waitForSnippetCommit(snippetId);
+      if (outcome) {
+        toast.error(
+          outcome.error ?? i18n.t("snippetDetail.errors.failedToDelete")
+        );
+        return;
+      }
+
+      const remaining = snippetsStore.state.snippets.filter(
+        (s) => s.id !== snippetId
+      );
+      snippetsStore.setState((prev) => ({ ...prev, snippets: remaining }));
+      // Deleting the addressed snippet has to move the address too, or the URL
+      // would keep pointing at something that no longer exists.
+      if (selectedSnippetId === snippetId) {
+        const newest = selectNewest(remaining);
+        if (newest) selectSnippet(newest.id);
+        else showList();
+      }
+    } catch (error) {
+      captureError(error, { action: "dashboard.delete", snippetId });
+      toast.error(i18n.t("snippetDetail.errors.failedToDelete"));
     }
   };
 
@@ -638,12 +672,27 @@ export default function Dashboard() {
       action: {
         label: i18n.t("snippetDetail.deleteToast.undo"),
         onClick: async () => {
-          await enqueueRestore(snippet, fieldsFromSnippet(snippet));
-          snippetsStore.setState((prev) => ({
-            ...prev,
-            snippets: [...prev.snippets, snippet],
-          }));
-          selectSnippet(snippet.id);
+          try {
+            await enqueueRestore(snippet, fieldsFromSnippet(snippet));
+            const outcome = await waitForSnippetCommit(snippet.id);
+            if (outcome) {
+              toast.error(
+                outcome.error ?? i18n.t("snippetDetail.errors.failedToSave")
+              );
+              return;
+            }
+            snippetsStore.setState((prev) => ({
+              ...prev,
+              snippets: [...prev.snippets, snippet],
+            }));
+            selectSnippet(snippet.id);
+          } catch (error) {
+            captureError(error, {
+              action: "dashboard.restore",
+              snippetId: snippet.id,
+            });
+            toast.error(i18n.t("snippetDetail.errors.failedToSave"));
+          }
         },
       },
     });
