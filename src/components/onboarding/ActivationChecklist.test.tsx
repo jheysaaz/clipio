@@ -58,42 +58,69 @@ describe("ActivationChecklist", () => {
       "0 of 3"
     );
     expect(doneState("activation-step-create")).toBe("false");
-    expect(doneState("activation-step-shortcut")).toBe("false");
+    expect(doneState("activation-step-placeholder")).toBe("false");
     expect(doneState("activation-step-insert")).toBe("false");
   });
 
-  it("derives the create and shortcut steps from the library", async () => {
-    await seedCompleted();
-
-    render(<ActivationChecklist snippets={[snippet({ shortcut: "" })]} />);
-
-    await waitFor(() =>
-      expect(doneState("activation-step-create")).toBe("true")
-    );
-    expect(doneState("activation-step-shortcut")).toBe("false");
-  });
-
-  it("marks the shortcut step from a saved snippet", async () => {
+  it("derives the create and placeholder steps from the library", async () => {
     await seedCompleted();
 
     render(<ActivationChecklist snippets={[snippet()]} />);
 
     await waitFor(() =>
-      expect(doneState("activation-step-shortcut")).toBe("true")
+      expect(doneState("activation-step-create")).toBe("true")
+    );
+    expect(doneState("activation-step-placeholder")).toBe("false");
+  });
+
+  it("marks the placeholder step from a snippet content token", async () => {
+    await seedCompleted();
+
+    render(
+      <ActivationChecklist
+        snippets={[snippet({ content: "Regards {{cursor}}" })]}
+      />
+    );
+
+    await waitFor(() =>
+      expect(doneState("activation-step-placeholder")).toBe("true")
     );
     expect(screen.getByTestId("activation-progress")).toHaveTextContent(
       "2 of 3"
     );
   });
 
-  it("marks insertion from the global counter", async () => {
-    await seedCompleted({ totalSnippetInsertions: 1 });
+  it("marks insertion from a used snippet still in the library", async () => {
+    await seedCompleted({ snippetUsageCount: { s1: 1 } });
 
-    render(<ActivationChecklist snippets={[snippet()]} />);
+    render(
+      <ActivationChecklist
+        snippets={[snippet({ content: "Regards {{cursor}}" })]}
+      />
+    );
 
     await waitFor(() =>
       expect(screen.queryByTestId("activation-checklist")).toBeNull()
     );
+  });
+
+  it("starts over when the used snippet has been deleted", async () => {
+    // The lifetime counter remains 1, but no current snippet has been used.
+    await seedCompleted({
+      totalSnippetInsertions: 1,
+      snippetUsageCount: { "deleted-snippet": 1 },
+    });
+
+    render(<ActivationChecklist snippets={[]} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("activation-checklist")).toBeVisible()
+    );
+    expect(screen.getByTestId("activation-progress")).toHaveTextContent(
+      "0 of 3"
+    );
+    expect(doneState("activation-step-placeholder")).toBe("false");
+    expect(doneState("activation-step-insert")).toBe("false");
   });
 
   it("does not render while the tour is still in progress", async () => {

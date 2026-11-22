@@ -1,8 +1,9 @@
 /**
  * The first-success loop that follows the guided tour.
  *
- * Selectors are contracts: the checklist's own testids, and the same stable
- * create-form ids the onboarding tour uses. No assertion depends on copy.
+ * The checklist lives in the options rail, never across the top of popup
+ * views. Selectors are contracts: the checklist's own testids and the stable
+ * `options-search` readiness handle. No assertion depends on copy.
  */
 
 import type { Page } from "@playwright/test";
@@ -16,87 +17,145 @@ async function waitForPopupReady(page: Page): Promise<void> {
   );
 }
 
+async function waitForOptionsReady(page: Page): Promise<void> {
+  await expect(page.getByTestId("options-search")).toBeVisible();
+}
+
 function step(page: Page, id: string) {
   return page.getByTestId(`activation-step-${id}`);
 }
 
 test.describe("activation after onboarding", () => {
-  test("tracks creation, shortcut and first insertion", async ({
+  test("tracks creation, placeholder and first insertion in the options rail", async ({
     popupPage,
+    optionsPage,
+    storageHelper,
   }) => {
-    await waitForPopupReady(popupPage);
-    await setLocalItem(popupPage, "totalSnippetInsertions", 0);
-    await setLocalItem(popupPage, "activationDismissed", false);
-    await popupPage.reload();
-    await waitForPopupReady(popupPage);
+    await waitForOptionsReady(optionsPage);
+    await setLocalItem(optionsPage, "totalSnippetInsertions", 0);
+    await setLocalItem(optionsPage, "snippetUsageCount", {});
+    await setLocalItem(optionsPage, "activationDismissed", false);
+    await optionsPage.reload();
+    await waitForOptionsReady(optionsPage);
 
-    const checklist = popupPage.getByTestId("activation-checklist");
+    const checklist = optionsPage.getByTestId("activation-checklist");
     await expect(checklist).toBeVisible();
-    await expect(step(popupPage, "create")).toHaveAttribute(
+    await expect(step(optionsPage, "create")).toHaveAttribute(
       "data-done",
       "false"
     );
-    await expect(step(popupPage, "shortcut")).toHaveAttribute(
-      "data-done",
-      "false"
-    );
-
-    await popupPage.getByTestId("add-snippet").click();
-    await popupPage.getByTestId("snippet-label-input").fill("Signature");
-    await popupPage.getByTestId("snippet-shortcut-input").fill("sig");
-    await popupPage.locator('[contenteditable="true"]').first().fill("Regards");
-    await popupPage.getByTestId("snippet-create-save").click();
-
-    await expect(step(popupPage, "create")).toHaveAttribute(
-      "data-done",
-      "true"
-    );
-    await expect(step(popupPage, "shortcut")).toHaveAttribute(
-      "data-done",
-      "true"
-    );
-    await expect(step(popupPage, "insert")).toHaveAttribute(
+    await expect(step(optionsPage, "placeholder")).toHaveAttribute(
       "data-done",
       "false"
     );
 
-    await setLocalItem(popupPage, "totalSnippetInsertions", 1);
-    await popupPage.reload();
+    // The popup is the surface the card was removed from. Wait for it to be
+    // ready first, or an assertion before hydration would prove nothing.
     await waitForPopupReady(popupPage);
+    await expect(popupPage.getByTestId("activation-checklist")).toHaveCount(0);
+
+    await storageHelper.seedSnippets([
+      {
+        id: "s1",
+        label: "Signature",
+        content: "Regards {{cursor}}",
+        shortcut: "sig",
+        tags: [],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+    await optionsPage.reload();
+    await waitForOptionsReady(optionsPage);
+
+    await expect(step(optionsPage, "create")).toHaveAttribute(
+      "data-done",
+      "true"
+    );
+    await expect(step(optionsPage, "placeholder")).toHaveAttribute(
+      "data-done",
+      "true"
+    );
+    await expect(step(optionsPage, "insert")).toHaveAttribute(
+      "data-done",
+      "false"
+    );
+
+    await setLocalItem(optionsPage, "totalSnippetInsertions", 1);
+    await setLocalItem(optionsPage, "snippetUsageCount", { s1: 1 });
+    await optionsPage.reload();
+    await waitForOptionsReady(optionsPage);
 
     await expect(checklist).toHaveCount(0);
   });
 
-  test("dismissal survives a reload", async ({ popupPage }) => {
-    await waitForPopupReady(popupPage);
-    await setLocalItem(popupPage, "activationDismissed", false);
-    await popupPage.reload();
-    await waitForPopupReady(popupPage);
+  test("starts over when the used snippet has been deleted", async ({
+    optionsPage,
+    storageHelper,
+  }) => {
+    // clearAll restores the completed tour but removes the library and its
+    // usage counts. Re-seed only the orphaned signals from the old setup: a
+    // lifetime insertion total and a usage count for a snippet that no longer
+    // exists. Neither may leave "use it on a page" checked.
+    await storageHelper.clearAll();
+    await setLocalItem(optionsPage, "activationDismissed", false);
+    await setLocalItem(optionsPage, "totalSnippetInsertions", 1);
+    await setLocalItem(optionsPage, "snippetUsageCount", {
+      "deleted-snippet": 1,
+    });
+    await optionsPage.reload();
+    await waitForOptionsReady(optionsPage);
 
-    await expect(popupPage.getByTestId("activation-checklist")).toBeVisible();
-    await popupPage.getByTestId("activation-dismiss").click();
-    await expect(popupPage.getByTestId("activation-checklist")).toHaveCount(0);
-    expect(await getLocalItem(popupPage, "activationDismissed")).toBe(true);
+    const checklist = optionsPage.getByTestId("activation-checklist");
+    await expect(checklist).toBeVisible();
+    await expect(step(optionsPage, "create")).toHaveAttribute(
+      "data-done",
+      "false"
+    );
+    await expect(step(optionsPage, "placeholder")).toHaveAttribute(
+      "data-done",
+      "false"
+    );
+    await expect(step(optionsPage, "insert")).toHaveAttribute(
+      "data-done",
+      "false"
+    );
+  });
 
-    await popupPage.reload();
-    await waitForPopupReady(popupPage);
-    await expect(popupPage.getByTestId("activation-checklist")).toHaveCount(0);
+  test("dismissal survives a reload", async ({ optionsPage }) => {
+    await waitForOptionsReady(optionsPage);
+    await setLocalItem(optionsPage, "activationDismissed", false);
+    await optionsPage.reload();
+    await waitForOptionsReady(optionsPage);
+
+    const checklist = optionsPage.getByTestId("activation-checklist");
+    await expect(checklist).toBeVisible();
+    await optionsPage.getByTestId("activation-dismiss").click();
+    await expect(checklist).toHaveCount(0);
+    expect(await getLocalItem(optionsPage, "activationDismissed")).toBe(true);
+
+    await optionsPage.reload();
+    await waitForOptionsReady(optionsPage);
+    await expect(checklist).toHaveCount(0);
   });
 });
 
 test.describe("activation during onboarding", () => {
   test.use({ onboardingState: "fresh" });
 
-  test("waits for the tour, then appears when it is skipped", async ({
+  test("waits for the tour, then appears in the options rail when it is skipped", async ({
     popupPage,
+    optionsPage,
   }) => {
-    await waitForPopupReady(popupPage);
-
+    // A first-run tour starts in the popup and writes its progress to shared
+    // storage. The options rail must stay quiet until that tour is over.
     await expect(popupPage.getByTestId("onboarding-popover")).toBeVisible();
-    await expect(popupPage.getByTestId("activation-checklist")).toHaveCount(0);
+    await expect(optionsPage.getByTestId("activation-checklist")).toHaveCount(
+      0
+    );
 
     await popupPage.getByTestId("onboarding-skip").click();
 
-    await expect(popupPage.getByTestId("activation-checklist")).toBeVisible();
+    await expect(optionsPage.getByTestId("activation-checklist")).toBeVisible();
   });
 });

@@ -4,7 +4,7 @@ import { waitFor } from "@testing-library/react";
 import {
   activationDismissedItem,
   guidedOnboardingStateItem,
-  totalSnippetInsertionsItem,
+  usageCountsItem,
 } from "@/storage/items";
 import { resetBrowserMocks } from "../../tests/mocks/browser";
 import {
@@ -33,7 +33,13 @@ describe("activation store", () => {
   it("loads normalised persisted inputs", async () => {
     await seed({
       guidedOnboarding: { status: "completed" },
-      totalSnippetInsertions: 4,
+      snippetUsageCount: {
+        s1: 3,
+        s2: 0,
+        s3: -1,
+        s4: "many",
+        s5: Number.POSITIVE_INFINITY,
+      },
       activationDismissed: true,
     });
 
@@ -41,7 +47,7 @@ describe("activation store", () => {
 
     expect(activationStore.state).toEqual({
       onboarding: { status: "completed" },
-      totalInsertions: 4,
+      usageCounts: { s1: 3 },
       dismissed: true,
       isLoaded: true,
     });
@@ -50,14 +56,14 @@ describe("activation store", () => {
   it("repairs corrupt persisted values instead of showing a half-state", async () => {
     await seed({
       guidedOnboarding: { status: "nonsense" },
-      totalSnippetInsertions: -8,
+      snippetUsageCount: "many",
       activationDismissed: "yes",
     });
 
     await loadActivation();
 
     expect(activationStore.state.onboarding).toEqual({ status: "not_started" });
-    expect(activationStore.state.totalInsertions).toBe(0);
+    expect(activationStore.state.usageCounts).toEqual({});
     expect(activationStore.state.dismissed).toBe(false);
     expect(activationStore.state.isLoaded).toBe(true);
   });
@@ -71,6 +77,7 @@ describe("activation store", () => {
 
     expect(activationStore.state.isLoaded).toBe(true);
     expect(activationStore.state.onboarding).toEqual({ status: "not_started" });
+    expect(activationStore.state.usageCounts).toEqual({});
   });
 
   it("dismisses immediately and persists the choice", async () => {
@@ -93,12 +100,14 @@ describe("activation store", () => {
     );
   });
 
-  it("reacts to an insertion counted in another context", async () => {
+  it("reacts to an insertion recorded in another context", async () => {
     await loadActivation();
 
-    await totalSnippetInsertionsItem.setValue(2);
+    await usageCountsItem.setValue({ s1: 2 });
 
-    await waitFor(() => expect(activationStore.state.totalInsertions).toBe(2));
+    await waitFor(() =>
+      expect(activationStore.state.usageCounts).toEqual({ s1: 2 })
+    );
   });
 
   it("reacts to a dismissal made in another context", async () => {
@@ -109,12 +118,16 @@ describe("activation store", () => {
     await waitFor(() => expect(activationStore.state.dismissed).toBe(true));
   });
 
-  it("ignores an insertion count that is not a finite number", async () => {
+  it.each([
+    "many",
+    [1, 2],
+    { s1: "many", s2: -1, s3: Number.POSITIVE_INFINITY },
+  ])("ignores a non-positive or non-finite usage value: %s", async (value) => {
     await loadActivation();
 
-    await totalSnippetInsertionsItem.setValue("many" as never);
+    await usageCountsItem.setValue(value as never);
 
-    expect(activationStore.state.totalInsertions).toBe(0);
+    expect(activationStore.state.usageCounts).toEqual({});
   });
 
   it("does not overwrite a stored dismissal when its write fails", async () => {
@@ -127,12 +140,12 @@ describe("activation store", () => {
     expect(activationStore.state.dismissed).toBe(true);
   });
 
-  it("reads the global insertion item it claims to read", async () => {
-    await seed({ totalSnippetInsertions: 9 });
-    vi.spyOn(totalSnippetInsertionsItem, "getValue");
+  it("reads the per-snippet usage item it claims to read", async () => {
+    await seed({ snippetUsageCount: { s1: 9 } });
+    vi.spyOn(usageCountsItem, "getValue");
 
     await loadActivation();
 
-    expect(totalSnippetInsertionsItem.getValue).toHaveBeenCalled();
+    expect(usageCountsItem.getValue).toHaveBeenCalled();
   });
 });

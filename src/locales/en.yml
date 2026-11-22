@@ -598,5 +598,5 @@ activation:
   dismiss: Dismiss setup checklist
   steps:
     create: Create your first snippet
-    shortcut: Give it a shortcut
+    placeholder: Use a placeholder
     insert: Use it on a page
