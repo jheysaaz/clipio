@@ -59,14 +59,28 @@ const posix = (p) => p.split(sep).join("/");
  * bytes and the aggregate by 173; the popup, background and content budgets did
  * not move. All affected sizes were measured twice from clean builds and did
  * not vary.
+ *
+ * Raised a sixth time for autosave, the persisted write queue and local version
+ * history. The background gains the queue drain and rate limiting, the popup
+ * gains draft staging plus undo/redo, and the options entry grows because the
+ * same storage and history modules are shared there. The content script grows
+ * slightly from the shared LWW/queue types. The popup entry chunk itself shrank
+ * (the Save button and its wiring are gone), so its budget is left high. All
+ * raised sizes were measured twice from clean builds and did not vary.
+ *
+ * Raised a seventh time for the queue drain's wake-up scheduling: operations
+ * blocked by the inter-send gap or backoff now get a timer so they are retried
+ * without waiting for another storage write. That adds 646 bytes to
+ * background.js and therefore to the all-JavaScript total; no other budget
+ * moved. Both sizes were measured twice from clean builds and did not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_722_054 },
-  { name: "background entry", pattern: "background.js", maxBytes: 217_475 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_753_042 },
+  { name: "background entry", pattern: "background.js", maxBytes: 224_510 },
   {
     name: "content script entry",
     pattern: "content-scripts/content.js",
-    maxBytes: 916_870,
+    maxBytes: 918_247,
   },
   {
     name: "popup entry chunk",
@@ -76,14 +90,14 @@ const BUDGETS = [
   {
     name: "options entry chunk",
     pattern: "chunks/options-*.js",
-    maxBytes: 187_989,
+    maxBytes: 201_182,
   },
   {
     // Shared chunks are included here even when their individual hashed names
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_587_709,
+    maxBytes: 1_610_285,
   },
 ];
 
