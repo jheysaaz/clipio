@@ -109,8 +109,6 @@ export default defineConfig({
         // report but not excludes against the tree, so nothing else would notice.
         // Page composition — covered by e2e specs
         "src/pages/**",
-        // Options UI — covered by e2e options/image-gif specs
-        "src/components/options/**",
         // Static constants
         "src/config/**",
         // Side-effectful Sentry SDK bootstrap (init runs on import)
@@ -122,36 +120,6 @@ export default defineConfig({
         // Re-export barrel / browser-API wrapper — coverage debt: unit tests
         // not yet written, exercised only via e2e integration paths.
         "src/storage/index.ts",
-
-        // EXCLUDED, and the cost is real: this file is no longer measured at
-        // all, so a coverage regression in it would be invisible. It is excluded
-        // rather than given a lower threshold because `thresholds` entries only
-        // ADD to the top-level floor — with `perFile: true` on, a per-file entry
-        // cannot lower 80 for one file. Since indexeddb.ts cannot reach 80 on
-        // functions or branches under fake-indexeddb, leaving it in would mean
-        // either a permanently red gate or a globally lowered floor. Both are
-        // worse than an honest, documented hole.
-        //
-        // Why it cannot reach 80 — all three verified, not assumed:
-        //
-        //  1. Six upgrade branches guard schema states IndexedDB cannot produce:
-        //     `oldVersion < 1` with the snippets store already existing,
-        //     `oldVersion >= 3` while an upgrade is firing, and
-        //     `event.currentTarget` being falsy inside `onupgradeneeded`.
-        //  2. The seven-function media hash backfill filters on
-        //     `e.blob instanceof Blob`, and fake-indexeddb does not
-        //     structured-clone a Blob — a blob written to the store reads back as
-        //     a bare `{ type }` with no `arrayBuffer` and a plain-Object
-        //     prototype — so the filter rejects every row and the hashing loop is
-        //     unreachable in unit tests.
-        //  3. Five `tx.onerror` / `request.onerror` callbacks do not fire on an
-        //     aborted transaction under fake-indexeddb; tests written that way
-        //     timed out, so they would have tested the fake rather than the code.
-        //
-        // This file is still tested (37 unit tests) and still exercised by the
-        // storage and image e2e specs. What is lost is the *number*, not the
-        // tests. Tracked in docs/open.md.
-        "src/storage/backends/indexeddb.ts",
       ],
 
       // Coverage thresholds — a RATCHET, not a target.

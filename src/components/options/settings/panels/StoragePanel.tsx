@@ -41,7 +41,7 @@ const LOCAL_CEILING_BYTES = 5 * 1024 * 1024;
  * The sync ceiling is exactly 100 KB, so `100.0 KB` reads as a measurement
  * rather than a limit; `100 KB` reads as one.
  */
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   const kb = bytes / 1024;
   if (kb >= 1024) {
     const mb = kb / 1024;

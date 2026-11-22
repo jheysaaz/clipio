@@ -26,6 +26,78 @@ import { captureError } from "@/lib/sentry";
 import { normalizeStoredSnippet } from "../normalize";
 
 /**
+ * Apply every schema step from `oldVersion` up to the configured version.
+ *
+ * Exported as a seam: the guards below cover database states fake-indexeddb
+ * cannot produce (a store that already exists at a lower version, an index
+ * that is already present, a missing event target).
+ *
+ * `currentTarget` is passed explicitly instead of being read from a captured
+ * event so callers can exercise the falsy-target guard. In the browser it is
+ * `event.currentTarget`; a falsy value skips the v3 index step, exactly as the
+ * inline handler did.
+ */
+export function applySchemaUpgrades(
+  db: IDBDatabase,
+  oldVersion: number,
+  request: IDBOpenDBRequest,
+  currentTarget: EventTarget | null
+): void {
+  // v1: create snippets store (first install or upgrade from nothing)
+  if (oldVersion < 1) {
+    if (!db.objectStoreNames.contains(IDB_CONFIG.STORE_NAME)) {
+      db.createObjectStore(IDB_CONFIG.STORE_NAME, { keyPath: "id" });
+    }
+  }
+
+  // v2: add media store
+  if (oldVersion < 2) {
+    if (!db.objectStoreNames.contains(IDB_CONFIG.MEDIA_STORE_NAME)) {
+      db.createObjectStore(IDB_CONFIG.MEDIA_STORE_NAME, { keyPath: "id" });
+    }
+  }
+
+  // v3: add "hash" index to media store for content-based deduplication.
+  // The index is non-unique because two entries may share a hash only
+  // transiently (e.g. during a backfill race). multiEntry: false.
+  if (oldVersion < 3) {
+    // The media store is guaranteed to exist by this point (created in v2
+    // or above, or just created in this same transaction for v0→v3).
+    const mediaStore = currentTarget
+      ? request.transaction!.objectStore(IDB_CONFIG.MEDIA_STORE_NAME)
+      : null;
+    if (mediaStore && !mediaStore.indexNames.contains("hash")) {
+      mediaStore.createIndex("hash", "hash", { unique: false });
+    }
+  }
+}
+
+/** A media row as read by the pre-v3 hash backfill. */
+export type MediaBackfillEntry = { id: string; blob: Blob; hash?: string };
+
+/**
+ * Injectable pieces of the backfill. Blob detection is a seam because
+ * fake-indexeddb does not structured-clone a Blob; hashing is a seam so a test
+ * can drive both a known digest and a deterministic rejection.
+ */
+export type BackfillMediaDeps = {
+  isBlob: (value: unknown) => value is Blob;
+  hashBlob: (blob: Blob) => Promise<string>;
+};
+
+/** Production implementations of the two backfill seams. */
+export const defaultBackfillMediaDeps: BackfillMediaDeps = {
+  isBlob: (value): value is Blob => value instanceof Blob,
+  async hashBlob(blob) {
+    const arrayBuffer = await blob.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest("SHA-256", arrayBuffer);
+    return Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  },
+};
+
+/**
  * Shared IndexedDB opener. Handles all version migrations.
  * Exported so MediaStore can reuse the same DB connection logic.
  *
@@ -37,38 +109,12 @@ export function openDB(): Promise<IDBDatabase> {
     const request = indexedDB.open(IDB_CONFIG.DB_NAME, IDB_CONFIG.VERSION);
 
     request.onupgradeneeded = (event) => {
-      const db = request.result;
-      const oldVersion = event.oldVersion;
-
-      // v1: create snippets store (first install or upgrade from nothing)
-      if (oldVersion < 1) {
-        if (!db.objectStoreNames.contains(IDB_CONFIG.STORE_NAME)) {
-          db.createObjectStore(IDB_CONFIG.STORE_NAME, { keyPath: "id" });
-        }
-      }
-
-      // v2: add media store
-      if (oldVersion < 2) {
-        if (!db.objectStoreNames.contains(IDB_CONFIG.MEDIA_STORE_NAME)) {
-          db.createObjectStore(IDB_CONFIG.MEDIA_STORE_NAME, { keyPath: "id" });
-        }
-      }
-
-      // v3: add "hash" index to media store for content-based deduplication.
-      // The index is non-unique because two entries may share a hash only
-      // transiently (e.g. during a backfill race). multiEntry: false.
-      if (oldVersion < 3) {
-        // The media store is guaranteed to exist by this point (created in v2
-        // or above, or just created in this same transaction for v0→v3).
-        const mediaStore = event.currentTarget
-          ? (event.target as IDBOpenDBRequest).transaction!.objectStore(
-              IDB_CONFIG.MEDIA_STORE_NAME
-            )
-          : null;
-        if (mediaStore && !mediaStore.indexNames.contains("hash")) {
-          mediaStore.createIndex("hash", "hash", { unique: false });
-        }
-      }
+      applySchemaUpgrades(
+        request.result,
+        event.oldVersion,
+        request,
+        event.currentTarget
+      );
     };
 
     request.onsuccess = () => {
@@ -89,30 +135,29 @@ export function openDB(): Promise<IDBDatabase> {
  * Called once per DB open after a v3 upgrade (or on any open if there are
  * un-hashed entries from a failed previous backfill run).
  *
- * This is fire-and-forget: errors are captured to Sentry but never thrown.
+ * This is fire-and-forget from the caller's perspective: a whole-run failure
+ * is reported by `openDB`, and a per-entry failure is captured here without
+ * stopping the remaining entries.
  */
-async function backfillMediaHashes(db: IDBDatabase): Promise<void> {
+export async function backfillMediaHashes(
+  db: IDBDatabase,
+  deps: BackfillMediaDeps = defaultBackfillMediaDeps
+): Promise<void> {
   // Read all media entries
-  const entries: Array<{ id: string; blob: Blob; hash?: string }> =
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(IDB_CONFIG.MEDIA_STORE_NAME, "readonly");
-      const req = tx.objectStore(IDB_CONFIG.MEDIA_STORE_NAME).getAll();
-      req.onsuccess = () =>
-        resolve(req.result as Array<{ id: string; blob: Blob; hash?: string }>);
-      req.onerror = () => reject(req.error);
-    });
+  const entries: MediaBackfillEntry[] = await new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_CONFIG.MEDIA_STORE_NAME, "readonly");
+    const req = tx.objectStore(IDB_CONFIG.MEDIA_STORE_NAME).getAll();
+    req.onsuccess = () => resolve(req.result as MediaBackfillEntry[]);
+    req.onerror = () => reject(req.error);
+  });
 
   // Filter to only those lacking a hash
-  const needsHash = entries.filter((e) => !e.hash && e.blob instanceof Blob);
+  const needsHash = entries.filter((e) => !e.hash && deps.isBlob(e.blob));
   if (needsHash.length === 0) return;
 
   for (const entry of needsHash) {
     try {
-      const arrayBuffer = await entry.blob.arrayBuffer();
-      const hashBuffer = await crypto.subtle.digest("SHA-256", arrayBuffer);
-      const hashHex = Array.from(new Uint8Array(hashBuffer))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
+      const hashHex = await deps.hashBlob(entry.blob);
 
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(IDB_CONFIG.MEDIA_STORE_NAME, "readwrite");

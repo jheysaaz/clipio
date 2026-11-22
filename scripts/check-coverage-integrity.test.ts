@@ -262,12 +262,19 @@ describe("exclude extraction — the real config", () => {
     for (const expected of [
       "src/entrypoints/**",
       "src/components/ui/**",
-      "src/components/options/**",
       "src/pages/**",
       "src/config/**",
-      "src/storage/backends/indexeddb.ts",
     ]) {
       expect(patterns, expected).toContain(expected);
+    }
+
+    // These two used to be excluded while their tests were built. Keeping the
+    // negative assertions here makes a silent re-exclusion fail the gate.
+    for (const removed of [
+      "src/components/options/**",
+      "src/storage/backends/indexeddb.ts",
+    ]) {
+      expect(patterns, removed).not.toContain(removed);
     }
   });
 
