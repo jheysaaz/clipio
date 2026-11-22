@@ -581,12 +581,13 @@ test.describe("Content Script Expansion", () => {
     await popupPage.reload();
     await expect(popupPage.getByTestId("snippet-list-item")).toBeVisible();
     await popupPage.getByTestId("snippet-list-item").click();
-    await popupPage
-      .locator('[contenteditable="true"]')
-      .first()
-      .fill("Updated content");
-    await expect(popupPage.getByTestId("snippet-save")).toBeEnabled();
-    await popupPage.getByTestId("snippet-save").click();
+    const editor = popupPage.locator('[contenteditable="true"]').first();
+    await editor.fill("Updated content");
+    await expect(editor).toContainText("Updated content");
+
+    // The edit is staged on blur rather than by a Save button, which no longer
+    // exists. `pagehide` is the event a real popup blur produces.
+    await popupPage.evaluate(() => window.dispatchEvent(new Event("pagehide")));
 
     await expect
       .poll(async () => (await storageHelper.readSyncSnippets())[0]?.content, {

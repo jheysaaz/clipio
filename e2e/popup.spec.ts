@@ -16,11 +16,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "./fixtures.js";
 import { helloSnippet, makeSnippet, makeSnippets } from "./helpers/snippets.js";
 import type { Snippet } from "../src/types/index.js";
-import {
-  getLocalItem,
-  readSyncSnippets,
-  writeBackupSnippets,
-} from "./helpers/storage.js";
+import { readHistory, readSyncSnippets } from "./helpers/storage.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -685,6 +681,36 @@ test.describe("Popup (Dashboard)", () => {
     await expect(popupPage.getByTestId("empty-state")).toBeVisible();
   });
 
+  test("offers a one-step undo after a delete", async ({ popupPage }) => {
+    const snippet = makeSnippet({ label: "Undo Me", shortcut: "/undo-me" });
+    await seedAndReload(popupPage, [snippet]);
+
+    await popupPage.getByTestId("snippet-delete").click();
+    await popupPage
+      .getByRole("button", { name: /delete|confirm|yes/i })
+      .first()
+      .click();
+
+    const countSnippets = () =>
+      popupPage.evaluate(async () => {
+        const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+        const all = await ext.storage.sync.get(null);
+        return Object.keys(all).filter((k) => k.startsWith("snip:")).length;
+      });
+    await expect.poll(countSnippets).toBe(0);
+
+    // Role + name: the toast action is the last visible Undo control (the top
+    // bar's Undo is a different control for editor history).
+    const undoDelete = popupPage
+      .getByRole("button", { name: "Undo", exact: true })
+      .last();
+    await expect(undoDelete).toBeVisible();
+    await undoDelete.click();
+
+    await expect.poll(countSnippets).toBe(1);
+    await expect(popupPage.getByTestId("snippet-list-item")).toHaveCount(1);
+  });
+
   // -------------------------------------------------------------------------
   // Accessibility checks
   // -------------------------------------------------------------------------
@@ -712,156 +738,114 @@ test.describe("Popup (Dashboard)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Save-path outcomes changed by Waves 9 and 10. Neither had e2e coverage, so
-// both regressions below were invisible to the e2e suite.
+// Autosave replaces the old unsaved-changes guard. The popup disappears on
+// blur, so an edit has to be staged locally and committed by the background
+// however the user leaves the editor — sidebar click, browser Back, or a blur.
 // ---------------------------------------------------------------------------
 
-test.describe("Popup (Dashboard) — oversized snippet is refused, not silently diverted", () => {});
+async function seedTwo(
+  popupPage: import("@playwright/test").Page
+): Promise<{ older: Snippet; newer: Snippet }> {
+  const older = makeSnippet({
+    label: "Older",
+    shortcut: ";ol",
+    content: "older body",
+  });
+  const newer = makeSnippet({
+    label: "Newer",
+    shortcut: ";nw",
+    content: "newer body",
+    updatedAt: "2999-01-01T00:00:00.000Z",
+  });
+  await seedAndReload(popupPage, [older, newer]);
+  return { older, newer };
+}
 
-// ---------------------------------------------------------------------------
-// Leaving a snippet with unsaved changes.
-//
-// The guard was a `pendingSnippet` store field consulted by the sidebar row and
-// nowhere else. Browser Back — the navigation a popup user actually reaches for
-// when they have made an edit they regret — walked straight past it, and so did
-// the arrow keys. Editing a snippet's content, pressing Back, and watching the
-// edit disappear was the reported symptom.
-//
-// `useBlocker` puts the decision in the router, so the sidebar click, the keyboard,
-// and a POP are the same code path. These tests are the deliverable: the wiring
-// without them proves nothing, and the control test is what stops the whole group
-// from passing because the guard fires on every navigation.
-// ---------------------------------------------------------------------------
+async function editSelectedSnippet(
+  popupPage: import("@playwright/test").Page,
+  snippet: Snippet,
+  text: string
+) {
+  // The URL changes before React swaps the keyed detail view. Waiting for the
+  // target's content avoids clicking the outgoing editor, which React would
+  // replace mid-type and drop every keystroke on the floor.
+  const editor = popupPage.locator('[contenteditable="true"]');
+  await expect(editor).toHaveCount(1);
+  await expect(editor).toContainText(snippet.content);
+  await editor.click();
+  await popupPage.keyboard.type(text);
+  await expect(editor).toContainText(text.trim());
+}
 
-test.describe("Popup — unsaved changes block navigation", () => {
-  /**
-   * Two snippets, with the newer one unambiguous so auto-select picks it.
-   *
-   * `updatedAt` is what `selectNewest` reads, and auto-select is what decides
-   * which snippet the popup is sitting on after a reload — so leaving it to chance
-   * would make every assertion below depend on `makeSnippet`'s clock.
-   */
-  async function seedTwo(
-    popupPage: import("@playwright/test").Page
-  ): Promise<{ older: Snippet; newer: Snippet }> {
-    const older = makeSnippet({
-      label: "Older",
-      shortcut: ";ol",
-      content: "older body",
-    });
-    const newer = makeSnippet({
-      label: "Newer",
-      shortcut: ";nw",
-      content: "newer body",
-      updatedAt: "2999-01-01T00:00:00.000Z",
-    });
-    await seedAndReload(popupPage, [older, newer]);
-    return { older, newer };
-  }
+async function syncedContent(
+  popupPage: import("@playwright/test").Page,
+  snippetId: string
+): Promise<string> {
+  const snippets = await readSyncSnippets(popupPage);
+  return snippets.find((s) => s.id === snippetId)?.content ?? "";
+}
 
-  /**
-   * Leave the selected snippet dirty, and prove it from the app's own statement.
-   *
-   * `snippet-save` is disabled unless there are unsaved changes, so waiting for it
-   * to enable is the app confirming the editor is dirty — no sleep, and no
-   * assumption about how long the rich editor takes to report a keystroke.
-   */
-  async function makeEditorDirty(popupPage: import("@playwright/test").Page) {
-    const editor = popupPage.locator('[contenteditable="true"]');
-    // Exactly one when a snippet is selected, so addressing it is not a positional
-    // pick wearing a different hat.
-    await expect(editor).toHaveCount(1);
-    await editor.click();
-    await popupPage.keyboard.type(" an unsaved edit");
-    await expect(popupPage.getByTestId("snippet-save")).toBeEnabled();
-  }
-
-  test("a dirty editor blocks a sidebar selection and keeps the snippet addressed", async ({
+test.describe("Popup — edits autosave", () => {
+  test("an edit is committed when the user switches snippets", async ({
     popupPage,
   }) => {
     const { older, newer } = await seedTwo(popupPage);
-    // The row's own `id` attribute — a stable attribute, and not an index into a
-    // list whose order the test does not control.
     await popupPage.locator(`#snippet-${older.id}`).click();
     await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
-    await makeEditorDirty(popupPage);
 
+    await editSelectedSnippet(popupPage, older, " autosaved");
     await popupPage.locator(`#snippet-${newer.id}`).click();
 
-    await expect(popupPage.getByRole("alertdialog")).toBeVisible();
-    // Blocked, not merely warned about: the address did not move, and the list
-    // still says the older snippet is the selected one.
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
-    await expect(popupPage.getByTestId("snippet-list")).toHaveAttribute(
-      "aria-activedescendant",
-      `snippet-${older.id}`
+    // No dialog, no Save button: the unmounting editor flushes its draft and
+    // the background commits it. What proves it is the authoritative store.
+    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${newer.id}$`));
+    await expect
+      .poll(() => syncedContent(popupPage, older.id), { timeout: 10_000 })
+      .toContain("autosaved");
+
+    await popupPage.locator(`#snippet-${older.id}`).click();
+    await expect(popupPage.locator('[contenteditable="true"]')).toContainText(
+      "autosaved"
     );
   });
 
-  test("keeping editing cancels the navigation and leaves the editor alone", async ({
+  test("undo restores the committed edit through the queue", async ({
     popupPage,
   }) => {
     const { older, newer } = await seedTwo(popupPage);
     await popupPage.locator(`#snippet-${older.id}`).click();
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
-    await makeEditorDirty(popupPage);
-
+    await editSelectedSnippet(popupPage, older, " autosaved");
     await popupPage.locator(`#snippet-${newer.id}`).click();
-    const dialog = popupPage.getByRole("alertdialog");
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: /keep editing/i }).click();
+    await expect
+      .poll(() => syncedContent(popupPage, older.id), { timeout: 10_000 })
+      .toContain("autosaved");
 
-    await expect(dialog).toBeHidden();
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
-    // The edit is still there, which is the point of cancelling.
-    await expect(popupPage.getByTestId("snippet-save")).toBeEnabled();
+    await popupPage.locator(`#snippet-${older.id}`).click();
+    const undo = popupPage.getByTestId("snippet-undo");
+    await expect(undo).toBeEnabled();
+    await undo.click();
+
+    await expect
+      .poll(() => syncedContent(popupPage, older.id), { timeout: 10_000 })
+      .toBe("older body");
+    await expect(
+      popupPage.locator('[contenteditable="true"]')
+    ).not.toContainText("autosaved");
   });
 
-  test("discarding from the dialog lets the blocked navigation through", async ({
-    popupPage,
-  }) => {
-    const { older, newer } = await seedTwo(popupPage);
-    await popupPage.locator(`#snippet-${older.id}`).click();
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
-    await makeEditorDirty(popupPage);
-
-    await popupPage.locator(`#snippet-${newer.id}`).click();
-    const dialog = popupPage.getByRole("alertdialog");
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: /discard/i }).click();
-
-    // Not just "the dialog closed" — the navigation it was holding actually
-    // happened, once, and the blocker did not re-arm against it.
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${newer.id}$`));
-    await expect(dialog).toBeHidden();
-    // And a second attempt is not blocked: nothing is dirty about the new snippet.
-    await popupPage.locator(`#snippet-${older.id}`).click();
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
-    await expect(dialog).toBeHidden();
-  });
-
-  test("a dirty editor blocks the browser's Back button", async ({
+  test("browser Back does not lose an edit", async ({
     popupPage,
     extensionId,
   }) => {
     const { older, newer } = await seedTwo(popupPage);
     await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${newer.id}$`));
 
-    // The popup's own navigation is replace-only (ADR 0011), so `history.length`
-    // never grows on its own and Back has nowhere to go. This same-document hash
-    // navigation is what gives it a previous entry — the same way a real user's
-    // Back arrives with somewhere to return to.
+    // The popup's own navigation is replace-only (ADR 0011), so a hash
+    // navigation from outside the router is what gives Back somewhere to go.
     await popupPage.goto(
       `chrome-extension://${extensionId}/popup.html#/snippet/${older.id}`
     );
     await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
-
-    // Give that entry the history index the router would have written had the
-    // popup pushed it itself. A hash navigation performed from outside the router
-    // copies the previous entry's state, so both entries claim the same index and
-    // the router reads the step as a delta of zero — which it answers by reloading
-    // rather than by stepping back. That is an artefact of manufacturing history
-    // depth here; a real entry always carries its own index.
     await popupPage.evaluate(() => {
       const state = (window.history.state ?? {}) as { __TSR_index?: number };
       window.history.replaceState(
@@ -870,35 +854,53 @@ test.describe("Popup — unsaved changes block navigation", () => {
       );
     });
 
-    await makeEditorDirty(popupPage);
-
+    await editSelectedSnippet(popupPage, older, " before back");
     await popupPage.goBack();
 
-    const dialog = popupPage.getByRole("alertdialog");
-    await expect(dialog).toBeVisible();
-    // A POP is the browser's own move, so the address bar has already stepped back
-    // by the time the blocker is consulted. What proves the *app* did not navigate
-    // is that it is still showing the snippet being edited, with the edit still
-    // unsaved. Before the blocker, this navigation went through and the typed text
-    // went with it, silently.
-    await expect(popupPage.getByTestId("snippet-list")).toHaveAttribute(
-      "aria-activedescendant",
-      `snippet-${older.id}`
-    );
-    await expect(popupPage.getByTestId("snippet-save")).toBeEnabled();
-
-    // And answering "Keep editing" puts the address back where it was, so the
-    // blocked step is undone rather than merely deferred.
-    await dialog.getByRole("button", { name: /keep editing/i }).click();
-    await expect(dialog).toBeHidden();
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
+    // Before autosave, this navigation threw the typed text away. The edit is
+    // now flushed by the unmounting editor and committed in the background.
+    await expect
+      .poll(() => syncedContent(popupPage, older.id), { timeout: 10_000 })
+      .toContain("before back");
+    await expect(popupPage.getByRole("alertdialog")).toBeHidden();
   });
 
-  test("a clean editor navigates away without a prompt", async ({
+  test("records a local history snapshot of the replaced state", async ({
     popupPage,
   }) => {
-    // The control. Without it, every test above would also pass if the guard fired
-    // on all navigation — which is a worse bug than the one being fixed.
+    const { older, newer } = await seedTwo(popupPage);
+    await popupPage.locator(`#snippet-${older.id}`).click();
+    await editSelectedSnippet(popupPage, older, "recorded");
+    await popupPage.locator(`#snippet-${newer.id}`).click();
+    await expect
+      .poll(() => syncedContent(popupPage, older.id), { timeout: 10_000 })
+      .toContain("recorded");
+
+    type HistoryEntry = {
+      snippetId: string;
+      reason: string;
+      snapshot: { content: string };
+    };
+    await expect
+      .poll(
+        async () => {
+          const entries = (await readHistory(popupPage)) as HistoryEntry[];
+          return entries.some(
+            (entry) =>
+              entry.snippetId === older.id &&
+              entry.reason === "edit" &&
+              entry.snapshot.content === "older body"
+          );
+        },
+        { timeout: 10_000, message: "the replaced revision was never recorded" }
+      )
+      .toBe(true);
+  });
+
+  test("a clean editor still navigates away without a prompt", async ({
+    popupPage,
+  }) => {
+    // The control. Autosave must not add a prompt where none was needed.
     const { older, newer } = await seedTwo(popupPage);
     await popupPage.locator(`#snippet-${older.id}`).click();
     await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
