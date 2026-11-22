@@ -49,11 +49,13 @@ Outcomes are classified, not all treated as "try again":
   edit over newer data. The draft stays put for the user to resolve or discard.
 - **Anything else** is transient and gets a backoff until attempts run out.
 
-The create form uses the same path with one provisional id for the whole form
-session. Its fields autosave, but `snippet-create-save` remains the explicit way
-to finish validation, address the new record and navigate to it. Inline rename,
-delete and undo-delete also go through the queue, so there is one write path for
-every editor-originated change.
+A new snippet uses the same path with one provisional id for the whole editing
+session. There is no Create button: once the debounced draft has content and its
+fields validate, that first autosave is also the create. The provisional id
+becomes the real record, the library is re-read, and the route follows the new
+snippet. Later autosaves update that record through the same queue. Empty drafts
+are never staged. Delete and undo-delete use the queue too, so there is one write
+path for every editor-originated change.
 
 ### One revisioned commit path decides who wins
 
@@ -101,11 +103,13 @@ history it is about to step through. Cancel and undo-delete call the stronger
 
 ### The top bar reflects the new contract
 
-The detail top bar's Save button is gone. In its place are small undo/redo
-controls and a compact `role="status"` indicator showing pending, failed,
-refused or saved. Sidebar toggle, delete, copy and insert commands stay. The
-status is queue-wide rather than per-snippet: it answers "are my writes landing?",
-not "which record changed?".
+The editor toolbar's Save and Create buttons are gone. In their place are small
+undo/redo controls and one compact `role="status"` indicator showing draft,
+saving, saved or a failed save with Retry. Sidebar toggle and copy stay; delete
+lives in the overflow menu. Short saving bursts stay silent — the status appears
+only after roughly 400 ms — so the toolbar does not flicker on every keystroke.
+The status is queue-wide rather than per-snippet: it answers "are my writes
+landing?", not "which record changed?".
 
 ### Local storage changes from ourselves are not external edits
 

@@ -262,6 +262,33 @@ export async function refreshSyncStatus(): Promise<void> {
   publish();
 }
 
+let refreshChain: Promise<void> = Promise.resolve();
+
+/**
+ * Keep the toolbar status in step with the background-owned queue.
+ *
+ * The popup publishes `Saving…` when it stages a draft, but the background is
+ * what later removes that draft and the queued operation. Without watching both
+ * items the local store never hears about the commit and the toolbar sticks on
+ * `Saving…` even though the write landed. Serialising refreshes stops an older
+ * read from overwriting the result of a newer one.
+ */
+export function watchWriteQueueStatus(): () => void {
+  let disposed = false;
+  const refresh = () => {
+    if (disposed) return;
+    refreshChain = refreshChain.then(refreshSyncStatus, refreshSyncStatus);
+  };
+  const unwatchDrafts = editorDraftsItem.watch(refresh);
+  const unwatchQueue = writeQueueItem.watch(refresh);
+  refresh();
+  return () => {
+    disposed = true;
+    unwatchDrafts();
+    unwatchQueue();
+  };
+}
+
 /** Save editor fields locally without committing them yet. */
 export async function stageDraft(draft: EditorDraft): Promise<void> {
   const drafts = await editorDraftsItem.getValue();

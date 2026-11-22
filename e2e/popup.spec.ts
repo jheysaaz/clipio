@@ -184,9 +184,10 @@ test.describe("Popup routing", () => {
     await popupPage.getByTestId("snippet-label-input").fill("Addressed");
     await popupPage.getByTestId("snippet-shortcut-input").fill(";ad");
     await popupPage.locator('[contenteditable="true"]').first().fill("hello");
-    await popupPage.getByTestId("snippet-create-save").click();
 
-    await expect(popupPage).toHaveURL(/#\/snippet\//);
+    // The first valid autosave creates the record and navigates to it. There is
+    // no Create button left to click.
+    await expect(popupPage).toHaveURL(/#\/snippet\//, { timeout: 10_000 });
   });
 });
 
@@ -363,15 +364,10 @@ test.describe("Popup — reopening resumes the last viewed snippet", () => {
     await popupPage.getByTestId("snippet-list-item").nth(1).click();
     await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}`));
 
-    // The same testid and confirm pattern as the existing delete test, rather than
-    // a broader regex: `/^(delete|confirm)/i` with `.last()` matched a control that
-    // closed the popup, and the failure surfaced as "target page has been closed".
+    // Delete moved into the overflow menu and no longer asks for confirmation.
+    await popupPage.getByTestId("snippet-more").click();
     await popupPage.getByTestId("snippet-delete").click();
-    const confirmButton = popupPage
-      .getByRole("button", { name: /delete|confirm|yes/i })
-      .first();
-    await expect(confirmButton).toBeVisible({ timeout: 5_000 });
-    await confirmButton.click();
+    await expect(popupPage.getByRole("alertdialog")).toHaveCount(0);
 
     // The delete moved the address, which is the app doing its job.
     await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${newer.id}`));
@@ -519,13 +515,11 @@ test.describe("Popup — a new snippet's shortcut follows the trigger prefix", (
       "/"
     );
 
-    // Role + name, per the e2e selector rule — the cancel button carries an
-    // aria-label rather than a testid, and adding one here would mean this test
-    // dictated the component's markup.
-    await popupPage
-      .getByRole("button", { name: /cancel/i })
-      .first()
-      .click();
+    // There is no Save/Cancel chrome in the unified editor. Reopening the popup
+    // is how an empty draft is abandoned, and this is the "next open" the case
+    // is named for.
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
     await popupPage.evaluate(async () => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.local.set({ snippetPreviewPrefix: "," });
@@ -540,7 +534,9 @@ test.describe("Popup — a new snippet's shortcut follows the trigger prefix", (
 });
 
 test.describe("Popup (Dashboard)", () => {
-  test("creates new snippet via form", async ({ popupPage }) => {
+  test("creates a snippet on the first valid autosave", async ({
+    popupPage,
+  }) => {
     await popupPage.evaluate(async () => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.sync.clear();
@@ -570,10 +566,9 @@ test.describe("Popup (Dashboard)", () => {
     await editor.click();
     await popupPage.keyboard.type("Created by e2e");
 
-    // Save the snippet
-    const saveButton = popupPage.getByTestId("snippet-create-save");
-    await expect(saveButton).toBeEnabled();
-    await saveButton.click();
+    // No Save button: once all fields are valid the debounced draft is created.
+    // The route change proves the create committed, not just that a draft exists.
+    await expect(popupPage).toHaveURL(/#\/snippet\//, { timeout: 10_000 });
 
     // Poll the persisted value: the save handler writes asynchronously.
     await expect
@@ -598,6 +593,214 @@ test.describe("Popup (Dashboard)", () => {
     // own write fired drove a re-read, so one snippet in storage became two rows
     // on screen. Asserting only on storage is what let it through.
     await expect(popupPage.getByTestId("snippet-list-item")).toHaveCount(1);
+    // The background clears the staged draft; the one status slot must follow it
+    // out of `Saving…` instead of staying stuck after a successful create.
+    await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText(
+      "Saved ✓",
+      { timeout: 10_000 }
+    );
+  });
+
+  test("opens a draft with one editor layout and a disabled action bar", async ({
+    popupPage,
+  }) => {
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.sync.clear();
+      await ext.storage.local.set({ cachedSnippets: [], storageMode: "sync" });
+    });
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+    await popupPage.getByTestId("add-snippet").click();
+
+    for (const testId of [
+      "snippet-toggle-sidebar",
+      "snippet-undo",
+      "snippet-redo",
+      "snippet-sync-status",
+      "snippet-copy",
+      "snippet-more",
+      "snippet-label-input",
+      "snippet-shortcut-input",
+      "snippet-content-editor",
+    ]) {
+      await expect(popupPage.getByTestId(testId)).toBeVisible();
+    }
+    await expect(popupPage.getByTestId("snippet-label-input")).toBeFocused();
+    for (const testId of [
+      "snippet-copy",
+      "snippet-more",
+      "snippet-undo",
+      "snippet-redo",
+    ]) {
+      await expect(popupPage.getByTestId(testId)).toBeDisabled();
+    }
+    await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText(
+      "Draft"
+    );
+    await expect(popupPage.getByTestId("snippet-sync-status")).toHaveCount(1);
+    await expect(
+      popupPage.getByRole("button", { name: /^create$/i })
+    ).toHaveCount(0);
+    await expect(
+      popupPage.getByRole("button", { name: /^save$/i })
+    ).toHaveCount(0);
+
+    // The command hint is the editor placeholder, not a second instruction row.
+    await expect(
+      popupPage.locator('[contenteditable="true"]').first()
+    ).toHaveAttribute("spellcheck", "false");
+    await expect(
+      popupPage.locator("[data-slate-placeholder]").first()
+    ).toHaveText(/Type \/ for commands…/);
+
+    // Nothing is clipped at the popup's normal width.
+    const overflows = await popupPage.evaluate(
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth
+    );
+    expect(overflows).toBe(false);
+  });
+
+  test("uses the same landmark positions for a saved snippet", async ({
+    popupPage,
+  }) => {
+    await seedAndReload(popupPage, [helloSnippet()]);
+    await popupPage.getByTestId("snippet-list-item").click();
+
+    for (const testId of [
+      "snippet-toggle-sidebar",
+      "snippet-undo",
+      "snippet-redo",
+      "snippet-sync-status",
+      "snippet-copy",
+      "snippet-more",
+      "snippet-label-input",
+      "snippet-shortcut-input",
+      "snippet-content-editor",
+    ]) {
+      await expect(popupPage.getByTestId(testId)).toBeVisible();
+    }
+    await expect(popupPage.getByTestId("snippet-copy")).toBeEnabled();
+    await expect(popupPage.getByTestId("snippet-more")).toBeEnabled();
+    await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText(
+      "Saved ✓"
+    );
+    await expect(popupPage.getByTestId("snippet-undo")).toHaveAttribute(
+      "title",
+      /Restore previous version/
+    );
+    await expect(popupPage.getByTestId("snippet-redo")).toHaveAttribute(
+      "title",
+      /Restore next version/
+    );
+    await expect(popupPage.getByTestId("snippet-more")).toHaveAttribute(
+      "title",
+      /More actions/
+    );
+
+    // The editor pill is the same compact chrome as the sidebar pill, not a
+    // larger full-radius input that changes shape when it gains focus.
+    const editorPill = popupPage.getByTestId("snippet-shortcut-input");
+    const sidebarPill = popupPage
+      .getByTestId("snippet-list-item")
+      .locator("kbd")
+      .first();
+    const [editorPillStyle, sidebarPillStyle] = await Promise.all([
+      editorPill.evaluate((el) => {
+        const style = getComputedStyle(el);
+        return {
+          radius: style.borderRadius,
+          fontSize: style.fontSize,
+          height: el.getBoundingClientRect().height,
+        };
+      }),
+      sidebarPill.evaluate((el) => {
+        const style = getComputedStyle(el);
+        return {
+          radius: style.borderRadius,
+          fontSize: style.fontSize,
+          height: el.getBoundingClientRect().height,
+        };
+      }),
+    ]);
+    expect(editorPillStyle.radius).toBe(sidebarPillStyle.radius);
+    expect(editorPillStyle.fontSize).toBe(sidebarPillStyle.fontSize);
+    expect(editorPillStyle.height).toBeLessThanOrEqual(26);
+
+    const titleHeight = await popupPage
+      .getByTestId("snippet-label-input")
+      .evaluate((el) => el.getBoundingClientRect().height);
+    expect(titleHeight).toBeLessThanOrEqual(30);
+
+    const titleRow = popupPage
+      .getByTestId("snippet-label-input")
+      .locator("xpath=..");
+    const beforeFocus = await titleRow.boundingBox();
+    await expect(editorPill).toHaveAttribute("title", /Type the trigger/);
+    await editorPill.focus();
+    await expect(popupPage.getByTestId("snippet-shortcut-tip")).toHaveCount(0);
+    await expect(popupPage.getByText(/Type the trigger/)).toHaveCount(0);
+    const afterFocus = await titleRow.boundingBox();
+    expect(afterFocus?.height).toBe(beforeFocus?.height);
+  });
+
+  test("keeps an invalid shortcut visible while the rest keeps autosaving", async ({
+    popupPage,
+  }) => {
+    const snippet = makeSnippet({
+      label: "Original",
+      shortcut: "/orig",
+      content: "Original body",
+    });
+    await seedAndReload(popupPage, [snippet]);
+    await popupPage.getByTestId("snippet-list-item").click();
+
+    await popupPage.getByTestId("snippet-shortcut-input").fill("/orig bad");
+    const error = popupPage.getByTestId("snippet-shortcut-error");
+    await expect(error).toBeVisible();
+    await expect(error).toContainText("cannot contain spaces");
+
+    await popupPage.getByTestId("snippet-label-input").fill("Renamed");
+    // The rest of the edit is staged locally and committed when the popup hides.
+    await popupPage.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+    await expect
+      .poll(async () => (await readSyncSnippets(popupPage))[0], {
+        timeout: 10_000,
+      })
+      .toMatchObject({ label: "Renamed", shortcut: "/orig" });
+    // The bad text is still on screen and still not committed.
+    await expect(popupPage.getByTestId("snippet-shortcut-input")).toHaveValue(
+      "/orig bad"
+    );
+    await expect(error).toBeVisible();
+  });
+
+  test("reports saving in one reserved status slot", async ({ popupPage }) => {
+    await seedAndReload(popupPage, [helloSnippet()]);
+    await popupPage.getByTestId("snippet-list-item").click();
+
+    const status = popupPage.getByTestId("snippet-sync-status");
+    await expect(status).toHaveCount(1);
+    const restingWidth = (await status.boundingBox())?.width ?? 0;
+
+    await popupPage
+      .locator('[contenteditable="true"]')
+      .first()
+      .fill("Autosaved body");
+    await expect(status).toHaveText("Saving…", { timeout: 5_000 });
+    expect((await status.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(
+      restingWidth - 1
+    );
+
+    // Saved edits are staged while the popup is open and handed to the queue on
+    // pagehide — the event a real popup blur produces.
+    await popupPage.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+    await expect
+      .poll(() => readSyncSnippets(popupPage), { timeout: 10_000 })
+      .toEqual([expect.objectContaining({ content: "Autosaved body" })]);
+    await expect(status).toHaveText("Saved ✓", { timeout: 10_000 });
   });
 
   test("shows a saved blank line between paragraphs in the editor", async ({
@@ -653,16 +856,11 @@ test.describe("Popup (Dashboard)", () => {
     const snippet = makeSnippet({ label: "Delete Me", shortcut: "/delete-me" });
     await seedAndReload(popupPage, [snippet]);
 
-    // Click delete via stable testid, then confirm in the dialog
+    // Delete lives in the overflow menu and acts immediately.
+    await popupPage.getByTestId("snippet-more").click();
     const deleteButton = popupPage.getByTestId("snippet-delete");
     await expect(deleteButton).toBeVisible({ timeout: 5_000 });
     await deleteButton.click();
-
-    const confirmButton = popupPage
-      .getByRole("button", { name: /delete|confirm|yes/i })
-      .first();
-    await expect(confirmButton).toBeVisible({ timeout: 5_000 });
-    await confirmButton.click();
 
     // Storage verification — the seeded snippet must be gone. Poll: the delete
     // handler writes asynchronously.
@@ -685,11 +883,8 @@ test.describe("Popup (Dashboard)", () => {
     const snippet = makeSnippet({ label: "Undo Me", shortcut: "/undo-me" });
     await seedAndReload(popupPage, [snippet]);
 
+    await popupPage.getByTestId("snippet-more").click();
     await popupPage.getByTestId("snippet-delete").click();
-    await popupPage
-      .getByRole("button", { name: /delete|confirm|yes/i })
-      .first()
-      .click();
 
     const countSnippets = () =>
       popupPage.evaluate(async () => {

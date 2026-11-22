@@ -33,14 +33,8 @@ export type OnboardingCopyKey =
   | "onboarding.popup.name.description"
   | "onboarding.popup.shortcut.title"
   | "onboarding.popup.shortcut.description"
-  | "onboarding.popup.shortcutTip.title"
-  | "onboarding.popup.shortcutTip.description"
   | "onboarding.popup.content.title"
   | "onboarding.popup.content.description"
-  | "onboarding.popup.placeholders.title"
-  | "onboarding.popup.placeholders.description"
-  | "onboarding.popup.save.title"
-  | "onboarding.popup.save.description"
   | "onboarding.popup.library.title"
   | "onboarding.popup.library.description"
   | "onboarding.popup.settings.title"
@@ -57,7 +51,7 @@ export type OnboardingCopyKey =
  * the tour (React) owns the DOM click; this registry only names the intention,
  * so the pure decisions stay testable without a document.
  */
-export type OnboardingStepAction = "open-create" | "close-create";
+export type OnboardingStepAction = "open-create";
 
 export type OnboardingStep = {
   /** Stable selector of the element the step highlights. */
@@ -101,29 +95,10 @@ export const ONBOARDING_STEPS: Record<
       side: "right",
     },
     {
-      element: '[data-testid="snippet-shortcut-tip"]',
-      titleKey: "onboarding.popup.shortcutTip.title",
-      descriptionKey: "onboarding.popup.shortcutTip.description",
-      side: "right",
-    },
-    {
       element: '[data-testid="snippet-content-editor"]',
       titleKey: "onboarding.popup.content.title",
       descriptionKey: "onboarding.popup.content.description",
       side: "left",
-    },
-    {
-      element: '[data-testid="snippet-placeholder-tip"]',
-      titleKey: "onboarding.popup.placeholders.title",
-      descriptionKey: "onboarding.popup.placeholders.description",
-      side: "right",
-    },
-    {
-      element: '[data-testid="snippet-create-save"]',
-      titleKey: "onboarding.popup.save.title",
-      descriptionKey: "onboarding.popup.save.description",
-      side: "left",
-      nextAction: "close-create",
     },
     {
       element: '[data-testid="snippet-library"]',

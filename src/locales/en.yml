@@ -2,8 +2,6 @@ extName: "Clipio: Snippets Manager"
 extDescription: "A powerful browser extension for managing and inserting snippets with lightning speed and increase your productivity."
 
 common:
-  hideSidebar: Hide sidebar
-  showSidebar: Show sidebar
   resizeSidebar: Resize sidebar
   cancel: Cancel
   closeModal: Close
@@ -39,8 +37,6 @@ dashboard:
     heading: No snippets yet
     body: Create your first snippet to start saving and reusing text quickly.
     action: Create your first snippet
-  toast:
-    snippetSaved: Snippet saved
   snippetListLabel: Snippets
   warnings:
     quotaFull:
@@ -70,49 +66,52 @@ dashboard:
     quotaTotal: Your snippets total $1 and sync allows $2.
     quotaCount: You have $1 snippets and sync allows $2.
 
-newSnippet:
-  cancel: Cancel
-  creating: Creating...
-  create: Create
-  name: Name
-  namePlaceholder: "e.g., Email Signature"
+snippetEditor:
+  name: Snippet name
+  namePlaceholder: Untitled snippet
   shortcut: Shortcut
-  shortcutPlaceholder: "e.g., $1sig"
+  shortcutPlaceholder: "/shortcut"
+  shortcutLabel: "Shortcut: $1"
+  shortcutTip: Type the trigger and this shortcut on any page to expand the snippet.
   shortcutError: Shortcut cannot contain spaces
   shortcutErrorDuplicate: 'Shortcut "$1" is already used by "$2". Choose a different shortcut.'
   shortcutErrorPrefix: 'Shortcut "$1" conflicts with "$2" — one may prevent the other from expanding.'
-  shortcutTip: Type the trigger and this shortcut on any page to expand the snippet.
-  content: Content
-  contentPlaceholder: Enter your snippet content...
-  placeholderTip: "Type / in the editor for commands like Clipboard, Today, Place Cursor and Pick Date."
+  content: Snippet content
+  contentPlaceholder: "Type / for commands…"
+  addTagLabel: "+ Tag"
+  removeTag: "Remove $1 tag"
+  more: More actions
+  moreTooltip: "More actions (Alt+O)"
+  deleteTooltip: Delete snippet
+  copyTooltip: "Copy to clipboard ($1C)"
+  copiedTooltip: "Copied ($1C)"
+  undoTooltip: "Restore previous version ($1Z)"
+  undoLabel: Restore previous version
+  redoTooltip: "Restore next version ($1)"
+  redoLabel: Restore next version
+  sidebarHideTooltip: Hide sidebar (Alt+B)
+  sidebarShowTooltip: Show sidebar (Alt+B)
+  sidebarHideLabel: Hide sidebar
+  sidebarShowLabel: Show sidebar
+  retryTooltip: Retry the last save
 
 snippetDetail:
   deleteSnippet: Delete snippet
   copyToClipboard: Copy to clipboard
-  insertCommand: Insert command
-  undo: Undo
-  redo: Redo
   copiedLabel: Copied!
-  editorPlaceholder: "Start typing your snippet content here or use '/' for commands..."
   tags: Tags
   tagPlaceholder: Tag name...
   addTag: Add tag
   addTagTitle: Add a new tag
   uses: uses
-  updated: Updated
-  deleteDialog:
-    title: Delete Snippet
-    message: 'Delete "$1"? You can undo this from the notification.'
-    confirm: Delete
-    cancel: Cancel
   deleteToast:
     message: '$1 deleted'
     undo: Undo
   syncStatus:
-    saved: All changes saved
-    saving: Saving changes...
+    saved: "Saved ✓"
+    saving: "Saving…"
     draft: Draft
-    failed: Changes not saved
+    failed: "Couldn't save · Retry"
     refused: Storage full — changes kept locally
   errors:
     failedToCopy: Failed to copy to clipboard
@@ -125,11 +124,6 @@ snippetDetail:
     shortcutConflict: That shortcut belongs to another snippet.
     emptyContent: A snippet needs content before it can be saved.
     malformedMedia: One of the media placeholders is incomplete.
-
-confirmDialog:
-  loading: Loading...
-  defaultConfirm: Confirm
-  defaultCancel: Cancel
 
 options:
   # Options page — component copy that was previously hardcoded English.
@@ -568,18 +562,9 @@ onboarding:
     shortcut:
       title: Pick a shortcut
       description: Add a short suffix without spaces, such as `sig`, to expand this snippet from any text field.
-    shortcutTip:
-      title: Use it anywhere
-      description: On a web page, type the trigger prefix followed by your shortcut and press Space.
     content:
       title: Write the content
       description: Type or paste anything you reuse often. The editor keeps formatting, links and images.
-    placeholders:
-      title: Add dynamic placeholders
-      description: Type / in the editor to insert commands such as Clipboard, Today, Place Cursor and Pick Date.
-    save:
-      title: Create the snippet
-      description: Create saves it to your library. For this tour, Next leaves the form without saving your sample draft.
     library:
       title: Find it again
       description: Select a snippet here to copy, edit or insert it into a page.

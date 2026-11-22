@@ -2,8 +2,6 @@ extName: "Clipio: Gestor de Fragmentos"
 extDescription: "Una potente extensión de navegador para gestionar e insertar fragmentos de texto con velocidad y aumentar tu productividad."
 
 common:
-  hideSidebar: Ocultar barra lateral
-  showSidebar: Mostrar barra lateral
   resizeSidebar: Cambiar tamaño de la barra lateral
   cancel: Cancelar
   closeModal: Cerrar
@@ -37,8 +35,6 @@ dashboard:
     heading: Aún no hay fragmentos
     body: Crea tu primer fragmento para guardar y reutilizar texto rápidamente.
     action: Crear tu primer fragmento
-  toast:
-    snippetSaved: Fragmento guardado
   snippetListLabel: Fragmentos
   warnings:
     quotaFull:
@@ -67,49 +63,52 @@ dashboard:
     quotaTotal: Tus fragmentos ocupan $1 y la sincronización permite $2.
     quotaCount: Tienes $1 fragmentos y la sincronización permite $2.
 
-newSnippet:
-  cancel: Cancelar
-  creating: Creando...
-  create: Crear
-  name: Nombre
-  namePlaceholder: "Ej: Firma de correo"
+snippetEditor:
+  name: Nombre del fragmento
+  namePlaceholder: Fragmento sin título
   shortcut: Atajo
-  shortcutPlaceholder: "Ej: $1firma"
+  shortcutPlaceholder: "/atajo"
+  shortcutLabel: "Atajo: $1"
+  shortcutTip: Escribe el desencadenante y este atajo en cualquier página para expandir el fragmento.
   shortcutError: El atajo no puede contener espacios
   shortcutErrorDuplicate: 'El atajo "$1" ya está en uso por "$2". Elige un atajo diferente.'
   shortcutErrorPrefix: 'El atajo "$1" entra en conflicto con "$2" — uno puede impedir que el otro se expanda.'
-  shortcutTip: Escribe el desencadenante y este atajo en cualquier página para expandir el fragmento.
-  content: Contenido
-  contentPlaceholder: Escribe el contenido de tu fragmento...
-  placeholderTip: "Escribe / en el editor para ver comandos como Portapapeles, Hoy, Colocar cursor y Elegir fecha."
+  content: Contenido del fragmento
+  contentPlaceholder: "Escribe / para ver comandos…"
+  addTagLabel: "+ Etiqueta"
+  removeTag: "Quitar etiqueta $1"
+  more: Más acciones
+  moreTooltip: "Más acciones (Alt+O)"
+  deleteTooltip: Eliminar fragmento
+  copyTooltip: "Copiar al portapapeles ($1C)"
+  copiedTooltip: "Copiado ($1C)"
+  undoTooltip: "Restaurar versión anterior ($1Z)"
+  undoLabel: Restaurar versión anterior
+  redoTooltip: "Restaurar versión siguiente ($1)"
+  redoLabel: Restaurar versión siguiente
+  sidebarHideTooltip: Ocultar barra lateral (Alt+B)
+  sidebarShowTooltip: Mostrar barra lateral (Alt+B)
+  sidebarHideLabel: Ocultar barra lateral
+  sidebarShowLabel: Mostrar barra lateral
+  retryTooltip: Reintentar el último guardado
 
 snippetDetail:
   deleteSnippet: Eliminar fragmento
   copyToClipboard: Copiar al portapapeles
-  insertCommand: Insertar comando
-  undo: Deshacer
-  redo: Rehacer
   copiedLabel: "¡Copiado!"
-  editorPlaceholder: "Empieza a escribir el contenido del fragmento o usa '/' para comandos..."
   tags: Etiquetas
   tagPlaceholder: Nombre de etiqueta...
   addTag: Agregar etiqueta
   addTagTitle: Agregar una nueva etiqueta
   uses: usos
-  updated: Actualizado
-  deleteDialog:
-    title: Eliminar fragmento
-    message: '¿Eliminar "$1"? Puedes deshacerlo desde la notificación.'
-    confirm: Eliminar
-    cancel: Cancelar
   deleteToast:
     message: '$1 eliminado'
     undo: Deshacer
   syncStatus:
-    saved: Todos los cambios guardados
-    saving: Guardando cambios...
+    saved: "Guardado ✓"
+    saving: "Guardando…"
     draft: Borrador
-    failed: Los cambios no se guardaron
+    failed: "No se pudo guardar · Reintentar"
     refused: "Almacenamiento lleno: los cambios se conservan localmente"
   errors:
     failedToCopy: Error al copiar al portapapeles
@@ -122,11 +121,6 @@ snippetDetail:
     shortcutConflict: Ese atajo pertenece a otro fragmento.
     emptyContent: El fragmento necesita contenido antes de guardarse.
     malformedMedia: Uno de los marcadores de contenido multimedia está incompleto.
-
-confirmDialog:
-  loading: Cargando...
-  defaultConfirm: Confirmar
-  defaultCancel: Cancelar
 
 options:
   # Página de opciones — texto que antes estaba en inglés fijo.
@@ -562,18 +556,9 @@ onboarding:
     shortcut:
       title: Elige un atajo
       description: Añade un sufijo corto sin espacios, como `firma`, para expandir el fragmento desde cualquier campo de texto.
-    shortcutTip:
-      title: Úsalo en cualquier lugar
-      description: En una página web, escribe el desencadenante seguido de tu atajo y pulsa Espacio.
     content:
       title: Escribe el contenido
       description: Escribe o pega cualquier texto que repitas a menudo. El editor conserva el formato, los enlaces y las imágenes.
-    placeholders:
-      title: Añade marcadores dinámicos
-      description: Escribe / en el editor para insertar comandos como Portapapeles, Hoy, Colocar cursor y Elegir fecha.
-    save:
-      title: Crea el fragmento
-      description: Crear lo guarda en tu biblioteca. En este recorrido, Siguiente sale del formulario sin guardar el borrador de ejemplo.
     library:
       title: Encuéntralo de nuevo
       description: Selecciona un fragmento aquí para copiarlo, editarlo o insertarlo en una página.

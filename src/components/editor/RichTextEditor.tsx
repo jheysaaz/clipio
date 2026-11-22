@@ -745,6 +745,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
             <PlateContent
               aria-label={ariaLabel}
               placeholder={placeholder}
+              spellCheck={false}
               className={cn(
                 "h-full overflow-auto outline-none text-sm leading-relaxed",
                 "text-foreground",

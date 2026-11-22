@@ -10,6 +10,8 @@ const state = vi.hoisted(() => ({
   drafts: {} as DraftMap,
   queue: null as QueueState | null,
   undo: {} as UndoStacks,
+  draftWatch: null as (() => void) | null,
+  queueWatch: null as (() => void) | null,
 }));
 
 vi.mock("@/storage/items", () => ({
@@ -18,13 +20,24 @@ vi.mock("@/storage/items", () => ({
     setValue: vi.fn(async (value: DraftMap) => {
       state.drafts = value;
     }),
+    watch: vi.fn((callback: () => void) => {
+      state.draftWatch = callback;
+      return () => {
+        state.draftWatch = null;
+      };
+    }),
   },
   writeQueueItem: {
     getValue: vi.fn(async () => state.queue),
     setValue: vi.fn(async (value: QueueState) => {
       state.queue = value;
     }),
-    watch: vi.fn(),
+    watch: vi.fn((callback: () => void) => {
+      state.queueWatch = callback;
+      return () => {
+        state.queueWatch = null;
+      };
+    }),
   },
   undoStacksItem: {
     getValue: vi.fn(async () => state.undo),
@@ -55,6 +68,7 @@ import {
   undoAvailabilityStore,
   undoLastEdit,
   waitForSnippetCommit,
+  watchWriteQueueStatus,
   writeQueueStore,
   draftPreviewsStore,
 } from "./write-queue";
@@ -86,6 +100,8 @@ function reset() {
   state.drafts = {};
   state.queue = emptyQueue();
   state.undo = {};
+  state.draftWatch = null;
+  state.queueWatch = null;
   writeQueueStore.setState(() => ({
     pending: 0,
     failed: 0,
@@ -131,6 +147,25 @@ describe("popup write queue", () => {
 
     expect(writeQueueStore.state.saving).toBe(false);
     expect(draftPreviewsStore.state.s1).toEqual(fields);
+  });
+
+  it("leaves Saving when the background clears the staged draft", async () => {
+    await stageEdit(snippet, fields);
+    expect(writeQueueStore.state.saving).toBe(true);
+
+    const stop = watchWriteQueueStatus();
+    // The background deletes only the draft it committed, then drains the queue.
+    // The popup must react to that write instead of waiting for another keystroke.
+    state.drafts = {};
+    state.queue = emptyQueue();
+    state.draftWatch?.();
+
+    await vi.waitFor(() => expect(writeQueueStore.state.saving).toBe(false));
+    // Only the status changes; the sidebar still shows what the user typed.
+    expect(draftPreviewsStore.state.s1).toEqual(fields);
+
+    stop();
+    expect(state.draftWatch).toBeNull();
   });
 
   it("remembers the previous fields so undo has a target", async () => {

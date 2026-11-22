@@ -545,7 +545,9 @@ test.describe("Content Script Expansion", () => {
       .locator('[contenteditable="true"]')
       .first()
       .fill("Live update content");
-    await popupPage.getByTestId("snippet-create-save").click();
+
+    // The first valid autosave creates the snippet; no Create button remains.
+    await expect(popupPage).toHaveURL(/#\/snippet\//, { timeout: 10_000 });
 
     await expect
       .poll(async () => (await storageHelper.readSyncSnippets()).length, {

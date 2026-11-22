@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { Icon } from "@/components/ui/icon";
 import SnippetListItem from "@/components/SnippetListItem";
-const SnippetDetailView = lazy(() => import("~/components/SnippetDetailView"));
+const SnippetEditor = lazy(() => import("~/components/SnippetEditor"));
 import { InlineError } from "@/components/ui/inline-error";
 import { toast } from "sonner";
 
@@ -62,15 +62,19 @@ import {
   SIDEBAR_MIN_WIDTH,
 } from "@/config/constants";
 import { selectNewest } from "@/lib/snippet-utils";
-import { fieldsFromSnippet } from "@/lib/snippet-draft";
+import {
+  fieldsFromForm,
+  fieldsFromSnippet,
+  validateEditorFields,
+} from "@/lib/snippet-draft";
 import {
   discardDraft,
   enqueueDelete,
   enqueueRestore,
   flushDraft,
-  stageEdit,
   stageProvisionalDraft,
   waitForSnippetCommit,
+  watchWriteQueueStatus,
 } from "@/store/write-queue";
 import { blankSnippetDraft } from "@/lib/trigger-prefix";
 import {
@@ -135,8 +139,6 @@ export default function Dashboard() {
   // time, which is how "Save selection" could open a form with nothing in it.
   const draftSnippet = useSnippets((s) => s.draft);
   const setDraftSnippet = setDraft;
-  const isSaving = useSnippets((s) => s.isSaving);
-
   // The library, its load state, the storage warnings and the recovery banner all
   // live in `src/store/snippets.ts`. They used to be eight `useState` calls here,
   // set from five separate effects — and nothing listened for changes made in
@@ -191,6 +193,8 @@ export default function Dashboard() {
   const [provisionalCreateId, setProvisionalCreateId] = useState<string | null>(
     null
   );
+  /** One create per draft: the debounce can fire many times before the commit. */
+  const createStartedRef = useRef(false);
 
   /**
    * The new-snippet detail pane needs a Snippet-shaped value for the shared
@@ -312,6 +316,7 @@ export default function Dashboard() {
           // Prefilled from the configured trigger prefix, read fresh: a value
           // captured at module load is stale for the life of the popup, and
           // "change it in Options, reopen the popup" is exactly the case.
+          createStartedRef.current = false;
           setProvisionalCreateId(null);
           setDraftSnippet(await blankSnippetDraft(draft));
           startCreating();
@@ -330,6 +335,7 @@ export default function Dashboard() {
                 action: "loadContextMenuDraft.clearSession",
               });
             });
+          createStartedRef.current = false;
           setProvisionalCreateId(null);
           setDraftSnippet(await blankSnippetDraft(sessionDraft));
           startCreating();
@@ -385,6 +391,10 @@ export default function Dashboard() {
       }
     })();
   }, [navigate]);
+
+  // The queue is owned by the background. Watching it here is what lets the
+  // editor's one status slot leave `Saving…` when the worker commits the draft.
+  useEffect(() => watchWriteQueueStatus(), []);
 
   // Check for available update banner. The background checker writes these
   // items asynchronously, so a one-shot read can miss a release found after the
@@ -492,17 +502,87 @@ export default function Dashboard() {
     return id;
   }, [provisionalCreateId]);
 
+  function createErrorFor(problem?: string): string {
+    return problem === "emptyLabel"
+      ? i18n.t("snippetDetail.errors.emptyLabel")
+      : problem === "emptyShortcut"
+        ? i18n.t("snippetDetail.errors.emptyShortcut")
+        : problem === "shortcutSpaces"
+          ? i18n.t("snippetDetail.errors.shortcutSpaces")
+          : problem === "shortcutConflict"
+            ? i18n.t("snippetDetail.errors.shortcutConflict")
+            : problem === "emptyContent"
+              ? i18n.t("snippetDetail.errors.emptyContent")
+              : problem === "malformedMedia"
+                ? i18n.t("snippetDetail.errors.malformedMedia")
+                : i18n.t("snippetDetail.errors.failedToSave");
+  }
+
   /**
-   * Autosave for the new snippet. Only stage: the background must not commit a
-   * record until the user presses Create, otherwise an abandoned create leaves a
-   * snippet behind and Create can add a second one with the same id.
+   * Autosave a draft. Once the debounced fields are valid, the first save is also
+   * the create: the provisional id becomes the real record and the route follows
+   * it. Later autosaves of the same draft stage an edit, never a second create.
    */
   const handleAutoSaveNewSnippet = useCallback(
     async (draft: SnippetFormData) => {
       const id = ensureProvisionalCreateId();
       await stageProvisionalDraft(id, draft);
+
+      const validation = validateEditorFields(
+        fieldsFromForm(draft),
+        snippetsStore.state.snippets
+      );
+      // A half-typed draft is still protected in `local:editorDrafts`; it just
+      // is not a record yet. The next autosave tries again with the full fields.
+      if (!validation.ok || createStartedRef.current) return;
+
+      createStartedRef.current = true;
+      setIsSaving(true);
+      try {
+        const result = await flushDraft(id, snippetsStore.state.snippets);
+        if (!result.ok) {
+          createStartedRef.current = false;
+          snippetsStore.setState((prev) => ({
+            ...prev,
+            createError: createErrorFor(result.error),
+          }));
+          return;
+        }
+
+        const outcome = await waitForSnippetCommit(id);
+        if (outcome) {
+          createStartedRef.current = false;
+          snippetsStore.setState((prev) => ({
+            ...prev,
+            createError:
+              outcome.error ?? i18n.t("snippetDetail.errors.failedToSave"),
+          }));
+          return;
+        }
+
+        // Re-read rather than appending a local copy: a storage change may have
+        // refreshed the library already, and an append would show the snippet
+        // twice with stale metadata.
+        await refreshSnippets();
+        snippetsStore.setState((prev) => ({
+          ...prev,
+          draft: { ...EMPTY_DRAFT },
+          createError: null,
+        }));
+        setProvisionalCreateId(null);
+        selectSnippet(id);
+      } catch (error) {
+        captureError(error, { action: "dashboard.create" });
+        createStartedRef.current = false;
+        snippetsStore.setState((prev) => ({
+          ...prev,
+          createError: i18n.t("snippetDetail.errors.failedToSave"),
+        }));
+      } finally {
+        setIsSaving(false);
+      }
     },
-    [ensureProvisionalCreateId]
+    [ensureProvisionalCreateId, selectSnippet]
   );
 
   /**
@@ -540,94 +620,10 @@ export default function Dashboard() {
   // so the detail pane mounts with a non-empty shortcut.
   const handleAddSnippet = async () => {
     const session = await createSessionDraft();
+    createStartedRef.current = false;
     setProvisionalCreateId(session.id);
     setDraftSnippet(session.draft);
     startCreating();
-  };
-
-  const handleCancelCreate = async () => {
-    const id = provisionalCreateId;
-    if (id) await discardDraft(id);
-    setProvisionalCreateId(null);
-    setDraftSnippet(await blankSnippetDraft());
-    const newest = selectNewest(snippets);
-    if (newest) selectSnippet(newest.id);
-    else showList();
-  };
-
-  const createErrorFor = (problem?: string): string => {
-    const message =
-      problem === "emptyLabel"
-        ? i18n.t("snippetDetail.errors.emptyLabel")
-        : problem === "emptyShortcut"
-          ? i18n.t("snippetDetail.errors.emptyShortcut")
-          : problem === "shortcutSpaces"
-            ? i18n.t("snippetDetail.errors.shortcutSpaces")
-            : problem === "shortcutConflict"
-              ? i18n.t("snippetDetail.errors.shortcutConflict")
-              : problem === "emptyContent"
-                ? i18n.t("snippetDetail.errors.emptyContent")
-                : problem === "malformedMedia"
-                  ? i18n.t("snippetDetail.errors.malformedMedia")
-                  : i18n.t("snippetDetail.errors.failedToSave");
-    return message;
-  };
-
-  const handleSaveNewSnippet = async () => {
-    if (
-      !draftSnippet.label.trim() ||
-      !draftSnippet.shortcut.trim() ||
-      !draftSnippet.content.trim()
-    )
-      return;
-
-    const id = ensureProvisionalCreateId();
-    setIsSaving(true);
-    try {
-      await stageProvisionalDraft(id, draftSnippet);
-      const result = await flushDraft(id, snippetsStore.state.snippets);
-      if (!result.ok) {
-        // Keep the form open: it is the component that renders `createError`, and
-        // the user needs the typed text to fix the problem.
-        snippetsStore.setState((prev) => ({
-          ...prev,
-          createError: createErrorFor(result.error),
-        }));
-        return;
-      }
-
-      const outcome = await waitForSnippetCommit(id);
-      if (outcome) {
-        snippetsStore.setState((prev) => ({
-          ...prev,
-          createError:
-            outcome.error ?? i18n.t("snippetDetail.errors.failedToSave"),
-        }));
-        return;
-      }
-
-      // Only now, after the background has committed, is the provisional id a
-      // real record. Re-read rather than appending a local copy: the storage
-      // change may have refreshed the library already, and an append would show
-      // the same snippet twice with stale metadata.
-      await refreshSnippets();
-      snippetsStore.setState((prev) => ({
-        ...prev,
-        draft: { ...EMPTY_DRAFT },
-        createError: null,
-      }));
-      setProvisionalCreateId(null);
-      selectSnippet(id);
-      toast.success(i18n.t("dashboard.toast.snippetSaved"));
-    } catch (error) {
-      captureError(error, { action: "dashboard.create" });
-      snippetsStore.setState((prev) => ({
-        ...prev,
-        createError: i18n.t("snippetDetail.errors.failedToSave"),
-      }));
-    } finally {
-      setIsSaving(false);
-    }
   };
 
   const handleDeleteSnippet = async (snippetId: string) => {
@@ -664,6 +660,7 @@ export default function Dashboard() {
   /** Offer a one-step restore for the snippet just deleted. */
   const handleUndoDelete = (snippet: Snippet) => {
     toast(i18n.t("snippetDetail.deleteToast.message", [snippet.label]), {
+      duration: 5000,
       action: {
         label: i18n.t("snippetDetail.deleteToast.undo"),
         onClick: async () => {
@@ -688,17 +685,6 @@ export default function Dashboard() {
         },
       },
     });
-  };
-
-  const handleUpdateSnippet = async (updated: Snippet) => {
-    // Inline rename is an edit like any other: stage it, then let the background
-    // commit it with the same LWW and history rules as the editor's autosave.
-    await stageEdit(updated, fieldsFromSnippet(updated));
-    await flushDraft(updated.id, snippetsStore.state.snippets);
-    snippetsStore.setState((prev) => ({
-      ...prev,
-      snippets: prev.snippets.map((s) => (s.id === updated.id ? updated : s)),
-    }));
   };
 
   // -------------------------------------------------------------------------
@@ -998,7 +984,6 @@ export default function Dashboard() {
                         }
                         selectSnippet(snippet.id);
                       }}
-                      onUpdate={handleUpdateSnippet}
                     />
                   ))}
                 </div>
@@ -1044,16 +1029,12 @@ export default function Dashboard() {
                 </div>
               }
             >
-              <SnippetDetailView
+              <SnippetEditor
                 key={isCreating ? "new" : selectedSnippet!.id}
                 snippet={(isCreating ? provisionalSnippet : selectedSnippet)!}
-                isNew={isCreating}
                 draft={isCreating ? draftSnippet : undefined}
                 onDraftChange={setDraftSnippet}
                 onAutoSave={handleAutoSaveNewSnippet}
-                onCreate={() => void handleSaveNewSnippet()}
-                onCancel={() => void handleCancelCreate()}
-                isCreating={isSaving}
                 createError={createError}
                 onClearCreateError={dismissCreateError}
                 existingSnippets={snippets}
