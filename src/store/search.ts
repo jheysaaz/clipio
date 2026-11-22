@@ -25,6 +25,8 @@ import { useStore } from "@tanstack/react-store";
 
 import type { Snippet } from "@/types";
 import { fuzzyMatchSnippets } from "@/lib/preview-helpers";
+import { compareSnippetContext, type ContextUsage } from "@/lib/context-usage";
+import { useRankingContext } from "@/store/ranking-context";
 
 export type SearchState = {
   /** The raw text in the search box. */
@@ -56,21 +58,71 @@ export function setSearchQuery(query: string): void {
  * so would throw away the ranking, which is the whole reason for fuzzy matching
  * rather than `includes`.
  *
- * The no-query branch copies before sorting. `sort` mutates, and the array handed
+ * The no-query branch maps before sorting. `sort` mutates, and the array handed
  * in is the store's own `snippets`; sorting it in place would reorder the library
  * itself, so "newest first" would quietly become the new canonical order and
  * survive the search being cleared.
+ *
+ * `context` supplies local recent-use data and the current hostname. It is
+ * consulted only after the primary order (fuzzy score, or edit recency with no
+ * query) has failed to separate two snippets.
  */
+export type RankingContextInput = {
+  /** Local-only recent-use data. Missing/absent means "no context signal". */
+  usage?: ContextUsage;
+  /** Current site hostname. Reduced to a bare hostname before comparison. */
+  hostname?: string | null;
+};
+
+function contextOrder(
+  a: Snippet,
+  b: Snippet,
+  context: RankingContextInput
+): number {
+  return compareSnippetContext(
+    context.usage?.[a.id],
+    context.usage?.[b.id],
+    context.hostname ?? null
+  );
+}
+
 export function visibleSnippets(
   snippets: readonly Snippet[],
-  query: string
+  query: string,
+  context: RankingContextInput = {}
 ): Snippet[] {
   if (!query) {
-    return [...snippets].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    // Primary order is still recency of editing. Context only speaks when two
+    // snippets were edited at the same instant, which is the one case where the
+    // old sort had nothing left to say.
+    return snippets
+      .map((snippet, index) => ({ snippet, index }))
+      .sort((a, b) => {
+        const edited = b.snippet.updatedAt.localeCompare(a.snippet.updatedAt);
+        if (edited !== 0) return edited;
+        return contextOrder(a.snippet, b.snippet, context) || a.index - b.index;
+      })
+      .map(({ snippet }) => snippet);
   }
-  return fuzzyMatchSnippets(query, snippets as Snippet[]).map(
-    (f) => f.snippet as unknown as Snippet
+
+  const matches = fuzzyMatchSnippets(query, snippets as Snippet[]).map(
+    (match, index) => ({ ...match, index })
   );
+  matches.sort((a, b) => {
+    const relevance = b.relevanceScore - a.relevanceScore;
+    if (relevance !== 0) return relevance;
+
+    // Only equal scores reach here. This is the whole invariant: a strong
+    // recent-use or same-site signal is a tie-break, never an override of the
+    // fuzzy matcher's answer.
+    const contextResult = contextOrder(
+      a.snippet as unknown as Snippet,
+      b.snippet as unknown as Snippet,
+      context
+    );
+    return contextResult || a.index - b.index;
+  });
+  return matches.map((match) => match.snippet as unknown as Snippet);
 }
 
 // ---------------------------------------------------------------------------
@@ -100,5 +152,7 @@ export function useSearch<T>(selector: (state: SearchState) => T): T {
 /** The visible list, given the library. Recomputed on read, never cached. */
 export function useVisibleSnippets(snippets: readonly Snippet[]): Snippet[] {
   const query = useSearch((s) => s.query);
-  return visibleSnippets(snippets, query);
+  const usage = useRankingContext((s) => s.usage);
+  const hostname = useRankingContext((s) => s.hostname);
+  return visibleSnippets(snippets, query, { usage, hostname });
 }

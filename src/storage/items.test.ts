@@ -70,6 +70,7 @@ const EXPECTED: Record<string, unknown> = {
   "local:theme": null,
   "local:uiFont": "inter",
   "local:snippetUsageCount": {},
+  "local:snippetContextUsage": {},
   "local:contextMenuDraft": null,
   "local:giphyApiKey": "",
   "local:blockedSites": [],
@@ -195,6 +196,7 @@ describe("storage items — default values", () => {
       localSnippetsItem: [],
       cachedSnippetsItem: [],
       usageCountsItem: {},
+      snippetContextUsageItem: {},
       blockedSitesItem: [],
       debugLogItem: [],
     };

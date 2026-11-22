@@ -175,6 +175,94 @@ describe("visibleSnippets", () => {
     expect(visibleSnippets(list, "")).toHaveLength(3);
     expect(visibleSnippets(list, "alpha")).toHaveLength(1);
   });
+
+  it("uses same-site use to break an equal-relevance tie", () => {
+    const onSite = makeSnippet({
+      id: "on-site",
+      label: "Reply",
+      shortcut: "/r",
+    });
+    const recentElsewhere = makeSnippet({
+      id: "recent-elsewhere",
+      label: "Reply",
+      shortcut: "/r",
+    });
+    const usage = {
+      "on-site": {
+        lastUsedAt: 100,
+        uses: 1,
+        sites: [{ hostname: "example.com", lastUsedAt: 100, uses: 1 }],
+      },
+      "recent-elsewhere": { lastUsedAt: 900, uses: 3, sites: [] },
+    };
+
+    // A full URL here must still resolve to the same bare hostname — the
+    // comparator, not just the recorder, enforces the storage contract.
+    const result = visibleSnippets([recentElsewhere, onSite], "reply", {
+      usage,
+      hostname: "https://example.com/path?q=1",
+    });
+
+    expect(result.map((s) => s.id)).toEqual(["on-site", "recent-elsewhere"]);
+  });
+
+  it("never lets context outrank a higher fuzzy relevance score", () => {
+    // Negative test with teeth: the exact shortcut match must stay first even
+    // when the weaker fuzzy match was used on this site seconds ago and used
+    // far more often overall. Context is a tie-break, not a second ranking.
+    const exact = makeSnippet({
+      id: "exact",
+      label: "Nothing alike",
+      shortcut: "/match",
+    });
+    const fuzzy = makeSnippet({
+      id: "fuzzy",
+      label: "m a t c h",
+      shortcut: "/other",
+    });
+    const now = 1_700_000_000_000;
+    const usage = {
+      fuzzy: {
+        lastUsedAt: now,
+        uses: 99,
+        sites: [{ hostname: "example.com", lastUsedAt: now, uses: 40 }],
+      },
+    };
+
+    const result = visibleSnippets([fuzzy, exact], "match", {
+      usage,
+      hostname: "example.com",
+    });
+
+    expect(result.map((s) => s.id)).toEqual(["exact", "fuzzy"]);
+  });
+
+  it("breaks equal edit dates with context when there is no query", () => {
+    const olderInList = makeSnippet({
+      id: "used",
+      label: "A",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const newerInList = makeSnippet({
+      id: "unused",
+      label: "B",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const usage = {
+      used: {
+        lastUsedAt: 500,
+        uses: 1,
+        sites: [{ hostname: "example.com", lastUsedAt: 500, uses: 1 }],
+      },
+    };
+
+    expect(
+      visibleSnippets([newerInList, olderInList], "", {
+        usage,
+        hostname: "example.com",
+      }).map((s) => s.id)
+    ).toEqual(["used", "unused"]);
+  });
 });
 
 describe("React bindings", () => {

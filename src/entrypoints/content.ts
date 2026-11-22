@@ -28,10 +28,7 @@ function debugLog(
     ...detail,
   });
 }
-import {
-  incrementSnippetUsage,
-  incrementTotalInsertions,
-} from "@/storage/usage-tracking";
+import { recordSnippetInsertion } from "@/storage/usage-tracking";
 import confetti from "canvas-confetti";
 import { initSentry, captureError, captureMessage } from "@/lib/sentry-content";
 import {
@@ -594,11 +591,15 @@ export default defineContentScript({
         reportInsertionReverted("input");
       }
 
-      incrementSnippetUsage(snippet.id).catch((err) => {
-        console.error("Failed to increment snippet usage:", err);
-        captureError(err, { action: "incrementUsage", snippetId: snippet.id });
-      });
-      incrementTotalInsertions().catch(() => {});
+      recordSnippetInsertion(snippet.id, window.location.hostname).catch(
+        (err) => {
+          console.error("Failed to record snippet insertion:", err);
+          captureError(err, {
+            action: "recordInsertion",
+            snippetId: snippet.id,
+          });
+        }
+      );
     }
 
     /**
@@ -784,11 +785,15 @@ export default defineContentScript({
         reportInsertionReverted("contenteditable");
       }
 
-      incrementSnippetUsage(snippet.id).catch((err) => {
-        console.error("Failed to increment snippet usage:", err);
-        captureError(err, { action: "incrementUsage", snippetId: snippet.id });
-      });
-      incrementTotalInsertions().catch(() => {});
+      recordSnippetInsertion(snippet.id, window.location.hostname).catch(
+        (err) => {
+          console.error("Failed to record snippet insertion:", err);
+          captureError(err, {
+            action: "recordInsertion",
+            snippetId: snippet.id,
+          });
+        }
+      );
     }
 
     // Handle keydown to expand immediately on Space or Tab
@@ -1132,8 +1137,7 @@ export default defineContentScript({
         element.dispatchEvent(new Event("input", { bubbles: true }));
 
         // Track usage
-        await incrementSnippetUsage(snippet.id);
-        await incrementTotalInsertions();
+        await recordSnippetInsertion(snippet.id, window.location.hostname);
 
         // Show confetti if enabled
         if (confettiEnabled) {
@@ -1277,8 +1281,7 @@ export default defineContentScript({
         }
 
         // Track usage
-        await incrementSnippetUsage(snippet.id);
-        await incrementTotalInsertions();
+        await recordSnippetInsertion(snippet.id, window.location.hostname);
 
         // Show confetti if enabled
         if (confettiEnabled) {

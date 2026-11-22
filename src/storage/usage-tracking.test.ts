@@ -10,29 +10,36 @@ import {
   resetSnippetUsage,
   clearAllUsageCounts,
   incrementTotalInsertions,
+  recordSnippetInsertion,
 } from "./usage-tracking";
 
 // ---------------------------------------------------------------------------
 // Mock the storage item and sentry
 // ---------------------------------------------------------------------------
 
-const { mockUsageCounts, mockTotalInsertions } = vi.hoisted(() => ({
-  mockUsageCounts: {
-    getValue: vi.fn(),
-    setValue: vi.fn(),
-    removeValue: vi.fn(),
-    watch: vi.fn(),
-  },
-  mockTotalInsertions: {
-    getValue: vi.fn(),
-    setValue: vi.fn(),
-    watch: vi.fn(),
-  },
-}));
+const { mockUsageCounts, mockTotalInsertions, mockRecordContextUse } =
+  vi.hoisted(() => ({
+    mockUsageCounts: {
+      getValue: vi.fn(),
+      setValue: vi.fn(),
+      removeValue: vi.fn(),
+      watch: vi.fn(),
+    },
+    mockTotalInsertions: {
+      getValue: vi.fn(),
+      setValue: vi.fn(),
+      watch: vi.fn(),
+    },
+    mockRecordContextUse: vi.fn(async () => undefined),
+  }));
 
 vi.mock("~/storage/items", () => ({
   usageCountsItem: mockUsageCounts,
   totalSnippetInsertionsItem: mockTotalInsertions,
+}));
+
+vi.mock("~/storage/context-usage", () => ({
+  recordContextUse: mockRecordContextUse,
 }));
 
 vi.mock("~/lib/sentry", () => ({
@@ -240,5 +247,42 @@ describe("incrementTotalInsertions", () => {
     mockTotalInsertions.getValue.mockResolvedValue(3);
     mockTotalInsertions.setValue.mockRejectedValue(new Error("write error"));
     await expect(incrementTotalInsertions()).resolves.not.toThrow();
+  });
+});
+
+describe("recordSnippetInsertion", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("records the count, global total and bare hostname for one insertion", async () => {
+    mockUsageCounts.getValue.mockResolvedValue({ "snip-1": 2 });
+    mockUsageCounts.setValue.mockResolvedValue(undefined);
+    mockTotalInsertions.getValue.mockResolvedValue(7);
+    mockTotalInsertions.setValue.mockResolvedValue(undefined);
+    mockRecordContextUse.mockResolvedValue(undefined);
+
+    const count = await recordSnippetInsertion("snip-1", "example.com");
+
+    expect(count).toBe(3);
+    expect(mockUsageCounts.setValue).toHaveBeenCalledWith({ "snip-1": 3 });
+    expect(mockTotalInsertions.setValue).toHaveBeenCalledWith(8);
+    expect(mockRecordContextUse).toHaveBeenCalledWith("snip-1", "example.com");
+  });
+
+  it("still attempts the other signals and does not reject when one fails", async () => {
+    mockUsageCounts.getValue.mockResolvedValue({});
+    mockUsageCounts.setValue.mockResolvedValue(undefined);
+    mockTotalInsertions.getValue.mockResolvedValue(0);
+    mockTotalInsertions.setValue.mockResolvedValue(undefined);
+    mockRecordContextUse.mockRejectedValueOnce(new Error("context failed"));
+
+    await expect(recordSnippetInsertion("snip-1", "example.com")).resolves.toBe(
+      1
+    );
+
+    // allSettled lets every independent write run even if one helper regresses.
+    expect(mockUsageCounts.setValue).toHaveBeenCalledWith({ "snip-1": 1 });
+    expect(mockTotalInsertions.setValue).toHaveBeenCalledWith(1);
   });
 });

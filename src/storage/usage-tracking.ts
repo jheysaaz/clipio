@@ -5,6 +5,7 @@
 
 import { captureError } from "@/lib/sentry";
 import { usageCountsItem, totalSnippetInsertionsItem } from "@/storage/items";
+import { recordContextUse } from "@/storage/context-usage";
 
 /**
  * Get usage count for all snippets
@@ -87,4 +88,26 @@ export const incrementTotalInsertions = async (): Promise<void> => {
     // Intentionally swallowed — this counter is best-effort
     console.error("Failed to increment total insertions:", error);
   }
+};
+
+/**
+ * Record everything that one successful insertion means.
+ *
+ * The three writes are independent: all three helpers already degrade
+ * gracefully, so a failure in one must not stop the others. The content script
+ * passes `location.hostname`, which `recordContextUse` reduces to a bare
+ * hostname again before anything is persisted.
+ */
+export const recordSnippetInsertion = async (
+  snippetId: string,
+  hostname: string
+): Promise<number> => {
+  const [countResult] = await Promise.allSettled([
+    incrementSnippetUsage(snippetId),
+    incrementTotalInsertions(),
+    recordContextUse(snippetId, hostname),
+  ]);
+  // Each helper swallows its own errors; allSettled is defence in depth so a
+  // future regression in one helper still cannot break snippet insertion.
+  return countResult?.status === "fulfilled" ? countResult.value : 0;
 };
