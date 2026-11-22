@@ -95,6 +95,13 @@ const posix = (p) => p.split(sep).join("/");
  * all-JavaScript total 82; the shared chunks shrink by one byte, so that
  * budget is unchanged. Both raised sizes were measured twice from clean builds
  * and did not vary.
+ *
+ * Raised an eleventh time when the delete confirmation dialog was removed. The
+ * dialog was the popup's only other importer of Base UI's floating internals, so
+ * Rollup no longer puts them in a shared chunk with the options Select and moves
+ * them into the options entry instead. Total JavaScript and all shared chunks
+ * both shrink; only the options entry grows. Its new size was measured twice
+ * from clean builds and did not vary.
  */
 const BUDGETS = [
   { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_757_453 },
@@ -112,7 +119,7 @@ const BUDGETS = [
   {
     name: "options entry chunk",
     pattern: "chunks/options-*.js",
-    maxBytes: 201_444,
+    maxBytes: 238_389,
   },
   {
     // Shared chunks are included here even when their individual hashed names
