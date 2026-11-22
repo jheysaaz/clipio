@@ -89,10 +89,16 @@ const posix = (p) => p.split(sep).join("/");
  * 3,035, and the all-JavaScript total 4,301. The content and popup budgets did
  * not move. All raised sizes were measured twice from clean builds and did not
  * vary.
+ *
+ * Raised a tenth time for the Sentry context guard that keeps DOM-only browser
+ * tracing out of the service worker. The background grows 83 bytes and the
+ * all-JavaScript total 82; the shared chunks shrink by one byte, so that
+ * budget is unchanged. Both raised sizes were measured twice from clean builds
+ * and did not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_757_371 },
-  { name: "background entry", pattern: "background.js", maxBytes: 225_776 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_757_453 },
+  { name: "background entry", pattern: "background.js", maxBytes: 225_859 },
   {
     name: "content script entry",
     pattern: "content-scripts/content.js",
