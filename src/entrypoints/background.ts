@@ -23,6 +23,7 @@ import { MESSAGE, MediaNotFoundError, onMessageFromSelf } from "@/lib/protocol";
 import { getMedia } from "@/storage/backends/media";
 import { updateContentScriptCache } from "@/storage/backends/local";
 import { storageManager } from "@/storage";
+import { startWriteQueue } from "@/storage/queue-drain";
 import { checkForUpdate, openReleasePage } from "@/lib/update-checker";
 import { addBlockedSite } from "@/lib/blocked-sites";
 import {
@@ -195,6 +196,9 @@ async function requestPopupView(route: string): Promise<void> {
 export default defineBackground(() => {
   initSentry("background");
   void setupBackgroundAlarms();
+  // Owned here, not in the popup: the popup dies on blur and would take a
+  // pending commit with it. The queue is persisted in local storage.
+  startWriteQueue();
 
   // Dev-only: open the manual QA harness once per dev session.
   if ((import.meta.env.MODE as string) !== "production") {
