@@ -26,6 +26,7 @@ import { ShortcutRecorder } from "./ShortcutRecorder";
 import { setThemeMode } from "@/store/settings";
 import type { SettingEntry } from "./registry";
 import { captureError } from "@/lib/sentry";
+import { shortcutsEqual } from "@/lib/shortcuts";
 import { i18n } from "#i18n";
 
 type Status = "idle" | "saving" | "saved" | "error";
@@ -206,6 +207,13 @@ export function SettingControl({
  */
 function isDefaultValue(entry: SettingEntry, value: unknown): boolean {
   if ("defaultValue" in entry) {
+    if (
+      entry.control === "shortcut" &&
+      typeof value === "string" &&
+      typeof entry.defaultValue === "string"
+    ) {
+      return shortcutsEqual(value, entry.defaultValue);
+    }
     return value === entry.defaultValue;
   }
   // No declared default: the row cannot prove it is dirty, so keep the reset

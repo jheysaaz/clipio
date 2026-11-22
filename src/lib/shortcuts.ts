@@ -261,6 +261,28 @@ export function isValidShortcut(input: string): boolean {
   return parseShortcut(input) !== null;
 }
 
+/**
+ * Semantic equality for stored chords.
+ *
+ * `Ctrl`, `Command` and the portable `Mod` all parse to the same modifier flag,
+ * and key aliases such as `spacebar` share a canonical key. Comparing the raw
+ * strings therefore reports a default as "changed" when nothing changed — the
+ * shipped `Mod+Shift+Space` default looked dirty next to a stored
+ * `Ctrl+Shift+Space` value.
+ */
+export function shortcutsEqual(a: string, b: string): boolean {
+  if (a === b) return true;
+  const left = parseShortcut(a);
+  const right = parseShortcut(b);
+  if (!left || !right) return false;
+  return (
+    left.mod === right.mod &&
+    left.shift === right.shift &&
+    left.alt === right.alt &&
+    left.key === right.key
+  );
+}
+
 /** The subset of `KeyboardEvent` needed to match a chord. */
 export interface ShortcutEventLike {
   ctrlKey: boolean;

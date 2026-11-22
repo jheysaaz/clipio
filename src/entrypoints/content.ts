@@ -11,6 +11,7 @@ import {
   uiFontItem,
 } from "@/storage/items";
 import { DEFAULT_UI_FONT, type UiFont } from "@/lib/ui-font";
+import { matchesShortcut, parseShortcut } from "@/lib/shortcuts";
 import { debugLog as _debugLog } from "@/lib/debug";
 
 /**
@@ -1350,19 +1351,16 @@ export default defineContentScript({
           // into the page. handleInput / handleKeyDown already bail on
           // isBlocked; this one did not.
           if (previewSettings.enabled && !isBlocked) {
-            const shortcut = previewSettings.keyboardShortcut.toLowerCase();
-            const hasCtrl = shortcut.includes("ctrl")
-              ? event.ctrlKey || event.metaKey
-              : !event.ctrlKey && !event.metaKey;
-            const hasShift = shortcut.includes("shift")
-              ? event.shiftKey
-              : !event.shiftKey;
-            const hasAlt = shortcut.includes("alt")
-              ? event.altKey
-              : !event.altKey;
-            const keyMatch = event.key === " " || event.code === "Space";
-
-            const isShortcutMatch = hasCtrl && hasShift && hasAlt && keyMatch;
+            // Compare the whole chord with the shared parser. The old literal
+            // `shortcut.includes("ctrl")` no longer matched once the stored
+            // default became the platform-neutral `Mod+Shift+Space`, so the
+            // preview shortcut silently stopped opening on a clean install.
+            const parsedShortcut = parseShortcut(
+              previewSettings.keyboardShortcut
+            );
+            const isShortcutMatch = parsedShortcut
+              ? matchesShortcut(parsedShortcut, event)
+              : false;
 
             if (isShortcutMatch) {
               const target = event.target as HTMLElement;

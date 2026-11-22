@@ -390,10 +390,12 @@ export const snippetPreviewPrefixItem = storage.defineItem<string>(
 
 /**
  * Keyboard shortcut to manually open the snippet preview UI.
- * Format: "Ctrl+Shift+Space" or "Cmd+Shift+Space" on Mac.
- * Default: "Ctrl+Shift+Space" (but UI will show platform-specific default).
+ *
+ * Stored as the platform-neutral `Mod` spelling, matching the registry default
+ * and its reset action. A `Ctrl` default here made a clean install look dirty:
+ * the settings row compared the two strings literally and offered a reset.
  */
 export const snippetPreviewShortcutItem = storage.defineItem<string>(
   "local:snippetPreviewShortcut",
-  { defaultValue: "Ctrl+Shift+Space" }
+  { defaultValue: "Mod+Shift+Space" }
 );

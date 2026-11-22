@@ -461,6 +461,34 @@ describe("SettingControl", () => {
     expect(screen.getByRole("status")).not.toBeEmptyDOMElement();
   });
 
+  it("hides reset when a shortcut is semantically the default", async () => {
+    const entry = makeEntry({
+      control: "shortcut",
+      defaultValue: "Mod+Shift+Space",
+      reset: vi.fn().mockResolvedValue(undefined),
+      useValue: vi.fn().mockResolvedValue("Ctrl+Shift+Space"),
+    });
+    render(<SettingControl entry={entry} />);
+    await settle();
+
+    // `Ctrl` and `Mod` parse to the same chord; a clean install must not look
+    // dirty just because storage uses a different spelling.
+    expect(screen.getByTestId("setting-test-setting-reset")).toBeDisabled();
+  });
+
+  it("keeps reset enabled when a shortcut is genuinely changed", async () => {
+    const entry = makeEntry({
+      control: "shortcut",
+      defaultValue: "Mod+Shift+Space",
+      reset: vi.fn().mockResolvedValue(undefined),
+      useValue: vi.fn().mockResolvedValue("Mod+Shift+K"),
+    });
+    render(<SettingControl entry={entry} />);
+    await settle();
+
+    expect(screen.getByTestId("setting-test-setting-reset")).toBeEnabled();
+  });
+
   it("masks a secret text field and highlights search matches", async () => {
     const entry = makeEntry({
       secret: true,

@@ -89,7 +89,7 @@ const EXPECTED: Record<string, unknown> = {
   "local:lastSentryErrorAt": null,
   "local:snippetPreviewEnabled": true,
   "local:snippetPreviewPrefix": "/",
-  "local:snippetPreviewShortcut": "Ctrl+Shift+Space",
+  "local:snippetPreviewShortcut": "Mod+Shift+Space",
   // The popup sidebar's width. Persisted because the popup closes on every blur, so
   // as component state it reset constantly.
   "local:sidebarWidth": 240,
