@@ -21,7 +21,7 @@
  *     format, lint, types, unit tests with coverage, and the integrity gate
  *     that makes the coverage number trustworthy
  *
- *   pnpm verify:full   fast gate + build + e2e (~4min)
+ *   pnpm verify:full   fast gate + build + bundle size + e2e (~4min)
  *     what CI and a release tag run
  *
  * Ordering is deliberate: cheap and specific failures first, so the first error
@@ -93,6 +93,11 @@ const FULL_STEPS = [
     name: "build",
     cmd: ["pnpm", "run", "build"],
     env: { SENTRY_AUTH_TOKEN: "" },
+  },
+  {
+    name: "bundle size",
+    cmd: ["pnpm", "run", "check:bundle-size"],
+    note: "fails when built JS grows past its measured budget",
   },
   {
     name: "e2e",

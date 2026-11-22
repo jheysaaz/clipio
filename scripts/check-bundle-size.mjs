@@ -1,0 +1,180 @@
+/**
+ * Bundle-size ratchet.
+ *
+ * A size warning in the build log is not a gate: it can be scrolled past, and a
+ * new chunk can grow without anyone whose PR is green ever seeing the number.
+ * This check turns the built JavaScript into a hard, reviewable budget.
+ *
+ * The budgets below were measured from the build at the commit that introduced
+ * this script, not chosen as round numbers. They are a ratchet, like the
+ * coverage thresholds: shrinking a bundle always passes, growing one fails, and
+ * raising a budget is a deliberate change visible in the diff.
+ *
+ * Only JavaScript is measured. Fonts and images are fixed assets whose size is
+ * decided by the design system, not by a PR's imports; the failure this gate
+ * exists to catch is a dependency or chunk silently landing in a hot bundle.
+ *
+ * Usage: pnpm check:bundle-size   (runs automatically after build in verify:full)
+ */
+
+import { existsSync, readdirSync, statSync } from "fs";
+import { dirname, join, relative, resolve, sep } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(__dirname, "..");
+const OUTPUT_DIR = join(ROOT, ".output", "chrome-mv3");
+
+const posix = (p) => p.split(sep).join("/");
+
+/**
+ * Measured baseline: update only when the increase is intentional.
+ *
+ * Raised once from 2_698_488 / 217_315 / 1_566_549 when the IndexedDB schema
+ * and backfill seams were exported for direct tests. That added 100 bytes to
+ * background.js and 102 bytes to the shared OnboardingLoader chunk; the sizes
+ * were measured twice from clean builds and did not vary.
+ */
+const BUDGETS = [
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_698_690 },
+  { name: "background entry", pattern: "background.js", maxBytes: 217_415 },
+  {
+    name: "content script entry",
+    pattern: "content-scripts/content.js",
+    maxBytes: 914_624,
+  },
+  {
+    name: "popup entry chunk",
+    pattern: "chunks/popup-*.js",
+    maxBytes: 60_644,
+  },
+  {
+    name: "options entry chunk",
+    pattern: "chunks/options-*.js",
+    maxBytes: 165_218,
+  },
+  {
+    // Shared chunks are included here even when their individual hashed names
+    // change: a rename must not be a way around the budget.
+    name: "all shared chunks",
+    pattern: "chunks/*.js",
+    maxBytes: 1_566_651,
+  },
+];
+
+/** Translate the small glob dialect used by BUDGETS into a regex. */
+function globToRegExp(glob) {
+  let source = "^";
+  for (let i = 0; i < glob.length; i += 1) {
+    const char = glob[i];
+    if (char === "*") {
+      if (glob[i + 1] === "*") {
+        // `**/` means "any number of directories, including none".
+        source += "(?:.*/)?";
+        i += 1;
+        if (glob[i + 1] === "/") i += 1;
+      } else {
+        source += "[^/]*";
+      }
+      continue;
+    }
+    source += char.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+  }
+  return new RegExp(`${source}$`);
+}
+
+function matchesPattern(pattern, path) {
+  return globToRegExp(pattern).test(path);
+}
+
+/**
+ * Evaluate budgets against a map of repo-relative path → byte count.
+ *
+ * A pattern that matches nothing is a failure, not a zero-size pass: a rename in
+ * the build output would otherwise remove a budget without changing the gate.
+ */
+function evaluateBudgets(fileSizes, budgets) {
+  return budgets.map((budget) => {
+    const matches = Object.entries(fileSizes).filter(([path]) =>
+      matchesPattern(budget.pattern, path)
+    );
+    const bytes = matches.reduce((sum, [, size]) => sum + size, 0);
+    return {
+      ...budget,
+      bytes,
+      matched: matches.map(([path]) => path),
+      overBy: Math.max(0, bytes - budget.maxBytes),
+      ok: matches.length > 0 && bytes <= budget.maxBytes,
+    };
+  });
+}
+
+function collectJavaScriptSizes(dir) {
+  const sizes = {};
+  const walk = (current) => {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const full = join(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.isFile() && entry.name.endsWith(".js")) {
+        sizes[posix(relative(OUTPUT_DIR, full))] = statSync(full).size;
+      }
+    }
+  };
+  walk(dir);
+  return sizes;
+}
+
+function formatBytes(bytes) {
+  return `${(bytes / 1024).toFixed(1)} KiB`;
+}
+
+function fail(lines) {
+  console.error("\n❌ Bundle size check failed\n");
+  for (const line of lines) console.error(`   ${line}`);
+  console.error(
+    "\n   Budgets are a ratchet measured from a real build. Shrinking a bundle\n" +
+      "   always passes. If the increase is deliberate, raise the specific budget\n" +
+      "   in scripts/check-bundle-size.mjs and explain why in the PR.\n"
+  );
+  process.exit(1);
+}
+
+function main() {
+  if (!existsSync(OUTPUT_DIR)) {
+    fail([
+      `Build output not found at ${posix(relative(ROOT, OUTPUT_DIR))}.`,
+      "Run pnpm build before checking bundle size.",
+    ]);
+  }
+
+  const results = evaluateBudgets(collectJavaScriptSizes(OUTPUT_DIR), BUDGETS);
+
+  for (const result of results) {
+    const status = result.ok ? "✓" : "✗";
+    console.log(
+      `  ${status} ${result.name.padEnd(24)} ${formatBytes(result.bytes)} / ${formatBytes(result.maxBytes)}`
+    );
+  }
+
+  const failed = results.filter((result) => !result.ok);
+  if (failed.length > 0) {
+    fail(
+      failed.map((result) => {
+        if (result.matched.length === 0) {
+          return `${result.name}: no file matched "${result.pattern}". Did the build output layout change?`;
+        }
+        return `${result.name}: over by ${formatBytes(result.overBy)} (${result.matched.join(", ")})`;
+      })
+    );
+  }
+
+  console.log(
+    `\n✅ Bundle size: ${results.length}/${results.length} budgets within limits.`
+  );
+}
+
+const invokedDirectly =
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (invokedDirectly) main();
