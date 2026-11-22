@@ -389,6 +389,24 @@ describe("saved snippet autosave", () => {
     );
   });
 
+  it("enqueues the autosaved edit while the pane is still open", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderView();
+
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY * 2);
+    expect(q.flushDraft).not.toHaveBeenCalled();
+
+    await user.type(screen.getByTestId("snippet-label-input"), "!");
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
+
+    expect(q.stageEdit).toHaveBeenCalledTimes(1);
+    // The staged draft is handed to the background on the same debounce. Waiting
+    // for pagehide alone strands it when the popup closes before that handler
+    // finishes, leaving the toolbar stuck on Saving… with no queued write.
+    expect(q.flushDraft).toHaveBeenCalledTimes(1);
+  });
+
   it("enqueues a staged edit when the pane closes", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -401,7 +419,7 @@ describe("saved snippet autosave", () => {
     unmount();
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(q.flushDraft).toHaveBeenCalledTimes(1);
+    expect(q.flushDraft).toHaveBeenCalled();
   });
 
   it("reports a validation failure from the queue", async () => {
@@ -441,12 +459,13 @@ describe("saved snippet autosave", () => {
     try {
       setVisibility("visible");
       fireEvent(document, new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(0);
       expect(q.flushDraft).not.toHaveBeenCalled();
 
       setVisibility("hidden");
       fireEvent(document, new Event("visibilitychange"));
       await vi.advanceTimersByTimeAsync(0);
-      expect(q.flushDraft).toHaveBeenCalledTimes(1);
+      expect(q.flushDraft).toHaveBeenCalled();
     } finally {
       if (originalVisibility) {
         Object.defineProperty(document, "visibilityState", originalVisibility);
@@ -741,6 +760,29 @@ describe("toolbar actions", () => {
       )
     );
     expect(q.discardUnflushedDraft).toHaveBeenCalledWith("s1");
+  });
+
+  it("does not restage restored fields as a new edit", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    undoAvailabilityStore.setState(() => ({
+      snippetId: "s1",
+      canUndo: true,
+      canRedo: false,
+    }));
+    q.undoLastEdit.mockResolvedValue({
+      ok: true,
+      fields: { ...fields, content: "before" },
+    });
+    renderView();
+
+    await user.click(screen.getByTestId("snippet-undo"));
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY * 2);
+
+    // The restore is already in the queue. Re-staging these fields as an edit
+    // would coalesce over the restore and fail against the committed revision.
+    expect(q.stageEdit).not.toHaveBeenCalled();
+    expect(q.flushDraft).not.toHaveBeenCalled();
   });
 
   it("redoes through the same queue path", async () => {

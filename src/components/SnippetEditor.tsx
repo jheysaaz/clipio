@@ -86,6 +86,11 @@ const problemKeys = {
   malformedMedia: "snippetDetail.errors.malformedMedia",
 } as const satisfies Record<DraftProblem, string>;
 
+function validationMessage(error?: string): string {
+  const key = error ? problemKeys[error as DraftProblem] : undefined;
+  return key ? i18n.t(key) : i18n.t("snippetDetail.errors.failedToStage");
+}
+
 function sameFields(a: EditorFields, b: EditorFields): boolean {
   return (
     a.label === b.label &&
@@ -179,9 +184,14 @@ export default function SnippetEditor({
   const tagInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<RichTextEditorRef>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const snippetRef = useRef(snippet);
   const fieldsRef = useRef<EditorFields>(fields);
   const changedRef = useRef(false);
+  // Undo/redo already queue a restore. The restored fields can differ from the
+  // authoritative record the editor mounted with, so the autosave effect would
+  // otherwise stage them straight back as a fresh edit and overwrite the
+  // restore operation with a stale-revision conflict. Remember the restored
+  // value, not just one render: a store refresh can re-run the effect later.
+  const restoredFieldsRef = useRef<EditorFields | null>(null);
   const loadedIdRef = useRef<string | null>(null);
 
   const status = useStore(writeQueueStore);
@@ -201,7 +211,6 @@ export default function SnippetEditor({
   const hasChanges = !sameFields(fields, fieldsFromSnippet(snippet));
 
   useEffect(() => {
-    snippetRef.current = snippet;
     fieldsRef.current = fields;
     changedRef.current = isDraft ? hasDraftContent : hasChanges;
   });
@@ -211,7 +220,16 @@ export default function SnippetEditor({
       const stored = snippetsStore.state.snippets.find(
         (item) => item.id === snippet.id
       );
-      if (stored) await stageEdit(stored, next);
+      if (!stored) return;
+      await stageEdit(stored, next);
+      // Staging alone leaves the edit in local storage with no operation to
+      // commit it. A popup that closes before its pagehide handler finishes then
+      // reopens to a draft that nothing will ever drain, and the toolbar stays on
+      // Saving… forever. Hand the staged draft to the queue on the same debounce
+      // so status follows a real write; pagehide stays as the safety net for the
+      // pending timer, not the only path to a commit.
+      const queued = await flushDraft(snippet.id, snippetsStore.state.snippets);
+      if (!queued.ok) throw new Error(validationMessage(queued.error));
     },
     [snippet.id]
   );
@@ -272,6 +290,14 @@ export default function SnippetEditor({
   }, [snippet.id, isDraft]);
 
   useEffect(() => {
+    if (restoredFieldsRef.current) {
+      if (sameFields(fields, restoredFieldsRef.current)) {
+        autosave.discard();
+        return;
+      }
+      // A real keystroke after the restore takes over from it.
+      restoredFieldsRef.current = null;
+    }
     if (isDraft) {
       if (!hasDraftContent) {
         draftAutosave.discard();
@@ -296,7 +322,7 @@ export default function SnippetEditor({
         setActionError(
           result.error instanceof Error
             ? result.error.message
-            : i18n.t("snippetDetail.errors.failedToStage")
+            : validationMessage()
         );
       }
     })();
@@ -304,18 +330,17 @@ export default function SnippetEditor({
 
   const flushChanges = async (): Promise<AutosaveOutcome | null> => {
     if (isDraft) return draftAutosave.flush();
+    // `persistFields` already stages *and* enqueues on the debounce. A second
+    // flush here used to enqueue the same draft again after the first commit,
+    // leaving a duplicate operation that a later undo had to fight with.
     const result = await autosave.flush();
-    if (!changedRef.current) return result;
-    const flush = await flushDraft(
-      snippetRef.current.id,
-      snippetsStore.state.snippets
-    );
-    if (!flush.ok && flush.error) {
-      const key = problemKeys[flush.error as DraftProblem];
+    if (result && !result.ok) {
       setActionError(
-        key ? i18n.t(key) : i18n.t("snippetDetail.errors.failedToStage")
+        result.error instanceof Error
+          ? result.error.message
+          : validationMessage()
       );
-      return { ok: false, error: flush.error };
+      return result;
     }
     changedRef.current = false;
     return result;
@@ -428,7 +453,14 @@ export default function SnippetEditor({
         ? await undoLastEdit(snippet, fieldsRef.current)
         : await redoLastEdit(snippet, fieldsRef.current);
     if (!result.ok || !result.fields) return;
-    setFields({ ...result.fields, tags: [...(result.fields.tags ?? [])] });
+    // The restore is already queued. Suppress the autosave the field change would
+    // otherwise schedule, or it would overwrite the restore with a stale edit.
+    const restored = {
+      ...result.fields,
+      tags: [...(result.fields.tags ?? [])],
+    };
+    restoredFieldsRef.current = restored;
+    setFields(restored);
     setShortcutInput(result.fields.shortcut);
     setShortcutError("");
   };

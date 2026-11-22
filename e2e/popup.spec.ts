@@ -763,8 +763,8 @@ test.describe("Popup (Dashboard)", () => {
     await expect(error).toContainText("cannot contain spaces");
 
     await popupPage.getByTestId("snippet-label-input").fill("Renamed");
-    // The rest of the edit is staged locally and committed when the popup hides.
-    await popupPage.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+    // The rest of the edit is staged and enqueued by the debounced autosave, so
+    // an invalid shortcut cannot hold the other fields hostage.
     await expect
       .poll(async () => (await readSyncSnippets(popupPage))[0], {
         timeout: 10_000,
@@ -779,6 +779,17 @@ test.describe("Popup (Dashboard)", () => {
 
   test("reports saving in one reserved status slot", async ({ popupPage }) => {
     await seedAndReload(popupPage, [helloSnippet()]);
+    // A recent send holds the next commit at the queue's 2s minimum gap, so the
+    // Saving… phase is observable. Without it the write lands inside the 400ms
+    // quiet window and only Saved is ever painted.
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.local.set({
+        writeQueue: { operations: [], sentAt: [Date.now()] },
+      });
+    });
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
     await popupPage.getByTestId("snippet-list-item").click();
 
     const status = popupPage.getByTestId("snippet-sync-status");
@@ -794,9 +805,10 @@ test.describe("Popup (Dashboard)", () => {
       restingWidth - 1
     );
 
-    // Saved edits are staged while the popup is open and handed to the queue on
-    // pagehide — the event a real popup blur produces.
-    await popupPage.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+    // The debounced autosave stages the edit and hands it to the queue while the
+    // popup is still open. The background commit must clear the draft and bring
+    // the one status slot out of Saving… without waiting for a pagehide that a
+    // closing popup may never finish delivering.
     await expect
       .poll(() => readSyncSnippets(popupPage), { timeout: 10_000 })
       .toEqual([expect.objectContaining({ content: "Autosaved body" })]);

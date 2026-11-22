@@ -251,9 +251,16 @@ export async function refreshSyncStatus(): Promise<void> {
     readQueue(),
     editorDraftsItem.getValue(),
   ]);
-  stagedDraftIds.clear();
-  for (const [id, draft] of Object.entries(drafts ?? {})) {
-    stagedDraftIds.add(id);
+  const stored = drafts ?? {};
+  // Only drafts staged by *this* document count as Saving. A draft recovered
+  // from storage on mount was staged by an earlier popup that may have closed
+  // before it could enqueue; adding it here would pin the status to Saving…
+  // with no queued operation to release it. Retire our own ids when their draft
+  // is gone, but never adopt an orphan from another session.
+  for (const id of [...stagedDraftIds]) {
+    if (!(id in stored)) stagedDraftIds.delete(id);
+  }
+  for (const [id, draft] of Object.entries(stored)) {
     setDraftPreview(id, draft.fields);
   }
   // Previews for already-committed edits are kept: this document deliberately

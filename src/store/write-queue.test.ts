@@ -168,6 +168,31 @@ describe("popup write queue", () => {
     expect(state.draftWatch).toBeNull();
   });
 
+  it("does not claim Saving for a draft left by an earlier popup", async () => {
+    // A draft recovered on mount was staged by a document that may have closed
+    // before enqueuing. Adopting it into stagedDraftIds pins the toolbar to
+    // Saving… forever because no queued operation will ever release it.
+    state.drafts = {
+      s1: {
+        id: "s1",
+        baseRev: 3,
+        isNew: false,
+        updatedAt: "2026-01-02T00:00:00.000Z",
+        fields,
+      },
+    };
+    await refreshSyncStatus();
+    expect(writeQueueStore.state.saving).toBe(false);
+
+    await stageEdit(snippet, fields);
+    expect(writeQueueStore.state.saving).toBe(true);
+
+    // Only this document's staged id retires when its draft is cleared.
+    state.drafts = {};
+    await refreshSyncStatus();
+    expect(writeQueueStore.state.saving).toBe(false);
+  });
+
   it("remembers the previous fields so undo has a target", async () => {
     await stageEdit(snippet, fields);
 
