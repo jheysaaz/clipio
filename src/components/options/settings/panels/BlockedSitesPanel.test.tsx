@@ -16,6 +16,8 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
+
 const originalSetTimeout = globalThis.setTimeout;
 
 const mocks = vi.hoisted(() => ({
@@ -40,7 +42,11 @@ const duplicateCopy = i18n.t(
 );
 
 function renderPanel() {
-  return render(<BlockedSitesPanel />);
+  return render(
+    <FeedbackProvider>
+      <BlockedSitesPanel />
+    </FeedbackProvider>
+  );
 }
 
 async function typeSite(value: string) {
@@ -151,7 +157,10 @@ describe("BlockedSitesPanel", () => {
     );
     expect(await screen.findByText("mail.example.com")).toBeInTheDocument();
     expect(screen.getByTestId("blocked-site-input")).toHaveValue("");
-    expect(screen.getByTestId("blocked-site-status")).toHaveTextContent(
+    expect(
+      screen.getByTestId("blocked-site-add-confirmation")
+    ).toHaveTextContent(i18n.t("options.generalSection.blockedSites.added"));
+    expect(screen.getByRole("status")).toHaveTextContent(
       i18n.t("options.generalSection.blockedSites.added")
     );
   });
@@ -192,7 +201,10 @@ describe("BlockedSitesPanel", () => {
     );
     expect(screen.queryByText("example.com")).not.toBeInTheDocument();
     expect(screen.getByText("other.test")).toBeInTheDocument();
-    expect(screen.getByTestId("blocked-site-status")).toHaveTextContent(
+    expect(
+      screen.getByTestId("blocked-site-remove-confirmation")
+    ).toHaveTextContent(i18n.t("options.generalSection.blockedSites.removed"));
+    expect(screen.getByRole("status")).toHaveTextContent(
       i18n.t("options.generalSection.blockedSites.removed")
     );
   });
@@ -212,7 +224,7 @@ describe("BlockedSitesPanel", () => {
       })
     );
     expect(screen.queryByText("example.com")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("blocked-site-status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("");
   });
 
   it("reports a rejected remove write and keeps the site on screen", async () => {
@@ -236,17 +248,16 @@ describe("BlockedSitesPanel", () => {
     expect(screen.getByText("example.com")).toBeInTheDocument();
   });
 
-  it("dismisses a validation error and clears the success flash on its timer", async () => {
-    // Only the 2s flash timer is captured; leaving the 8s error timer real
-    // keeps `findBy*` working, while advancing the flash manually avoids a
-    // two-second wait in the test.
-    const flashTimers: Array<() => void> = [];
+  it("dismisses a validation error and reverts the inline confirmation", async () => {
+    // The confirmation beside the control is informational, so it may revert on
+    // its short timer. The validation error stays until the user dismisses it.
+    const confirmationTimers: Array<() => void> = [];
     vi.spyOn(globalThis, "setTimeout").mockImplementation(((
       cb: () => void,
       ms?: number
     ) => {
       if (ms === 2000) {
-        flashTimers.push(cb);
+        confirmationTimers.push(cb);
         return 0;
       }
       return originalSetTimeout(cb, ms);
@@ -257,19 +268,26 @@ describe("BlockedSitesPanel", () => {
 
     await typeSite("localhost");
     await clickAdd();
-    const alert = await screen.findByRole("alert");
+    expect(await screen.findByTestId("inline-error")).toBeVisible();
     fireEvent.click(
       screen.getByRole("button", {
         name: i18n.t("common.dismissError"),
       })
     );
-    expect(alert).not.toBeInTheDocument();
+    expect(screen.queryByTestId("inline-error")).not.toBeInTheDocument();
 
     await typeSite("example.com");
     await clickAdd();
-    expect(await screen.findByTestId("blocked-site-status")).toBeVisible();
-    expect(flashTimers).toHaveLength(1);
-    act(() => flashTimers[0]());
-    expect(screen.queryByTestId("blocked-site-status")).not.toBeInTheDocument();
+    const addLabel = i18n.t("options.generalSection.blockedSites.added");
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("blocked-site-add-confirmation")
+      ).toHaveTextContent(addLabel)
+    );
+    expect(confirmationTimers).toHaveLength(1);
+    act(() => confirmationTimers[0]());
+    expect(
+      screen.queryByTestId("blocked-site-add-confirmation")
+    ).not.toBeInTheDocument();
   });
 });

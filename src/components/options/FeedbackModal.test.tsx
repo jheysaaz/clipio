@@ -13,7 +13,9 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 
+import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
 import { mockTabs, resetBrowserMocks } from "../../../tests/mocks/browser";
 import { i18n } from "../../../tests/mocks/i18n";
 
@@ -34,6 +36,10 @@ vi.mock("@/lib/review-prompt", () => ({
 }));
 
 import { FeedbackModal } from "./FeedbackModal";
+
+function renderModal(node: ReactNode) {
+  return render(<FeedbackProvider>{node}</FeedbackProvider>);
+}
 
 const originalCreateObjectURL = URL.createObjectURL;
 
@@ -76,28 +82,37 @@ afterEach(() => {
 
 describe("FeedbackModal", () => {
   it("renders nothing when closed", () => {
-    const { container } = render(
+    const { container } = renderModal(
       <FeedbackModal open={false} onClose={vi.fn()} />
     );
 
-    expect(container).toBeEmptyDOMElement();
+    // The provider's two live regions are intentionally mounted for the whole
+    // surface; only the modal's own form should be absent while it is closed.
+    expect(container.querySelector("form")).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("");
+    expect(screen.getByRole("alert")).toHaveTextContent("");
   });
 
-  it("requires a message and clears the validation error once the user types", () => {
-    const { container } = render(<FeedbackModal open onClose={vi.fn()} />);
+  it("requires a message and clears the validation error once the user types", async () => {
+    const { container } = renderModal(<FeedbackModal open onClose={vi.fn()} />);
 
     expect(submit()).toBeDisabled();
     fireEvent.submit(container.querySelector("form")!);
+    await waitFor(() =>
+      expect(screen.getByTestId("inline-error")).toHaveTextContent(
+        i18n.t("options.feedback.error")
+      )
+    );
     expect(screen.getByRole("alert")).toHaveTextContent(
       i18n.t("options.feedback.error")
     );
 
     fireEvent.change(messageField(), { target: { value: "Broken insert" } });
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("inline-error")).not.toBeInTheDocument();
   });
 
-  it("accepts an image screenshot and rejects a non-image file", () => {
-    const { container } = render(<FeedbackModal open onClose={vi.fn()} />);
+  it("accepts an image screenshot and rejects a non-image file", async () => {
+    const { container } = renderModal(<FeedbackModal open onClose={vi.fn()} />);
     const fileInput = container.querySelector("#feedback-screenshot")!;
 
     fireEvent.change(fileInput, { target: { files: [imageFile()] } });
@@ -121,6 +136,11 @@ describe("FeedbackModal", () => {
     fireEvent.change(fileInput, {
       target: { files: [new File(["x"], "notes.txt", { type: "text/plain" })] },
     });
+    await waitFor(() =>
+      expect(screen.getByTestId("inline-error")).toHaveTextContent(
+        "Please select an image file (PNG, JPG, GIF, etc.)"
+      )
+    );
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Please select an image file (PNG, JPG, GIF, etc.)"
     );
@@ -129,7 +149,7 @@ describe("FeedbackModal", () => {
   it("submits trimmed fields with the chosen screenshot and clears the form", async () => {
     const timeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const file = imageFile();
-    const { container } = render(<FeedbackModal open onClose={vi.fn()} />);
+    const { container } = renderModal(<FeedbackModal open onClose={vi.fn()} />);
     const fileInput = container.querySelector("#feedback-screenshot")!;
 
     fireEvent.change(
@@ -159,8 +179,15 @@ describe("FeedbackModal", () => {
         screenshot: file,
       })
     );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      i18n.t("options.feedback.success")
+    await waitFor(() =>
+      expect(screen.getByTestId("feedback-success")).toHaveTextContent(
+        i18n.t("options.feedback.success")
+      )
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        i18n.t("options.feedback.success")
+      )
     );
     expect(messageField()).toHaveValue("");
     expect(container.querySelector("img")).not.toBeInTheDocument();
@@ -170,13 +197,13 @@ describe("FeedbackModal", () => {
     )?.[0] as (() => void) | undefined;
     expect(flashReset).toBeTypeOf("function");
     act(() => flashReset?.());
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("feedback-success")).not.toBeInTheDocument();
   });
 
   it("reports a failed submission without claiming success", async () => {
     const failure = new Error("network down");
     mocks.sendUserFeedback.mockRejectedValue(failure);
-    render(<FeedbackModal open onClose={vi.fn()} />);
+    renderModal(<FeedbackModal open onClose={vi.fn()} />);
 
     fireEvent.change(messageField(), { target: { value: "Help" } });
     fireEvent.click(submit());
@@ -186,16 +213,23 @@ describe("FeedbackModal", () => {
         action: "sendUserFeedback",
       })
     );
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      i18n.t("options.feedback.error")
+    await waitFor(() =>
+      expect(screen.getByTestId("inline-error")).toHaveTextContent(
+        i18n.t("options.feedback.error")
+      )
     );
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        i18n.t("options.feedback.error")
+      )
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("");
     expect(submit()).toBeEnabled();
   });
 
   it("closes on Escape and on the close button, resetting the form", () => {
     const onClose = vi.fn();
-    const { container, rerender } = render(
+    const { container, rerender } = renderModal(
       <FeedbackModal open onClose={onClose} />
     );
 
@@ -203,7 +237,11 @@ describe("FeedbackModal", () => {
     fireEvent.keyDown(container.firstChild!, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
 
-    rerender(<FeedbackModal open onClose={onClose} />);
+    rerender(
+      <FeedbackProvider>
+        <FeedbackModal open onClose={onClose} />
+      </FeedbackProvider>
+    );
     expect(messageField()).toHaveValue("");
 
     fireEvent.click(
@@ -214,14 +252,14 @@ describe("FeedbackModal", () => {
 
   it("ignores a non-Escape key while the modal is open", () => {
     const onClose = vi.fn();
-    const { container } = render(<FeedbackModal open onClose={onClose} />);
+    const { container } = renderModal(<FeedbackModal open onClose={onClose} />);
 
     fireEvent.keyDown(container.firstChild!, { key: "a" });
     expect(onClose).not.toHaveBeenCalled();
   });
 
   it("opens the donation page and marks the store review as rated", () => {
-    render(<FeedbackModal open onClose={vi.fn()} />);
+    renderModal(<FeedbackModal open onClose={vi.fn()} />);
 
     fireEvent.click(
       screen.getByRole("button", {

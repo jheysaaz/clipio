@@ -16,12 +16,19 @@ import {
   Settings,
   Clipboard,
   ArrowDownUp,
+  PanelLeft,
+  PanelLeftClose,
+  Trash2,
 } from "lucide-react";
+import {
+  FeedbackBanner,
+  useFeedback,
+} from "@/components/feedback/FeedbackProvider";
 import { Icon } from "@/components/ui/icon";
+import { InlineAction } from "@/components/ui/inline-action";
 import SnippetListItem from "@/components/SnippetListItem";
 const SnippetEditor = lazy(() => import("~/components/SnippetEditor"));
 import { InlineError } from "@/components/ui/inline-error";
-import { toast } from "sonner";
 
 import type { Snippet, SnippetFormData } from "@/types";
 import { createSnippet } from "@/types";
@@ -48,7 +55,6 @@ import {
   snippetsStore,
 } from "@/store/snippets";
 import { setSearchQuery, useSearch, useVisibleSnippets } from "@/store/search";
-import { WarningBanner } from "@/components/ui/warning-banner";
 import {
   contextMenuDraftItem,
   latestVersionItem,
@@ -86,17 +92,25 @@ import {
   setSidebarOpen as storeSetSidebarOpen,
 } from "@/store/sidebar";
 import { openReleasePage, shouldShowUpdateAlert } from "@/lib/update-checker";
-import {
-  LIST_ROUTE,
-  NEW_ROUTE,
-  SNIPPET_ROUTE,
-  viewFromPath,
-} from "@/routes/popup";
+import { NEW_ROUTE, SNIPPET_ROUTE, viewFromPath } from "@/routes/popup";
 
 const CONTEXT_MENU_DRAFT_SESSION_KEY = "__clipioContextMenuDraft__";
 
+type DeletedSnippet = {
+  snippet: Snippet;
+  /** Where it sat in the sidebar, so Undo can put it back in the same row. */
+  index: number;
+};
+
 export default function Dashboard() {
   const navigate = useNavigate();
+
+  const [deletedSnippet, setDeletedSnippet] = useState<DeletedSnippet | null>(
+    null
+  );
+  const deletedMessageRef = useRef<HTMLDivElement>(null);
+  const [pendingNameFocus, setPendingNameFocus] = useState(false);
+  const { showBanner, dismissBanner, announce } = useFeedback();
 
   // Which snippet is selected, and whether the create form is open, are now the
   // URL. That is what gives a selection an address: a future "open this specific
@@ -113,6 +127,7 @@ export default function Dashboard() {
 
   const selectSnippet = useCallback(
     (id: string) => {
+      setDeletedSnippet(null);
       // Recorded here rather than in the route, so a deep link is remembered too —
       // the user did view it. Fire-and-forget: navigation must not wait on a
       // storage write.
@@ -125,10 +140,8 @@ export default function Dashboard() {
     },
     [navigate]
   );
-  const showList = useCallback(() => {
-    void navigate({ to: LIST_ROUTE, replace: true });
-  }, [navigate]);
   const startCreating = useCallback(() => {
+    setDeletedSnippet(null);
     void navigate({ to: NEW_ROUTE, replace: true });
   }, [navigate]);
 
@@ -449,6 +462,144 @@ export default function Dashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    if (loading) announce(i18n.t("dashboard.loadingSnippets"));
+  }, [loading, announce]);
+
+  useEffect(() => {
+    if (deletedSnippet) deletedMessageRef.current?.focus();
+  }, [deletedSnippet]);
+
+  useEffect(() => {
+    if (!pendingNameFocus) return;
+
+    const focus = () => {
+      const input = document.querySelector<HTMLInputElement>(
+        '[data-testid="snippet-label-input"]'
+      );
+      if (!input) return false;
+      input.focus();
+      return true;
+    };
+
+    if (focus()) {
+      // Defer clearing the flag out of the effect body so React does not report
+      // a cascading render; the observer below is subscription-only.
+      queueMicrotask(() => setPendingNameFocus(false));
+      return;
+    }
+
+    // The editor is lazy-loaded, so the input can arrive a frame after Undo
+    // restores the route. Watch for it rather than guessing a delay.
+    const observer = new MutationObserver(() => {
+      if (focus()) {
+        setPendingNameFocus(false);
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [pendingNameFocus]);
+
+  useEffect(() => {
+    if (!showRecoveryBanner) {
+      dismissBanner("recovery", { runOnDismiss: false });
+      return;
+    }
+    showBanner({
+      source: "recovery",
+      severity: "error",
+      testId: "warning-uninstall",
+      message: i18n.t(
+        "dashboard.warnings.recovery.body",
+        recoverySnippets.length
+      ),
+      action: {
+        label: i18n.t(
+          "dashboard.warnings.recovery.action",
+          recoverySnippets.length
+        ),
+        onClick: async () => {
+          const result = await restoreRecoveredSnippets();
+          if (!result.ok) return;
+          const newest = selectNewest(result.value);
+          if (newest) selectSnippet(newest.id);
+        },
+      },
+      onDismiss: dismissRecoveryBanner,
+    });
+  }, [
+    showRecoveryBanner,
+    recoverySnippets.length,
+    dismissRecoveryBanner,
+    showBanner,
+    dismissBanner,
+    selectSnippet,
+  ]);
+
+  useEffect(() => {
+    if (!quotaWarning) {
+      dismissBanner("quota", { runOnDismiss: false });
+      return;
+    }
+    showBanner({
+      source: "quota",
+      severity: "error",
+      testId: "warning-quota",
+      message: i18n.t("dashboard.warnings.quotaFull.body"),
+      action: {
+        label: i18n.t("dashboard.warnings.quotaFull.action"),
+        onClick: () => browser.runtime.openOptionsPage(),
+      },
+      onDismiss: dismissQuotaWarning,
+    });
+  }, [quotaWarning, dismissQuotaWarning, showBanner, dismissBanner]);
+
+  useEffect(() => {
+    if (!syncPausedWarning) {
+      dismissBanner("sync-paused", { runOnDismiss: false });
+      return;
+    }
+    showBanner({
+      source: "sync-paused",
+      severity: "error",
+      testId: "warning-sync-paused",
+      message: i18n.t("dashboard.warnings.syncPaused.body"),
+      action: {
+        label: i18n.t("dashboard.warnings.syncPaused.action"),
+        onClick: () => browser.runtime.openOptionsPage(),
+      },
+      onDismiss: dismissSyncPausedWarning,
+    });
+  }, [syncPausedWarning, dismissSyncPausedWarning, showBanner, dismissBanner]);
+
+  useEffect(() => {
+    if (!showUpdateBanner || !updateRelease) {
+      dismissBanner("update", { runOnDismiss: false });
+      return;
+    }
+    const version = updateRelease.version;
+    showBanner({
+      source: "update",
+      severity: "info",
+      testId: "warning-update",
+      message: i18n.t("dashboard.warnings.updateAvailable.body", [version]),
+      action: {
+        label: i18n.t("dashboard.warnings.updateAvailable.action"),
+        onClick: () => {
+          void openReleasePage(updateRelease.htmlUrl);
+          dismissBanner("update", { runOnDismiss: false });
+          dismissedUpdateVersionItem.setValue(version).catch(console.warn);
+          setShowUpdateBanner(false);
+        },
+      },
+      onDismiss: () => {
+        dismissedUpdateVersionItem.setValue(version).catch(console.warn);
+        setShowUpdateBanner(false);
+      },
+    });
+  }, [showUpdateBanner, updateRelease, showBanner, dismissBanner]);
+
   /**
    * Land on something when the URL does not already say what to show: the last
    * snippet viewed, falling back to the newest.
@@ -482,7 +633,8 @@ export default function Dashboard() {
     // another device's sync, or be replaced by an import, and a stale id must not
     // leave the popup on a blank pane.
     const initial = resolveInitialSnippet(snippets, lastViewedSnippetId);
-    if (initial) selectSnippet(initial.id);
+    // Navigation is a state change too. Let the effect finish before it runs.
+    if (initial) queueMicrotask(() => selectSnippet(initial.id));
   }, [
     snippets,
     lastViewedSnippetId,
@@ -627,64 +779,85 @@ export default function Dashboard() {
   };
 
   const handleDeleteSnippet = async (snippetId: string) => {
-    const snippet = findSnippet(snippetsStore.state.snippets, snippetId);
+    const snippetsInStore = snippetsStore.state.snippets;
+    const snippet = findSnippet(snippetsInStore, snippetId);
     if (!snippet) return;
+    const index = snippetsInStore.findIndex((s) => s.id === snippetId);
+
     try {
       await discardDraft(snippetId);
       await enqueueDelete(snippet);
       const outcome = await waitForSnippetCommit(snippetId);
       if (outcome) {
-        toast.error(
-          outcome.error ?? i18n.t("snippetDetail.errors.failedToDelete")
-        );
+        showBanner({
+          source: "delete",
+          severity: "error",
+          message:
+            outcome.error ?? i18n.t("snippetDetail.errors.failedToDelete"),
+        });
         return;
       }
 
-      const remaining = snippetsStore.state.snippets.filter(
-        (s) => s.id !== snippetId
-      );
-      snippetsStore.setState((prev) => ({ ...prev, snippets: remaining }));
-      // Deleting the addressed snippet has to move the address too, or the URL
-      // would keep pointing at something that no longer exists.
-      if (selectedSnippetId === snippetId) {
-        const newest = selectNewest(remaining);
-        if (newest) selectSnippet(newest.id);
-        else showList();
-      }
+      snippetsStore.setState((prev) => ({
+        ...prev,
+        snippets: prev.snippets.filter((s) => s.id !== snippetId),
+      }));
+      // The address deliberately still names the deleted snippet. No other
+      // snippet takes over; the deleted pane owns this address until the user
+      // navigates away, which is what keeps Undo available indefinitely.
+      setDeletedSnippet({ snippet, index });
+      announce(i18n.t("snippetDetail.deleted.live"));
     } catch (error) {
       captureError(error, { action: "dashboard.delete", snippetId });
-      toast.error(i18n.t("snippetDetail.errors.failedToDelete"));
+      showBanner({
+        source: "delete",
+        severity: "error",
+        message: i18n.t("snippetDetail.errors.failedToDelete"),
+      });
     }
   };
 
-  /** Offer a one-step restore for the snippet just deleted. */
-  const handleUndoDelete = (snippet: Snippet) => {
-    toast(i18n.t("snippetDetail.deleteToast.message", [snippet.label]), {
-      duration: 5000,
-      action: {
-        label: i18n.t("snippetDetail.deleteToast.undo"),
-        onClick: async () => {
-          try {
-            await enqueueRestore(snippet, fieldsFromSnippet(snippet));
-            const outcome = await waitForSnippetCommit(snippet.id);
-            if (outcome) {
-              toast.error(
-                outcome.error ?? i18n.t("snippetDetail.errors.failedToSave")
-              );
-              return;
-            }
-            await refreshSnippets();
-            selectSnippet(snippet.id);
-          } catch (error) {
-            captureError(error, {
-              action: "dashboard.restore",
-              snippetId: snippet.id,
-            });
-            toast.error(i18n.t("snippetDetail.errors.failedToSave"));
-          }
-        },
-      },
-    });
+  /** Restore the retained copy, at the same row, from a no-timer deleted pane. */
+  const handleUndoDelete = async () => {
+    if (!deletedSnippet) return;
+    const { snippet, index } = deletedSnippet;
+
+    try {
+      await enqueueRestore(snippet, fieldsFromSnippet(snippet));
+      const outcome = await waitForSnippetCommit(snippet.id);
+      if (outcome) {
+        showBanner({
+          source: "undo-delete",
+          severity: "error",
+          message: outcome.error ?? i18n.t("snippetDetail.errors.failedToSave"),
+        });
+        return;
+      }
+
+      // Reinsert the retained copy rather than refreshing from storage: order
+      // is part of what the user is getting back.
+      snippetsStore.setState((prev) => {
+        const without = prev.snippets.filter((s) => s.id !== snippet.id);
+        const at = Math.min(index, without.length);
+        return {
+          ...prev,
+          snippets: [...without.slice(0, at), snippet, ...without.slice(at)],
+        };
+      });
+      setDeletedSnippet(null);
+      setPendingNameFocus(true);
+      selectSnippet(snippet.id);
+    } catch (error) {
+      captureError(error, {
+        action: "dashboard.restore",
+        snippetId: snippet.id,
+      });
+      showBanner({
+        source: "undo-delete",
+        severity: "error",
+        message: i18n.t("snippetDetail.errors.failedToSave"),
+      });
+    }
   };
 
   // -------------------------------------------------------------------------
@@ -755,79 +928,7 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-full select-none">
-      {/* Sign-out recovery banner */}
-      {showRecoveryBanner && (
-        <WarningBanner
-          testId="warning-uninstall"
-          action={{
-            label: i18n.t(
-              "dashboard.warnings.recovery.action",
-              recoverySnippets.length
-            ),
-            onClick: async () => {
-              const result = await restoreRecoveredSnippets();
-              if (!result.ok) return;
-              const newest = selectNewest(result.value);
-              if (newest) selectSnippet(newest.id);
-            },
-          }}
-          onDismiss={dismissRecoveryBanner}
-        >
-          {i18n.t("dashboard.warnings.recovery.body", recoverySnippets.length)}
-        </WarningBanner>
-      )}
       <InlineError message={recoveryError} onDismiss={dismissRecoveryError} />
-
-      {/* Quota warning banner — only shown when sync quota was actually exceeded */}
-      {quotaWarning && (
-        <WarningBanner
-          testId="warning-quota"
-          action={{
-            label: i18n.t("dashboard.warnings.quotaFull.action"),
-            onClick: () => browser.runtime.openOptionsPage(),
-          }}
-          onDismiss={dismissQuotaWarning}
-        >
-          {i18n.t("dashboard.warnings.quotaFull.body")}
-        </WarningBanner>
-      )}
-
-      {/* Sync paused banner — shown when user manually switched to local */}
-      {syncPausedWarning && (
-        <WarningBanner
-          testId="warning-sync-paused"
-          action={{
-            label: i18n.t("dashboard.warnings.syncPaused.action"),
-            onClick: () => browser.runtime.openOptionsPage(),
-          }}
-          onDismiss={dismissSyncPausedWarning}
-        >
-          {i18n.t("dashboard.warnings.syncPaused.body")}
-        </WarningBanner>
-      )}
-
-      {/* Update available banner */}
-      {showUpdateBanner && updateRelease && (
-        <WarningBanner
-          testId="warning-update"
-          action={{
-            label: i18n.t("dashboard.warnings.updateAvailable.action"),
-            onClick: () => {
-              void openReleasePage(updateRelease.htmlUrl);
-            },
-          }}
-          onDismiss={() => {
-            dismissedUpdateVersionItem
-              .setValue(updateRelease.version)
-              .catch(console.warn);
-            setShowUpdateBanner(false);
-          }}
-        >
-          {i18n.t("dashboard.warnings.updateAvailable.body", [
-            updateRelease.version,
-          ])}
-        </WarningBanner>
-      )}
 
       {/* Master-Detail Layout */}
       <div className="flex-1 flex overflow-hidden">
@@ -855,7 +956,7 @@ export default function Dashboard() {
           />
 
           {/* Search Bar */}
-          <div className="px-2 py-2 border-b">
+          <div className="px-2 pb-1 pt-2">
             <div className="relative">
               <Icon
                 icon={Search}
@@ -887,15 +988,11 @@ export default function Dashboard() {
           <ScrollArea className="flex-1 min-w-0 min-h-0">
             <div className="p-2 pb-14 overflow-hidden">
               {loading ? (
-                <div
-                  className="flex flex-col items-center justify-center py-12 gap-3"
-                  role="status"
-                  aria-live="polite"
-                >
+                <div className="flex flex-col items-center justify-center gap-3 py-12">
                   <Icon
                     icon={Loader2}
                     size="xl"
-                    className="animate-spin text-muted-foreground"
+                    className="animate-spin text-muted-foreground motion-reduce:hidden"
                   />
                   <p className="text-xs text-muted-foreground">
                     {i18n.t("dashboard.loadingSnippets")}
@@ -992,7 +1089,7 @@ export default function Dashboard() {
           </ScrollArea>
 
           {/* Add Snippet + Settings */}
-          <div className="px-2 py-2 border-t flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 px-2 py-2">
             <Button
               data-testid="add-snippet"
               onClick={handleAddSnippet}
@@ -1005,7 +1102,10 @@ export default function Dashboard() {
               data-testid="settings-button"
               variant="outline"
               size="icon"
-              onClick={() => browser.runtime.openOptionsPage()}
+              onClick={() => {
+                setDeletedSnippet(null);
+                browser.runtime.openOptionsPage();
+              }}
               className="h-8 w-8 shrink-0 rounded-lg"
               title={i18n.t("dashboard.settingsAndExport")}
               aria-label={i18n.t("dashboard.settingsAndExport")}
@@ -1016,8 +1116,63 @@ export default function Dashboard() {
         </div>
 
         {/* Right Content - Detail */}
-        <div className="flex-1 flex flex-col bg-background">
-          {(isCreating || selectedSnippet) && (
+        <div
+          data-testid="dashboard-main-pane"
+          className="flex-1 flex flex-col bg-background"
+        >
+          <FeedbackBanner />
+
+          {deletedSnippet && !isCreating && (
+            <div className="flex flex-1 flex-col">
+              <div className="flex h-11 items-center border-b border-border px-2">
+                <Button
+                  data-testid="snippet-toggle-sidebar"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  aria-label={i18n.t(
+                    sidebarOpen
+                      ? "snippetEditor.sidebarHideLabel"
+                      : "snippetEditor.sidebarShowLabel"
+                  )}
+                  title={i18n.t(
+                    sidebarOpen
+                      ? "snippetEditor.sidebarHideTooltip"
+                      : "snippetEditor.sidebarShowTooltip"
+                  )}
+                  className="size-8"
+                >
+                  <Icon
+                    icon={sidebarOpen ? PanelLeftClose : PanelLeft}
+                    stroke="emphasis"
+                  />
+                </Button>
+              </div>
+              <div className="flex flex-1 items-center justify-center p-8">
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <div className="flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                    <Icon icon={Trash2} size="xl" />
+                  </div>
+                  <p
+                    ref={deletedMessageRef}
+                    tabIndex={-1}
+                    data-testid="snippet-deleted-message"
+                    className="text-base font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {i18n.t("snippetDetail.deleted.title")}
+                  </p>
+                  <InlineAction
+                    data-testid="snippet-undo-delete"
+                    onClick={() => void handleUndoDelete()}
+                  >
+                    {i18n.t("snippetDetail.deleted.undo")}
+                  </InlineAction>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!deletedSnippet && (isCreating || selectedSnippet) && (
             <Suspense
               fallback={
                 <div className="flex items-center justify-center flex-1">
@@ -1039,13 +1194,13 @@ export default function Dashboard() {
                 onClearCreateError={dismissCreateError}
                 existingSnippets={snippets}
                 onDelete={handleDeleteSnippet}
-                onUndoDelete={handleUndoDelete}
                 sidebarOpen={sidebarOpen}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
               />
             </Suspense>
           )}
-          {!isCreating &&
+          {!deletedSnippet &&
+          !isCreating &&
           !selectedSnippet &&
           snippets.length === 0 &&
           !loading ? (

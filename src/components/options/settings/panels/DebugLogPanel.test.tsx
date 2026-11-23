@@ -49,7 +49,6 @@ const mocks = vi.hoisted(() => {
     },
     captureError: vi.fn(),
     writeText: vi.fn(),
-    toast: { success: vi.fn(), error: vi.fn() },
   };
 });
 
@@ -58,10 +57,22 @@ vi.mock("@/storage/items", () => ({
   debugLogItem: mocks.debugLogItem,
 }));
 vi.mock("@/lib/sentry", () => ({ captureError: mocks.captureError }));
-vi.mock("sonner", () => ({ toast: mocks.toast }));
 
+import {
+  FeedbackBanner,
+  FeedbackProvider,
+} from "@/components/feedback/FeedbackProvider";
 import { DebugLogPanel } from "./DebugLogPanel";
 import { i18n } from "../../../../../tests/mocks/i18n";
+
+function renderPanel() {
+  return render(
+    <FeedbackProvider>
+      <DebugLogPanel />
+      <FeedbackBanner testId="feedback-banner" />
+    </FeedbackProvider>
+  );
+}
 
 const entry = {
   ts: Date.parse("2026-01-02T03:04:05.000Z"),
@@ -100,8 +111,6 @@ beforeEach(() => {
   mocks.debugLogItem.setValue.mockReset().mockResolvedValue(undefined);
   mocks.captureError.mockReset();
   mocks.writeText.mockReset().mockResolvedValue(undefined);
-  mocks.toast.success.mockReset();
-  mocks.toast.error.mockReset();
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: mocks.writeText },
@@ -119,7 +128,7 @@ afterEach(() => {
 
 describe("DebugLogPanel", () => {
   it("renders nothing while debug logging is off", async () => {
-    const { unmount } = render(<DebugLogPanel />);
+    const { unmount } = renderPanel();
 
     expect(screen.queryByTestId("panel-debug-log")).not.toBeInTheDocument();
     await waitFor(() =>
@@ -131,7 +140,7 @@ describe("DebugLogPanel", () => {
   it("shows the empty state and disables both actions with no entries", async () => {
     enableLog([]);
 
-    render(<DebugLogPanel />);
+    renderPanel();
 
     expect(await screen.findByTestId("debug-log")).toHaveTextContent(
       i18n.t("options.developers.debugMode.emptyLog")
@@ -147,7 +156,7 @@ describe("DebugLogPanel", () => {
   it("renders populated entries, including string and object details", async () => {
     enableLog([entry, anotherEntry]);
 
-    render(<DebugLogPanel />);
+    renderPanel();
 
     // Wait for the entry itself: the panel appears as soon as the mode read
     // resolves, which can be before the log read resolves.
@@ -161,7 +170,7 @@ describe("DebugLogPanel", () => {
   it("treats a non-array stored log as empty", async () => {
     enableLog({ unexpected: "shape" });
 
-    render(<DebugLogPanel />);
+    renderPanel();
 
     expect(await screen.findByTestId("debug-log")).toHaveTextContent(
       i18n.t("options.developers.debugMode.emptyLog")
@@ -171,7 +180,7 @@ describe("DebugLogPanel", () => {
   it("copies the formatted log to the clipboard", async () => {
     enableLog([entry]);
 
-    render(<DebugLogPanel />);
+    renderPanel();
     await screen.findByText("insert");
     const copy = await screen.findByRole("button", {
       name: i18n.t("options.developers.debugMode.copyLog"),
@@ -183,7 +192,14 @@ describe("DebugLogPanel", () => {
         `[${new Date(entry.ts).toISOString()}] [content] insert snippet-1`
       )
     );
-    expect(mocks.toast.success).toHaveBeenCalledWith(
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", {
+          name: i18n.t("options.developers.debugMode.copiedLog"),
+        })
+      ).toHaveAttribute("aria-pressed", "true")
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
       i18n.t("options.developers.debugMode.copiedLog")
     );
   });
@@ -193,7 +209,7 @@ describe("DebugLogPanel", () => {
     mocks.writeText.mockRejectedValue(failure);
     enableLog([entry]);
 
-    render(<DebugLogPanel />);
+    renderPanel();
     await screen.findByText("insert");
     fireEvent.click(
       await screen.findByRole("button", {
@@ -206,16 +222,18 @@ describe("DebugLogPanel", () => {
         action: "copyDebugLog",
       })
     );
-    expect(mocks.toast.error).toHaveBeenCalledWith(
+    expect(screen.getByTestId("feedback-banner")).toHaveTextContent(
       i18n.t("options.developers.debugMode.copyFailed")
     );
-    expect(mocks.toast.success).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      i18n.t("options.developers.debugMode.copyFailed")
+    );
   });
 
   it("clears the visible log on a successful write", async () => {
     enableLog([entry]);
 
-    render(<DebugLogPanel />);
+    renderPanel();
     await screen.findByText("insert");
     fireEvent.click(
       await screen.findByRole("button", {
@@ -236,7 +254,7 @@ describe("DebugLogPanel", () => {
     mocks.debugLogItem.setValue.mockRejectedValue(failure);
     enableLog([entry]);
 
-    render(<DebugLogPanel />);
+    renderPanel();
     await screen.findByText("insert");
     fireEvent.click(
       await screen.findByRole("button", {
@@ -255,7 +273,7 @@ describe("DebugLogPanel", () => {
   it("reacts to watch updates and ignores a non-array log watch value", async () => {
     enableLog([]);
 
-    render(<DebugLogPanel />);
+    renderPanel();
     await screen.findByText(i18n.t("options.developers.debugMode.emptyLog"));
 
     act(() => mocks.emitLog([entry]));
@@ -274,7 +292,7 @@ describe("DebugLogPanel", () => {
     mocks.debugModeItem.getValue.mockResolvedValue(false);
     mocks.debugLogItem.getValue.mockResolvedValue([entry]);
 
-    render(<DebugLogPanel />);
+    renderPanel();
     await waitFor(() =>
       expect(mocks.debugModeItem.getValue).toHaveBeenCalled()
     );

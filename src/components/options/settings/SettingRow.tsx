@@ -7,9 +7,10 @@
  *
  */
 
-import { type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Check, RotateCcw, TriangleAlert } from "lucide-react";
 
+import { useFeedback } from "@/components/feedback/FeedbackProvider";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { i18n } from "#i18n";
@@ -91,6 +92,7 @@ export function SettingRow({
   highlight,
 }: {
   title: string;
+
   description?: string;
   /** The control. Always the last element in the right-hand column. */
   children: ReactNode;
@@ -116,6 +118,16 @@ export function SettingRow({
   testId?: string;
   className?: string;
 }) {
+  const { announce, announceError } = useFeedback();
+
+  useEffect(() => {
+    if (status === "error") {
+      announceError(i18n.t("options.row.saveFailed"));
+    } else if (status === "saved") {
+      announce(i18n.t("options.row.saved"));
+    }
+  }, [status, announce, announceError]);
+
   return (
     <div
       data-testid={testId}
@@ -136,7 +148,6 @@ export function SettingRow({
         )}
         {status === "error" && (
           <p
-            role="alert"
             data-testid={testId ? `${testId}-error` : undefined}
             className="mt-1 flex items-center gap-1 text-xs text-destructive"
           >
@@ -147,14 +158,18 @@ export function SettingRow({
       </div>
 
       <div className="flex shrink-0 items-center justify-end gap-2">
-        {/* Announced politely rather than focused: a confirmation that steals
-            focus mid-edit is worse than no confirmation. */}
-        <span
-          role="status"
-          aria-live="polite"
-          className="w-4 shrink-0 text-muted-foreground"
-        >
-          {status === "saved" && <Icon icon={Check} className="size-3.5" />}
+        {/* Announced through the shared polite region rather than focused: a
+            confirmation that steals focus mid-edit is worse than none. */}
+        <span className="w-4 shrink-0 text-muted-foreground">
+          {status === "saved" && (
+            <span
+              role="img"
+              aria-label={i18n.t("options.row.saved")}
+              title={i18n.t("options.row.saved")}
+            >
+              <Icon icon={Check} className="size-3.5" />
+            </span>
+          )}
         </span>
 
         {onReset && (

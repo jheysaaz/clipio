@@ -6,10 +6,13 @@
  * images and can overwrite a library. They answer different questions.
  */
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { ArchiveRestore, Download } from "lucide-react";
 
+import { useFeedback } from "@/components/feedback/FeedbackProvider";
+import { useControlConfirmation } from "@/components/feedback/use-control-confirmation";
 import { Button } from "@/components/ui/button";
+import { ControlConfirmation } from "@/components/ui/control-confirmation";
 import { Icon } from "@/components/ui/icon";
 import type { ConflictResolution } from "@/lib/importers/types";
 import { captureError } from "@/lib/sentry";
@@ -23,7 +26,6 @@ import {
   type BackupPhase,
 } from "@/store/backup";
 import { i18n } from "#i18n";
-import { toast } from "sonner";
 
 function errorCopy(code: string | null): string {
   switch (code) {
@@ -90,6 +92,23 @@ function BackupDialog({ onClose }: { onClose: () => void }) {
   const errorCode = useBackup((s) => s.errorCode);
   const resolutions = useBackup((s) => s.resolutions);
   const result = useBackup((s) => s.result);
+  const { announce, announceError } = useFeedback();
+
+  const dialogError = phase === "error" ? errorCopy(errorCode) : null;
+  const missingMedia =
+    phase === "preview" && preview && preview.missingMediaCount > 0
+      ? i18n.t("options.backup.missingMedia", [
+          String(preview.missingMediaCount),
+        ])
+      : null;
+
+  useEffect(() => {
+    if (dialogError) announceError(dialogError);
+  }, [dialogError, announceError]);
+
+  useEffect(() => {
+    if (missingMedia) announce(missingMedia);
+  }, [missingMedia, announce]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 dark:bg-black/60">
@@ -125,12 +144,8 @@ function BackupDialog({ onClose }: { onClose: () => void }) {
         )}
 
         {phase === "error" && (
-          <p
-            data-testid="backup-error"
-            role="alert"
-            className="text-sm text-destructive"
-          >
-            {errorCopy(errorCode)}
+          <p data-testid="backup-error" className="text-sm text-destructive">
+            {dialogError}
           </p>
         )}
 
@@ -194,12 +209,9 @@ function BackupDialog({ onClose }: { onClose: () => void }) {
             {preview.missingMediaCount > 0 && (
               <p
                 data-testid="backup-missing-media"
-                role="status"
                 className="text-xs text-muted-foreground"
               >
-                {i18n.t("options.backup.missingMedia", [
-                  String(preview.missingMediaCount),
-                ])}
+                {missingMedia}
               </p>
             )}
 
@@ -325,15 +337,25 @@ export function BackupManager() {
   const phase = useBackup((s) => s.phase);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const restoreButtonRef = useRef<HTMLButtonElement>(null);
+  const { confirmed, show, reset } = useControlConfirmation();
+  const { announce, showBanner, dismissBanner } = useFeedback();
 
   const handleCreate = async () => {
     try {
       const { blob, fileName } = await createBackupFile();
       downloadBackup(blob, fileName);
-      toast.success(i18n.t("options.backup.created"));
+      const message = i18n.t("options.backup.created");
+      show();
+      announce(message);
+      dismissBanner("backup-create", { runOnDismiss: false });
     } catch (error) {
       captureError(error, { action: "backup.create" });
-      toast.error(i18n.t("options.backup.failedCreate"));
+      reset();
+      showBanner({
+        source: "backup-create",
+        severity: "error",
+        message: i18n.t("options.backup.failedCreate"),
+      });
     }
   };
 
@@ -371,6 +393,12 @@ export function BackupManager() {
             <Icon icon={Download} className="mr-1.5" />
             {i18n.t("options.backup.create")}
           </Button>
+          {confirmed && (
+            <ControlConfirmation
+              label={i18n.t("options.backup.created")}
+              className="self-center"
+            />
+          )}
           <Button
             ref={restoreButtonRef}
             variant="outline"

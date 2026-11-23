@@ -1,7 +1,7 @@
 /**
  * LibraryPanel turns storage reads into a count and a usage list, and routes
- * export/import outcomes to the right toast. Those are the decisions tested
- * here; the importer and exporter themselves have their own suites.
+ * export/import outcomes to inline confirmations or the shared banner. Those are
+ * the decisions tested here; the importers and exporters have their own suites.
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -15,7 +15,6 @@ const mocks = vi.hoisted(() => ({
   snippetsContainMedia: vi.fn(),
   usageCountsItem: { getValue: vi.fn() },
   captureError: vi.fn(),
-  toast: { success: vi.fn(), error: vi.fn() },
   importWizard: {
     onClose: vi.fn(),
     onImportComplete: vi.fn(),
@@ -40,7 +39,6 @@ vi.mock("@/lib/importers/registry", () => ({
 vi.mock("@/pages/options/LibraryImportPanel", () => ({
   IMPORT_PANEL_ANCHOR: "import-anchor",
 }));
-vi.mock("sonner", () => ({ toast: mocks.toast }));
 // The backup controls own their own storage and dialog tests. Here they are a
 // stable landmark so this suite only decides that the panel renders them.
 vi.mock("@/components/BackupManager", () => ({
@@ -61,7 +59,20 @@ vi.mock("@/components/ImportWizard", () => ({
   ),
 }));
 
+import {
+  FeedbackBanner,
+  FeedbackProvider,
+} from "@/components/feedback/FeedbackProvider";
 import { LibraryPanel } from "./LibraryPanel";
+
+function renderPanel() {
+  return render(
+    <FeedbackProvider>
+      <LibraryPanel />
+      <FeedbackBanner testId="feedback-banner" />
+    </FeedbackProvider>
+  );
+}
 
 beforeEach(() => {
   mocks.getSnippets.mockReset().mockResolvedValue([]);
@@ -69,8 +80,6 @@ beforeEach(() => {
   mocks.snippetsContainMedia.mockReset().mockReturnValue(false);
   mocks.usageCountsItem.getValue.mockReset().mockResolvedValue({});
   mocks.captureError.mockReset();
-  mocks.toast.success.mockReset();
-  mocks.toast.error.mockReset();
 });
 
 describe("LibraryPanel", () => {
@@ -85,7 +94,7 @@ describe("LibraryPanel", () => {
       b: 1,
     });
 
-    render(<LibraryPanel />);
+    renderPanel();
 
     await waitFor(() =>
       expect(screen.getByTestId("stat-snippets")).toHaveTextContent("2")
@@ -114,7 +123,7 @@ describe("LibraryPanel", () => {
   });
 
   it("places import ahead of export in the panel", () => {
-    render(<LibraryPanel />);
+    renderPanel();
 
     const importSection = document.getElementById("import-anchor");
     const exportButton = screen.getByTestId("export-json");
@@ -126,7 +135,7 @@ describe("LibraryPanel", () => {
   });
 
   it("keeps placeholders in every tile until the library reads settle", () => {
-    render(<LibraryPanel />);
+    renderPanel();
 
     for (const id of ["stat-snippets", "stat-total-uses", "stat-most-used"]) {
       expect(screen.getByTestId(id)).toHaveTextContent("—");
@@ -134,7 +143,7 @@ describe("LibraryPanel", () => {
   });
 
   it("shows zero uses and no top snippet when there is no usage data", async () => {
-    render(<LibraryPanel />);
+    renderPanel();
 
     await waitFor(() =>
       expect(screen.getByTestId("stat-total-uses")).toHaveTextContent("0")
@@ -147,7 +156,7 @@ describe("LibraryPanel", () => {
     const failure = new Error("storage down");
     mocks.getSnippets.mockRejectedValue(failure);
 
-    render(<LibraryPanel />);
+    renderPanel();
 
     await waitFor(() =>
       expect(mocks.captureError).toHaveBeenCalledWith(failure, {
@@ -156,54 +165,66 @@ describe("LibraryPanel", () => {
     );
   });
 
-  it("changes the export toast when snippets contain media", async () => {
+  it("changes the inline export confirmation when snippets contain media", async () => {
     mocks.getSnippets.mockResolvedValue([{ id: "a", label: "A" }]);
-    const { unmount } = render(<LibraryPanel />);
+    const { unmount } = renderPanel();
 
     fireEvent.click(screen.getByTestId("export-json"));
     await waitFor(() =>
-      expect(mocks.toast.success).toHaveBeenCalledWith(
+      expect(screen.getByRole("status")).toHaveTextContent(
         i18n.t("options.library.exported")
       )
+    );
+    expect(screen.getByTestId("export-json").parentElement).toHaveTextContent(
+      i18n.t("options.library.exported")
     );
     unmount();
 
     mocks.snippetsContainMedia.mockReturnValue(true);
-    render(<LibraryPanel />);
+    renderPanel();
     fireEvent.click(screen.getByTestId("export-json"));
     await waitFor(() =>
-      expect(mocks.toast.success).toHaveBeenCalledWith(
+      expect(screen.getByRole("status")).toHaveTextContent(
         i18n.t("options.library.exportedWithMedia")
       )
+    );
+    expect(screen.getByTestId("export-json").parentElement).toHaveTextContent(
+      i18n.t("options.library.exportedWithMedia")
     );
   });
 
   it("reports the original error on export failure and a fallback for non-errors", async () => {
     const failure = new Error("disk full");
     mocks.exportSnippets.mockRejectedValueOnce(failure);
-    const { unmount } = render(<LibraryPanel />);
+    const { unmount } = renderPanel();
 
     fireEvent.click(screen.getByTestId("export-json"));
     await waitFor(() =>
-      expect(mocks.toast.error).toHaveBeenCalledWith("disk full")
+      expect(screen.getByTestId("feedback-banner")).toHaveTextContent(
+        "disk full"
+      )
     );
+    expect(screen.getByRole("alert")).toHaveTextContent("disk full");
     expect(mocks.captureError).toHaveBeenCalledWith(failure, {
       action: "exportSnippets",
     });
     unmount();
 
     mocks.exportSnippets.mockRejectedValueOnce("unknown failure");
-    render(<LibraryPanel />);
+    renderPanel();
     fireEvent.click(screen.getByTestId("export-json"));
     await waitFor(() =>
-      expect(mocks.toast.error).toHaveBeenCalledWith(
+      expect(screen.getByTestId("feedback-banner")).toHaveTextContent(
         i18n.t("options.errors.failedExport")
       )
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      i18n.t("options.errors.failedExport")
     );
   });
 
   it("advertises every parser format, with and without an icon", () => {
-    render(<LibraryPanel />);
+    renderPanel();
 
     const formats = screen.getByTestId("import-formats");
     expect(formats).toHaveTextContent("Clipio");
@@ -214,7 +235,7 @@ describe("LibraryPanel", () => {
   });
 
   it("opens the import wizard and returns focus to the trigger on close", async () => {
-    render(<LibraryPanel />);
+    renderPanel();
     const openButton = screen.getByTestId("import-open");
 
     fireEvent.click(openButton);
@@ -227,16 +248,16 @@ describe("LibraryPanel", () => {
   });
 
   it("announces a completed import and closes the wizard", async () => {
-    render(<LibraryPanel />);
+    renderPanel();
 
     fireEvent.click(screen.getByTestId("import-open"));
     fireEvent.click(
       await screen.findByRole("button", { name: "complete wizard" })
     );
 
-    expect(mocks.toast.success).toHaveBeenCalledWith(
-      i18n.t("options.importExport.importCard.successMessage", 3)
-    );
+    const message = i18n.t("options.importExport.importCard.successMessage", 3);
+    expect(screen.getByTestId("feedback-banner")).toHaveTextContent(message);
+    expect(screen.getByRole("status")).toHaveTextContent(message);
     expect(screen.queryByTestId("mock-import-wizard")).not.toBeInTheDocument();
   });
 });

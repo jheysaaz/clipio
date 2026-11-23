@@ -14,13 +14,17 @@ import {
   MoreHorizontal,
   AlertCircle,
 } from "lucide-react";
+import { useFeedback } from "@/components/feedback/FeedbackProvider";
+import { useControlConfirmation } from "@/components/feedback/use-control-confirmation";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
+import { InlineAction } from "@/components/ui/inline-action";
 import { Input } from "@/components/ui/input";
 import { RichTextEditor, type RichTextEditorRef } from "@/components/editor";
 import { Badge } from "@/components/ui/badge";
 import type { Snippet, SnippetFormData } from "@/types";
 import { InlineError } from "@/components/ui/inline-error";
+import { cn } from "@/lib/utils";
 import { isWriteRefusal } from "@/store/snippets";
 import {
   createAutosave,
@@ -56,6 +60,11 @@ import { copyMarkdownAsRichText } from "@/lib/copy-markdown-as-rich-text";
 
 /** Saving is quiet until it lasts long enough for a user to notice. */
 const SAVING_VISIBLE_DELAY_MS = 400;
+/** Saved stays legible for two seconds, then fades before leaving the slot. */
+const SAVED_VISIBLE_MS = 2000;
+const SAVED_FADE_MS = 200;
+/** Repeating "Saved" on every keystroke is noise, not feedback. */
+const SAVED_ANNOUNCE_THROTTLE_MS = 10_000;
 
 interface SnippetEditorProps {
   /** A saved snippet, or the provisional shape that backs an empty draft. */
@@ -69,7 +78,6 @@ interface SnippetEditorProps {
   /** Called once the debounced draft has content; Dashboard creates the record. */
   onAutoSave?: (draft: SnippetFormData) => void;
   onDelete: (snippetId: string) => void | Promise<void>;
-  onUndoDelete?: (snippet: Snippet) => void;
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
   createError?: string | null;
@@ -98,13 +106,6 @@ function sameFields(a: EditorFields, b: EditorFields): boolean {
     a.content === b.content &&
     JSON.stringify(a.tags ?? []) === JSON.stringify(b.tags ?? [])
   );
-}
-
-function statusText(isDraft: boolean, hasDraftContent: boolean): string {
-  if (isDraft && !hasDraftContent) {
-    return i18n.t("snippetDetail.syncStatus.draft");
-  }
-  return i18n.t("snippetDetail.syncStatus.saved");
 }
 
 function shortcutErrorFor(
@@ -138,7 +139,6 @@ export default function SnippetEditor({
   onDraftChange,
   onAutoSave,
   onDelete,
-  onUndoDelete,
   sidebarOpen = true,
   onToggleSidebar,
   createError = null,
@@ -171,15 +171,23 @@ export default function SnippetEditor({
   );
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newTagInput, setNewTagInput] = useState("");
-  const [copied, setCopied] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [usageCount, setUsageCount] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showSaving, setShowSaving] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
+  const [savedFading, setSavedFading] = useState(false);
   const [initialShortcut, setInitialShortcut] = useState(
     initialFields.shortcut
   );
+
+  const {
+    confirmed: copied,
+    show: showCopied,
+    reset: resetCopied,
+  } = useControlConfirmation();
+  const { announce, announceError } = useFeedback();
 
   const tagInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<RichTextEditorRef>(null);
@@ -193,6 +201,12 @@ export default function SnippetEditor({
   // value, not just one render: a store refresh can re-run the effect later.
   const restoredFieldsRef = useRef<EditorFields | null>(null);
   const loadedIdRef = useRef<string | null>(null);
+  const savedTimersRef = useRef<{
+    fade: ReturnType<typeof setTimeout> | null;
+    hide: ReturnType<typeof setTimeout> | null;
+  }>({ fade: null, hide: null });
+  const showSavedRef = useRef(false);
+  const sawBusyRef = useRef(false);
 
   const status = useStore(writeQueueStore);
   const queuedOutcome = useStore(queueOutcomesStore)[snippet.id];
@@ -209,6 +223,51 @@ export default function SnippetEditor({
     (fields.tags?.length ?? 0) > 0 ||
     (!!fields.shortcut.trim() && fields.shortcut !== initialShortcut);
   const hasChanges = !sameFields(fields, fieldsFromSnippet(snippet));
+
+  const clearSavedTimers = useCallback(() => {
+    if (savedTimersRef.current.fade !== null) {
+      clearTimeout(savedTimersRef.current.fade);
+      savedTimersRef.current.fade = null;
+    }
+    if (savedTimersRef.current.hide !== null) {
+      clearTimeout(savedTimersRef.current.hide);
+      savedTimersRef.current.hide = null;
+    }
+  }, []);
+
+  const hideSaved = useCallback(() => {
+    clearSavedTimers();
+    showSavedRef.current = false;
+    setShowSaved(false);
+    setSavedFading(false);
+  }, [clearSavedTimers]);
+
+  /** Show the one-check confirmation for a completed save, then fade it. */
+  const scheduleSaved = useCallback(
+    (announceIt: boolean) => {
+      clearSavedTimers();
+      showSavedRef.current = true;
+      setSavedFading(false);
+      setShowSaved(true);
+      if (announceIt) {
+        announce(i18n.t("snippetDetail.syncStatus.saved"), {
+          key: "saved",
+          throttleMs: SAVED_ANNOUNCE_THROTTLE_MS,
+        });
+      }
+      savedTimersRef.current.fade = setTimeout(() => {
+        setSavedFading(true);
+        savedTimersRef.current.fade = null;
+      }, SAVED_VISIBLE_MS - SAVED_FADE_MS);
+      savedTimersRef.current.hide = setTimeout(() => {
+        showSavedRef.current = false;
+        setShowSaved(false);
+        setSavedFading(false);
+        savedTimersRef.current.hide = null;
+      }, SAVED_VISIBLE_MS);
+    },
+    [announce, clearSavedTimers]
+  );
 
   useEffect(() => {
     fieldsRef.current = fields;
@@ -268,9 +327,12 @@ export default function SnippetEditor({
     setNewTagInput("");
     setDismissedOutcomeId(null);
     setIsAddingTag(false);
-    setCopied(false);
+    resetCopied();
     setActionError(null);
     setMenuOpen(false);
+    hideSaved();
+    setShowSaving(false);
+    sawBusyRef.current = false;
     autosave.discard();
     draftAutosave.discard();
     void refreshUndoAvailability(isDraft ? null : snippet.id);
@@ -279,6 +341,10 @@ export default function SnippetEditor({
     // fields the user is still typing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snippet.id, autosave, draftAutosave]);
+
+  useEffect(() => {
+    if (shortcutError) announceError(shortcutError);
+  }, [shortcutError, announceError]);
 
   useEffect(() => {
     if (isDraft) return;
@@ -368,16 +434,41 @@ export default function SnippetEditor({
   useEffect(() => {
     let cancelled = false;
     const busy = status.saving || status.pending > 0;
-    if (!busy) {
-      // Defer the reset out of the effect body; it still happens before paint
-      // in practice, but React does not treat it as a cascading render.
+    const hasError = status.failed > 0 || status.refused > 0 || !!outcome;
+
+    if (hasError) {
+      sawBusyRef.current = false;
       queueMicrotask(() => {
-        if (!cancelled) setShowSaving(false);
+        if (cancelled) return;
+        hideSaved();
+        setShowSaving(false);
       });
       return () => {
         cancelled = true;
       };
     }
+
+    if (!busy) {
+      // Defer the reset out of the effect body; it still happens before paint
+      // in practice, but React does not treat it as a cascading render.
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setShowSaving(false);
+        if (sawBusyRef.current) {
+          sawBusyRef.current = false;
+          scheduleSaved(true);
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    sawBusyRef.current = true;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      hideSaved();
+    });
     const timer = setTimeout(() => {
       if (!cancelled) setShowSaving(true);
     }, SAVING_VISIBLE_DELAY_MS);
@@ -385,7 +476,17 @@ export default function SnippetEditor({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [status.saving, status.pending]);
+  }, [
+    status.saving,
+    status.pending,
+    status.failed,
+    status.refused,
+    outcome,
+    hideSaved,
+    scheduleSaved,
+  ]);
+
+  useEffect(() => clearSavedTimers, [clearSavedTimers]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -422,6 +523,9 @@ export default function SnippetEditor({
   }, [onToggleSidebar]);
 
   const commitFields = (next: EditorFields) => {
+    // Typing while Saved is on screen starts its two-second window again, but
+    // must not re-announce the same completion on every keystroke.
+    if (showSavedRef.current) scheduleSaved(false);
     setFields(next);
     if (isDraft) {
       onDraftChange?.({
@@ -484,11 +588,15 @@ export default function SnippetEditor({
   const handleCopy = async () => {
     try {
       await copyMarkdownAsRichText(fields.content);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      showCopied();
+      announce(i18n.t("snippetDetail.copiedLabel"), {
+        key: "copied",
+        throttleMs: 2000,
+      });
       const newCount = await incrementSnippetUsage(snippet.id);
       setUsageCount(newCount);
     } catch (err) {
+      resetCopied();
       captureError(err, { action: "copy.snippet", snippetId: snippet.id });
       setActionError(i18n.t("snippetDetail.errors.failedToCopy"));
     }
@@ -499,7 +607,6 @@ export default function SnippetEditor({
     setIsDeleting(true);
     try {
       await onDelete(snippet.id);
-      onUndoDelete?.(snippet);
     } catch (error) {
       if (isWriteRefusal(error)) {
         setActionError(error.userMessage);
@@ -531,13 +638,12 @@ export default function SnippetEditor({
   const redoShortcut = mod === "⌘" ? "⌘⇧Z" : "Ctrl+Shift+Z";
 
   const tagEditor = (
-    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-      <div className="flex items-center gap-1 text-muted-foreground mr-1">
-        <Icon icon={Tag} size="sm" />
-        <span className="text-[10px] font-medium uppercase tracking-wide">
-          {i18n.t("snippetDetail.tags")}
-        </span>
-      </div>
+    <div
+      role="group"
+      aria-label={i18n.t("snippetDetail.tags")}
+      className="flex min-w-0 flex-wrap items-center gap-1.5"
+    >
+      <Icon icon={Tag} size="sm" className="mr-0.5 text-muted-foreground" />
       {(fields.tags ?? []).map((tag) => (
         <Badge
           key={tag}
@@ -646,7 +752,6 @@ export default function SnippetEditor({
             <Icon icon={PanelLeft} stroke="emphasis" />
           )}
         </Button>
-        <span className="w-px h-4 bg-border mx-0.5" aria-hidden="true" />
         <Button
           variant="ghost"
           size="icon"
@@ -672,24 +777,31 @@ export default function SnippetEditor({
           <Icon icon={Redo2} stroke="emphasis" />
         </Button>
 
+        {/*
+          Presentation only. The shared provider owns the two live regions;
+          this reserved slot never becomes one, so status changes cannot be
+          announced twice or move focus.
+        */}
         <span
           data-testid="snippet-sync-status"
-          role="status"
-          aria-live="polite"
-          className="flex items-center gap-1 min-w-32 px-2 text-[10px] font-medium text-muted-foreground"
+          className="flex h-4 min-w-32 items-center gap-1 px-2 text-xs font-medium text-muted-foreground"
         >
           {statusIsError ? (
             <>
-              <Icon icon={AlertCircle} size="sm" stroke="emphasis" />
-              <button
-                type="button"
+              <Icon
+                icon={AlertCircle}
+                size="sm"
+                stroke="emphasis"
+                className="text-destructive"
+              />
+              <InlineAction
                 onClick={() => void handleRetry()}
-                className="text-destructive underline-offset-2 hover:underline"
                 aria-label={i18n.t("snippetDetail.syncStatus.failed")}
                 title={i18n.t("snippetEditor.retryTooltip")}
+                className="text-destructive"
               >
                 {i18n.t("snippetDetail.syncStatus.failed")}
-              </button>
+              </InlineAction>
             </>
           ) : showSaving && (status.saving || status.pending > 0) ? (
             <>
@@ -701,12 +813,17 @@ export default function SnippetEditor({
               />
               {i18n.t("snippetDetail.syncStatus.saving")}
             </>
-          ) : (
-            <>
+          ) : showSaved ? (
+            <span
+              className={cn(
+                "flex items-center gap-1 transition-opacity duration-200 motion-reduce:transition-none",
+                savedFading && "opacity-0"
+              )}
+            >
               <Icon icon={Check} size="sm" stroke="emphasis" />
-              {statusText(isDraft, hasDraftContent)}
-            </>
-          )}
+              {i18n.t("snippetDetail.syncStatus.saved")}
+            </span>
+          ) : null}
         </span>
 
         <div className="flex-1 min-w-2" />
@@ -716,9 +833,12 @@ export default function SnippetEditor({
           data-testid="snippet-copy"
           onClick={() => void handleCopy()}
           disabled={isDraft}
-          className={
-            copied ? "text-green-600 size-8" : "text-foreground size-8"
-          }
+          className={cn(
+            "size-8",
+            copied
+              ? "w-auto gap-1 px-2 text-emerald-700 dark:text-emerald-300"
+              : "text-foreground"
+          )}
           title={
             copied
               ? i18n.t("snippetEditor.copiedTooltip", [mod])
@@ -731,11 +851,8 @@ export default function SnippetEditor({
           }
           aria-pressed={copied}
         >
-          {copied ? (
-            <Icon icon={Check} stroke="emphasis" />
-          ) : (
-            <Icon icon={Copy} stroke="emphasis" />
-          )}
+          <Icon icon={copied ? Check : Copy} stroke="emphasis" />
+          {copied && <span>{i18n.t("snippetDetail.copiedLabel")}</span>}
         </Button>
 
         <div className="relative" ref={menuRef}>
@@ -800,7 +917,7 @@ export default function SnippetEditor({
       />
 
       {/* Title row: one input pair, always in the same position. */}
-      <div className="px-3 pt-1.5 pb-1 shrink-0">
+      <div className="shrink-0 px-4 pb-3 pt-3">
         <div className="flex items-center gap-2 min-w-0">
           <label className="sr-only" htmlFor="snippet-name">
             {i18n.t("snippetEditor.name")}
@@ -813,7 +930,7 @@ export default function SnippetEditor({
             placeholder={i18n.t("snippetEditor.namePlaceholder")}
             aria-label={i18n.t("snippetEditor.name")}
             autoFocus={isDraft}
-            className="min-w-0 flex-1 h-7 border-0 bg-transparent px-0 text-sm font-medium shadow-none focus-visible:ring-0 focus-visible:border-0 placeholder:text-muted-foreground"
+            className="h-9 min-w-0 flex-1 border-0 bg-transparent px-0 text-xl font-semibold leading-tight shadow-none focus-visible:border-0 focus-visible:ring-0 placeholder:text-muted-foreground"
           />
           <div className="shrink-0">
             <label className="sr-only" htmlFor="snippet-shortcut">
@@ -829,7 +946,7 @@ export default function SnippetEditor({
               aria-label={i18n.t("snippetEditor.shortcut")}
               aria-invalid={!!shortcutError}
               aria-describedby={shortcutError ? "shortcut-error" : undefined}
-              className={`h-6 w-20 rounded border-border bg-secondary px-2 text-center font-mono text-[10px]! shadow-none ${
+              className={`h-7 w-20 rounded border-border bg-secondary px-2 text-center font-mono text-[10px]! shadow-none ${
                 shortcutError ? "border-destructive" : ""
               }`}
             />
@@ -837,7 +954,6 @@ export default function SnippetEditor({
               <p
                 id="shortcut-error"
                 data-testid="snippet-shortcut-error"
-                role="alert"
                 className="mt-1 text-[10px] text-destructive"
               >
                 {shortcutError}
@@ -849,7 +965,7 @@ export default function SnippetEditor({
 
       {/* Content fills the space between the two fixed chrome rows. */}
       <div
-        className="flex-1 min-h-0 px-3 pb-2"
+        className="min-h-0 flex-1 px-4 pb-3"
         data-testid="snippet-content-editor"
       >
         <RichTextEditor
@@ -864,8 +980,8 @@ export default function SnippetEditor({
         />
       </div>
 
-      {/* Footer: tags left, usage right; no second status line. */}
-      <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-t border-border bg-muted/30 shrink-0">
+      {/* Footer: tags left, usage right; tinted rather than divided. */}
+      <div className="flex shrink-0 items-center justify-between gap-2 bg-muted/30 px-4 py-2">
         {tagEditor}
         <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
           {usageCount} {i18n.t("snippetDetail.uses")}

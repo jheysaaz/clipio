@@ -11,7 +11,10 @@ import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import { Download, FileText, MousePointerClick, Trophy } from "lucide-react";
 
 import { BackupManager } from "@/components/BackupManager";
+import { useFeedback } from "@/components/feedback/FeedbackProvider";
+import { useControlConfirmation } from "@/components/feedback/use-control-confirmation";
 import { Button } from "@/components/ui/button";
+import { ControlConfirmation } from "@/components/ui/control-confirmation";
 import { Icon } from "@/components/ui/icon";
 import { exportSnippets, getSnippets } from "@/storage";
 import { snippetsContainMedia } from "@/lib/exporters/clipio";
@@ -20,7 +23,6 @@ import { captureError } from "@/lib/sentry";
 import { IMPORT_PARSERS } from "@/lib/importers/registry";
 import { IMPORT_PANEL_ANCHOR } from "@/pages/options/LibraryImportPanel";
 import { i18n } from "#i18n";
-import { toast } from "sonner";
 
 const ImportWizard = lazy(() => import("@/components/ImportWizard"));
 
@@ -32,6 +34,9 @@ export function LibraryPanel() {
   }>({ count: null, totalUses: null, mostUsed: null });
   const [showWizard, setShowWizard] = useState(false);
   const importButtonRef = useRef<HTMLButtonElement>(null);
+  const { confirmed, show, reset } = useControlConfirmation();
+  const [exportConfirmation, setExportConfirmation] = useState("");
+  const { announce, showBanner, dismissBanner } = useFeedback();
 
   useEffect(() => {
     Promise.all([getSnippets(), usageCountsItem.getValue()])
@@ -57,18 +62,26 @@ export function LibraryPanel() {
       const snippets = await getSnippets();
       const hasMedia = snippetsContainMedia(snippets);
       await exportSnippets();
-      toast.success(
+      const message = i18n.t(
         hasMedia
-          ? i18n.t("options.library.exportedWithMedia")
-          : i18n.t("options.library.exported")
+          ? "options.library.exportedWithMedia"
+          : "options.library.exported"
       );
+      setExportConfirmation(message);
+      show();
+      announce(message);
+      dismissBanner("library-export", { runOnDismiss: false });
     } catch (err) {
       captureError(err, { action: "exportSnippets" });
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : i18n.t("options.errors.failedExport")
-      );
+      reset();
+      showBanner({
+        source: "library-export",
+        severity: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : i18n.t("options.errors.failedExport"),
+      });
     }
   };
 
@@ -211,6 +224,12 @@ export function LibraryPanel() {
             <Icon icon={Download} className="mr-1.5" />
             {i18n.t("options.importExport.exportCard.button")}
           </Button>
+          {confirmed && (
+            <ControlConfirmation
+              label={exportConfirmation}
+              className="self-center"
+            />
+          )}
         </div>
       </section>
 
@@ -232,8 +251,11 @@ export function LibraryPanel() {
             </h2>
             <Suspense
               fallback={
-                <div className="flex items-center justify-center py-12">
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-foreground" />
+                <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-foreground motion-reduce:hidden" />
+                  <span className="sr-only motion-reduce:not-sr-only">
+                    {i18n.t("common.loading")}
+                  </span>
                 </div>
               }
             >
@@ -243,9 +265,14 @@ export function LibraryPanel() {
                   importButtonRef.current?.focus();
                 }}
                 onImportComplete={(n) => {
-                  toast.success(
-                    i18n.t("options.importExport.importCard.successMessage", n)
-                  );
+                  showBanner({
+                    source: "library-import",
+                    severity: "info",
+                    message: i18n.t(
+                      "options.importExport.importCard.successMessage",
+                      n
+                    ),
+                  });
                   setShowWizard(false);
                   importButtonRef.current?.focus();
                 }}

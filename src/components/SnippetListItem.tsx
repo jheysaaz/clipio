@@ -63,16 +63,17 @@ export default function SnippetListItem({
       role="option"
       aria-selected={isSelected}
       className={cn(
-        "w-full justify-start items-start text-left h-auto py-2 px-2.5 rounded-lg transition-colors overflow-hidden relative max-w-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        "h-auto max-w-full w-full items-start justify-start overflow-hidden relative rounded-lg px-2.5 py-2 text-left transition-colors",
+        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         isSelected
-          ? "bg-muted text-foreground border-l-2 border-l-primary"
-          : "hover:bg-muted/50 border-l-2 border-l-transparent"
+          ? "bg-muted text-foreground"
+          : "text-foreground hover:bg-muted/50"
       )}
       onClick={onClick}
     >
       <div className="flex flex-col gap-1 w-0 min-w-full overflow-hidden">
         <div className="flex items-center gap-2 w-full min-w-0 max-w-full overflow-hidden">
-          <h3 className="font-medium text-xs text-foreground truncate flex-1 min-w-0">
+          <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
             {snippet.label}
           </h3>
           <kbd
@@ -83,7 +84,7 @@ export default function SnippetListItem({
           </kbd>
         </div>
         {contentPreview && (
-          <p className="text-[10px] text-muted-foreground leading-relaxed truncate">
+          <p className="truncate text-xs font-normal leading-snug text-muted-foreground">
             {contentPreview}
           </p>
         )}

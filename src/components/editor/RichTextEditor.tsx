@@ -747,7 +747,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
               placeholder={placeholder}
               spellCheck={false}
               className={cn(
-                "h-full overflow-auto outline-none text-sm leading-relaxed",
+                "h-full overflow-auto font-normal text-base leading-[1.6] outline-none",
                 "text-foreground",
                 "**:data-slate-placeholder:text-muted-foreground",
                 "**:data-slate-placeholder:opacity-100!"

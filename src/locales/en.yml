@@ -11,6 +11,7 @@ common:
   dismissError: Dismiss error
   close: Close
   reload: Reload
+  loading: Loading…
   # Error-boundary copy. The two fallbacks differ only in what the user should
   # do next, so they need two strings rather than one generic apology.
   errorOptions: Something went wrong. Please reload the options page.
@@ -98,19 +99,19 @@ snippetEditor:
 snippetDetail:
   deleteSnippet: Delete snippet
   copyToClipboard: Copy to clipboard
-  copiedLabel: Copied!
+  copiedLabel: Copied
   tags: Tags
   tagPlaceholder: Tag name...
   addTag: Add tag
   addTagTitle: Add a new tag
   uses: uses
-  deleteToast:
-    message: '$1 deleted'
+  deleted:
+    title: Snippet deleted
     undo: Undo
+    live: "Snippet deleted. Undo available."
   syncStatus:
     saved: "Saved"
     saving: "Saving…"
-    draft: Draft
     failed: "Couldn't save · Retry"
     refused: Storage full — changes kept locally
   errors:
@@ -170,6 +171,7 @@ options:
   row:
     resetToDefault: Reset to default
     saveFailed: Could not save
+    saved: Saved
     managedInSection: Managed in its section
     preview: Preview
   shortcut:
@@ -283,7 +285,6 @@ options:
     reviewBannerTitle: "Enjoying Clipio?"
     reviewBannerDescription: A quick review helps others discover Clipio and motivates continued development.
     reviewBannerAction: Rate on the Store
-    reviewBannerDismiss: Dismiss
   importExport:
     exportCard:
       title: Export snippets

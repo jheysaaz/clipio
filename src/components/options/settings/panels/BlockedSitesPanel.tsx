@@ -9,7 +9,10 @@
 import { useEffect, useState } from "react";
 import { Globe, Plus, X } from "lucide-react";
 
+import { useFeedback } from "@/components/feedback/FeedbackProvider";
+import { useControlConfirmation } from "@/components/feedback/use-control-confirmation";
 import { Button } from "@/components/ui/button";
+import { ControlConfirmation } from "@/components/ui/control-confirmation";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { InlineError } from "@/components/ui/inline-error";
@@ -40,7 +43,12 @@ export function BlockedSitesPanel() {
   const [blockedSites, setBlockedSites] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{
+    message: string;
+    hostname?: string;
+  } | null>(null);
+  const { confirmed, show, reset } = useControlConfirmation();
+  const { announce } = useFeedback();
 
   useEffect(() => {
     blockedSitesItem
@@ -49,9 +57,10 @@ export function BlockedSitesPanel() {
       .catch(console.warn);
   }, []);
 
-  function flash(message: string) {
-    setStatus(message);
-    setTimeout(() => setStatus(null), 2000);
+  function confirm(message: string, hostname?: string) {
+    setConfirmation({ message, hostname });
+    show();
+    announce(message);
   }
 
   const addSite = async () => {
@@ -70,9 +79,10 @@ export function BlockedSitesPanel() {
       setBlockedSites(updated);
       setDraft("");
       setError(null);
-      flash(i18n.t("options.generalSection.blockedSites.added"));
+      confirm(i18n.t("options.generalSection.blockedSites.added"));
     } catch (err) {
       captureError(err, { action: "addBlockedSite" });
+      reset();
     }
   };
 
@@ -81,9 +91,10 @@ export function BlockedSitesPanel() {
       const updated = blockedSites.filter((s) => s !== hostname);
       await blockedSitesItem.setValue(updated);
       setBlockedSites(updated);
-      flash(i18n.t("options.generalSection.blockedSites.removed"));
+      confirm(i18n.t("options.generalSection.blockedSites.removed"), hostname);
     } catch (err) {
       captureError(err, { action: "removeBlockedSite" });
+      reset();
     }
   };
 
@@ -135,6 +146,13 @@ export function BlockedSitesPanel() {
           <Icon icon={Plus} />
           {i18n.t("options.generalSection.blockedSites.addButton")}
         </Button>
+        {confirmed && confirmation && confirmation.hostname === undefined && (
+          <ControlConfirmation
+            testId="blocked-site-add-confirmation"
+            label={confirmation.message}
+            className="self-center"
+          />
+        )}
       </div>
 
       {error && (
@@ -177,15 +195,14 @@ export function BlockedSitesPanel() {
         </ul>
       )}
 
-      {status && (
-        <p
-          role="status"
-          aria-live="polite"
-          data-testid="blocked-site-status"
-          className="mt-2 text-xs text-green-600 dark:text-green-400"
-        >
-          {status}
-        </p>
+      {/* A removed row is gone immediately, so its confirmation lives beside
+          the list it was removed from rather than inside the vanished row. */}
+      {confirmed && confirmation && confirmation.hostname !== undefined && (
+        <ControlConfirmation
+          testId="blocked-site-remove-confirmation"
+          label={confirmation.message}
+          className="mt-2"
+        />
       )}
     </div>
   );

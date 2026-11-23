@@ -8,15 +8,34 @@
 
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
 
+import { useFeedback } from "@/components/feedback/FeedbackProvider";
+import { useControlConfirmation } from "@/components/feedback/use-control-confirmation";
 import { Button } from "@/components/ui/button";
+import { ControlConfirmation } from "@/components/ui/control-confirmation";
 import { Icon } from "@/components/ui/icon";
 import { MESSAGE, sendMessage } from "@/lib/protocol";
 import { i18n } from "#i18n";
 
 export function DiagnosticsPanel() {
   const [pinging, setPinging] = useState(false);
+  const { confirmed, show, reset } = useControlConfirmation();
+  const { announce, showBanner, dismissBanner } = useFeedback();
+
+  const fail = (message: string) => {
+    reset();
+    showBanner({
+      source: "diagnostics",
+      severity: "error",
+      message,
+    });
+  };
+
+  const succeed = (message: string) => {
+    show();
+    announce(message);
+    dismissBanner("diagnostics", { runOnDismiss: false });
+  };
 
   const ping = async () => {
     setPinging(true);
@@ -34,9 +53,7 @@ export function DiagnosticsPanel() {
       );
       if (!tab?.id) {
         setPinging(false);
-        toast.error(
-          i18n.t("options.developers.contentScriptHealth.errorNoTab")
-        );
+        fail(i18n.t("options.developers.contentScriptHealth.errorNoTab"));
         return;
       }
       // Rejects when the tab has no content script listening — which is the
@@ -51,17 +68,15 @@ export function DiagnosticsPanel() {
         .catch(() => false);
       setPinging(false);
       if (alive) {
-        toast.success(i18n.t("options.developers.contentScriptHealth.pong"));
+        succeed(i18n.t("options.developers.contentScriptHealth.pong"));
       } else {
-        toast.error(
+        fail(
           i18n.t("options.developers.contentScriptHealth.errorNoContentScript")
         );
       }
     } catch {
       setPinging(false);
-      toast.error(
-        i18n.t("options.developers.contentScriptHealth.errorGeneric")
-      );
+      fail(i18n.t("options.developers.contentScriptHealth.errorGeneric"));
     }
   };
 
@@ -84,13 +99,22 @@ export function DiagnosticsPanel() {
       >
         {pinging ? (
           <>
-            <Icon icon={Loader2} className="mr-1.5 animate-spin" />
+            <Icon
+              icon={Loader2}
+              className="mr-1.5 animate-spin motion-reduce:hidden"
+            />
             {i18n.t("options.developers.contentScriptHealth.pinging")}
           </>
         ) : (
           i18n.t("options.developers.contentScriptHealth.pingButton")
         )}
       </Button>
+      {confirmed && (
+        <ControlConfirmation
+          label={i18n.t("options.developers.contentScriptHealth.pong")}
+          className="ml-2 self-center"
+        />
+      )}
     </div>
   );
 }

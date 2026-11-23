@@ -1,5 +1,7 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Check, Heart, ExternalLink, X, MessageSquareText } from "lucide-react";
+
+import { useFeedback } from "@/components/feedback/FeedbackProvider";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Label } from "@/components/ui/label";
@@ -37,6 +39,11 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { announce } = useFeedback();
+
+  useEffect(() => {
+    if (state.submitted) announce(i18n.t("options.feedback.success"));
+  }, [state.submitted, announce]);
 
   const handleInputChange =
     (
@@ -309,9 +316,8 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
 
           {state.submitted && (
             <div
-              className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-4 py-3 flex items-start gap-3"
-              role="status"
-              aria-live="polite"
+              data-testid="feedback-success"
+              className="flex items-start gap-3 rounded-lg bg-emerald-50 px-4 py-3 dark:bg-emerald-950/30"
             >
               <Icon
                 icon={Check}

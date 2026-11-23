@@ -17,6 +17,7 @@ import {
 } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
+import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
 import SnippetEditor from "./SnippetEditor";
 import type { Snippet, SnippetFormData } from "@/types";
 import type { EditorFields } from "@/lib/snippet-draft";
@@ -103,7 +104,6 @@ vi.mock("@/components/editor", async () => {
 });
 
 const onDelete = vi.fn();
-const onUndoDelete = vi.fn();
 const onToggleSidebar = vi.fn();
 
 const snippet: Snippet = {
@@ -128,14 +128,15 @@ function renderView(
   props: Partial<React.ComponentProps<typeof SnippetEditor>> = {}
 ) {
   return render(
-    <SnippetEditor
-      snippet={snippet}
-      onDelete={onDelete}
-      onUndoDelete={onUndoDelete}
-      onToggleSidebar={onToggleSidebar}
-      existingSnippets={[snippet]}
-      {...props}
-    />
+    <FeedbackProvider>
+      <SnippetEditor
+        snippet={snippet}
+        onDelete={onDelete}
+        onToggleSidebar={onToggleSidebar}
+        existingSnippets={[snippet]}
+        {...props}
+      />
+    </FeedbackProvider>
   );
 }
 
@@ -166,18 +167,20 @@ function DraftHarness({
 }) {
   const [draft, setDraft] = useState(initial);
   return (
-    <SnippetEditor
-      snippet={newSnippet}
-      draft={draft}
-      onDraftChange={(next) => {
-        onDraftChange(next);
-        setDraft(next);
-      }}
-      onAutoSave={onAutoSave}
-      onDelete={onDelete}
-      onToggleSidebar={onToggleSidebar}
-      {...props}
-    />
+    <FeedbackProvider>
+      <SnippetEditor
+        snippet={newSnippet}
+        draft={draft}
+        onDraftChange={(next) => {
+          onDraftChange(next);
+          setDraft(next);
+        }}
+        onAutoSave={onAutoSave}
+        onDelete={onDelete}
+        onToggleSidebar={onToggleSidebar}
+        {...props}
+      />
+    </FeedbackProvider>
   );
 }
 
@@ -260,9 +263,8 @@ describe("one editor, two data states", () => {
     expect(screen.getByTestId("snippet-more")).toBeDisabled();
     expect(screen.getByTestId("snippet-undo")).toBeDisabled();
     expect(screen.getByTestId("snippet-redo")).toBeDisabled();
-    expect(screen.getByTestId("snippet-sync-status")).toHaveTextContent(
-      "Draft"
-    );
+    // An untouched draft has nothing to report; the reserved slot stays empty.
+    expect(screen.getByTestId("snippet-sync-status")).toBeEmptyDOMElement();
   });
 
   it("names version-history controls honestly and gives icons accessible names", () => {
@@ -590,36 +592,55 @@ describe("autosave status", () => {
     }));
     renderView();
 
-    expect(screen.getByTestId("snippet-sync-status")).toHaveTextContent(
-      "Saved"
-    );
+    const status = screen.getByTestId("snippet-sync-status");
+    expect(status).toBeEmptyDOMElement();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(399);
     });
-    expect(screen.getByTestId("snippet-sync-status")).not.toHaveTextContent(
-      "Saving"
-    );
+    expect(status).not.toHaveTextContent("Saving");
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2);
     });
-    expect(screen.getByTestId("snippet-sync-status")).toHaveTextContent(
-      "Saving…"
-    );
+    expect(status).toHaveTextContent("Saving…");
   });
 
-  it("shows Saved once the queue settles", () => {
+  it("shows one Saved check after the queue settles, then leaves the slot", async () => {
+    vi.useFakeTimers();
+    writeQueueStore.setState(() => ({
+      pending: 1,
+      failed: 0,
+      refused: 0,
+      saving: true,
+    }));
     renderView();
 
-    expect(screen.getByTestId("snippet-sync-status")).toHaveTextContent(
-      "Saved"
-    );
-    expect(screen.getByTestId("snippet-sync-status")).toHaveClass(
-      "text-muted-foreground"
-    );
+    const status = screen.getByTestId("snippet-sync-status");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(401);
+    });
+    expect(status).toHaveTextContent("Saving…");
+
+    await act(async () => {
+      writeQueueStore.setState(() => ({
+        pending: 0,
+        failed: 0,
+        refused: 0,
+        saving: false,
+      }));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(status).toHaveTextContent("Saved");
+    expect(status.querySelectorAll("svg")).toHaveLength(1);
+    expect(screen.getByRole("status")).toHaveTextContent("Saved");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(status).toBeEmptyDOMElement();
   });
 
-  it("shows a red retry status for a queued failure", () => {
+  it("shows a sticky retry status and announces a queued failure", () => {
     queueOutcomesStore.setState(() => ({
       s1: {
         opId: "op-1",
@@ -638,7 +659,8 @@ describe("autosave status", () => {
 
     const status = screen.getByTestId("snippet-sync-status");
     expect(status).toHaveTextContent("Couldn't save · Retry");
-    expect(status.querySelector("button")).toHaveClass("text-destructive");
+    expect(status.querySelector("button")).not.toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent("Storage is full");
   });
 
   it("dismisses a failure and retries the pending draft", async () => {
@@ -672,7 +694,6 @@ describe("toolbar actions", () => {
     await user.click(screen.getByTestId("snippet-delete"));
 
     await waitFor(() => expect(onDelete).toHaveBeenCalledWith("s1"));
-    expect(onUndoDelete).toHaveBeenCalledWith(snippet);
     expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 
@@ -700,9 +721,11 @@ describe("toolbar actions", () => {
     await user.click(screen.getByTestId("snippet-more"));
     await user.click(screen.getByTestId("snippet-delete"));
 
-    expect(
-      await screen.findByText("This snippet is too large to sync.")
-    ).toBeInTheDocument();
+    // The visible error is the inline surface; the shared assertive region
+    // repeats the same text for screen readers, so query the surface directly.
+    expect(await screen.findByTestId("inline-error")).toHaveTextContent(
+      "This snippet is too large to sync."
+    );
     expect(captureError).not.toHaveBeenCalled();
   });
 
@@ -714,9 +737,9 @@ describe("toolbar actions", () => {
     await user.click(screen.getByTestId("snippet-more"));
     await user.click(screen.getByTestId("snippet-delete"));
 
-    expect(
-      await screen.findByText("Failed to delete snippet. Please try again.")
-    ).toBeInTheDocument();
+    expect(await screen.findByTestId("inline-error")).toHaveTextContent(
+      "Failed to delete snippet. Please try again."
+    );
     expect(captureError).toHaveBeenCalled();
   });
 
@@ -867,12 +890,12 @@ describe("toolbar actions", () => {
     renderView();
 
     await user.click(screen.getByTestId("snippet-copy"));
-    expect(
-      await screen.findByText("Failed to copy to clipboard")
-    ).toBeInTheDocument();
+    expect(await screen.findByTestId("inline-error")).toHaveTextContent(
+      "Failed to copy to clipboard"
+    );
 
     await user.click(screen.getByRole("button", { name: "Dismiss error" }));
-    expect(screen.queryByText("Failed to copy to clipboard")).toBeNull();
+    expect(screen.queryByTestId("inline-error")).toBeNull();
   });
 
   it("surfaces a copy failure raised inside the editor", async () => {
@@ -883,9 +906,9 @@ describe("toolbar actions", () => {
       screen.getByRole("button", { name: "simulate editor copy failure" })
     );
 
-    expect(
-      await screen.findByText("Failed to copy to clipboard")
-    ).toBeInTheDocument();
+    expect(await screen.findByTestId("inline-error")).toHaveTextContent(
+      "Failed to copy to clipboard"
+    );
   });
 
   it("keeps working when the usage count cannot be read", async () => {

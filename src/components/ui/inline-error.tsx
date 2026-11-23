@@ -1,62 +1,51 @@
-import { i18n } from "#i18n";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { AlertCircle, X } from "lucide-react";
+
+import { useFeedback } from "@/components/feedback/FeedbackProvider";
+import { i18n } from "#i18n";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
 
-const AUTO_CLEAR_MS = 8000;
-
-interface InlineErrorProps {
+type InlineErrorProps = {
   message: string | null;
-  /** Called when the error is dismissed (via X or after AUTO_CLEAR_MS). */
   onDismiss: () => void;
   className?: string;
-}
+};
 
 /**
- * Accessible inline error banner.
+ * A co-located, persistent inline error.
  *
- * - `role="alert"` (implies aria-live="assertive") — announced immediately by
- *   screen readers without moving focus.
- * - Auto-dismisses after 8 seconds (WCAG 2.2.1: timing adjustable — the user
- *   can also dismiss manually with the X button before that).
- * - Co-located with the action that triggered the error, satisfying the
- *   gestalt principle of proximity.
+ * It is presentational: the error is announced through the provider's single
+ * assertive live region. It has no timer — an error with a dismiss control is
+ * actionable and must never disappear on its own.
  */
 export function InlineError({
   message,
   onDismiss,
   className,
 }: InlineErrorProps) {
-  // Use a ref so the timer always calls the latest onDismiss without the
-  // useEffect needing to re-run (and re-start the timer) when the inline
-  // function identity changes between renders.
-  const onDismissRef = useRef(onDismiss);
-  useEffect(() => {
-    onDismissRef.current = onDismiss;
-  });
+  const { announceError } = useFeedback();
 
   useEffect(() => {
-    if (!message) return;
-    const timer = setTimeout(() => onDismissRef.current(), AUTO_CLEAR_MS);
-    return () => clearTimeout(timer);
-  }, [message]);
+    if (message) announceError(message);
+  }, [message, announceError]);
 
   if (!message) return null;
 
   return (
     <div
-      role="alert"
+      data-testid="inline-error"
       className={cn(
-        "flex items-start gap-2 px-3 py-2 bg-destructive/10 border-b border-destructive/20 text-destructive text-xs",
+        "flex items-start gap-2 bg-destructive/10 px-3 py-2 text-xs text-destructive",
         className
       )}
     >
       <Icon icon={AlertCircle} className="mt-0.5" />
       <p className="flex-1 leading-snug">{message}</p>
       <button
+        type="button"
         onClick={onDismiss}
-        className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+        className="shrink-0 opacity-60 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
         aria-label={i18n.t("common.dismissError")}
       >
         <Icon icon={X} size="sm" stroke="emphasis" />

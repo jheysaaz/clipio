@@ -11,7 +11,7 @@ import {
 } from "@/routes/options";
 import "@/store/settings";
 import { initSentry, captureError } from "@/lib/sentry";
-import { Toaster } from "@/components/ui/toaster";
+import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
 import { OnboardingLoader } from "@/components/onboarding/OnboardingLoader";
 import { i18n } from "#i18n";
 
@@ -68,14 +68,17 @@ function ErrorFallback() {
 
 function App() {
   return (
-    <ErrorBoundary
-      fallback={<ErrorFallback />}
-      onError={(error) => captureError(error, { action: "ReactErrorBoundary" })}
-    >
-      <RouterProvider router={router} />
-      <OnboardingLoader surface="options" />
-      <Toaster />
-    </ErrorBoundary>
+    <FeedbackProvider>
+      <ErrorBoundary
+        fallback={<ErrorFallback />}
+        onError={(error) =>
+          captureError(error, { action: "ReactErrorBoundary" })
+        }
+      >
+        <RouterProvider router={router} />
+        <OnboardingLoader surface="options" />
+      </ErrorBoundary>
+    </FeedbackProvider>
   );
 }
 

@@ -11,6 +11,7 @@ common:
   dismissError: Cerrar aviso
   close: Cerrar
   reload: Recargar
+  loading: Cargando…
   errorOptions: Algo ha salido mal. Recarga la página de opciones.
   errorPopup: Algo ha salido mal. Cierra y vuelve a abrir la extensión.
 
@@ -95,19 +96,19 @@ snippetEditor:
 snippetDetail:
   deleteSnippet: Eliminar fragmento
   copyToClipboard: Copiar al portapapeles
-  copiedLabel: "¡Copiado!"
+  copiedLabel: Copiado
   tags: Etiquetas
   tagPlaceholder: Nombre de etiqueta...
   addTag: Agregar etiqueta
   addTagTitle: Agregar una nueva etiqueta
   uses: usos
-  deleteToast:
-    message: '$1 eliminado'
+  deleted:
+    title: Fragmento eliminado
     undo: Deshacer
+    live: "Fragmento eliminado. Deshacer disponible."
   syncStatus:
     saved: "Guardado"
     saving: "Guardando…"
-    draft: Borrador
     failed: "No se pudo guardar · Reintentar"
     refused: "Almacenamiento lleno: los cambios se conservan localmente"
   errors:
@@ -164,6 +165,7 @@ options:
   row:
     resetToDefault: Restablecer al valor predeterminado
     saveFailed: No se pudo guardar
+    saved: Guardado
     managedInSection: Se gestiona en su sección
     preview: Vista previa
   shortcut:
@@ -277,7 +279,6 @@ options:
     reviewBannerTitle: "¿Disfrutas Clipio?"
     reviewBannerDescription: Una reseña rápida ayuda a otros a descubrir Clipio y motiva el desarrollo continuo.
     reviewBannerAction: Valorar en la tienda
-    reviewBannerDismiss: Descartar
   importExport:
     exportCard:
       title: Exportar fragmentos

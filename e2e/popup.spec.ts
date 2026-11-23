@@ -16,7 +16,15 @@ import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "./fixtures.js";
 import { helloSnippet, makeSnippet, makeSnippets } from "./helpers/snippets.js";
 import type { Snippet } from "../src/types/index.js";
-import { readHistory, readSyncSnippets } from "./helpers/storage.js";
+import {
+  getLocalItem,
+  readHistory,
+  readSyncSnippets,
+} from "./helpers/storage.js";
+
+// Sonner's own attributes. Asserting their absence proves the old toast layer
+// is really gone instead of merely hidden by a CSS class or a copy change.
+const TOAST_SELECTOR = "[data-sonner-toaster], [data-sonner-toast]";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -369,13 +377,19 @@ test.describe("Popup — reopening resumes the last viewed snippet", () => {
     await popupPage.getByTestId("snippet-delete").click();
     await expect(popupPage.getByRole("alertdialog")).toHaveCount(0);
 
-    // The delete moved the address, which is the app doing its job.
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${newer.id}`));
+    // Deleting no longer navigates the app out from under the user: the route
+    // stays on the deleted id so the inline Undo is tied to what they just did.
+    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}`));
+    await expect(
+      popupPage.getByTestId("snippet-deleted-message")
+    ).toBeVisible();
+    await expect(popupPage.getByTestId("snippet-undo-delete")).toBeVisible();
 
-    // Now reopen cold. The remembered id no longer resolves, so it must fall back
-    // to the newest rather than showing a pane for a snippet that is gone.
-    await popupPage.reload();
-    await waitForPopupReady(popupPage);
+    // Now reopen cold with no route in the address. The remembered id no longer
+    // resolves, so it must fall back to the newest rather than showing a pane for
+    // a snippet that is gone. A `reload()` would keep the deleted id in the hash
+    // and never exercise the resume path at all.
+    await reopenPopup(popupPage);
 
     await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${newer.id}`));
     await expect(popupPage.getByTestId("snippet-list")).toBeVisible();
@@ -593,12 +607,12 @@ test.describe("Popup (Dashboard)", () => {
     // own write fired drove a re-read, so one snippet in storage became two rows
     // on screen. Asserting only on storage is what let it through.
     await expect(popupPage.getByTestId("snippet-list-item")).toHaveCount(1);
-    // The background clears the staged draft; the one status slot must follow it
-    // out of `Saving…` instead of staying stuck after a successful create.
-    await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText(
-      "Saved",
-      { timeout: 10_000 }
-    );
+    // The background clears the staged draft; the one status slot must follow
+    // it out of `Saving…` and back to idle instead of staying stuck after a
+    // successful create. A transient `Saved` is covered by the status test.
+    await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText("", {
+      timeout: 10_000,
+    });
   });
 
   test("opens a draft with one editor layout and a disabled action bar", async ({
@@ -635,9 +649,8 @@ test.describe("Popup (Dashboard)", () => {
     ]) {
       await expect(popupPage.getByTestId(testId)).toBeDisabled();
     }
-    await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText(
-      "Draft"
-    );
+    // An untouched draft has nothing to report: the reserved slot is idle.
+    await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText("");
     await expect(popupPage.getByTestId("snippet-sync-status")).toHaveCount(1);
     await expect(
       popupPage.getByRole("button", { name: /^create$/i })
@@ -684,9 +697,8 @@ test.describe("Popup (Dashboard)", () => {
     }
     await expect(popupPage.getByTestId("snippet-copy")).toBeEnabled();
     await expect(popupPage.getByTestId("snippet-more")).toBeEnabled();
-    await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText(
-      "Saved"
-    );
+    // Selecting a snippet resets the status to idle; no stale `Saved` survives.
+    await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText("");
     await expect(popupPage.getByTestId("snippet-undo")).toHaveAttribute(
       "title",
       /Restore previous version/
@@ -727,12 +739,18 @@ test.describe("Popup (Dashboard)", () => {
     ]);
     expect(editorPillStyle.radius).toBe(sidebarPillStyle.radius);
     expect(editorPillStyle.fontSize).toBe(sidebarPillStyle.fontSize);
-    expect(editorPillStyle.height).toBeLessThanOrEqual(26);
+    // The 20px title row needs a 28px chip to sit on the same optical baseline;
+    // the old 24px chip belonged to the old 14px title. It still stays compact
+    // relative to the 36px title row below.
+    expect(editorPillStyle.height).toBeLessThanOrEqual(28);
 
     const titleHeight = await popupPage
       .getByTestId("snippet-label-input")
       .evaluate((el) => el.getBoundingClientRect().height);
-    expect(titleHeight).toBeLessThanOrEqual(30);
+    // A 20px name in a 36px row gives the text room without taking over the
+    // popup; the old 30px row belonged to the smaller 14px name.
+    expect(titleHeight).toBeLessThanOrEqual(36);
+    expect(editorPillStyle.height).toBeLessThan(titleHeight);
 
     const titleRow = popupPage
       .getByTestId("snippet-label-input")
@@ -856,13 +874,20 @@ test.describe("Popup (Dashboard)", () => {
     await expect(copyButton).toBeVisible({ timeout: 5_000 });
     await copyButton.click();
 
-    // Behavior: aria-pressed flips to true after a successful copy
+    // The confirmation lives on the button itself, with one polite announcement
+    // and no toast. It reverts after its short window.
     await expect(copyButton).toHaveAttribute("aria-pressed", "true", {
       timeout: 3_000,
     });
+    await expect(copyButton).toContainText("Copied");
+    await expect(copyButton).toHaveAttribute("aria-label", "Copied");
+    await expect(popupPage.getByRole("status")).toHaveText("Copied");
+    await expect(popupPage.locator(TOAST_SELECTOR)).toHaveCount(0);
+    await expect(copyButton).not.toContainText("Copied", { timeout: 5_000 });
+    await expect(copyButton).toHaveAttribute("aria-pressed", "false");
   });
 
-  test("deletes snippet and verifies removal from storage", async ({
+  test("deletes immediately and confirms deletion inline", async ({
     popupPage,
   }) => {
     const snippet = makeSnippet({ label: "Delete Me", shortcut: "/delete-me" });
@@ -888,34 +913,155 @@ test.describe("Popup (Dashboard)", () => {
         { timeout: 5_000, message: "deleted snippet never left sync storage" }
       )
       .toBe(0);
+
+    // The deleted state is a persistent part of the main panel, not a toast.
+    const message = popupPage.getByTestId("snippet-deleted-message");
+    await expect(message).toHaveText("Snippet deleted");
+    await expect(message).toBeFocused();
+    await expect(popupPage.getByTestId("snippet-undo-delete")).toBeVisible();
+    await expect(popupPage.getByRole("status")).toHaveText(
+      "Snippet deleted. Undo available."
+    );
+    await expect(popupPage.locator(TOAST_SELECTOR)).toHaveCount(0);
     await expect(popupPage.getByTestId("empty-state")).toBeVisible();
   });
 
-  test("offers a one-step undo after a delete", async ({ popupPage }) => {
-    const snippet = makeSnippet({ label: "Undo Me", shortcut: "/undo-me" });
-    await seedAndReload(popupPage, [snippet]);
+  test("undo restores the deleted snippet in place and focuses its name", async ({
+    popupPage,
+  }) => {
+    const first = makeSnippet({ label: "First", shortcut: "/first" });
+    const target = makeSnippet({
+      label: "Undo Me",
+      shortcut: "/undo-me",
+      content: "Restore this exact body",
+      tags: ["keep-me"],
+    });
+    const third = makeSnippet({ label: "Third", shortcut: "/third" });
+    await seedAndReload(popupPage, [first, target, third]);
+
+    const rows = popupPage.getByTestId("snippet-list-item");
+    await expect(rows).toHaveText([/First/, /Undo Me/, /Third/]);
+    await popupPage.getByRole("option", { name: /Undo Me/ }).click();
 
     await popupPage.getByTestId("snippet-more").click();
     await popupPage.getByTestId("snippet-delete").click();
 
-    const countSnippets = () =>
-      popupPage.evaluate(async () => {
-        const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-        const all = await ext.storage.sync.get(null);
-        return Object.keys(all).filter((k) => k.startsWith("snip:")).length;
+    // Removal from the sidebar is synchronous with the delete, not deferred to
+    // a storage refresh or a toast timeout.
+    await expect(rows).toHaveText([/First/, /Third/]);
+    await expect(
+      popupPage.getByTestId("snippet-deleted-message")
+    ).toBeVisible();
+
+    await popupPage.getByTestId("snippet-undo-delete").click();
+
+    await expect(rows).toHaveText([/First/, /Undo Me/, /Third/]);
+    await expect(popupPage.getByTestId("snippet-list")).toHaveAttribute(
+      "aria-activedescendant",
+      `snippet-${target.id}`
+    );
+    const name = popupPage.getByTestId("snippet-label-input");
+    await expect(name).toBeFocused();
+    await expect(name).toHaveValue(target.label);
+    await expect(popupPage.getByTestId("snippet-shortcut-input")).toHaveValue(
+      target.shortcut
+    );
+
+    await expect
+      .poll(
+        async () => {
+          const snippets = await readSyncSnippets(popupPage);
+          return snippets.find((s) => s.id === target.id);
+        },
+        { timeout: 5_000 }
+      )
+      .toEqual(
+        expect.objectContaining({
+          id: target.id,
+          label: target.label,
+          shortcut: target.shortcut,
+          content: target.content,
+          tags: target.tags,
+        })
+      );
+  });
+
+  test("mounts exactly two live regions and no toast layer", async ({
+    popupPage,
+  }) => {
+    await seedAndReload(popupPage, [helloSnippet()]);
+
+    await expect(
+      popupPage.locator('[role="status"], [role="alert"], [aria-live]')
+    ).toHaveCount(2);
+    await expect(popupPage.getByRole("status")).toHaveAttribute(
+      "aria-live",
+      "polite"
+    );
+    await expect(popupPage.getByRole("alert")).toHaveAttribute(
+      "aria-live",
+      "assertive"
+    );
+    // The polite region may still hold the startup "Loading snippets…"
+    // announcement; that is legitimate status text. What matters is that both
+    // regions stay screen-reader-only and contain no actionable controls.
+    await expect(
+      popupPage.locator('[role="status"], [role="alert"]').locator("button, a")
+    ).toHaveCount(0);
+    await expect(popupPage.getByRole("alert")).toHaveText("");
+    await expect(popupPage.locator(TOAST_SELECTOR)).toHaveCount(0);
+  });
+
+  test("keeps one dismissible banner at the top of the main pane", async ({
+    popupPage,
+  }) => {
+    const version = "9.9.9";
+    await seedAndReload(popupPage, []);
+    await popupPage.evaluate(async (v) => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.local.set({
+        latestVersion: {
+          version: v,
+          htmlUrl: "https://example.test/release",
+          publishedAt: "2026-01-01T00:00:00.000Z",
+        },
+        dismissedUpdateVersion: "",
+        // Keep the background's periodic checker from overwriting the release
+        // mid-test. A recent check is throttled, so the banner has one stable
+        // source for the whole dismissal flow.
+        latestVersionCheckedAt: new Date().toISOString(),
       });
-    await expect.poll(countSnippets).toBe(0);
+    }, version);
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
 
-    // Role + name: the toast action is the last visible Undo control (the top
-    // bar's Undo is a different control for editor history).
-    const undoDelete = popupPage
-      .getByRole("button", { name: "Undo", exact: true })
-      .last();
-    await expect(undoDelete).toBeVisible();
-    await undoDelete.click();
+    // An empty library has no selected snippet. The banner still belongs in the
+    // main pane, above its content, and it is the only Tier 2 surface.
+    const banner = popupPage.getByTestId("warning-update");
+    await expect(banner).toBeVisible();
+    await expect(popupPage.getByTestId("empty-state")).toBeVisible();
+    await expect(banner).toHaveCount(1);
+    await expect(
+      popupPage.locator(
+        '[data-testid="warning-uninstall"], [data-testid="warning-quota"], [data-testid="warning-sync-paused"]'
+      )
+    ).toHaveCount(0);
+    expect(
+      await banner.evaluate((el) => {
+        const pane = el.closest('[data-testid="dashboard-main-pane"]');
+        return pane?.firstElementChild === el;
+      })
+    ).toBe(true);
 
-    await expect.poll(countSnippets).toBe(1);
-    await expect(popupPage.getByTestId("snippet-list-item")).toHaveCount(1);
+    await banner.getByRole("button", { name: "Dismiss" }).click();
+    await expect(banner).toHaveCount(0);
+    expect(await getLocalItem(popupPage, "dismissedUpdateVersion")).toBe(
+      version
+    );
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+    await expect(banner).toHaveCount(0);
+    await expect(popupPage.locator(TOAST_SELECTOR)).toHaveCount(0);
   });
 
   // -------------------------------------------------------------------------

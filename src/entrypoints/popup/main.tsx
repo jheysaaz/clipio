@@ -10,7 +10,7 @@ import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { popupHistory, popupRouteTree } from "@/routes/popup";
 import "@/store/settings";
 import { initSentry, captureError } from "@/lib/sentry";
-import { Toaster } from "@/components/ui/toaster";
+import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
 import { OnboardingLoader } from "@/components/onboarding/OnboardingLoader";
 
 initSentry("popup");
@@ -38,14 +38,17 @@ const router = createRouter({
 
 function App() {
   return (
-    <ErrorBoundary
-      fallback={<ErrorFallback />}
-      onError={(error) => captureError(error, { action: "ReactErrorBoundary" })}
-    >
-      <RouterProvider router={router} />
-      <OnboardingLoader surface="popup" />
-      <Toaster />
-    </ErrorBoundary>
+    <FeedbackProvider>
+      <ErrorBoundary
+        fallback={<ErrorFallback />}
+        onError={(error) =>
+          captureError(error, { action: "ReactErrorBoundary" })
+        }
+      >
+        <RouterProvider router={router} />
+        <OnboardingLoader surface="popup" />
+      </ErrorBoundary>
+    </FeedbackProvider>
   );
 }
 
