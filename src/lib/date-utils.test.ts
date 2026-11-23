@@ -3,7 +3,12 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { getRelativeTime, formatShortDate, formatFullDate } from "./date-utils";
+import {
+  getRelativeTime,
+  shortenRelativeTime,
+  formatShortDate,
+  formatFullDate,
+} from "./date-utils";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -207,5 +212,29 @@ describe("formatFullDate", () => {
   it("uses the full month name", () => {
     const result = formatFullDate(new Date(2025, 5, 15));
     expect(result).toBe("June 15, 2025");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// shortenRelativeTime
+// ---------------------------------------------------------------------------
+
+describe("shortenRelativeTime", () => {
+  it("shortens units while keeping the count", () => {
+    expect(shortenRelativeTime("1 day ago")).toBe("1d ago");
+    expect(shortenRelativeTime("3 weeks ago")).toBe("3w ago");
+    expect(shortenRelativeTime("2 months ago")).toBe("2mo ago");
+  });
+
+  it("keeps the singular form readable", () => {
+    expect(shortenRelativeTime("1 minute ago")).toBe("1m ago");
+  });
+
+  it("shortens the immediate case", () => {
+    expect(shortenRelativeTime("just now")).toBe("now");
+  });
+
+  it("returns an unknown label unchanged", () => {
+    expect(shortenRelativeTime("a while back")).toBe("a while back");
   });
 });

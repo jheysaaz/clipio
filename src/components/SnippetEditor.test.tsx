@@ -14,6 +14,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
@@ -199,11 +200,57 @@ function expectLandmarks() {
   expect(screen.getByTestId("snippet-sync-status")).toBeInTheDocument();
   expect(screen.getByTestId("snippet-copy")).toBeInTheDocument();
   expect(screen.getByTestId("snippet-more")).toBeInTheDocument();
-  expect(screen.getByTestId("snippet-label-input")).toBeInTheDocument();
-  expect(screen.getByTestId("snippet-shortcut-input")).toBeInTheDocument();
+  expect(screen.getAllByLabelText("Snippet name")).toHaveLength(1);
+  expect(screen.getAllByLabelText("Shortcut")).toHaveLength(1);
   expect(screen.getByTestId("snippet-content-editor")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /add tag/i })).toBeInTheDocument();
-  expect(screen.getByText(/uses/i)).toBeInTheDocument();
+  expect(screen.getByRole("group", { name: "Tags" })).toBeInTheDocument();
+}
+
+async function expectSavedFooter() {
+  await waitFor(() =>
+    expect(screen.getByTestId("snippet-metadata")).toHaveTextContent(/3\s*uses/)
+  );
+  expect(screen.getByText("Updated")).toBeInTheDocument();
+  const time = screen.getByTestId("snippet-updated-time");
+  expect(time).toHaveAttribute("datetime", snippet.updatedAt);
+  expect(time).toHaveAttribute(
+    "title",
+    new Date(snippet.updatedAt).toLocaleString()
+  );
+}
+
+function expectDraftFooter() {
+  expect(screen.getByTestId("snippet-draft")).toHaveTextContent("Draft");
+  expect(screen.queryByTestId("snippet-metadata")).toBeNull();
+}
+
+/** Fix measured chip widths so the overflow decision is deterministic. */
+function stubTagWidths(available: number, each: number, more: number) {
+  const rect = vi
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockImplementation(function (this: HTMLElement) {
+      let width = 0;
+      if (this.getAttribute("data-testid") === "snippet-tags") {
+        width = available;
+      } else if (this.hasAttribute("data-measure-more")) {
+        width = more;
+      } else if (this.hasAttribute("data-measure-tag")) {
+        width = each;
+      }
+      return {
+        width,
+        height: 20,
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: width,
+        bottom: 20,
+        toJSON: () => ({}),
+      } as DOMRect;
+    });
+  return () => rect.mockRestore();
 }
 
 beforeEach(() => {
@@ -236,16 +283,18 @@ afterEach(() => {
 });
 
 describe("one editor, two data states", () => {
-  it("renders the same landmarks for a saved snippet and a draft", () => {
+  it("renders the same landmarks for a saved snippet and a draft", async () => {
     const saved = renderView();
     expectLandmarks();
+    await expectSavedFooter();
     saved.unmount();
 
     renderDraft();
     expectLandmarks();
+    expectDraftFooter();
   });
 
-  it("has one status element and no Create, Save or Updated copy", () => {
+  it("has one status element and no Create, Save or Updated copy for a draft", () => {
     renderDraft();
 
     expect(screen.getAllByTestId("snippet-sync-status")).toHaveLength(1);
@@ -267,6 +316,17 @@ describe("one editor, two data states", () => {
     expect(screen.getByTestId("snippet-sync-status")).toBeEmptyDOMElement();
   });
 
+  it("focuses the name when empty header space is clicked", async () => {
+    const user = userEvent.setup();
+    renderView();
+    const shortcut = screen.getByTestId("snippet-shortcut-input");
+    await user.click(shortcut);
+    expect(shortcut).toHaveFocus();
+
+    await user.click(screen.getByTestId("snippet-header"));
+    expect(screen.getByTestId("snippet-label-input")).toHaveFocus();
+  });
+
   it("names version-history controls honestly and gives icons accessible names", () => {
     renderView();
 
@@ -282,28 +342,54 @@ describe("one editor, two data states", () => {
       "snippet-toggle-sidebar",
       "snippet-copy",
       "snippet-more",
+      "snippet-add-tag",
     ]) {
       expect(screen.getByTestId(testId)).toHaveAccessibleName();
       expect(screen.getByTestId(testId)).toHaveAttribute("title");
     }
   });
 
-  it("keeps the shortcut hint in a tooltip without shifting the title row", async () => {
+  it("shows the shortcut hint only while focused, linked as a tooltip", async () => {
     const user = userEvent.setup();
-    const saved = renderView();
-
+    renderView();
     const input = screen.getByTestId("snippet-shortcut-input");
-    expect(input.getAttribute("title")).toContain("Type the trigger");
-    expect(screen.queryByTestId("snippet-shortcut-tip")).toBeNull();
 
-    // Focusing the pill used to insert an inline label and push the row down.
+    expect(screen.queryByRole("tooltip")).toBeNull();
     await user.click(input);
-    expect(input).toHaveFocus();
-    expect(screen.queryByTestId("snippet-shortcut-tip")).toBeNull();
-    saved.unmount();
 
+    const tip = screen.getByRole("tooltip");
+    expect(tip).toHaveTextContent(
+      "Type this on any page to expand the snippet"
+    );
+    expect(input).toHaveAttribute("aria-describedby", "shortcut-tip");
+    expect(document.getElementById("shortcut-tip")).toBe(tip);
+
+    await user.tab();
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(input).not.toHaveAttribute("aria-describedby");
+  });
+
+  it("shows the hint for an empty shortcut on hover", () => {
     renderDraft({ initial: { ...blank, shortcut: "" } });
-    expect(screen.queryByTestId("snippet-shortcut-tip")).toBeNull();
+    const input = screen.getByTestId("snippet-shortcut-input");
+
+    fireEvent.mouseEnter(input.parentElement!);
+
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
+      "Type this on any page"
+    );
+    expect(input).toHaveAttribute("aria-describedby", "shortcut-tip");
+  });
+
+  it("uses one icon-only Add tag control with no old tag labels", () => {
+    renderView();
+    const button = screen.getByTestId("snippet-add-tag");
+
+    expect(button).toHaveAccessibleName("Add tag");
+    expect(button).toHaveAttribute("title", "Add tag");
+    expect(button).toHaveTextContent("");
+    expect(screen.queryByText("TAGS")).toBeNull();
+    expect(screen.queryByText("+ Tag")).toBeNull();
   });
 });
 
@@ -516,10 +602,12 @@ describe("shortcut validation", () => {
       target: { value: "/a b" },
     });
 
-    expect(screen.getByTestId("snippet-shortcut-input")).toHaveValue("/a b");
-    expect(screen.getByTestId("snippet-shortcut-error")).toHaveTextContent(
-      "cannot contain spaces"
-    );
+    const input = screen.getByTestId("snippet-shortcut-input");
+    expect(input).toHaveValue("/a b");
+    const error = screen.getByTestId("snippet-shortcut-error");
+    expect(error).toHaveTextContent("cannot contain spaces");
+    expect(error).toHaveAttribute("role", "tooltip");
+    expect(input).toHaveAttribute("aria-describedby", "shortcut-error");
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
 
     // The rest keeps autosaving while the invalid field is withheld.
@@ -538,13 +626,14 @@ describe("shortcut validation", () => {
       existingSnippets: [snippet],
     });
 
-    fireEvent.change(screen.getByTestId("snippet-shortcut-input"), {
-      target: { value: "/addr" },
-    });
+    const input = screen.getByTestId("snippet-shortcut-input");
+    fireEvent.change(input, { target: { value: "/addr" } });
+    fireEvent.blur(input);
 
-    expect(screen.getByTestId("snippet-shortcut-error")).toHaveTextContent(
-      "already used"
-    );
+    // The duplicate hint outlives focus; only changing the value dismisses it.
+    const error = screen.getByTestId("snippet-shortcut-error");
+    expect(error).toHaveTextContent("already used");
+    expect(error).toBeVisible();
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
     expect(onAutoSave).toHaveBeenCalledWith(
       expect.objectContaining({ shortcut: "/valid" })
@@ -607,6 +696,7 @@ describe("autosave status", () => {
 
   it("shows one Saved check after the queue settles, then leaves the slot", async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-22T12:00:00.000Z"));
     writeQueueStore.setState(() => ({
       pending: 1,
       failed: 0,
@@ -633,6 +723,10 @@ describe("autosave status", () => {
     expect(status).toHaveTextContent("Saved");
     expect(status.querySelectorAll("svg")).toHaveLength(1);
     expect(screen.getByRole("status")).toHaveTextContent("Saved");
+    // The footer follows the completed write, not the record's original date.
+    expect(screen.getByTestId("snippet-updated-time")).toHaveTextContent(
+      "just now"
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
@@ -880,7 +974,9 @@ describe("toolbar actions", () => {
     );
     expect(copyMarkdownAsRichText).toHaveBeenCalledWith(snippet.content);
     await waitFor(() =>
-      expect(screen.getByText("4 uses", { exact: true })).toBeInTheDocument()
+      expect(screen.getByTestId("snippet-metadata")).toHaveTextContent(
+        /4\s*uses/
+      )
     );
   });
 
@@ -954,6 +1050,27 @@ describe("toolbar actions", () => {
     await user.tab();
 
     expect(await screen.findByText("work")).toBeInTheDocument();
+  });
+
+  it("collapses overflowing chips into a popover of the hidden tags", async () => {
+    const restoreLayout = stubTagWidths(120, 40, 30);
+    try {
+      const user = userEvent.setup();
+      const tags = ["alpha", "beta", "gamma", "delta"];
+      renderView({ snippet: { ...snippet, tags } });
+
+      expect(screen.getAllByTestId("snippet-tag-chip")).toHaveLength(1);
+      const overflow = screen.getByTestId("snippet-tag-overflow");
+      expect(overflow).toHaveTextContent("+3");
+
+      await user.click(overflow);
+      const popover = screen.getByRole("dialog", { name: "Hidden tags" });
+      for (const tag of tags.slice(1)) {
+        expect(within(popover).getByText(tag)).toBeInTheDocument();
+      }
+    } finally {
+      restoreLayout();
+    }
   });
 
   it("toggles the sidebar and opens the menu from the keyboard", async () => {

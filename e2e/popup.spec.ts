@@ -640,7 +640,17 @@ test.describe("Popup (Dashboard)", () => {
     ]) {
       await expect(popupPage.getByTestId(testId)).toBeVisible();
     }
+    await expect(
+      popupPage.getByRole("textbox", { name: "Snippet name" })
+    ).toHaveCount(1);
+    await expect(
+      popupPage.getByRole("textbox", { name: "Shortcut" })
+    ).toHaveCount(1);
     await expect(popupPage.getByTestId("snippet-label-input")).toBeFocused();
+    await expect(popupPage.getByTestId("snippet-draft")).toHaveText("Draft");
+    await expect(popupPage.getByTestId("snippet-metadata")).toHaveCount(0);
+    await expect(popupPage.getByText("TAGS", { exact: true })).toHaveCount(0);
+    await expect(popupPage.getByText("+ Tag", { exact: true })).toHaveCount(0);
     for (const testId of [
       "snippet-copy",
       "snippet-more",
@@ -679,7 +689,8 @@ test.describe("Popup (Dashboard)", () => {
   test("uses the same landmark positions for a saved snippet", async ({
     popupPage,
   }) => {
-    await seedAndReload(popupPage, [helloSnippet()]);
+    const seeded = helloSnippet();
+    await seedAndReload(popupPage, [seeded]);
     await popupPage.getByTestId("snippet-list-item").click();
 
     for (const testId of [
@@ -692,9 +703,17 @@ test.describe("Popup (Dashboard)", () => {
       "snippet-label-input",
       "snippet-shortcut-input",
       "snippet-content-editor",
+      "snippet-header",
+      "snippet-footer",
     ]) {
       await expect(popupPage.getByTestId(testId)).toBeVisible();
     }
+    await expect(
+      popupPage.getByRole("textbox", { name: "Snippet name" })
+    ).toHaveCount(1);
+    await expect(
+      popupPage.getByRole("textbox", { name: "Shortcut" })
+    ).toHaveCount(1);
     await expect(popupPage.getByTestId("snippet-copy")).toBeEnabled();
     await expect(popupPage.getByTestId("snippet-more")).toBeEnabled();
     // Selecting a snippet resets the status to idle; no stale `Saved` survives.
@@ -712,56 +731,76 @@ test.describe("Popup (Dashboard)", () => {
       /More actions/
     );
 
-    // The editor pill is the same compact chrome as the sidebar pill, not a
-    // larger full-radius input that changes shape when it gains focus.
-    const editorPill = popupPage.getByTestId("snippet-shortcut-input");
-    const sidebarPill = popupPage
-      .getByTestId("snippet-list-item")
-      .locator("kbd")
-      .first();
-    const [editorPillStyle, sidebarPillStyle] = await Promise.all([
-      editorPill.evaluate((el) => {
-        const style = getComputedStyle(el);
-        return {
-          radius: style.borderRadius,
-          fontSize: style.fontSize,
-          height: el.getBoundingClientRect().height,
-        };
-      }),
-      sidebarPill.evaluate((el) => {
-        const style = getComputedStyle(el);
-        return {
-          radius: style.borderRadius,
-          fontSize: style.fontSize,
-          height: el.getBoundingClientRect().height,
-        };
-      }),
-    ]);
-    expect(editorPillStyle.radius).toBe(sidebarPillStyle.radius);
-    expect(editorPillStyle.fontSize).toBe(sidebarPillStyle.fontSize);
-    // The 20px title row needs a 28px chip to sit on the same optical baseline;
-    // the old 24px chip belonged to the old 14px title. It still stays compact
-    // relative to the 36px title row below.
-    expect(editorPillStyle.height).toBeLessThanOrEqual(28);
+    // One icon-only Add tag control, with no leftover label copy.
+    const addTag = popupPage.getByRole("button", { name: "Add tag" });
+    await expect(addTag).toHaveAttribute("title", "Add tag");
+    await expect(addTag).toHaveText("");
+    await expect(popupPage.getByRole("group", { name: "Tags" })).toHaveCount(1);
+    await expect(popupPage.getByText("TAGS", { exact: true })).toHaveCount(0);
+    await expect(popupPage.getByText("+ Tag", { exact: true })).toHaveCount(0);
 
-    const titleHeight = await popupPage
-      .getByTestId("snippet-label-input")
-      .evaluate((el) => el.getBoundingClientRect().height);
-    // A 20px name in a 36px row gives the text room without taking over the
-    // popup; the old 30px row belonged to the smaller 14px name.
-    expect(titleHeight).toBeLessThanOrEqual(36);
-    expect(editorPillStyle.height).toBeLessThan(titleHeight);
+    // Saved snippets report usage and a real timestamp on one line.
+    const metadata = popupPage.getByTestId("snippet-metadata");
+    await expect(metadata).toHaveText(/\d+\s*uses/);
+    await expect(metadata).toContainText("Updated");
+    const time = popupPage.getByTestId("snippet-updated-time");
+    await expect(time).toHaveAttribute("datetime", seeded.updatedAt);
+    await expect(time).toHaveAttribute("title", /.+/);
 
-    const titleRow = popupPage
-      .getByTestId("snippet-label-input")
-      .locator("xpath=..");
-    const beforeFocus = await titleRow.boundingBox();
-    await expect(editorPill).toHaveAttribute("title", /Type the trigger/);
-    await editorPill.focus();
-    await expect(popupPage.getByTestId("snippet-shortcut-tip")).toHaveCount(0);
-    await expect(popupPage.getByText(/Type the trigger/)).toHaveCount(0);
-    const afterFocus = await titleRow.boundingBox();
+    // The floating hint is linked as a tooltip but does not move the content.
+    const shortcut = popupPage.getByTestId("snippet-shortcut-input");
+    const content = popupPage.getByTestId("snippet-content-editor");
+    const beforeFocus = await content.boundingBox();
+    await shortcut.focus();
+    await expect(popupPage.getByRole("tooltip")).toHaveText(
+      "Type this on any page to expand the snippet."
+    );
+    await expect(shortcut).toHaveAttribute("aria-describedby", "shortcut-tip");
+    const afterFocus = await content.boundingBox();
+    expect(afterFocus?.y).toBe(beforeFocus?.y);
     expect(afterFocus?.height).toBe(beforeFocus?.height);
+
+    // Clicking the empty left edge of the header moves focus to the name.
+    await popupPage.getByTestId("snippet-header").click({
+      position: { x: 4, y: 22 },
+    });
+    await expect(popupPage.getByTestId("snippet-label-input")).toBeFocused();
+  });
+
+  test("collapses footer tags into an accessible +N popover", async ({
+    popupPage,
+  }) => {
+    const tags = [
+      "alpha-layout",
+      "beta-layout",
+      "gamma-layout",
+      "delta-layout",
+      "epsilon-layout",
+      "zeta-layout",
+      "eta-layout",
+    ];
+    await seedAndReload(popupPage, [
+      makeSnippet({ label: "Tagged", shortcut: "/tagged", tags }),
+    ]);
+    await popupPage.getByTestId("snippet-list-item").click();
+
+    const footer = popupPage.getByTestId("snippet-footer");
+    const before = await footer.boundingBox();
+    const overflow = popupPage.getByTestId("snippet-tag-overflow");
+    await expect(overflow).toBeVisible();
+
+    const hiddenCount =
+      tags.length - (await popupPage.getByTestId("snippet-tag-chip").count());
+    await expect(overflow).toHaveText(`+${hiddenCount}`);
+    await overflow.click();
+
+    const popover = popupPage.getByRole("dialog", { name: "Hidden tags" });
+    await expect(popover).toBeVisible();
+    await expect(
+      popover.locator('[data-testid="snippet-hidden-tag"]')
+    ).toHaveCount(hiddenCount);
+    const after = await footer.boundingBox();
+    expect(after?.height).toBe(before?.height);
   });
 
   test("keeps an invalid shortcut visible while the rest keeps autosaving", async ({

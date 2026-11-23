@@ -1,4 +1,11 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useCallback,
+  useLayoutEffect,
+} from "react";
 import { useStore } from "@tanstack/react-store";
 import {
   Copy,
@@ -6,9 +13,8 @@ import {
   Trash2,
   PanelLeftClose,
   PanelLeft,
-  Tag,
+  TagPlus,
   X,
-  Plus,
   Undo2,
   Redo2,
   MoreHorizontal,
@@ -37,6 +43,8 @@ import {
   type EditorFields,
 } from "@/lib/snippet-draft";
 import { detectShortcutConflict } from "@/lib/snippet-utils";
+import { getRelativeTime, shortenRelativeTime } from "@/lib/date-utils";
+import { visibleTagCount } from "@/lib/tag-overflow";
 import {
   discardUnflushedDraft,
   flushDraft,
@@ -65,6 +73,10 @@ const SAVED_VISIBLE_MS = 2000;
 const SAVED_FADE_MS = 200;
 /** Repeating "Saved" on every keystroke is noise, not feedback. */
 const SAVED_ANNOUNCE_THROTTLE_MS = 10_000;
+
+const EMPTY_TAGS: readonly string[] = [];
+const TAG_CHIP_CLASS =
+  "inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border border-border px-2 py-0.5 text-[10px] font-normal whitespace-nowrap text-muted-foreground";
 
 interface SnippetEditorProps {
   /** A saved snippet, or the provisional shape that backs an empty draft. */
@@ -166,13 +178,20 @@ export default function SnippetEditor({
   // value so the rest of the snippet can keep autosaving.
   const [shortcutInput, setShortcutInput] = useState(initialFields.shortcut);
   const [shortcutError, setShortcutError] = useState("");
+  const [shortcutFocused, setShortcutFocused] = useState(false);
+  const [shortcutHovered, setShortcutHovered] = useState(false);
   const [dismissedOutcomeId, setDismissedOutcomeId] = useState<string | null>(
     null
   );
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newTagInput, setNewTagInput] = useState("");
+  const [visibleTagLimit, setVisibleTagLimit] = useState(
+    initialFields.tags?.length ?? 0
+  );
+  const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [usageCount, setUsageCount] = useState(0);
+  const [lastSavedAt, setLastSavedAt] = useState(snippet.updatedAt);
   const [isDeleting, setIsDeleting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showSaving, setShowSaving] = useState(false);
@@ -189,7 +208,12 @@ export default function SnippetEditor({
   } = useControlConfirmation();
   const { announce, announceError } = useFeedback();
 
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const tagInputRef = useRef<HTMLInputElement>(null);
+  const tagAreaRef = useRef<HTMLDivElement>(null);
+  const tagMeasureRef = useRef<HTMLDivElement>(null);
+  const tagMoreMeasureRef = useRef<HTMLSpanElement>(null);
+  const tagPopoverRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<RichTextEditorRef>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const fieldsRef = useRef<EditorFields>(fields);
@@ -217,10 +241,11 @@ export default function SnippetEditor({
   const canUndo = controlsForThisSnippet && undoState.canUndo;
   const canRedo = controlsForThisSnippet && undoState.canRedo;
 
+  const tags = fields.tags ?? EMPTY_TAGS;
   const hasDraftContent =
     !!fields.label.trim() ||
     !!fields.content.trim() ||
-    (fields.tags?.length ?? 0) > 0 ||
+    tags.length > 0 ||
     (!!fields.shortcut.trim() && fields.shortcut !== initialShortcut);
   const hasChanges = !sameFields(fields, fieldsFromSnippet(snippet));
 
@@ -249,6 +274,7 @@ export default function SnippetEditor({
       showSavedRef.current = true;
       setSavedFading(false);
       setShowSaved(true);
+      setLastSavedAt(new Date().toISOString());
       if (announceIt) {
         announce(i18n.t("snippetDetail.syncStatus.saved"), {
           key: "saved",
@@ -324,9 +350,13 @@ export default function SnippetEditor({
     setFields(initialFields);
     setShortcutInput(initialFields.shortcut);
     setShortcutError("");
+    setShortcutFocused(false);
+    setShortcutHovered(false);
     setNewTagInput("");
     setDismissedOutcomeId(null);
     setIsAddingTag(false);
+    setTagPopoverOpen(false);
+    setLastSavedAt(snippet.updatedAt);
     resetCopied();
     setActionError(null);
     setMenuOpen(false);
@@ -504,6 +534,50 @@ export default function SnippetEditor({
     };
   }, [menuOpen]);
 
+  // Measure against a hidden copy of the chips: hiding a chip with display:none
+  // would make its own width unmeasurable, which breaks the next resize.
+  useLayoutEffect(() => {
+    const area = tagAreaRef.current;
+    const measureLayer = tagMeasureRef.current;
+    if (!area || !measureLayer) return;
+    const measure = () => {
+      const widths = Array.from(
+        measureLayer.querySelectorAll<HTMLElement>("[data-measure-tag]")
+      ).map((element) => element.getBoundingClientRect().width);
+      const moreWidth =
+        tagMoreMeasureRef.current?.getBoundingClientRect().width ?? 0;
+      const availableWidth = area.getBoundingClientRect().width;
+      const next =
+        availableWidth > 0
+          ? visibleTagCount(widths, moreWidth, availableWidth)
+          : tags.length;
+      setVisibleTagLimit((current) => (current === next ? current : next));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(area);
+    return () => observer.disconnect();
+  }, [tags]);
+
+  useEffect(() => {
+    if (!tagPopoverOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!tagPopoverRef.current?.contains(event.target as Node)) {
+        setTagPopoverOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTagPopoverOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [tagPopoverOpen]);
+
   // The toolbar advertises Alt+B and Alt+O, so they must work wherever focus is
   // in the editor — not only when a focusable descendant receives the event.
   useEffect(() => {
@@ -637,29 +711,86 @@ export default function SnippetEditor({
   const mod = modifierKey();
   const redoShortcut = mod === "⌘" ? "⌘⇧Z" : "Ctrl+Shift+Z";
 
+  const removeTag = (tag: string) => {
+    commitFields({ ...fields, tags: tags.filter((item) => item !== tag) });
+  };
+
+  const addTag = (raw: string) => {
+    const tag = raw.trim().toLowerCase();
+    if (tag && !tags.includes(tag)) {
+      commitFields({ ...fields, tags: [...tags, tag] });
+    }
+  };
+
+  const shownTags = tags.slice(0, Math.min(visibleTagLimit, tags.length));
+  const hiddenTags = tags.slice(shownTags.length);
+  const hiddenTagsLabel = i18n.t("snippetDetail.hiddenTags");
+
+  const tagAddControl = isAddingTag ? (
+    <Input
+      ref={tagInputRef}
+      value={newTagInput}
+      onChange={(e) => setNewTagInput(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          addTag(newTagInput);
+          setNewTagInput("");
+          setIsAddingTag(false);
+        } else if (e.key === "Escape") {
+          setNewTagInput("");
+          setIsAddingTag(false);
+        }
+      }}
+      onBlur={() => {
+        addTag(newTagInput);
+        setNewTagInput("");
+        setIsAddingTag(false);
+      }}
+      placeholder={i18n.t("snippetDetail.tagPlaceholder")}
+      className="h-6 w-20 px-1.5 py-0 text-[10px] border-dashed"
+      autoFocus
+    />
+  ) : (
+    <Button
+      variant="ghost"
+      size="icon"
+      data-testid="snippet-add-tag"
+      onClick={() => {
+        setIsAddingTag(true);
+        setTimeout(() => tagInputRef.current?.focus(), 0);
+      }}
+      className="size-8 rounded-md text-muted-foreground hover:text-foreground"
+      title={i18n.t("snippetDetail.addTag")}
+      aria-label={i18n.t("snippetDetail.addTag")}
+    >
+      <Icon icon={TagPlus} size="lg" />
+    </Button>
+  );
+
   const tagEditor = (
     <div
+      ref={tagAreaRef}
       role="group"
       aria-label={i18n.t("snippetDetail.tags")}
-      className="flex min-w-0 flex-wrap items-center gap-1.5"
+      data-testid="snippet-tags"
+      className="relative flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-hidden"
     >
-      <Icon icon={Tag} size="sm" className="mr-0.5 text-muted-foreground" />
-      {(fields.tags ?? []).map((tag) => (
+      {shownTags.map((tag) => (
         <Badge
           key={tag}
           variant="outline"
-          className="text-[10px] px-2 py-0.5 h-5 font-normal border-border text-muted-foreground gap-1 group cursor-default hover:bg-accent transition-colors"
+          data-testid="snippet-tag-chip"
+          data-tag={tag}
+          className={cn(
+            TAG_CHIP_CLASS,
+            "cursor-default transition-colors hover:bg-accent"
+          )}
         >
           {tag}
           <button
             type="button"
-            onClick={() =>
-              commitFields({
-                ...fields,
-                tags: (fields.tags ?? []).filter((item) => item !== tag),
-              })
-            }
-            className="opacity-70 hover:opacity-100 transition-opacity -mr-0.5"
+            onClick={() => removeTag(tag)}
+            className="-mr-0.5 opacity-70 transition-opacity hover:opacity-100"
             title={i18n.t("snippetEditor.removeTag", [tag])}
             aria-label={i18n.t("snippetEditor.removeTag", [tag])}
           >
@@ -667,63 +798,88 @@ export default function SnippetEditor({
           </button>
         </Badge>
       ))}
-      {isAddingTag ? (
-        <Input
-          ref={tagInputRef}
-          value={newTagInput}
-          onChange={(e) => setNewTagInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && newTagInput.trim()) {
-              const tag = newTagInput.trim().toLowerCase();
-              if (!(fields.tags ?? []).includes(tag)) {
-                commitFields({
-                  ...fields,
-                  tags: [...(fields.tags ?? []), tag],
-                });
-              }
-              setNewTagInput("");
-              setIsAddingTag(false);
-            } else if (e.key === "Escape") {
-              setNewTagInput("");
-              setIsAddingTag(false);
-            }
-          }}
-          onBlur={() => {
-            if (newTagInput.trim()) {
-              const tag = newTagInput.trim().toLowerCase();
-              if (!(fields.tags ?? []).includes(tag)) {
-                commitFields({
-                  ...fields,
-                  tags: [...(fields.tags ?? []), tag],
-                });
-              }
-            }
-            setNewTagInput("");
-            setIsAddingTag(false);
-          }}
-          placeholder={i18n.t("snippetDetail.tagPlaceholder")}
-          className="h-5 w-20 text-[10px] px-1.5 py-0 border-dashed"
-          autoFocus
-        />
-      ) : (
-        <Button
-          variant="ghost"
-          size="xs"
-          data-testid="snippet-add-tag"
-          onClick={() => {
-            setIsAddingTag(true);
-            setTimeout(() => tagInputRef.current?.focus(), 0);
-          }}
-          className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-          title={i18n.t("snippetDetail.addTagTitle")}
-          aria-label={i18n.t("snippetDetail.addTag")}
-        >
-          <Icon icon={Plus} size="sm" />
-          {i18n.t("snippetEditor.addTagLabel")}
-        </Button>
+      {hiddenTags.length > 0 && (
+        <div ref={tagPopoverRef} className="relative shrink-0">
+          <button
+            type="button"
+            data-testid="snippet-tag-overflow"
+            aria-label={hiddenTagsLabel}
+            aria-haspopup="dialog"
+            aria-expanded={tagPopoverOpen}
+            aria-controls="snippet-hidden-tags"
+            title={hiddenTagsLabel}
+            onClick={() => setTagPopoverOpen((open) => !open)}
+            className={cn(
+              TAG_CHIP_CLASS,
+              "cursor-pointer transition-colors hover:bg-accent"
+            )}
+          >
+            {i18n.t("snippetDetail.moreTags", [hiddenTags.length])}
+          </button>
+          {tagPopoverOpen && (
+            <div
+              id="snippet-hidden-tags"
+              data-testid="snippet-hidden-tags"
+              role="dialog"
+              aria-label={hiddenTagsLabel}
+              className="absolute bottom-full left-0 z-30 mb-1 max-h-40 overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md"
+            >
+              <ul className="flex flex-col gap-1">
+                {hiddenTags.map((tag) => (
+                  <li key={tag} data-testid="snippet-hidden-tag">
+                    <Badge
+                      variant="outline"
+                      className={cn(TAG_CHIP_CLASS, "cursor-default")}
+                    >
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => removeTag(tag)}
+                        className="-mr-0.5 opacity-70 transition-opacity hover:opacity-100"
+                        title={i18n.t("snippetEditor.removeTag", [tag])}
+                        aria-label={i18n.t("snippetEditor.removeTag", [tag])}
+                      >
+                        <Icon icon={X} size="sm" stroke="emphasis" />
+                      </button>
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
+      <div
+        ref={tagMeasureRef}
+        aria-hidden="true"
+        className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5"
+      >
+        {tags.map((tag) => (
+          <span
+            key={tag}
+            data-measure-tag
+            data-measure-text={tag}
+            className={cn(TAG_CHIP_CLASS, "tag-measure-chip")}
+          >
+            <span className="-mr-0.5 opacity-70">
+              <Icon icon={X} size="sm" stroke="emphasis" />
+            </span>
+          </span>
+        ))}
+        <span
+          ref={tagMoreMeasureRef}
+          data-measure-more
+          data-measure-text={i18n.t("snippetDetail.moreTags", [tags.length])}
+          className={cn(TAG_CHIP_CLASS, "tag-measure-more")}
+        />
+      </div>
     </div>
   );
+
+  const relativeTime = getRelativeTime(lastSavedAt);
+  const showShortcutHint =
+    !!shortcutError || shortcutFocused || (shortcutHovered && !shortcutInput);
+  const shortcutHintId = shortcutError ? "shortcut-error" : "shortcut-tip";
 
   return (
     <div className="flex flex-col h-full min-h-0" onKeyDown={handleKeyDown}>
@@ -916,56 +1072,79 @@ export default function SnippetEditor({
         }}
       />
 
-      {/* Title row: one input pair, always in the same position. */}
-      <div className="shrink-0 px-4 pb-3 pt-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <label className="sr-only" htmlFor="snippet-name">
-            {i18n.t("snippetEditor.name")}
+      {/* Metadata reads as chrome: one tinted row, never part of the content. */}
+      <div
+        data-testid="snippet-header"
+        onClick={(event) => {
+          if (!(event.target as HTMLElement).closest("input")) {
+            nameInputRef.current?.focus();
+          }
+        }}
+        className="relative flex h-11 shrink-0 items-center gap-2 bg-muted/30 px-4"
+      >
+        <label className="sr-only" htmlFor="snippet-name">
+          {i18n.t("snippetEditor.name")}
+        </label>
+        <Input
+          ref={nameInputRef}
+          id="snippet-name"
+          data-testid="snippet-label-input"
+          value={fields.label}
+          onChange={(e) => commitFields({ ...fields, label: e.target.value })}
+          placeholder={i18n.t("snippetEditor.namePlaceholder")}
+          aria-label={i18n.t("snippetEditor.name")}
+          autoFocus={isDraft}
+          className="h-8 w-auto min-w-[8ch] max-w-[65%] overflow-hidden border-0 bg-transparent px-1 text-[18px] font-semibold leading-tight text-ellipsis whitespace-nowrap shadow-none outline-none transition-colors [field-sizing:content] hover:bg-background/60 focus-visible:border-0 focus-visible:bg-background focus-visible:text-clip focus-visible:ring-2 focus-visible:ring-ring/50 placeholder:text-muted-foreground"
+        />
+        <div
+          className="relative shrink-0"
+          onFocus={() => setShortcutFocused(true)}
+          onBlur={() => setShortcutFocused(false)}
+          onMouseEnter={() => setShortcutHovered(true)}
+          onMouseLeave={() => setShortcutHovered(false)}
+        >
+          <label className="sr-only" htmlFor="snippet-shortcut">
+            {i18n.t("snippetEditor.shortcut")}
           </label>
           <Input
-            id="snippet-name"
-            data-testid="snippet-label-input"
-            value={fields.label}
-            onChange={(e) => commitFields({ ...fields, label: e.target.value })}
-            placeholder={i18n.t("snippetEditor.namePlaceholder")}
-            aria-label={i18n.t("snippetEditor.name")}
-            autoFocus={isDraft}
-            className="h-9 min-w-0 flex-1 border-0 bg-transparent px-0 text-xl font-semibold leading-tight shadow-none focus-visible:border-0 focus-visible:ring-0 placeholder:text-muted-foreground"
-          />
-          <div className="shrink-0">
-            <label className="sr-only" htmlFor="snippet-shortcut">
-              {i18n.t("snippetEditor.shortcut")}
-            </label>
-            <Input
-              id="snippet-shortcut"
-              data-testid="snippet-shortcut-input"
-              value={shortcutInput}
-              onChange={(e) => handleShortcutChange(e.target.value)}
-              placeholder={i18n.t("snippetEditor.shortcutPlaceholder")}
-              title={i18n.t("snippetEditor.shortcutTip")}
-              aria-label={i18n.t("snippetEditor.shortcut")}
-              aria-invalid={!!shortcutError}
-              aria-describedby={shortcutError ? "shortcut-error" : undefined}
-              className={`h-7 w-20 rounded border-border bg-secondary px-2 text-center font-mono text-[10px]! shadow-none ${
-                shortcutError ? "border-destructive" : ""
-              }`}
-            />
-            {shortcutError && (
-              <p
-                id="shortcut-error"
-                data-testid="snippet-shortcut-error"
-                className="mt-1 text-[10px] text-destructive"
-              >
-                {shortcutError}
-              </p>
+            id="snippet-shortcut"
+            data-testid="snippet-shortcut-input"
+            value={shortcutInput}
+            onChange={(e) => handleShortcutChange(e.target.value)}
+            placeholder={i18n.t("snippetEditor.shortcutPlaceholder")}
+            aria-label={i18n.t("snippetEditor.shortcut")}
+            aria-invalid={!!shortcutError}
+            aria-describedby={showShortcutHint ? shortcutHintId : undefined}
+            className={cn(
+              "h-7 w-auto min-w-[9ch] shrink-0 rounded-md border-border bg-background px-2 text-center font-mono text-[10px]! shadow-none transition-colors [field-sizing:content] hover:border-ring/60 placeholder:text-muted-foreground",
+              shortcutError && "border-destructive"
             )}
-          </div>
+          />
+          {showShortcutHint && (
+            <div
+              id={shortcutHintId}
+              role="tooltip"
+              data-testid={
+                shortcutError
+                  ? "snippet-shortcut-error"
+                  : "snippet-shortcut-tip"
+              }
+              className={cn(
+                "pointer-events-none absolute left-0 top-full z-30 mt-1 w-56 rounded-md border px-2 py-1 text-[10px] leading-snug shadow-md",
+                shortcutError
+                  ? "border-destructive/30 bg-destructive/5 text-destructive"
+                  : "border-border bg-popover text-popover-foreground"
+              )}
+            >
+              {shortcutError || i18n.t("snippetEditor.shortcutTip")}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Content fills the space between the two fixed chrome rows. */}
       <div
-        className="min-h-0 flex-1 px-4 pb-3"
+        className="min-h-0 flex-1 bg-background px-4 pb-3 pt-3"
         data-testid="snippet-content-editor"
       >
         <RichTextEditor
@@ -980,12 +1159,48 @@ export default function SnippetEditor({
         />
       </div>
 
-      {/* Footer: tags left, usage right; tinted rather than divided. */}
-      <div className="flex shrink-0 items-center justify-between gap-2 bg-muted/30 px-4 py-2">
+      {/* One tinted footer row: add tag, chips, and never-truncated metadata. */}
+      <div
+        data-testid="snippet-footer"
+        className="editor-footer flex h-9 shrink-0 flex-nowrap items-center gap-2 overflow-hidden bg-muted/30 px-4"
+      >
+        {tagAddControl}
         {tagEditor}
-        <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
-          {usageCount} {i18n.t("snippetDetail.uses")}
-        </span>
+        {isDraft ? (
+          <span
+            data-testid="snippet-draft"
+            className="ml-auto shrink-0 text-[10px] font-medium text-muted-foreground"
+          >
+            {i18n.t("snippetDetail.draft")}
+          </span>
+        ) : (
+          <div
+            data-testid="snippet-metadata"
+            className="ml-auto flex shrink-0 items-center gap-1 whitespace-nowrap text-[10px] text-muted-foreground"
+          >
+            <span>
+              <span className="font-semibold text-foreground">
+                {usageCount}
+              </span>{" "}
+              {i18n.t("snippetDetail.uses")}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span className="editor-updated-label">
+              {i18n.t("snippetDetail.updated")}
+            </span>
+            <time
+              dateTime={lastSavedAt}
+              title={new Date(lastSavedAt).toLocaleString()}
+              data-testid="snippet-updated-time"
+              className="font-semibold text-foreground"
+            >
+              <span className="editor-time-long">{relativeTime}</span>
+              <span className="editor-time-short">
+                {shortenRelativeTime(relativeTime)}
+              </span>
+            </time>
+          </div>
+        )}
       </div>
     </div>
   );

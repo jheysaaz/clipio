@@ -68,15 +68,14 @@ snippetEditor:
   name: Nombre del fragmento
   namePlaceholder: Fragmento sin título
   shortcut: Atajo
-  shortcutPlaceholder: "/atajo"
+  shortcutPlaceholder: "Agregar atajo"
   shortcutLabel: "Atajo: $1"
-  shortcutTip: Escribe el desencadenante y este atajo en cualquier página para expandir el fragmento.
+  shortcutTip: Escribe esto en cualquier página para expandir el fragmento.
   shortcutError: El atajo no puede contener espacios
   shortcutErrorDuplicate: 'El atajo "$1" ya está en uso por "$2". Elige un atajo diferente.'
   shortcutErrorPrefix: 'El atajo "$1" entra en conflicto con "$2" — uno puede impedir que el otro se expanda.'
   content: Contenido del fragmento
   contentPlaceholder: "Escribe / para ver comandos…"
-  addTagLabel: "Etiqueta"
   removeTag: "Quitar etiqueta $1"
   more: Más acciones
   moreTooltip: "Más acciones (Alt+O)"
@@ -100,8 +99,11 @@ snippetDetail:
   tags: Etiquetas
   tagPlaceholder: Nombre de etiqueta...
   addTag: Agregar etiqueta
-  addTagTitle: Agregar una nueva etiqueta
   uses: usos
+  updated: Actualizado
+  draft: Borrador
+  hiddenTags: Etiquetas ocultas
+  moreTags: "+$1"
   deleted:
     title: Fragmento eliminado
     undo: Deshacer
