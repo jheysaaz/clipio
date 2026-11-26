@@ -129,7 +129,7 @@ describe("OnboardingTour", () => {
     const { unmount } = renderTour();
 
     await waitFor(() => expect(mocks.driver).toHaveBeenCalledTimes(1));
-    expect(lastConfig().steps).toHaveLength(10);
+    expect(lastConfig().steps).toHaveLength(7);
     expect(mocks.instance.drive).toHaveBeenCalledWith(0);
     expect(await storedProgress()).toEqual(POPUP_START);
 
@@ -190,22 +190,20 @@ describe("OnboardingTour", () => {
     expect(mocks.instance.moveNext).toHaveBeenCalledTimes(1);
   });
 
-  it("closes the create form before returning to the library", async () => {
+  it("has no close-form action now that the editor has no Cancel button", async () => {
     const cancelButton = addAnchor("snippet-create-cancel");
     const click = vi.spyOn(cancelButton, "click");
     renderTour();
     await waitFor(() => expect(mocks.driver).toHaveBeenCalledTimes(1));
 
+    const steps = lastConfig().steps ?? [];
+    expect(steps.filter((step) => step.popover?.onNextClick)).toHaveLength(1);
     act(() => {
-      lastConfig().steps?.[7]?.popover?.onNextClick?.(
-        undefined,
-        {},
-        hookOpts(7)
-      );
+      steps[6]?.popover?.onNextClick?.(undefined, {}, hookOpts(6));
     });
 
-    expect(click).toHaveBeenCalledTimes(1);
-    expect(mocks.instance.moveNext).toHaveBeenCalledTimes(1);
+    expect(click).not.toHaveBeenCalled();
+    expect(mocks.instance.moveNext).not.toHaveBeenCalled();
   });
 
   it("skips and closes the tour from the custom Skip button", async () => {

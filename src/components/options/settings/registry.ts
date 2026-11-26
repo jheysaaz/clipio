@@ -27,10 +27,17 @@ import {
   type ThemeMode,
 } from "@/storage/items";
 import { UI_FONT_OPTIONS, UI_FONT_STACKS, type UiFont } from "@/lib/ui-font";
-import { MonitorIcon, MoonIcon, SunIcon, type LucideIcon } from "lucide-react";
+import {
+  MonitorIcon,
+  MoonIcon,
+  PartyPopper,
+  SunIcon,
+  type LucideIcon,
+} from "lucide-react";
 import { forceSetStorageMode } from "@/storage";
 import type { StorageMode } from "@/storage";
 import { TIMING } from "@/config/constants";
+import { previewConfetti } from "@/lib/confetti-preview";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -101,6 +108,9 @@ export type NavLabelKey =
   | "options.nav.about";
 
 /** Locale key for a select option's label. */
+/** Locale key for an in-row action that demos a setting. */
+export type PreviewLabelKey = "options.row.preview";
+
 export type OptionLabelKey =
   | "options.theme.light"
   | "options.theme.dark"
@@ -204,6 +214,17 @@ export interface SettingEntry {
   setValue: (value: any) => Promise<void>;
   /** Restores the shipped default. */
   reset?: () => Promise<void>;
+  /**
+   * Optional in-place demo for a setting whose effect is normally seen
+   * somewhere else. The renderer only knows "button that runs this action";
+   * what it previews lives entirely in the entry.
+   */
+  preview?: {
+    labelKey: PreviewLabelKey;
+    icon?: LucideIcon;
+    testId: string;
+    run: () => void;
+  };
   /** Stable e2e / component handle. */
   testId: string;
 }
@@ -434,6 +455,14 @@ export const SETTINGS: readonly SettingEntry[] = [
     reset: () => confettiEnabledItem.setValue(true),
     defaultValue: true,
     testId: "confetti-toggle",
+    // Fires even while the switch is off: the preview is how someone decides
+    // whether they want the effect, not a confirmation of the current value.
+    preview: {
+      labelKey: "options.row.preview",
+      icon: PartyPopper,
+      testId: "confetti-preview",
+      run: previewConfetti,
+    },
   },
 
   // ── Storage ───────────────────────────────────────────────────────────────

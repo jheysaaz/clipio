@@ -18,9 +18,13 @@ import { helloSnippet, makeSnippet, makeSnippets } from "./helpers/snippets.js";
 import type { Snippet } from "../src/types/index.js";
 import {
   getLocalItem,
+  readHistory,
   readSyncSnippets,
-  writeBackupSnippets,
 } from "./helpers/storage.js";
+
+// Sonner's own attributes. Asserting their absence proves the old toast layer
+// is really gone instead of merely hidden by a CSS class or a copy change.
+const TOAST_SELECTOR = "[data-sonner-toaster], [data-sonner-toast]";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -188,9 +192,10 @@ test.describe("Popup routing", () => {
     await popupPage.getByTestId("snippet-label-input").fill("Addressed");
     await popupPage.getByTestId("snippet-shortcut-input").fill(";ad");
     await popupPage.locator('[contenteditable="true"]').first().fill("hello");
-    await popupPage.getByTestId("snippet-create-save").click();
 
-    await expect(popupPage).toHaveURL(/#\/snippet\//);
+    // The first valid autosave creates the record and navigates to it. There is
+    // no Create button left to click.
+    await expect(popupPage).toHaveURL(/#\/snippet\//, { timeout: 10_000 });
   });
 });
 
@@ -367,23 +372,24 @@ test.describe("Popup — reopening resumes the last viewed snippet", () => {
     await popupPage.getByTestId("snippet-list-item").nth(1).click();
     await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}`));
 
-    // The same testid and confirm pattern as the existing delete test, rather than
-    // a broader regex: `/^(delete|confirm)/i` with `.last()` matched a control that
-    // closed the popup, and the failure surfaced as "target page has been closed".
+    // Delete moved into the overflow menu and no longer asks for confirmation.
+    await popupPage.getByTestId("snippet-more").click();
     await popupPage.getByTestId("snippet-delete").click();
-    const confirmButton = popupPage
-      .getByRole("button", { name: /delete|confirm|yes/i })
-      .first();
-    await expect(confirmButton).toBeVisible({ timeout: 5_000 });
-    await confirmButton.click();
+    await expect(popupPage.getByRole("alertdialog")).toHaveCount(0);
 
-    // The delete moved the address, which is the app doing its job.
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${newer.id}`));
+    // Deleting no longer navigates the app out from under the user: the route
+    // stays on the deleted id so the inline Undo is tied to what they just did.
+    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}`));
+    await expect(
+      popupPage.getByTestId("snippet-deleted-message")
+    ).toBeVisible();
+    await expect(popupPage.getByTestId("snippet-undo-delete")).toBeVisible();
 
-    // Now reopen cold. The remembered id no longer resolves, so it must fall back
-    // to the newest rather than showing a pane for a snippet that is gone.
-    await popupPage.reload();
-    await waitForPopupReady(popupPage);
+    // Now reopen cold with no route in the address. The remembered id no longer
+    // resolves, so it must fall back to the newest rather than showing a pane for
+    // a snippet that is gone. A `reload()` would keep the deleted id in the hash
+    // and never exercise the resume path at all.
+    await reopenPopup(popupPage);
 
     await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${newer.id}`));
     await expect(popupPage.getByTestId("snippet-list")).toBeVisible();
@@ -523,13 +529,11 @@ test.describe("Popup — a new snippet's shortcut follows the trigger prefix", (
       "/"
     );
 
-    // Role + name, per the e2e selector rule — the cancel button carries an
-    // aria-label rather than a testid, and adding one here would mean this test
-    // dictated the component's markup.
-    await popupPage
-      .getByRole("button", { name: /cancel/i })
-      .first()
-      .click();
+    // There is no Save/Cancel chrome in the unified editor. Reopening the popup
+    // is how an empty draft is abandoned, and this is the "next open" the case
+    // is named for.
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
     await popupPage.evaluate(async () => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.local.set({ snippetPreviewPrefix: "," });
@@ -544,7 +548,9 @@ test.describe("Popup — a new snippet's shortcut follows the trigger prefix", (
 });
 
 test.describe("Popup (Dashboard)", () => {
-  test("creates new snippet via form", async ({ popupPage }) => {
+  test("creates a snippet on the first valid autosave", async ({
+    popupPage,
+  }) => {
     await popupPage.evaluate(async () => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.sync.clear();
@@ -574,10 +580,9 @@ test.describe("Popup (Dashboard)", () => {
     await editor.click();
     await popupPage.keyboard.type("Created by e2e");
 
-    // Save the snippet
-    const saveButton = popupPage.getByTestId("snippet-create-save");
-    await expect(saveButton).toBeEnabled();
-    await saveButton.click();
+    // No Save button: once all fields are valid the debounced draft is created.
+    // The route change proves the create committed, not just that a draft exists.
+    await expect(popupPage).toHaveURL(/#\/snippet\//, { timeout: 10_000 });
 
     // Poll the persisted value: the save handler writes asynchronously.
     await expect
@@ -602,6 +607,275 @@ test.describe("Popup (Dashboard)", () => {
     // own write fired drove a re-read, so one snippet in storage became two rows
     // on screen. Asserting only on storage is what let it through.
     await expect(popupPage.getByTestId("snippet-list-item")).toHaveCount(1);
+    // The background clears the staged draft; the one status slot must follow
+    // it out of `Saving…` and back to idle instead of staying stuck after a
+    // successful create. A transient `Saved` is covered by the status test.
+    await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText("", {
+      timeout: 10_000,
+    });
+  });
+
+  test("opens a draft with one editor layout and a disabled action bar", async ({
+    popupPage,
+  }) => {
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.sync.clear();
+      await ext.storage.local.set({ cachedSnippets: [], storageMode: "sync" });
+    });
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+    await popupPage.getByTestId("add-snippet").click();
+
+    for (const testId of [
+      "snippet-toggle-sidebar",
+      "snippet-undo",
+      "snippet-redo",
+      "snippet-sync-status",
+      "snippet-copy",
+      "snippet-more",
+      "snippet-label-input",
+      "snippet-shortcut-input",
+      "snippet-content-editor",
+    ]) {
+      await expect(popupPage.getByTestId(testId)).toBeVisible();
+    }
+    await expect(
+      popupPage.getByRole("textbox", { name: "Snippet name" })
+    ).toHaveCount(1);
+    await expect(
+      popupPage.getByRole("textbox", { name: "Shortcut" })
+    ).toHaveCount(1);
+    await expect(popupPage.getByTestId("snippet-label-input")).toBeFocused();
+    await expect(popupPage.getByTestId("snippet-draft")).toHaveText("Draft");
+    await expect(popupPage.getByTestId("snippet-metadata")).toHaveCount(0);
+    await expect(popupPage.getByTestId("snippet-add-tag")).toHaveText(
+      "New Tag"
+    );
+    await expect(popupPage.getByText("TAGS", { exact: true })).toHaveCount(0);
+    await expect(popupPage.getByText("+ Tag", { exact: true })).toHaveCount(0);
+    for (const testId of [
+      "snippet-copy",
+      "snippet-more",
+      "snippet-undo",
+      "snippet-redo",
+    ]) {
+      await expect(popupPage.getByTestId(testId)).toBeDisabled();
+    }
+    // An untouched draft has nothing to report: the reserved slot is idle.
+    await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText("");
+    await expect(popupPage.getByTestId("snippet-sync-status")).toHaveCount(1);
+    await expect(
+      popupPage.getByRole("button", { name: /^create$/i })
+    ).toHaveCount(0);
+    await expect(
+      popupPage.getByRole("button", { name: /^save$/i })
+    ).toHaveCount(0);
+
+    // The command hint is the editor placeholder, not a second instruction row.
+    await expect(
+      popupPage.locator('[contenteditable="true"]').first()
+    ).toHaveAttribute("spellcheck", "false");
+    await expect(
+      popupPage.locator("[data-slate-placeholder]").first()
+    ).toHaveText(/Type \/ for commands…/);
+
+    // Nothing is clipped at the popup's normal width.
+    const overflows = await popupPage.evaluate(
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth
+    );
+    expect(overflows).toBe(false);
+  });
+
+  test("uses the same landmark positions for a saved snippet", async ({
+    popupPage,
+  }) => {
+    const seeded = helloSnippet();
+    await seedAndReload(popupPage, [seeded]);
+    await popupPage.getByTestId("snippet-list-item").click();
+
+    for (const testId of [
+      "snippet-toggle-sidebar",
+      "snippet-undo",
+      "snippet-redo",
+      "snippet-sync-status",
+      "snippet-copy",
+      "snippet-more",
+      "snippet-label-input",
+      "snippet-shortcut-input",
+      "snippet-content-editor",
+      "snippet-header",
+      "snippet-footer",
+    ]) {
+      await expect(popupPage.getByTestId(testId)).toBeVisible();
+    }
+    await expect(
+      popupPage.getByRole("textbox", { name: "Snippet name" })
+    ).toHaveCount(1);
+    await expect(
+      popupPage.getByRole("textbox", { name: "Shortcut" })
+    ).toHaveCount(1);
+    await expect(popupPage.getByTestId("snippet-copy")).toBeEnabled();
+    await expect(popupPage.getByTestId("snippet-more")).toBeEnabled();
+    // Selecting a snippet resets the status to idle; no stale `Saved` survives.
+    await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText("");
+    await expect(popupPage.getByTestId("snippet-undo")).toHaveAttribute(
+      "title",
+      /Restore previous version/
+    );
+    await expect(popupPage.getByTestId("snippet-redo")).toHaveAttribute(
+      "title",
+      /Restore next version/
+    );
+    await expect(popupPage.getByTestId("snippet-more")).toHaveAttribute(
+      "title",
+      /More actions/
+    );
+
+    // One icon-only Add tag control, with no leftover label copy.
+    const addTag = popupPage.getByRole("button", { name: "Add tag" });
+    await expect(addTag).toHaveAttribute("title", "Add tag");
+    await expect(addTag).toHaveText("New Tag");
+    await expect(popupPage.getByRole("group", { name: "Tags" })).toHaveCount(1);
+    await expect(popupPage.getByText("TAGS", { exact: true })).toHaveCount(0);
+    await expect(popupPage.getByText("+ Tag", { exact: true })).toHaveCount(0);
+
+    // Saved snippets report usage and a real timestamp on one line.
+    const metadata = popupPage.getByTestId("snippet-metadata");
+    await expect(metadata).toHaveText(/\d+\s*uses/);
+    await expect(metadata).toContainText("Updated");
+    const time = popupPage.getByTestId("snippet-updated-time");
+    await expect(time).toHaveAttribute("datetime", seeded.updatedAt);
+    await expect(time).toHaveAttribute("title", /.+/);
+
+    // The floating hint is linked as a tooltip but does not move the content.
+    const shortcut = popupPage.getByTestId("snippet-shortcut-input");
+    const content = popupPage.getByTestId("snippet-content-editor");
+    const beforeFocus = await content.boundingBox();
+    await shortcut.focus();
+    await expect(popupPage.getByRole("tooltip")).toHaveText(
+      "Type this on any page to expand the snippet."
+    );
+    await expect(shortcut).toHaveAttribute("aria-describedby", "shortcut-tip");
+    const afterFocus = await content.boundingBox();
+    expect(afterFocus?.y).toBe(beforeFocus?.y);
+    expect(afterFocus?.height).toBe(beforeFocus?.height);
+
+    // Clicking the empty left edge of the header moves focus to the name.
+    await popupPage.getByTestId("snippet-header").click({
+      position: { x: 4, y: 22 },
+    });
+    await expect(popupPage.getByTestId("snippet-label-input")).toBeFocused();
+  });
+
+  test("collapses footer tags into an accessible +N popover", async ({
+    popupPage,
+  }) => {
+    const tags = [
+      "alpha-layout",
+      "beta-layout",
+      "gamma-layout",
+      "delta-layout",
+      "epsilon-layout",
+      "zeta-layout",
+      "eta-layout",
+    ];
+    await seedAndReload(popupPage, [
+      makeSnippet({ label: "Tagged", shortcut: "/tagged", tags }),
+    ]);
+    await popupPage.getByTestId("snippet-list-item").click();
+
+    // With tags present the control returns to icon-only; the icon's left edge
+    // still lines up with the footer padding.
+    await expect(popupPage.getByTestId("snippet-add-tag")).toHaveText("");
+    const footer = popupPage.getByTestId("snippet-footer");
+    const before = await footer.boundingBox();
+    const overflow = popupPage.getByTestId("snippet-tag-overflow");
+    await expect(overflow).toBeVisible();
+
+    const hiddenCount =
+      tags.length - (await popupPage.getByTestId("snippet-tag-chip").count());
+    await expect(overflow).toHaveText(`+${hiddenCount}`);
+    await overflow.click();
+
+    const popover = popupPage.getByRole("dialog", { name: "Hidden tags" });
+    await expect(popover).toBeVisible();
+    await expect(
+      popover.locator('[data-testid="snippet-hidden-tag"]')
+    ).toHaveCount(hiddenCount);
+    const after = await footer.boundingBox();
+    expect(after?.height).toBe(before?.height);
+  });
+
+  test("keeps an invalid shortcut visible while the rest keeps autosaving", async ({
+    popupPage,
+  }) => {
+    const snippet = makeSnippet({
+      label: "Original",
+      shortcut: "/orig",
+      content: "Original body",
+    });
+    await seedAndReload(popupPage, [snippet]);
+    await popupPage.getByTestId("snippet-list-item").click();
+
+    await popupPage.getByTestId("snippet-shortcut-input").fill("/orig bad");
+    const error = popupPage.getByTestId("snippet-shortcut-error");
+    await expect(error).toBeVisible();
+    await expect(error).toContainText("cannot contain spaces");
+
+    await popupPage.getByTestId("snippet-label-input").fill("Renamed");
+    // The rest of the edit is staged and enqueued by the debounced autosave, so
+    // an invalid shortcut cannot hold the other fields hostage.
+    await expect
+      .poll(async () => (await readSyncSnippets(popupPage))[0], {
+        timeout: 10_000,
+      })
+      .toMatchObject({ label: "Renamed", shortcut: "/orig" });
+    // The bad text is still on screen and still not committed.
+    await expect(popupPage.getByTestId("snippet-shortcut-input")).toHaveValue(
+      "/orig bad"
+    );
+    await expect(error).toBeVisible();
+  });
+
+  test("reports saving in one reserved status slot", async ({ popupPage }) => {
+    await seedAndReload(popupPage, [helloSnippet()]);
+    // A recent send holds the next commit at the queue's 2s minimum gap, so the
+    // Saving… phase is observable. Without it the write lands inside the 400ms
+    // quiet window and only Saved is ever painted.
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.local.set({
+        writeQueue: { operations: [], sentAt: [Date.now()] },
+      });
+    });
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+    await popupPage.getByTestId("snippet-list-item").click();
+
+    const status = popupPage.getByTestId("snippet-sync-status");
+    await expect(status).toHaveCount(1);
+    const restingWidth = (await status.boundingBox())?.width ?? 0;
+
+    await popupPage
+      .locator('[contenteditable="true"]')
+      .first()
+      .fill("Autosaved body");
+    await expect(status).toHaveText("Saving…", { timeout: 5_000 });
+    expect((await status.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(
+      restingWidth - 1
+    );
+
+    // The debounced autosave stages the edit and hands it to the queue while the
+    // popup is still open. The background commit must clear the draft and bring
+    // the one status slot out of Saving… without waiting for a pagehide that a
+    // closing popup may never finish delivering.
+    await expect
+      .poll(() => readSyncSnippets(popupPage), { timeout: 10_000 })
+      .toEqual([expect.objectContaining({ content: "Autosaved body" })]);
+    await expect(status).toHaveText("Saved", { timeout: 10_000 });
   });
 
   test("shows a saved blank line between paragraphs in the editor", async ({
@@ -645,28 +919,30 @@ test.describe("Popup (Dashboard)", () => {
     await expect(copyButton).toBeVisible({ timeout: 5_000 });
     await copyButton.click();
 
-    // Behavior: aria-pressed flips to true after a successful copy
+    // The confirmation lives on the button itself, with one polite announcement
+    // and no toast. It reverts after its short window.
     await expect(copyButton).toHaveAttribute("aria-pressed", "true", {
       timeout: 3_000,
     });
+    await expect(copyButton).toContainText("Copied");
+    await expect(copyButton).toHaveAttribute("aria-label", "Copied");
+    await expect(popupPage.getByRole("status")).toHaveText("Copied");
+    await expect(popupPage.locator(TOAST_SELECTOR)).toHaveCount(0);
+    await expect(copyButton).not.toContainText("Copied", { timeout: 5_000 });
+    await expect(copyButton).toHaveAttribute("aria-pressed", "false");
   });
 
-  test("deletes snippet and verifies removal from storage", async ({
+  test("deletes immediately and confirms deletion inline", async ({
     popupPage,
   }) => {
     const snippet = makeSnippet({ label: "Delete Me", shortcut: "/delete-me" });
     await seedAndReload(popupPage, [snippet]);
 
-    // Click delete via stable testid, then confirm in the dialog
+    // Delete lives in the overflow menu and acts immediately.
+    await popupPage.getByTestId("snippet-more").click();
     const deleteButton = popupPage.getByTestId("snippet-delete");
     await expect(deleteButton).toBeVisible({ timeout: 5_000 });
     await deleteButton.click();
-
-    const confirmButton = popupPage
-      .getByRole("button", { name: /delete|confirm|yes/i })
-      .first();
-    await expect(confirmButton).toBeVisible({ timeout: 5_000 });
-    await confirmButton.click();
 
     // Storage verification — the seeded snippet must be gone. Poll: the delete
     // handler writes asynchronously.
@@ -682,7 +958,155 @@ test.describe("Popup (Dashboard)", () => {
         { timeout: 5_000, message: "deleted snippet never left sync storage" }
       )
       .toBe(0);
+
+    // The deleted state is a persistent part of the main panel, not a toast.
+    const message = popupPage.getByTestId("snippet-deleted-message");
+    await expect(message).toHaveText("Snippet deleted");
+    await expect(message).toBeFocused();
+    await expect(popupPage.getByTestId("snippet-undo-delete")).toBeVisible();
+    await expect(popupPage.getByRole("status")).toHaveText(
+      "Snippet deleted. Undo available."
+    );
+    await expect(popupPage.locator(TOAST_SELECTOR)).toHaveCount(0);
     await expect(popupPage.getByTestId("empty-state")).toBeVisible();
+  });
+
+  test("undo restores the deleted snippet in place and focuses its name", async ({
+    popupPage,
+  }) => {
+    const first = makeSnippet({ label: "First", shortcut: "/first" });
+    const target = makeSnippet({
+      label: "Undo Me",
+      shortcut: "/undo-me",
+      content: "Restore this exact body",
+      tags: ["keep-me"],
+    });
+    const third = makeSnippet({ label: "Third", shortcut: "/third" });
+    await seedAndReload(popupPage, [first, target, third]);
+
+    const rows = popupPage.getByTestId("snippet-list-item");
+    await expect(rows).toHaveText([/First/, /Undo Me/, /Third/]);
+    await popupPage.getByRole("option", { name: /Undo Me/ }).click();
+
+    await popupPage.getByTestId("snippet-more").click();
+    await popupPage.getByTestId("snippet-delete").click();
+
+    // Removal from the sidebar is synchronous with the delete, not deferred to
+    // a storage refresh or a toast timeout.
+    await expect(rows).toHaveText([/First/, /Third/]);
+    await expect(
+      popupPage.getByTestId("snippet-deleted-message")
+    ).toBeVisible();
+
+    await popupPage.getByTestId("snippet-undo-delete").click();
+
+    await expect(rows).toHaveText([/First/, /Undo Me/, /Third/]);
+    await expect(popupPage.getByTestId("snippet-list")).toHaveAttribute(
+      "aria-activedescendant",
+      `snippet-${target.id}`
+    );
+    const name = popupPage.getByTestId("snippet-label-input");
+    await expect(name).toBeFocused();
+    await expect(name).toHaveValue(target.label);
+    await expect(popupPage.getByTestId("snippet-shortcut-input")).toHaveValue(
+      target.shortcut
+    );
+
+    await expect
+      .poll(
+        async () => {
+          const snippets = await readSyncSnippets(popupPage);
+          return snippets.find((s) => s.id === target.id);
+        },
+        { timeout: 5_000 }
+      )
+      .toEqual(
+        expect.objectContaining({
+          id: target.id,
+          label: target.label,
+          shortcut: target.shortcut,
+          content: target.content,
+          tags: target.tags,
+        })
+      );
+  });
+
+  test("mounts exactly two live regions and no toast layer", async ({
+    popupPage,
+  }) => {
+    await seedAndReload(popupPage, [helloSnippet()]);
+
+    await expect(
+      popupPage.locator('[role="status"], [role="alert"], [aria-live]')
+    ).toHaveCount(2);
+    await expect(popupPage.getByRole("status")).toHaveAttribute(
+      "aria-live",
+      "polite"
+    );
+    await expect(popupPage.getByRole("alert")).toHaveAttribute(
+      "aria-live",
+      "assertive"
+    );
+    // The polite region may still hold the startup "Loading snippets…"
+    // announcement; that is legitimate status text. What matters is that both
+    // regions stay screen-reader-only and contain no actionable controls.
+    await expect(
+      popupPage.locator('[role="status"], [role="alert"]').locator("button, a")
+    ).toHaveCount(0);
+    await expect(popupPage.getByRole("alert")).toHaveText("");
+    await expect(popupPage.locator(TOAST_SELECTOR)).toHaveCount(0);
+  });
+
+  test("keeps one dismissible banner at the top of the main pane", async ({
+    popupPage,
+  }) => {
+    const version = "9.9.9";
+    await seedAndReload(popupPage, []);
+    await popupPage.evaluate(async (v) => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.local.set({
+        latestVersion: {
+          version: v,
+          htmlUrl: "https://example.test/release",
+          publishedAt: "2026-01-01T00:00:00.000Z",
+        },
+        dismissedUpdateVersion: "",
+        // Keep the background's periodic checker from overwriting the release
+        // mid-test. A recent check is throttled, so the banner has one stable
+        // source for the whole dismissal flow.
+        latestVersionCheckedAt: new Date().toISOString(),
+      });
+    }, version);
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+
+    // An empty library has no selected snippet. The banner still belongs in the
+    // main pane, above its content, and it is the only Tier 2 surface.
+    const banner = popupPage.getByTestId("warning-update");
+    await expect(banner).toBeVisible();
+    await expect(popupPage.getByTestId("empty-state")).toBeVisible();
+    await expect(banner).toHaveCount(1);
+    await expect(
+      popupPage.locator(
+        '[data-testid="warning-uninstall"], [data-testid="warning-quota"], [data-testid="warning-sync-paused"]'
+      )
+    ).toHaveCount(0);
+    expect(
+      await banner.evaluate((el) => {
+        const pane = el.closest('[data-testid="dashboard-main-pane"]');
+        return pane?.firstElementChild === el;
+      })
+    ).toBe(true);
+
+    await banner.getByRole("button", { name: "Dismiss" }).click();
+    await expect(banner).toHaveCount(0);
+    expect(await getLocalItem(popupPage, "dismissedUpdateVersion")).toBe(
+      version
+    );
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
+    await expect(banner).toHaveCount(0);
+    await expect(popupPage.locator(TOAST_SELECTOR)).toHaveCount(0);
   });
 
   // -------------------------------------------------------------------------
@@ -712,156 +1136,153 @@ test.describe("Popup (Dashboard)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Save-path outcomes changed by Waves 9 and 10. Neither had e2e coverage, so
-// both regressions below were invisible to the e2e suite.
+// Autosave replaces the old unsaved-changes guard. The popup disappears on
+// blur, so an edit has to be staged locally and committed by the background
+// however the user leaves the editor — sidebar click, browser Back, or a blur.
 // ---------------------------------------------------------------------------
 
-test.describe("Popup (Dashboard) — oversized snippet is refused, not silently diverted", () => {});
+async function seedTwo(
+  popupPage: import("@playwright/test").Page
+): Promise<{ older: Snippet; newer: Snippet }> {
+  const older = makeSnippet({
+    label: "Older",
+    shortcut: ";ol",
+    content: "older body",
+  });
+  const newer = makeSnippet({
+    label: "Newer",
+    shortcut: ";nw",
+    content: "newer body",
+    updatedAt: "2999-01-01T00:00:00.000Z",
+  });
+  await seedAndReload(popupPage, [older, newer]);
+  return { older, newer };
+}
 
-// ---------------------------------------------------------------------------
-// Leaving a snippet with unsaved changes.
-//
-// The guard was a `pendingSnippet` store field consulted by the sidebar row and
-// nowhere else. Browser Back — the navigation a popup user actually reaches for
-// when they have made an edit they regret — walked straight past it, and so did
-// the arrow keys. Editing a snippet's content, pressing Back, and watching the
-// edit disappear was the reported symptom.
-//
-// `useBlocker` puts the decision in the router, so the sidebar click, the keyboard,
-// and a POP are the same code path. These tests are the deliverable: the wiring
-// without them proves nothing, and the control test is what stops the whole group
-// from passing because the guard fires on every navigation.
-// ---------------------------------------------------------------------------
+async function editSelectedSnippet(
+  popupPage: import("@playwright/test").Page,
+  snippet: Snippet,
+  text: string
+) {
+  // The URL changes before React swaps the keyed detail view. Waiting for the
+  // target's content avoids clicking the outgoing editor, which React would
+  // replace mid-type and drop every keystroke on the floor.
+  const editor = popupPage.locator('[contenteditable="true"]');
+  await expect(editor).toHaveCount(1);
+  await expect(editor).toContainText(snippet.content);
+  await editor.click();
+  await popupPage.keyboard.type(text);
+  await expect(editor).toContainText(text.trim());
+}
 
-test.describe("Popup — unsaved changes block navigation", () => {
-  /**
-   * Two snippets, with the newer one unambiguous so auto-select picks it.
-   *
-   * `updatedAt` is what `selectNewest` reads, and auto-select is what decides
-   * which snippet the popup is sitting on after a reload — so leaving it to chance
-   * would make every assertion below depend on `makeSnippet`'s clock.
-   */
-  async function seedTwo(
-    popupPage: import("@playwright/test").Page
-  ): Promise<{ older: Snippet; newer: Snippet }> {
-    const older = makeSnippet({
-      label: "Older",
-      shortcut: ";ol",
-      content: "older body",
-    });
-    const newer = makeSnippet({
-      label: "Newer",
-      shortcut: ";nw",
-      content: "newer body",
-      updatedAt: "2999-01-01T00:00:00.000Z",
-    });
-    await seedAndReload(popupPage, [older, newer]);
-    return { older, newer };
-  }
+async function syncedContent(
+  popupPage: import("@playwright/test").Page,
+  snippetId: string
+): Promise<string> {
+  const snippets = await readSyncSnippets(popupPage);
+  return snippets.find((s) => s.id === snippetId)?.content ?? "";
+}
 
-  /**
-   * Leave the selected snippet dirty, and prove it from the app's own statement.
-   *
-   * `snippet-save` is disabled unless there are unsaved changes, so waiting for it
-   * to enable is the app confirming the editor is dirty — no sleep, and no
-   * assumption about how long the rich editor takes to report a keystroke.
-   */
-  async function makeEditorDirty(popupPage: import("@playwright/test").Page) {
-    const editor = popupPage.locator('[contenteditable="true"]');
-    // Exactly one when a snippet is selected, so addressing it is not a positional
-    // pick wearing a different hat.
-    await expect(editor).toHaveCount(1);
-    await editor.click();
-    await popupPage.keyboard.type(" an unsaved edit");
-    await expect(popupPage.getByTestId("snippet-save")).toBeEnabled();
-  }
-
-  test("a dirty editor blocks a sidebar selection and keeps the snippet addressed", async ({
+test.describe("Popup — edits autosave", () => {
+  test("an edit is committed when the user switches snippets", async ({
     popupPage,
   }) => {
     const { older, newer } = await seedTwo(popupPage);
-    // The row's own `id` attribute — a stable attribute, and not an index into a
-    // list whose order the test does not control.
     await popupPage.locator(`#snippet-${older.id}`).click();
     await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
-    await makeEditorDirty(popupPage);
 
+    await editSelectedSnippet(popupPage, older, " autosaved");
     await popupPage.locator(`#snippet-${newer.id}`).click();
 
-    await expect(popupPage.getByRole("alertdialog")).toBeVisible();
-    // Blocked, not merely warned about: the address did not move, and the list
-    // still says the older snippet is the selected one.
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
-    await expect(popupPage.getByTestId("snippet-list")).toHaveAttribute(
-      "aria-activedescendant",
-      `snippet-${older.id}`
+    // No dialog, no Save button: the unmounting editor flushes its draft and
+    // the background commits it. What proves it is the authoritative store.
+    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${newer.id}$`));
+    await expect
+      .poll(() => syncedContent(popupPage, older.id), { timeout: 10_000 })
+      .toContain("autosaved");
+
+    await popupPage.locator(`#snippet-${older.id}`).click();
+    await expect(popupPage.locator('[contenteditable="true"]')).toContainText(
+      "autosaved"
     );
   });
 
-  test("keeping editing cancels the navigation and leaves the editor alone", async ({
+  test("undo restores the committed edit through the queue", async ({
     popupPage,
   }) => {
     const { older, newer } = await seedTwo(popupPage);
     await popupPage.locator(`#snippet-${older.id}`).click();
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
-    await makeEditorDirty(popupPage);
-
+    await editSelectedSnippet(popupPage, older, " autosaved");
     await popupPage.locator(`#snippet-${newer.id}`).click();
-    const dialog = popupPage.getByRole("alertdialog");
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: /keep editing/i }).click();
+    await expect
+      .poll(() => syncedContent(popupPage, older.id), { timeout: 10_000 })
+      .toContain("autosaved");
 
-    await expect(dialog).toBeHidden();
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
-    // The edit is still there, which is the point of cancelling.
-    await expect(popupPage.getByTestId("snippet-save")).toBeEnabled();
+    await popupPage.locator(`#snippet-${older.id}`).click();
+    const undo = popupPage.getByTestId("snippet-undo");
+    await expect(undo).toBeEnabled();
+    await undo.click();
+
+    await expect
+      .poll(() => syncedContent(popupPage, older.id), { timeout: 10_000 })
+      .toBe("older body");
+    await expect(
+      popupPage.locator('[contenteditable="true"]')
+    ).not.toContainText("autosaved");
   });
 
-  test("discarding from the dialog lets the blocked navigation through", async ({
+  test("the sidebar preview follows the draft before it commits", async ({
     popupPage,
   }) => {
-    const { older, newer } = await seedTwo(popupPage);
+    const { older } = await seedTwo(popupPage);
     await popupPage.locator(`#snippet-${older.id}`).click();
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
-    await makeEditorDirty(popupPage);
 
-    await popupPage.locator(`#snippet-${newer.id}`).click();
-    const dialog = popupPage.getByRole("alertdialog");
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: /discard/i }).click();
+    // The URL changes before the keyed detail view swaps in; wait for the
+    // target's content so the keystrokes do not land in the outgoing editor.
+    const editor = popupPage.locator('[contenteditable="true"]');
+    await expect(editor).toContainText(older.content);
+    await editor.click();
+    await popupPage.keyboard.type(" autosaved");
 
-    // Not just "the dialog closed" — the navigation it was holding actually
-    // happened, once, and the blocker did not re-arm against it.
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${newer.id}$`));
-    await expect(dialog).toBeHidden();
-    // And a second attempt is not blocked: nothing is dirty about the new snippet.
-    await popupPage.locator(`#snippet-${older.id}`).click();
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
-    await expect(dialog).toBeHidden();
+    // The authoritative record is intentionally not overwritten by our own
+    // writes, so the row can only show this by reading the staged draft.
+    await expect(popupPage.locator(`#snippet-${older.id}`)).toContainText(
+      "autosaved"
+    );
   });
 
-  test("a dirty editor blocks the browser's Back button", async ({
+  test("undo restores the value the editor opened with, without switching snippets", async ({
+    popupPage,
+  }) => {
+    const { older } = await seedTwo(popupPage);
+    await popupPage.locator(`#snippet-${older.id}`).click();
+    await editSelectedSnippet(popupPage, older, " autosaved");
+
+    // Undo the staged draft before anything is committed. The restored value is
+    // the one the editor mounted with — the exact case the old external-value
+    // guard skipped because it compared against the initial value.
+    const undo = popupPage.getByTestId("snippet-undo");
+    await expect(undo).toBeEnabled();
+    await undo.click();
+
+    const editor = popupPage.locator('[contenteditable="true"]');
+    await expect(editor).toContainText("older body");
+    await expect(editor).not.toContainText("autosaved");
+  });
+
+  test("browser Back does not lose an edit", async ({
     popupPage,
     extensionId,
   }) => {
     const { older, newer } = await seedTwo(popupPage);
     await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${newer.id}$`));
 
-    // The popup's own navigation is replace-only (ADR 0011), so `history.length`
-    // never grows on its own and Back has nowhere to go. This same-document hash
-    // navigation is what gives it a previous entry — the same way a real user's
-    // Back arrives with somewhere to return to.
+    // The popup's own navigation is replace-only (ADR 0011), so a hash
+    // navigation from outside the router is what gives Back somewhere to go.
     await popupPage.goto(
       `chrome-extension://${extensionId}/popup.html#/snippet/${older.id}`
     );
     await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
-
-    // Give that entry the history index the router would have written had the
-    // popup pushed it itself. A hash navigation performed from outside the router
-    // copies the previous entry's state, so both entries claim the same index and
-    // the router reads the step as a delta of zero — which it answers by reloading
-    // rather than by stepping back. That is an artefact of manufacturing history
-    // depth here; a real entry always carries its own index.
     await popupPage.evaluate(() => {
       const state = (window.history.state ?? {}) as { __TSR_index?: number };
       window.history.replaceState(
@@ -870,35 +1291,53 @@ test.describe("Popup — unsaved changes block navigation", () => {
       );
     });
 
-    await makeEditorDirty(popupPage);
-
+    await editSelectedSnippet(popupPage, older, " before back");
     await popupPage.goBack();
 
-    const dialog = popupPage.getByRole("alertdialog");
-    await expect(dialog).toBeVisible();
-    // A POP is the browser's own move, so the address bar has already stepped back
-    // by the time the blocker is consulted. What proves the *app* did not navigate
-    // is that it is still showing the snippet being edited, with the edit still
-    // unsaved. Before the blocker, this navigation went through and the typed text
-    // went with it, silently.
-    await expect(popupPage.getByTestId("snippet-list")).toHaveAttribute(
-      "aria-activedescendant",
-      `snippet-${older.id}`
-    );
-    await expect(popupPage.getByTestId("snippet-save")).toBeEnabled();
-
-    // And answering "Keep editing" puts the address back where it was, so the
-    // blocked step is undone rather than merely deferred.
-    await dialog.getByRole("button", { name: /keep editing/i }).click();
-    await expect(dialog).toBeHidden();
-    await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));
+    // Before autosave, this navigation threw the typed text away. The edit is
+    // now flushed by the unmounting editor and committed in the background.
+    await expect
+      .poll(() => syncedContent(popupPage, older.id), { timeout: 10_000 })
+      .toContain("before back");
+    await expect(popupPage.getByRole("alertdialog")).toBeHidden();
   });
 
-  test("a clean editor navigates away without a prompt", async ({
+  test("records a local history snapshot of the replaced state", async ({
     popupPage,
   }) => {
-    // The control. Without it, every test above would also pass if the guard fired
-    // on all navigation — which is a worse bug than the one being fixed.
+    const { older, newer } = await seedTwo(popupPage);
+    await popupPage.locator(`#snippet-${older.id}`).click();
+    await editSelectedSnippet(popupPage, older, "recorded");
+    await popupPage.locator(`#snippet-${newer.id}`).click();
+    await expect
+      .poll(() => syncedContent(popupPage, older.id), { timeout: 10_000 })
+      .toContain("recorded");
+
+    type HistoryEntry = {
+      snippetId: string;
+      reason: string;
+      snapshot: { content: string };
+    };
+    await expect
+      .poll(
+        async () => {
+          const entries = (await readHistory(popupPage)) as HistoryEntry[];
+          return entries.some(
+            (entry) =>
+              entry.snippetId === older.id &&
+              entry.reason === "edit" &&
+              entry.snapshot.content === "older body"
+          );
+        },
+        { timeout: 10_000, message: "the replaced revision was never recorded" }
+      )
+      .toBe(true);
+  });
+
+  test("a clean editor still navigates away without a prompt", async ({
+    popupPage,
+  }) => {
+    // The control. Autosave must not add a prompt where none was needed.
     const { older, newer } = await seedTwo(popupPage);
     await popupPage.locator(`#snippet-${older.id}`).click();
     await expect(popupPage).toHaveURL(new RegExp(`#/snippet/${older.id}$`));

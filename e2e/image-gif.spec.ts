@@ -5,8 +5,7 @@
  *
  * 1. Popup auto-selects the most-recently-updated snippet on open
  *    (selectNewest fix — was selecting raw storage order instead of sorted order)
- * 2. Unsaved-changes guard — switching snippets with unsaved edits shows a
- *    confirm dialog and only navigates if the user confirms
+ * 2. Snippet edits are staged on blur and committed by the background queue
  * 3. Media blob → data URL bridge: background validates sender origin and
  *    rejects requests from non-extension senders
  * 4. Image alt text is carried through the media:get message and

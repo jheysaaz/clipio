@@ -1,23 +1,40 @@
 import { useState } from "react";
 import { Globe } from "lucide-react";
+
 import { Icon } from "@/components/ui/icon";
+import { getFaviconDomain } from "@/lib/blocked-sites";
+import { cn } from "@/lib/utils";
 
-export function SiteFavicon({ hostname }: { hostname: string }) {
-  const domain = hostname.startsWith("*.") ? hostname.slice(2) : hostname;
-  const [failed, setFailed] = useState(false);
+/**
+ * Favicon for a blocked-site entry.
+ *
+ * The domain is derived on every render so the same component can preview what
+ * the user is typing. A failed fetch is remembered by domain, not by a bare
+ * boolean: typing a new hostname must retry instead of staying on the globe.
+ */
+export function SiteFavicon({
+  hostname,
+  className,
+}: {
+  hostname: string;
+  className?: string;
+}) {
+  const domain = getFaviconDomain(hostname);
+  const [failedDomain, setFailedDomain] = useState<string | null>(null);
+  const failed = domain !== null && failedDomain === domain;
 
-  if (failed) {
-    return <Icon icon={Globe} className="text-muted-foreground" />;
+  if (!domain || failed) {
+    return (
+      <Icon icon={Globe} className={cn("text-muted-foreground", className)} />
+    );
   }
 
   return (
     <img
-      src={`https://www.google.com/s2/favicons?domain=${domain}&sz=16`}
+      src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`}
       alt=""
-      width={14}
-      height={14}
-      className="shrink-0 rounded-sm"
-      onError={() => setFailed(true)}
+      className={cn("size-6 shrink-0 rounded", className)}
+      onError={() => setFailedDomain(domain)}
     />
   );
 }

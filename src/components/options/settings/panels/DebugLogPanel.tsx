@@ -8,9 +8,10 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Copy, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { Check, Copy, Trash2 } from "lucide-react";
 
+import { useFeedback } from "@/components/feedback/FeedbackProvider";
+import { useControlConfirmation } from "@/components/feedback/use-control-confirmation";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import {
@@ -26,6 +27,8 @@ export function DebugLogPanel() {
   const [enabled, setEnabled] = useState(false);
   const [log, setLog] = useState<DebugLogEntry[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
+  const { confirmed, show, reset } = useControlConfirmation();
+  const { announce, showBanner, dismissBanner } = useFeedback();
 
   useEffect(() => {
     debugModeItem
@@ -72,10 +75,18 @@ export function DebugLogPanel() {
       .join("\n");
     try {
       await navigator.clipboard.writeText(text);
-      toast.success(i18n.t("options.developers.debugMode.copiedLog"));
+      const message = i18n.t("options.developers.debugMode.copiedLog");
+      show();
+      announce(message);
+      dismissBanner("debug-copy", { runOnDismiss: false });
     } catch (err) {
       captureError(err, { action: "copyDebugLog" });
-      toast.error(i18n.t("options.developers.debugMode.copyFailed"));
+      reset();
+      showBanner({
+        source: "debug-copy",
+        severity: "error",
+        message: i18n.t("options.developers.debugMode.copyFailed"),
+      });
     }
   };
 
@@ -103,9 +114,12 @@ export function DebugLogPanel() {
             className="h-7 text-xs"
             onClick={copyLog}
             disabled={log.length === 0}
+            aria-pressed={confirmed}
           >
-            <Icon icon={Copy} className="mr-1" />
-            {i18n.t("options.developers.debugMode.copyLog")}
+            <Icon icon={confirmed ? Check : Copy} className="mr-1" />
+            {confirmed
+              ? i18n.t("options.developers.debugMode.copiedLog")
+              : i18n.t("options.developers.debugMode.copyLog")}
           </Button>
           <Button
             size="sm"

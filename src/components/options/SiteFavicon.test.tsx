@@ -9,7 +9,7 @@ describe("SiteFavicon", () => {
 
     expect(container.querySelector("img")).toHaveAttribute(
       "src",
-      "https://www.google.com/s2/favicons?domain=example.com&sz=16"
+      "https://www.google.com/s2/favicons?domain=example.com&sz=64"
     );
   });
 
@@ -18,8 +18,15 @@ describe("SiteFavicon", () => {
 
     expect(container.querySelector("img")).toHaveAttribute(
       "src",
-      "https://www.google.com/s2/favicons?domain=example.org&sz=16"
+      "https://www.google.com/s2/favicons?domain=example.org&sz=64"
     );
+  });
+
+  it("renders a globe while the typed text is not yet a domain", () => {
+    const { container } = render(<SiteFavicon hostname="exa" />);
+
+    expect(container.querySelector("img")).not.toBeInTheDocument();
+    expect(container.querySelector("svg")).toBeInTheDocument();
   });
 
   it("falls back to a globe when the favicon fails to load", () => {
@@ -31,5 +38,21 @@ describe("SiteFavicon", () => {
     // A broken remote favicon must not leave a broken-image icon on screen.
     expect(container.querySelector("img")).not.toBeInTheDocument();
     expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("retries the favicon when the typed domain changes after a failure", () => {
+    const { container, rerender } = render(
+      <SiteFavicon hostname="example.com" />
+    );
+    fireEvent.error(container.querySelector("img")!);
+    expect(container.querySelector("svg")).toBeInTheDocument();
+
+    rerender(<SiteFavicon hostname="other.test" />);
+
+    // A remembered failure must be scoped to the domain it belonged to.
+    expect(container.querySelector("img")).toHaveAttribute(
+      "src",
+      "https://www.google.com/s2/favicons?domain=other.test&sz=64"
+    );
   });
 });

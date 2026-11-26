@@ -174,6 +174,46 @@ export async function readIndexedDbSnippets(page: Page): Promise<Snippet[]> {
 }
 
 /**
+ * Read local-only version history from its IndexedDB store.
+ *
+ * History never appears in sync, the content-script cache or an export, so the
+ * only way to prove an edit was actually recorded is to read this store in a
+ * real browser.
+ */
+export async function readHistory(page: Page): Promise<unknown[]> {
+  return page.evaluate(
+    async ({ dbName, version, storeName }) =>
+      new Promise<unknown[]>((resolve, reject) => {
+        const request = indexedDB.open(dbName, version);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains(storeName)) {
+            db.close();
+            resolve([]);
+            return;
+          }
+          const tx = db.transaction(storeName, "readonly");
+          const getAllRequest = tx.objectStore(storeName).getAll();
+          getAllRequest.onsuccess = () => {
+            db.close();
+            resolve(getAllRequest.result);
+          };
+          getAllRequest.onerror = () => {
+            db.close();
+            reject(getAllRequest.error);
+          };
+        };
+      }),
+    {
+      dbName: IDB_CONFIG.DB_NAME,
+      version: IDB_CONFIG.VERSION,
+      storeName: IDB_CONFIG.HISTORY_STORE_NAME,
+    }
+  );
+}
+
+/**
  * Write snippets straight into the IndexedDB backup store.
  *
  * The recovery banner is driven by `tryRecoverFromBackup()`, which reads this

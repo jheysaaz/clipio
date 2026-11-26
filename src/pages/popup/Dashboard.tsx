@@ -7,40 +7,38 @@ import {
   lazy,
   Suspense,
 } from "react";
-import {
-  useNavigate,
-  useRouterState,
-  useBlocker,
-  type ShouldBlockFn,
-} from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { i18n } from "#i18n";
 import {
   Plus,
   Search,
   Loader2,
-  PanelLeftClose,
-  PanelLeft,
   Settings,
   Clipboard,
   ArrowDownUp,
+  PanelLeft,
+  PanelLeftClose,
+  Trash2,
 } from "lucide-react";
+import {
+  FeedbackBanner,
+  useFeedback,
+} from "@/components/feedback/FeedbackProvider";
 import { Icon } from "@/components/ui/icon";
+import { InlineAction } from "@/components/ui/inline-action";
 import SnippetListItem from "@/components/SnippetListItem";
-import ConfirmDialog from "@/components/ConfirmDialog";
-const SnippetDetailView = lazy(() => import("~/components/SnippetDetailView"));
-const NewSnippetView = lazy(() => import("~/components/NewSnippetView"));
+const SnippetEditor = lazy(() => import("~/components/SnippetEditor"));
 import { InlineError } from "@/components/ui/inline-error";
-import { toast } from "sonner";
 
-import type { Snippet } from "@/types";
+import type { Snippet, SnippetFormData } from "@/types";
+import { createSnippet } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   initialiseSnippets,
-  addSnippet,
-  editSnippet,
-  removeSnippet,
+  EMPTY_DRAFT,
+  setIsSaving,
   restoreRecoveredSnippets,
   dismissRecoveryBanner,
   dismissRecoveryError,
@@ -49,17 +47,19 @@ import {
   dismissLoadError,
   dismissCreateError,
   findSnippet,
+  refreshSnippets,
   rememberSnippetView,
   resolveInitialSnippet,
   setDraft,
   useSnippets,
+  snippetsStore,
 } from "@/store/snippets";
 import { setSearchQuery, useSearch, useVisibleSnippets } from "@/store/search";
-import { WarningBanner } from "@/components/ui/warning-banner";
 import {
   contextMenuDraftItem,
   latestVersionItem,
   dismissedUpdateVersionItem,
+  editorDraftsItem,
 } from "@/storage/items";
 import { captureError } from "@/lib/sentry";
 import {
@@ -68,6 +68,20 @@ import {
   SIDEBAR_MIN_WIDTH,
 } from "@/config/constants";
 import { selectNewest } from "@/lib/snippet-utils";
+import {
+  fieldsFromForm,
+  fieldsFromSnippet,
+  validateEditorFields,
+} from "@/lib/snippet-draft";
+import {
+  discardDraft,
+  enqueueDelete,
+  enqueueRestore,
+  flushDraft,
+  stageProvisionalDraft,
+  waitForSnippetCommit,
+  watchWriteQueueStatus,
+} from "@/store/write-queue";
 import { blankSnippetDraft } from "@/lib/trigger-prefix";
 import {
   nudgeSidebarWidth,
@@ -77,18 +91,26 @@ import {
   useSidebarWidth,
   setSidebarOpen as storeSetSidebarOpen,
 } from "@/store/sidebar";
-import { openReleasePage } from "@/lib/update-checker";
-import {
-  LIST_ROUTE,
-  NEW_ROUTE,
-  SNIPPET_ROUTE,
-  viewFromPath,
-} from "@/routes/popup";
+import { openReleasePage, shouldShowUpdateAlert } from "@/lib/update-checker";
+import { NEW_ROUTE, SNIPPET_ROUTE, viewFromPath } from "@/routes/popup";
 
 const CONTEXT_MENU_DRAFT_SESSION_KEY = "__clipioContextMenuDraft__";
 
+type DeletedSnippet = {
+  snippet: Snippet;
+  /** Where it sat in the sidebar, so Undo can put it back in the same row. */
+  index: number;
+};
+
 export default function Dashboard() {
   const navigate = useNavigate();
+
+  const [deletedSnippet, setDeletedSnippet] = useState<DeletedSnippet | null>(
+    null
+  );
+  const deletedMessageRef = useRef<HTMLDivElement>(null);
+  const [pendingNameFocus, setPendingNameFocus] = useState(false);
+  const { showBanner, dismissBanner, announce } = useFeedback();
 
   // Which snippet is selected, and whether the create form is open, are now the
   // URL. That is what gives a selection an address: a future "open this specific
@@ -105,6 +127,7 @@ export default function Dashboard() {
 
   const selectSnippet = useCallback(
     (id: string) => {
+      setDeletedSnippet(null);
       // Recorded here rather than in the route, so a deep link is remembered too —
       // the user did view it. Fire-and-forget: navigation must not wait on a
       // storage write.
@@ -117,10 +140,8 @@ export default function Dashboard() {
     },
     [navigate]
   );
-  const showList = useCallback(() => {
-    void navigate({ to: LIST_ROUTE, replace: true });
-  }, [navigate]);
   const startCreating = useCallback(() => {
+    setDeletedSnippet(null);
     void navigate({ to: NEW_ROUTE, replace: true });
   }, [navigate]);
 
@@ -131,8 +152,6 @@ export default function Dashboard() {
   // time, which is how "Save selection" could open a form with nothing in it.
   const draftSnippet = useSnippets((s) => s.draft);
   const setDraftSnippet = setDraft;
-  const isSaving = useSnippets((s) => s.isSaving);
-
   // The library, its load state, the storage warnings and the recovery banner all
   // live in `src/store/snippets.ts`. They used to be eight `useState` calls here,
   // set from five separate effects — and nothing listened for changes made in
@@ -177,66 +196,35 @@ export default function Dashboard() {
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const draggingRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
-
-  // -------------------------------------------------------------------------
-  // The unsaved-changes guard
-  // -------------------------------------------------------------------------
-  //
-  // `useBlocker` is the router's own mechanism, so one code path guards every way
-  // out of a dirty editor: a sidebar click, an arrow key, "Add snippet", the
-  // browser's Back and Forward. It was a `pendingSnippet` store field consulted by
-  // the sidebar row alone, which left Back — the one a popup user actually reaches
-  // for — walking straight past it and dropping the edit.
-  //
-  // The popup's own navigation stays `replace`-only (ADR 0011). Blocking does not
-  // change that: a blocked navigation simply does not happen, so `history.length`
-  // still never grows.
-
-  const detailHasChanges = useRef(false);
-
   /**
-   * Whether this navigation would throw away an edit.
-   *
-   * A ref, not state: it is written from the editor's own effect on every
-   * keystroke, and `useBlocker` re-registers its listener whenever this function's
-   * identity changes — so state here would tear the blocker down and rebuild it
-   * per character.
-   *
-   * `useCallback` for the same reason, and with no dependencies on purpose: the ref
-   * it reads is stable for the life of the popup.
-   *
-   * Only a *different* address is guarded. Re-selecting the snippet already open
-   * replaces the location with the one the router is already at, and a dialog
-   * warning about edits that are not going anywhere would be a lie.
+   * One id for the whole create session. It is state, not a ref: the id appears
+   * in the JSX passed to the detail pane, and a ref read during render is both
+   * a lint error and a stale-value trap when the create route is entered
+   * directly. The id is not the authoritative record — the draft map is — it
+   * only gives autosave and Create the same key.
    */
-  const shouldBlockNavigation: ShouldBlockFn = useCallback(
-    ({ current, next }) =>
-      detailHasChanges.current && current.pathname !== next.pathname,
-    []
+  const [provisionalCreateId, setProvisionalCreateId] = useState<string | null>(
+    null
   );
-
-  const blocker = useBlocker({
-    shouldBlockFn: shouldBlockNavigation,
-    // No `beforeunload`: the popup is torn down on blur, so there is no document
-    // unload for a prompt to be *about* — only one the user cannot answer.
-    enableBeforeUnload: false,
-    withResolver: true,
-  });
+  /** One create per draft: the debounce can fire many times before the commit. */
+  const createStartedRef = useRef(false);
 
   /**
-   * Let a blocked navigation happen.
-   *
-   * The dirty flag is cleared first, and it has to be. The editor is about to
-   * unmount without ever reporting `false` — `SnippetDetailView` only reports on a
-   * *change* — so leaving the flag set would re-arm the blocker against the very
-   * navigation being permitted, and against every one after it: navigating to
-   * `#/list` mounts no editor to correct it, and the next selection would raise the
-   * dialog again, about nothing.
+   * The new-snippet detail pane needs a Snippet-shaped value for the shared
+   * editor, but the record must not enter the library until Create. The route
+   * still addresses it as `#/new`; only the id is provisional.
    */
-  const confirmBlockedNavigation = useCallback(() => {
-    detailHasChanges.current = false;
-    blocker.proceed?.();
-  }, [blocker]);
+  const provisionalSnippet = useMemo<Snippet | null>(() => {
+    if (!isCreating) return null;
+    return {
+      ...createSnippet(draftSnippet, "unknown"),
+      id: provisionalCreateId ?? "new-provisional",
+    };
+  }, [isCreating, draftSnippet, provisionalCreateId]);
+
+  // Edits are staged locally and committed by the background queue, so there is
+  // no unsaved-changes dialog to guard navigation: the work survives a popup blur
+  // or a snippet switch without asking the user to choose between them.
 
   // ---------------------------------------------------------------------------
   // Sidebar resize
@@ -341,6 +329,8 @@ export default function Dashboard() {
           // Prefilled from the configured trigger prefix, read fresh: a value
           // captured at module load is stale for the life of the popup, and
           // "change it in Options, reopen the popup" is exactly the case.
+          createStartedRef.current = false;
+          setProvisionalCreateId(null);
           setDraftSnippet(await blankSnippetDraft(draft));
           startCreating();
           return;
@@ -358,6 +348,8 @@ export default function Dashboard() {
                 action: "loadContextMenuDraft.clearSession",
               });
             });
+          createStartedRef.current = false;
+          setProvisionalCreateId(null);
           setDraftSnippet(await blankSnippetDraft(sessionDraft));
           startCreating();
         }
@@ -413,23 +405,200 @@ export default function Dashboard() {
     })();
   }, [navigate]);
 
-  // Check for available update banner
+  // The queue is owned by the background. Watching it here is what lets the
+  // editor's one status slot leave `Saving…` when the worker commits the draft.
+  useEffect(() => watchWriteQueueStatus(), []);
+
+  // Check for available update banner. The background checker writes these
+  // items asynchronously, so a one-shot read can miss a release found after the
+  // popup opens. Watch both items so the banner reacts to changes in place.
+  const updateReleaseRef = useRef<{
+    version: string;
+    htmlUrl: string;
+    publishedAt: string;
+  } | null>(null);
   useEffect(() => {
+    let mounted = true;
+    const apply = (
+      release: typeof updateReleaseRef.current,
+      dismissed: string
+    ) => {
+      updateReleaseRef.current = release;
+      setUpdateRelease(release);
+      setShowUpdateBanner(shouldShowUpdateAlert(release, dismissed));
+    };
+
     (async () => {
       try {
         const [release, dismissed] = await Promise.all([
           latestVersionItem.getValue(),
           dismissedUpdateVersionItem.getValue(),
         ]);
-        if (release && release.version !== dismissed) {
-          setUpdateRelease(release);
-          setShowUpdateBanner(true);
-        }
+        if (mounted) apply(release, dismissed ?? "");
       } catch (err) {
         captureError(err, { action: "loadUpdateBanner" });
       }
     })();
+
+    const unwatchRelease = latestVersionItem.watch((release) => {
+      if (!mounted) return;
+      void dismissedUpdateVersionItem
+        .getValue()
+        .then((dismissed) => {
+          if (mounted) apply(release, dismissed ?? "");
+        })
+        .catch((err: unknown) => {
+          captureError(err, { action: "loadUpdateBanner.watch" });
+        });
+    });
+    const unwatchDismissed = dismissedUpdateVersionItem.watch((dismissed) => {
+      if (mounted) apply(updateReleaseRef.current, dismissed ?? "");
+    });
+
+    return () => {
+      mounted = false;
+      unwatchRelease();
+      unwatchDismissed();
+    };
   }, []);
+
+  useEffect(() => {
+    if (loading) announce(i18n.t("dashboard.loadingSnippets"));
+  }, [loading, announce]);
+
+  useEffect(() => {
+    if (deletedSnippet) deletedMessageRef.current?.focus();
+  }, [deletedSnippet]);
+
+  useEffect(() => {
+    if (!pendingNameFocus) return;
+
+    const focus = () => {
+      const input = document.querySelector<HTMLInputElement>(
+        '[data-testid="snippet-label-input"]'
+      );
+      if (!input) return false;
+      input.focus();
+      return true;
+    };
+
+    if (focus()) {
+      // Defer clearing the flag out of the effect body so React does not report
+      // a cascading render; the observer below is subscription-only.
+      queueMicrotask(() => setPendingNameFocus(false));
+      return;
+    }
+
+    // The editor is lazy-loaded, so the input can arrive a frame after Undo
+    // restores the route. Watch for it rather than guessing a delay.
+    const observer = new MutationObserver(() => {
+      if (focus()) {
+        setPendingNameFocus(false);
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [pendingNameFocus]);
+
+  useEffect(() => {
+    if (!showRecoveryBanner) {
+      dismissBanner("recovery", { runOnDismiss: false });
+      return;
+    }
+    showBanner({
+      source: "recovery",
+      severity: "error",
+      testId: "warning-uninstall",
+      message: i18n.t(
+        "dashboard.warnings.recovery.body",
+        recoverySnippets.length
+      ),
+      action: {
+        label: i18n.t(
+          "dashboard.warnings.recovery.action",
+          recoverySnippets.length
+        ),
+        onClick: async () => {
+          const result = await restoreRecoveredSnippets();
+          if (!result.ok) return;
+          const newest = selectNewest(result.value);
+          if (newest) selectSnippet(newest.id);
+        },
+      },
+      onDismiss: dismissRecoveryBanner,
+    });
+  }, [
+    showRecoveryBanner,
+    recoverySnippets.length,
+    dismissRecoveryBanner,
+    showBanner,
+    dismissBanner,
+    selectSnippet,
+  ]);
+
+  useEffect(() => {
+    if (!quotaWarning) {
+      dismissBanner("quota", { runOnDismiss: false });
+      return;
+    }
+    showBanner({
+      source: "quota",
+      severity: "error",
+      testId: "warning-quota",
+      message: i18n.t("dashboard.warnings.quotaFull.body"),
+      action: {
+        label: i18n.t("dashboard.warnings.quotaFull.action"),
+        onClick: () => browser.runtime.openOptionsPage(),
+      },
+      onDismiss: dismissQuotaWarning,
+    });
+  }, [quotaWarning, dismissQuotaWarning, showBanner, dismissBanner]);
+
+  useEffect(() => {
+    if (!syncPausedWarning) {
+      dismissBanner("sync-paused", { runOnDismiss: false });
+      return;
+    }
+    showBanner({
+      source: "sync-paused",
+      severity: "error",
+      testId: "warning-sync-paused",
+      message: i18n.t("dashboard.warnings.syncPaused.body"),
+      action: {
+        label: i18n.t("dashboard.warnings.syncPaused.action"),
+        onClick: () => browser.runtime.openOptionsPage(),
+      },
+      onDismiss: dismissSyncPausedWarning,
+    });
+  }, [syncPausedWarning, dismissSyncPausedWarning, showBanner, dismissBanner]);
+
+  useEffect(() => {
+    if (!showUpdateBanner || !updateRelease) {
+      dismissBanner("update", { runOnDismiss: false });
+      return;
+    }
+    const version = updateRelease.version;
+    showBanner({
+      source: "update",
+      severity: "info",
+      testId: "warning-update",
+      message: i18n.t("dashboard.warnings.updateAvailable.body", [version]),
+      action: {
+        label: i18n.t("dashboard.warnings.updateAvailable.action"),
+        onClick: () => {
+          void openReleasePage(updateRelease.htmlUrl);
+          dismissBanner("update", { runOnDismiss: false });
+          dismissedUpdateVersionItem.setValue(version).catch(console.warn);
+          setShowUpdateBanner(false);
+        },
+      },
+      onDismiss: () => {
+        dismissedUpdateVersionItem.setValue(version).catch(console.warn);
+        setShowUpdateBanner(false);
+      },
+    });
+  }, [showUpdateBanner, updateRelease, showBanner, dismissBanner]);
 
   /**
    * Land on something when the URL does not already say what to show: the last
@@ -464,7 +633,8 @@ export default function Dashboard() {
     // another device's sync, or be replaced by an import, and a stale id must not
     // leave the popup on a blank pane.
     const initial = resolveInitialSnippet(snippets, lastViewedSnippetId);
-    if (initial) selectSnippet(initial.id);
+    // Navigation is a state change too. Let the effect finish before it runs.
+    if (initial) queueMicrotask(() => selectSnippet(initial.id));
   }, [
     snippets,
     lastViewedSnippetId,
@@ -477,71 +647,217 @@ export default function Dashboard() {
   // CRUD helpers
   // -------------------------------------------------------------------------
 
-  // Async because the shortcut default comes from storage. Not pre-filled in
-  // `NewSnippetView` on mount instead: this sets the draft *before* navigating, so
-  // the form mounts with a non-empty shortcut and a mount-time prefill would be
-  // skipped — and if it were not, it would be a second writer racing the draft it
-  // was handed.
+  const ensureProvisionalCreateId = useCallback(() => {
+    if (provisionalCreateId) return provisionalCreateId;
+    const id = crypto.randomUUID();
+    setProvisionalCreateId(id);
+    return id;
+  }, [provisionalCreateId]);
+
+  function createErrorFor(problem?: string): string {
+    return problem === "emptyLabel"
+      ? i18n.t("snippetDetail.errors.emptyLabel")
+      : problem === "emptyShortcut"
+        ? i18n.t("snippetDetail.errors.emptyShortcut")
+        : problem === "shortcutSpaces"
+          ? i18n.t("snippetDetail.errors.shortcutSpaces")
+          : problem === "shortcutConflict"
+            ? i18n.t("snippetDetail.errors.shortcutConflict")
+            : problem === "emptyContent"
+              ? i18n.t("snippetDetail.errors.emptyContent")
+              : problem === "malformedMedia"
+                ? i18n.t("snippetDetail.errors.malformedMedia")
+                : i18n.t("snippetDetail.errors.failedToSave");
+  }
+
+  /**
+   * Autosave a draft. Once the debounced fields are valid, the first save is also
+   * the create: the provisional id becomes the real record and the route follows
+   * it. Later autosaves of the same draft stage an edit, never a second create.
+   */
+  const handleAutoSaveNewSnippet = useCallback(
+    async (draft: SnippetFormData) => {
+      const id = ensureProvisionalCreateId();
+      await stageProvisionalDraft(id, draft);
+
+      const validation = validateEditorFields(
+        fieldsFromForm(draft),
+        snippetsStore.state.snippets
+      );
+      // A half-typed draft is still protected in `local:editorDrafts`; it just
+      // is not a record yet. The next autosave tries again with the full fields.
+      if (!validation.ok || createStartedRef.current) return;
+
+      createStartedRef.current = true;
+      setIsSaving(true);
+      try {
+        const result = await flushDraft(id, snippetsStore.state.snippets);
+        if (!result.ok) {
+          createStartedRef.current = false;
+          snippetsStore.setState((prev) => ({
+            ...prev,
+            createError: createErrorFor(result.error),
+          }));
+          return;
+        }
+
+        const outcome = await waitForSnippetCommit(id);
+        if (outcome) {
+          createStartedRef.current = false;
+          snippetsStore.setState((prev) => ({
+            ...prev,
+            createError:
+              outcome.error ?? i18n.t("snippetDetail.errors.failedToSave"),
+          }));
+          return;
+        }
+
+        // Re-read rather than appending a local copy: a storage change may have
+        // refreshed the library already, and an append would show the snippet
+        // twice with stale metadata.
+        await refreshSnippets();
+        snippetsStore.setState((prev) => ({
+          ...prev,
+          draft: { ...EMPTY_DRAFT },
+          createError: null,
+        }));
+        setProvisionalCreateId(null);
+        selectSnippet(id);
+      } catch (error) {
+        captureError(error, { action: "dashboard.create" });
+        createStartedRef.current = false;
+        snippetsStore.setState((prev) => ({
+          ...prev,
+          createError: i18n.t("snippetDetail.errors.failedToSave"),
+        }));
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [ensureProvisionalCreateId, selectSnippet]
+  );
+
+  /**
+   * Start a create session, resuming a draft left by a popup that closed on blur.
+   *
+   * The id travels with the draft. A fresh id here would stage the recovered
+   * fields under a second record, which is exactly how one create turned into two
+   * snippets.
+   */
+  const createSessionDraft = async (
+    content?: string
+  ): Promise<{ id: string; draft: SnippetFormData }> => {
+    if (content === undefined) {
+      const drafts = await editorDraftsItem.getValue();
+      const recovered = Object.values(drafts ?? {}).find((item) => item.isNew);
+      if (recovered) {
+        return {
+          id: recovered.id,
+          draft: {
+            label: recovered.fields.label,
+            shortcut: recovered.fields.shortcut,
+            content: recovered.fields.content,
+            tags: [...(recovered.fields.tags ?? [])],
+          },
+        };
+      }
+    }
+    return {
+      id: crypto.randomUUID(),
+      draft: await blankSnippetDraft(content ?? ""),
+    };
+  };
+
+  // Async because the shortcut default comes from storage. Set before navigating
+  // so the detail pane mounts with a non-empty shortcut.
   const handleAddSnippet = async () => {
-    setDraftSnippet(await blankSnippetDraft());
+    const session = await createSessionDraft();
+    createStartedRef.current = false;
+    setProvisionalCreateId(session.id);
+    setDraftSnippet(session.draft);
     startCreating();
   };
 
-  const handleCancelCreate = async () => {
-    setDraftSnippet(await blankSnippetDraft());
-    const newest = selectNewest(snippets);
-    if (newest) selectSnippet(newest.id);
-    else showList();
-  };
-
-  const handleSaveNewSnippet = async () => {
-    if (
-      !draftSnippet.label.trim() ||
-      !draftSnippet.shortcut.trim() ||
-      !draftSnippet.content.trim()
-    )
-      return;
-
-    // `addSnippet` owns the saving flag, the error and the draft reset, so the
-    // button cannot stay disabled after a refusal and the message cannot be shown
-    // against a draft that has already been cleared.
-    const result = await addSnippet(draftSnippet);
-    if (!result.ok) {
-      // The create view stays OPEN. Closing it here unmounts `NewSnippetView`,
-      // which is the component that renders `createError` — so the explanation was
-      // set and then immediately made invisible and the user watched their snippet
-      // silently not save. Keeping the form open also lets them shorten the
-      // snippet and retry without starting over.
-      return;
-    }
-    // Address the new snippet rather than only showing it: the id is now in the
-    // URL, so "copy link to this snippet" needs no work to start working.
-    selectSnippet(result.value.id);
-    toast.success(i18n.t("dashboard.toast.snippetSaved"));
-  };
-
   const handleDeleteSnippet = async (snippetId: string) => {
-    // `removeSnippet` throws on failure; this propagates to the delete dialog,
-    // which shows a message rather than pretending it worked.
-    const { remaining } = await removeSnippet(snippetId);
-    // The snippet is gone, so there is nothing left for the unsaved-changes guard
-    // to protect — and the navigation below would otherwise be blocked by edits to
-    // a snippet that no longer exists, raising the dialog *after* the delete had
-    // already succeeded.
-    detailHasChanges.current = false;
-    // Deleting the addressed snippet has to move the address too, or the URL
-    // would keep pointing at something that no longer exists.
-    if (selectedSnippetId === snippetId) {
-      const newest = selectNewest(remaining);
-      if (newest) selectSnippet(newest.id);
-      else showList();
+    const snippetsInStore = snippetsStore.state.snippets;
+    const snippet = findSnippet(snippetsInStore, snippetId);
+    if (!snippet) return;
+    const index = snippetsInStore.findIndex((s) => s.id === snippetId);
+
+    try {
+      await discardDraft(snippetId);
+      await enqueueDelete(snippet);
+      const outcome = await waitForSnippetCommit(snippetId);
+      if (outcome) {
+        showBanner({
+          source: "delete",
+          severity: "error",
+          message:
+            outcome.error ?? i18n.t("snippetDetail.errors.failedToDelete"),
+        });
+        return;
+      }
+
+      snippetsStore.setState((prev) => ({
+        ...prev,
+        snippets: prev.snippets.filter((s) => s.id !== snippetId),
+      }));
+      // The address deliberately still names the deleted snippet. No other
+      // snippet takes over; the deleted pane owns this address until the user
+      // navigates away, which is what keeps Undo available indefinitely.
+      setDeletedSnippet({ snippet, index });
+      announce(i18n.t("snippetDetail.deleted.live"));
+    } catch (error) {
+      captureError(error, { action: "dashboard.delete", snippetId });
+      showBanner({
+        source: "delete",
+        severity: "error",
+        message: i18n.t("snippetDetail.errors.failedToDelete"),
+      });
     }
-    toast.success(i18n.t("dashboard.toast.snippetDeleted"));
   };
 
-  const handleUpdateSnippet = async (updated: Snippet) => {
-    await editSnippet(updated);
-    toast.success(i18n.t("dashboard.toast.snippetUpdated"));
+  /** Restore the retained copy, at the same row, from a no-timer deleted pane. */
+  const handleUndoDelete = async () => {
+    if (!deletedSnippet) return;
+    const { snippet, index } = deletedSnippet;
+
+    try {
+      await enqueueRestore(snippet, fieldsFromSnippet(snippet));
+      const outcome = await waitForSnippetCommit(snippet.id);
+      if (outcome) {
+        showBanner({
+          source: "undo-delete",
+          severity: "error",
+          message: outcome.error ?? i18n.t("snippetDetail.errors.failedToSave"),
+        });
+        return;
+      }
+
+      // Reinsert the retained copy rather than refreshing from storage: order
+      // is part of what the user is getting back.
+      snippetsStore.setState((prev) => {
+        const without = prev.snippets.filter((s) => s.id !== snippet.id);
+        const at = Math.min(index, without.length);
+        return {
+          ...prev,
+          snippets: [...without.slice(0, at), snippet, ...without.slice(at)],
+        };
+      });
+      setDeletedSnippet(null);
+      setPendingNameFocus(true);
+      selectSnippet(snippet.id);
+    } catch (error) {
+      captureError(error, {
+        action: "dashboard.restore",
+        snippetId: snippet.id,
+      });
+      showBanner({
+        source: "undo-delete",
+        severity: "error",
+        message: i18n.t("snippetDetail.errors.failedToSave"),
+      });
+    }
   };
 
   // -------------------------------------------------------------------------
@@ -612,79 +928,7 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-full select-none">
-      {/* Sign-out recovery banner */}
-      {showRecoveryBanner && (
-        <WarningBanner
-          testId="warning-uninstall"
-          action={{
-            label: i18n.t(
-              "dashboard.warnings.recovery.action",
-              recoverySnippets.length
-            ),
-            onClick: async () => {
-              const result = await restoreRecoveredSnippets();
-              if (!result.ok) return;
-              const newest = selectNewest(result.value);
-              if (newest) selectSnippet(newest.id);
-            },
-          }}
-          onDismiss={dismissRecoveryBanner}
-        >
-          {i18n.t("dashboard.warnings.recovery.body", recoverySnippets.length)}
-        </WarningBanner>
-      )}
       <InlineError message={recoveryError} onDismiss={dismissRecoveryError} />
-
-      {/* Quota warning banner — only shown when sync quota was actually exceeded */}
-      {quotaWarning && (
-        <WarningBanner
-          testId="warning-quota"
-          action={{
-            label: i18n.t("dashboard.warnings.quotaFull.action"),
-            onClick: () => browser.runtime.openOptionsPage(),
-          }}
-          onDismiss={dismissQuotaWarning}
-        >
-          {i18n.t("dashboard.warnings.quotaFull.body")}
-        </WarningBanner>
-      )}
-
-      {/* Sync paused banner — shown when user manually switched to local */}
-      {syncPausedWarning && (
-        <WarningBanner
-          testId="warning-sync-paused"
-          action={{
-            label: i18n.t("dashboard.warnings.syncPaused.action"),
-            onClick: () => browser.runtime.openOptionsPage(),
-          }}
-          onDismiss={dismissSyncPausedWarning}
-        >
-          {i18n.t("dashboard.warnings.syncPaused.body")}
-        </WarningBanner>
-      )}
-
-      {/* Update available banner */}
-      {showUpdateBanner && updateRelease && (
-        <WarningBanner
-          testId="warning-update"
-          action={{
-            label: i18n.t("dashboard.warnings.updateAvailable.action"),
-            onClick: () => {
-              void openReleasePage(updateRelease.htmlUrl);
-            },
-          }}
-          onDismiss={() => {
-            dismissedUpdateVersionItem
-              .setValue(updateRelease.version)
-              .catch(console.warn);
-            setShowUpdateBanner(false);
-          }}
-        >
-          {i18n.t("dashboard.warnings.updateAvailable.body", [
-            updateRelease.version,
-          ])}
-        </WarningBanner>
-      )}
 
       {/* Master-Detail Layout */}
       <div className="flex-1 flex overflow-hidden">
@@ -712,7 +956,7 @@ export default function Dashboard() {
           />
 
           {/* Search Bar */}
-          <div className="px-2 py-2 border-b">
+          <div className="px-2 pb-1 pt-2">
             <div className="relative">
               <Icon
                 icon={Search}
@@ -744,15 +988,11 @@ export default function Dashboard() {
           <ScrollArea className="flex-1 min-w-0 min-h-0">
             <div className="p-2 pb-14 overflow-hidden">
               {loading ? (
-                <div
-                  className="flex flex-col items-center justify-center py-12 gap-3"
-                  role="status"
-                  aria-live="polite"
-                >
+                <div className="flex flex-col items-center justify-center gap-3 py-12">
                   <Icon
                     icon={Loader2}
                     size="xl"
-                    className="animate-spin text-muted-foreground"
+                    className="animate-spin text-muted-foreground motion-reduce:hidden"
                   />
                   <p className="text-xs text-muted-foreground">
                     {i18n.t("dashboard.loadingSnippets")}
@@ -829,11 +1069,8 @@ export default function Dashboard() {
                         selectedSnippet?.id === snippet.id && !isCreating
                       }
                       onClick={() => {
-                        // No dirty check here on purpose. `selectSnippet` goes
-                        // through the router, so `useBlocker` already intercepted
-                        // this if the editor had unsaved changes — a second guard
-                        // would be a second answer to the same question, and the
-                        // two could disagree.
+                        // No dirty check here on purpose. Edits are staged in
+                        // local storage, so switching snippets cannot lose them.
                         if (isCreating) {
                           setDraftSnippet({
                             label: "",
@@ -844,7 +1081,6 @@ export default function Dashboard() {
                         }
                         selectSnippet(snippet.id);
                       }}
-                      onUpdate={handleUpdateSnippet}
                     />
                   ))}
                 </div>
@@ -853,7 +1089,7 @@ export default function Dashboard() {
           </ScrollArea>
 
           {/* Add Snippet + Settings */}
-          <div className="px-2 py-2 border-t flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 px-2 py-2">
             <Button
               data-testid="add-snippet"
               onClick={handleAddSnippet}
@@ -866,7 +1102,10 @@ export default function Dashboard() {
               data-testid="settings-button"
               variant="outline"
               size="icon"
-              onClick={() => browser.runtime.openOptionsPage()}
+              onClick={() => {
+                setDeletedSnippet(null);
+                browser.runtime.openOptionsPage();
+              }}
               className="h-8 w-8 shrink-0 rounded-lg"
               title={i18n.t("dashboard.settingsAndExport")}
               aria-label={i18n.t("dashboard.settingsAndExport")}
@@ -877,8 +1116,63 @@ export default function Dashboard() {
         </div>
 
         {/* Right Content - Detail */}
-        <div className="flex-1 flex flex-col bg-background">
-          {isCreating ? (
+        <div
+          data-testid="dashboard-main-pane"
+          className="flex-1 flex flex-col bg-background"
+        >
+          <FeedbackBanner />
+
+          {deletedSnippet && !isCreating && (
+            <div className="flex flex-1 flex-col">
+              <div className="flex h-11 items-center border-b border-border px-2">
+                <Button
+                  data-testid="snippet-toggle-sidebar"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  aria-label={i18n.t(
+                    sidebarOpen
+                      ? "snippetEditor.sidebarHideLabel"
+                      : "snippetEditor.sidebarShowLabel"
+                  )}
+                  title={i18n.t(
+                    sidebarOpen
+                      ? "snippetEditor.sidebarHideTooltip"
+                      : "snippetEditor.sidebarShowTooltip"
+                  )}
+                  className="size-8"
+                >
+                  <Icon
+                    icon={sidebarOpen ? PanelLeftClose : PanelLeft}
+                    stroke="emphasis"
+                  />
+                </Button>
+              </div>
+              <div className="flex flex-1 items-center justify-center p-8">
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <div className="flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                    <Icon icon={Trash2} size="xl" />
+                  </div>
+                  <p
+                    ref={deletedMessageRef}
+                    tabIndex={-1}
+                    data-testid="snippet-deleted-message"
+                    className="text-base font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {i18n.t("snippetDetail.deleted.title")}
+                  </p>
+                  <InlineAction
+                    data-testid="snippet-undo-delete"
+                    onClick={() => void handleUndoDelete()}
+                  >
+                    {i18n.t("snippetDetail.deleted.undo")}
+                  </InlineAction>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!deletedSnippet && (isCreating || selectedSnippet) && (
             <Suspense
               fallback={
                 <div className="flex items-center justify-center flex-1">
@@ -890,177 +1184,84 @@ export default function Dashboard() {
                 </div>
               }
             >
-              <NewSnippetView
-                draftSnippet={draftSnippet}
+              <SnippetEditor
+                key={isCreating ? "new" : selectedSnippet!.id}
+                snippet={(isCreating ? provisionalSnippet : selectedSnippet)!}
+                draft={isCreating ? draftSnippet : undefined}
                 onDraftChange={setDraftSnippet}
-                onSave={handleSaveNewSnippet}
-                onCancel={handleCancelCreate}
-                isSaving={isSaving}
+                onAutoSave={handleAutoSaveNewSnippet}
                 createError={createError}
                 onClearCreateError={dismissCreateError}
-                sidebarOpen={sidebarOpen}
-                onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
                 existingSnippets={snippets}
-              />
-            </Suspense>
-          ) : selectedSnippet ? (
-            <Suspense
-              fallback={
-                <div className="flex items-center justify-center flex-1">
-                  <Icon
-                    icon={Loader2}
-                    size="xl"
-                    className="animate-spin text-muted-foreground"
-                  />
-                </div>
-              }
-            >
-              <SnippetDetailView
-                key={selectedSnippet.id}
-                snippet={selectedSnippet}
                 onDelete={handleDeleteSnippet}
-                onUpdate={handleUpdateSnippet}
                 sidebarOpen={sidebarOpen}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-                onHasChanges={(v) => {
-                  detailHasChanges.current = v;
-                }}
               />
             </Suspense>
-          ) : snippets.length === 0 && !loading ? (
-            /* Empty state when no snippets exist */
-            <>
-              <div className="px-3 py-2 border-b flex items-center">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSidebarOpen(!sidebarOpen)}
-                  className="h-8 w-8"
-                  title={
-                    sidebarOpen
-                      ? i18n.t("common.hideSidebar")
-                      : i18n.t("common.showSidebar")
-                  }
-                  aria-label={
-                    sidebarOpen
-                      ? i18n.t("common.hideSidebar")
-                      : i18n.t("common.showSidebar")
-                  }
-                >
-                  {sidebarOpen ? (
-                    <Icon icon={PanelLeftClose} />
-                  ) : (
-                    <Icon icon={PanelLeft} />
-                  )}
-                </Button>
-              </div>
-              <div className="flex flex-col items-center justify-center flex-1 p-8 text-center">
-                <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
-                  <Icon
-                    icon={Clipboard}
-                    size="3xl"
-                    className="text-muted-foreground"
-                  />
-                </div>
-                <h3 className="text-sm font-medium text-foreground mb-1">
-                  {i18n.t("dashboard.emptyState.heading")}
-                </h3>
-                <p className="text-xs text-muted-foreground mb-4 max-w-50">
-                  {i18n.t("dashboard.emptyState.body")}
-                </p>
-                <div className="flex flex-col gap-2 w-full max-w-44">
-                  <Button
-                    data-testid="empty-create"
-                    onClick={handleAddSnippet}
-                    className="h-8 text-xs w-full"
-                  >
-                    <Icon icon={Plus} size="sm" className="mr-1.5" />
-                    {i18n.t("dashboard.emptyState.action")}
-                  </Button>
-                  <Button
-                    data-testid="empty-import"
-                    variant="outline"
-                    size="sm"
-                    className="w-full h-7 text-xs gap-1.5"
-                    onClick={() =>
-                      browser.tabs.create({
-                        // The import panel's own route, rather than the
-                        // `#import-export` hash this used to build — which named
-                        // no section and so fell through to Library by accident.
-                        url:
-                          browser.runtime.getURL("/options.html") +
-                          "#/library/import",
-                      })
-                    }
-                  >
-                    <Icon icon={ArrowDownUp} size="sm" />
-                    {i18n.t("dashboard.importButton")}
-                  </Button>
-                  {/*
-                    No "Open settings" button here. The sidebar footer already
-                    carries a settings icon labelled "Settings & Import/Export",
-                    one click away and present in every state, so a third route
-                    to the same page was pure duplication — and it forced an e2e
-                    test to disambiguate by exact accessible name.
-                  */}
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="px-3 py-2 border-b flex items-center">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSidebarOpen(!sidebarOpen)}
-                  className="h-8 w-8"
-                  title={
-                    sidebarOpen
-                      ? i18n.t("common.hideSidebar")
-                      : i18n.t("common.showSidebar")
-                  }
-                  aria-label={
-                    sidebarOpen
-                      ? i18n.t("common.hideSidebar")
-                      : i18n.t("common.showSidebar")
-                  }
-                >
-                  {sidebarOpen ? (
-                    <Icon icon={PanelLeftClose} />
-                  ) : (
-                    <Icon icon={PanelLeft} />
-                  )}
-                </Button>
-              </div>
-              <div className="flex items-center justify-center flex-1">
-                <p className="text-sm text-muted-foreground">
-                  {i18n.t("dashboard.detailPlaceholder")}
-                </p>
-              </div>
-            </>
           )}
+          {!deletedSnippet &&
+          !isCreating &&
+          !selectedSnippet &&
+          snippets.length === 0 &&
+          !loading ? (
+            /* Empty state when no snippets exist. The pane stands on its own:
+               no header strip holding a lone sidebar toggle, and no second
+               placeholder strip for "select a snippet" when there is nothing
+               to select. The list and its footer remain the navigation chrome. */
+            <div className="flex flex-col items-center justify-center flex-1 p-8 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
+                <Icon
+                  icon={Clipboard}
+                  size="3xl"
+                  className="text-muted-foreground"
+                />
+              </div>
+              <h3 className="text-sm font-medium text-foreground mb-1">
+                {i18n.t("dashboard.emptyState.heading")}
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4 max-w-50">
+                {i18n.t("dashboard.emptyState.body")}
+              </p>
+              <div className="flex flex-col gap-2 w-full max-w-44">
+                <Button
+                  data-testid="empty-create"
+                  onClick={handleAddSnippet}
+                  className="h-8 text-xs w-full"
+                >
+                  <Icon icon={Plus} size="sm" className="mr-1.5" />
+                  {i18n.t("dashboard.emptyState.action")}
+                </Button>
+                <Button
+                  data-testid="empty-import"
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-7 text-xs gap-1.5"
+                  onClick={() =>
+                    browser.tabs.create({
+                      // The import panel's own route, rather than the
+                      // `#import-export` hash this used to build — which named
+                      // no section and so fell through to Library by accident.
+                      url:
+                        browser.runtime.getURL("/options.html") +
+                        "#/library/import",
+                    })
+                  }
+                >
+                  <Icon icon={ArrowDownUp} size="sm" />
+                  {i18n.t("dashboard.importButton")}
+                </Button>
+                {/*
+                  No "Open settings" button here. The sidebar footer already
+                  carries a settings icon labelled "Settings & Import/Export",
+                  one click away and present in every state, so a third route
+                  to the same page was pure duplication — and it forced an e2e
+                  test to disambiguate by exact accessible name.
+                */}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
-
-      {/*
-        Unsaved changes guard. Driven entirely by the router's blocker, so it opens
-        for a sidebar click, an arrow key, "Add snippet" or the browser's Back
-        alike — one dialog for one question, asked by the thing that actually knows
-        whether the navigation is going to happen.
-      */}
-      <ConfirmDialog
-        isOpen={blocker.status === "blocked"}
-        // `reset` keeps the user where they are, which is what "Keep editing"
-        // means. It is also what the alert dialog calls on Escape or an outside
-        // click, so every way out of this dialog other than Discard is a cancel.
-        onClose={() => blocker.reset?.()}
-        onConfirm={confirmBlockedNavigation}
-        title={i18n.t("snippetDetail.unsavedChanges.title")}
-        message={i18n.t("snippetDetail.unsavedChanges.message")}
-        confirmText={i18n.t("snippetDetail.unsavedChanges.discard")}
-        cancelText={i18n.t("snippetDetail.unsavedChanges.keepEditing")}
-        confirmVariant="danger"
-      />
     </div>
   );
 }

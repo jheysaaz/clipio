@@ -7,32 +7,40 @@
  */
 
 import { useEffect, useState } from "react";
-import { Globe, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 
+import { useFeedback } from "@/components/feedback/FeedbackProvider";
+import { useControlConfirmation } from "@/components/feedback/use-control-confirmation";
 import { Button } from "@/components/ui/button";
+import { ControlConfirmation } from "@/components/ui/control-confirmation";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { InlineError } from "@/components/ui/inline-error";
 import { SiteFavicon } from "@/components/options/SiteFavicon";
 import { blockedSitesItem } from "@/storage/items";
-import { normalizeHostname } from "@/lib/blocked-sites";
+import {
+  addBlockedSite,
+  normalizeHostname,
+  parseRegexEntry,
+} from "@/lib/blocked-sites";
 import { captureError } from "@/lib/sentry";
 import { i18n } from "#i18n";
 
 /**
- * A hostname is valid when it is a dotted, alphanumeric-or-hyphen label with
- * no leading or trailing hyphen. A wildcard prefix covers all subdomains.
+ * An entry is valid when it is a dotted hostname, a wildcard subdomain, or a
+ * compilable `/pattern/flags` regex. Anything else would sit in the list
+ * forever without ever blocking a site.
  */
-export function isValidHostname(hostname: string): boolean {
-  if (hostname.startsWith("*.")) {
-    const rest = hostname.slice(2);
+export function isValidSitePattern(entry: string): boolean {
+  if (parseRegexEntry(entry)) return true;
+  if (entry.startsWith("*.")) {
+    const rest = entry.slice(2);
     return (
       /^[a-z0-9]([a-z0-9\-.]*[a-z0-9])?$/i.test(rest) && rest.includes(".")
     );
   }
   return (
-    /^[a-z0-9]([a-z0-9\-.]*[a-z0-9])?$/i.test(hostname) &&
-    hostname.includes(".")
+    /^[a-z0-9]([a-z0-9\-.]*[a-z0-9])?$/i.test(entry) && entry.includes(".")
   );
 }
 
@@ -40,7 +48,12 @@ export function BlockedSitesPanel() {
   const [blockedSites, setBlockedSites] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{
+    message: string;
+    hostname?: string;
+  } | null>(null);
+  const { confirmed, show, reset } = useControlConfirmation();
+  const { announce } = useFeedback();
 
   useEffect(() => {
     blockedSitesItem
@@ -49,30 +62,34 @@ export function BlockedSitesPanel() {
       .catch(console.warn);
   }, []);
 
-  function flash(message: string) {
-    setStatus(message);
-    setTimeout(() => setStatus(null), 2000);
+  function confirm(message: string, hostname?: string) {
+    setConfirmation({ message, hostname });
+    show();
+    announce(message);
   }
 
   const addSite = async () => {
-    const hostname = normalizeHostname(draft);
-    if (!isValidHostname(hostname)) {
+    // Normalisation leaves valid regex entries alone; hostnames are lowercased
+    // with schemes, ports and paths stripped before validation and storage.
+    const pattern = normalizeHostname(draft);
+    if (!isValidSitePattern(pattern)) {
       setError(i18n.t("options.generalSection.blockedSites.errorInvalid"));
       return;
     }
-    if (blockedSites.includes(hostname)) {
+    const updated = addBlockedSite(blockedSites, pattern);
+    if (updated.length === blockedSites.length) {
       setError(i18n.t("options.generalSection.blockedSites.errorDuplicate"));
       return;
     }
     try {
-      const updated = [...blockedSites, hostname];
       await blockedSitesItem.setValue(updated);
       setBlockedSites(updated);
       setDraft("");
       setError(null);
-      flash(i18n.t("options.generalSection.blockedSites.added"));
+      confirm(i18n.t("options.generalSection.blockedSites.added"));
     } catch (err) {
       captureError(err, { action: "addBlockedSite" });
+      reset();
     }
   };
 
@@ -81,9 +98,10 @@ export function BlockedSitesPanel() {
       const updated = blockedSites.filter((s) => s !== hostname);
       await blockedSitesItem.setValue(updated);
       setBlockedSites(updated);
-      flash(i18n.t("options.generalSection.blockedSites.removed"));
+      confirm(i18n.t("options.generalSection.blockedSites.removed"), hostname);
     } catch (err) {
       captureError(err, { action: "removeBlockedSite" });
+      reset();
     }
   };
 
@@ -102,10 +120,14 @@ export function BlockedSitesPanel() {
       </div>
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <Icon
-            icon={Globe}
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
+          {/* Like a browser address bar: the leading icon becomes the site's
+              favicon as soon as the typed text names a usable domain. */}
+          <span
+            data-testid="blocked-site-preview-icon"
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2"
+          >
+            <SiteFavicon hostname={draft} className="size-4" />
+          </span>
           <Input
             type="text"
             placeholder={i18n.t(
@@ -135,6 +157,13 @@ export function BlockedSitesPanel() {
           <Icon icon={Plus} />
           {i18n.t("options.generalSection.blockedSites.addButton")}
         </Button>
+        {confirmed && confirmation && confirmation.hostname === undefined && (
+          <ControlConfirmation
+            testId="blocked-site-add-confirmation"
+            label={confirmation.message}
+            className="self-center"
+          />
+        )}
       </div>
 
       {error && (
@@ -145,47 +174,45 @@ export function BlockedSitesPanel() {
         />
       )}
 
+      {/* Each blocked site gets the same quiet tile treatment as the storage
+          figures: bordered, tinted, and one per hostname. */}
       {blockedSites.length === 0 ? (
         <p className="mt-3 text-xs italic text-muted-foreground">
           {i18n.t("options.generalSection.blockedSites.empty")}
         </p>
       ) : (
-        <ul className="mt-3 space-y-1">
+        <ul className="mt-3 flex flex-col gap-2">
           {blockedSites.map((hostname) => (
             <li
               key={hostname}
-              className="flex items-center justify-between gap-2 py-1 text-sm"
+              className="flex w-full items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/30 px-4 py-2"
             >
               <div className="flex min-w-0 items-center gap-2">
                 <SiteFavicon hostname={hostname} />
-                <span className="truncate font-mono text-foreground">
-                  {hostname}
-                </span>
+                <span className="truncate font-mono text-sm">{hostname}</span>
               </div>
               <Button
-                size="sm"
+                size="icon"
                 variant="ghost"
-                className="h-6 shrink-0 text-xs text-muted-foreground hover:text-destructive"
+                className="size-8 text-muted-foreground hover:text-destructive"
                 onClick={() => removeSite(hostname)}
                 aria-label={`${i18n.t("options.generalSection.blockedSites.remove")} ${hostname}`}
               >
-                <Icon icon={X} className="mr-1" />
-                {i18n.t("options.generalSection.blockedSites.remove")}
+                <Icon icon={X} size="sm" />
               </Button>
             </li>
           ))}
         </ul>
       )}
 
-      {status && (
-        <p
-          role="status"
-          aria-live="polite"
-          data-testid="blocked-site-status"
-          className="mt-2 text-xs text-green-600 dark:text-green-400"
-        >
-          {status}
-        </p>
+      {/* A removed row is gone immediately, so its confirmation lives beside
+          the list it was removed from rather than inside the vanished row. */}
+      {confirmed && confirmation && confirmation.hostname !== undefined && (
+        <ControlConfirmation
+          testId="blocked-site-remove-confirmation"
+          label={confirmation.message}
+          className="mt-2"
+        />
       )}
     </div>
   );

@@ -9,6 +9,7 @@ import {
   formatShortcut,
   matchesShortcut,
   isValidShortcut,
+  shortcutsEqual,
   shortcutFromEvent,
   shortcutSegments,
   currentPlatform,
@@ -273,6 +274,29 @@ describe("currentPlatform", () => {
   it("falls back to non-mac when no signal is available", () => {
     setNavigator({} as Partial<Navigator>);
     expect(currentPlatform()).toBe("other");
+  });
+});
+
+describe("shortcutsEqual", () => {
+  it("treats Ctrl, Command and Mod as the same primary modifier", () => {
+    expect(shortcutsEqual("Mod+Shift+Space", "Ctrl+Shift+Space")).toBe(true);
+    expect(shortcutsEqual("Cmd+Shift+Space", "Mod+Shift+Space")).toBe(true);
+  });
+
+  it("treats key aliases as the same chord", () => {
+    expect(shortcutsEqual("Mod+spacebar", "Mod+Space")).toBe(true);
+    expect(shortcutsEqual("mod+shift+k", "Mod+Shift+K")).toBe(true);
+  });
+
+  it("reports genuinely different chords as different", () => {
+    expect(shortcutsEqual("Mod+Shift+Space", "Mod+Space")).toBe(false);
+    expect(shortcutsEqual("Mod+K", "Alt+K")).toBe(false);
+  });
+
+  it("handles unusable input without throwing", () => {
+    expect(shortcutsEqual("", "")).toBe(true);
+    expect(shortcutsEqual("", "invalid")).toBe(false);
+    expect(shortcutsEqual("invalid", "also invalid")).toBe(false);
   });
 });
 

@@ -62,6 +62,12 @@ import * as items from "./items";
 const EXPECTED: Record<string, unknown> = {
   "local:snippets": [],
   "local:cachedSnippets": [],
+  // Autosave bookkeeping. Local-only: never synced, exported, backed up or
+  // cached for the content script (ADR 0015).
+  "local:editorDrafts": {},
+  "local:writeQueue": { operations: [], sentAt: [] },
+  "local:undoStacks": {},
+  "local:writerId": "unknown",
   "local:storageMode": "sync",
   "local:storageModeReason": "quota",
   "local:syncDataLost": false,
@@ -89,7 +95,7 @@ const EXPECTED: Record<string, unknown> = {
   "local:lastSentryErrorAt": null,
   "local:snippetPreviewEnabled": true,
   "local:snippetPreviewPrefix": "/",
-  "local:snippetPreviewShortcut": "Ctrl+Shift+Space",
+  "local:snippetPreviewShortcut": "Mod+Shift+Space",
   // The popup sidebar's width. Persisted because the popup closes on every blur, so
   // as component state it reset constantly.
   "local:sidebarWidth": 240,
@@ -195,6 +201,9 @@ describe("storage items — default values", () => {
     const expected: Record<string, unknown> = {
       localSnippetsItem: [],
       cachedSnippetsItem: [],
+      editorDraftsItem: {},
+      writeQueueItem: { operations: [], sentAt: [] },
+      undoStacksItem: {},
       usageCountsItem: {},
       snippetContextUsageItem: {},
       blockedSitesItem: [],

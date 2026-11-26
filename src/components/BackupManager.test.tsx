@@ -9,6 +9,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BackupState } from "@/store/backup";
 
 import { i18n } from "../../tests/mocks/i18n";
+import {
+  FeedbackBanner,
+  FeedbackProvider,
+} from "@/components/feedback/FeedbackProvider";
 
 const mocks = vi.hoisted(() => ({
   createBackupFile: vi.fn(),
@@ -17,7 +21,6 @@ const mocks = vi.hoisted(() => ({
   confirmBackupRestore: vi.fn(),
   setBackupConflictResolution: vi.fn(),
   captureError: vi.fn(),
-  toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 vi.mock("@/storage/backup", () => ({
@@ -35,10 +38,18 @@ vi.mock("@/store/backup", async () => {
   };
 });
 vi.mock("@/lib/sentry", () => ({ captureError: mocks.captureError }));
-vi.mock("sonner", () => ({ toast: mocks.toast }));
 
 import { BackupManager } from "./BackupManager";
 import { backupStore } from "@/store/backup";
+
+function renderManager() {
+  return render(
+    <FeedbackProvider>
+      <BackupManager />
+      <FeedbackBanner testId="feedback-banner" />
+    </FeedbackProvider>
+  );
+}
 
 const preview = {
   sourceVersion: 3,
@@ -98,7 +109,7 @@ beforeEach(() => {
 
 describe("BackupManager controls", () => {
   it("creates and downloads a backup, with its own test id", async () => {
-    render(<BackupManager />);
+    renderManager();
 
     fireEvent.click(screen.getByTestId("backup-create"));
 
@@ -108,7 +119,10 @@ describe("BackupManager controls", () => {
         expect.any(Blob),
         "clipio-backup-2026-11-21.clipio.zip"
       );
-      expect(mocks.toast.success).toHaveBeenCalledWith(
+      expect(
+        screen.getByTestId("backup-create").parentElement
+      ).toHaveTextContent(i18n.t("options.backup.created"));
+      expect(screen.getByRole("status")).toHaveTextContent(
         i18n.t("options.backup.created")
       );
     });
@@ -116,13 +130,16 @@ describe("BackupManager controls", () => {
 
   it("reports a failed backup without pretending it worked", async () => {
     mocks.createBackupFile.mockRejectedValue(new Error("disk full"));
-    render(<BackupManager />);
+    renderManager();
 
     fireEvent.click(screen.getByTestId("backup-create"));
 
     await waitFor(() => {
       expect(mocks.downloadBackup).not.toHaveBeenCalled();
-      expect(mocks.toast.error).toHaveBeenCalledWith(
+      expect(screen.getByTestId("feedback-banner")).toHaveTextContent(
+        i18n.t("options.backup.failedCreate")
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent(
         i18n.t("options.backup.failedCreate")
       );
       expect(mocks.captureError).toHaveBeenCalledOnce();
@@ -130,7 +147,7 @@ describe("BackupManager controls", () => {
   });
 
   it("opens the file picker through its button, not by accepting literal copy", () => {
-    render(<BackupManager />);
+    renderManager();
 
     const input = screen.getByTestId("backup-file-input") as HTMLInputElement;
     const click = vi.spyOn(input, "click").mockImplementation(() => {});
@@ -141,7 +158,7 @@ describe("BackupManager controls", () => {
   });
 
   it("passes the chosen file to the prepare step and clears the input", () => {
-    render(<BackupManager />);
+    renderManager();
 
     const input = screen.getByTestId("backup-file-input") as HTMLInputElement;
     const file = new File(["zip"], "backup.clipio.zip");
@@ -164,7 +181,7 @@ describe("BackupManager preview dialog", () => {
   });
 
   it("shows conflicts and settings before asking for confirmation", () => {
-    render(<BackupManager />);
+    renderManager();
 
     expect(screen.getByTestId("backup-preview-dialog")).toBeInTheDocument();
     expect(screen.getByTestId("backup-summary")).toBeInTheDocument();
@@ -182,7 +199,7 @@ describe("BackupManager preview dialog", () => {
   });
 
   it("records a resolution change and only writes on confirm", () => {
-    render(<BackupManager />);
+    renderManager();
 
     const select = screen.getByTestId(
       "backup-conflict-resolution"
@@ -201,7 +218,7 @@ describe("BackupManager preview dialog", () => {
   });
 
   it("cancels back to idle without writing", () => {
-    render(<BackupManager />);
+    renderManager();
 
     fireEvent.click(screen.getByTestId("backup-restore-cancel"));
 
@@ -218,7 +235,7 @@ describe("BackupManager preview dialog", () => {
       errorCode: "unsupported-version",
       preview: null,
     }));
-    render(<BackupManager />);
+    renderManager();
 
     expect(screen.getByTestId("backup-error")).toHaveTextContent(
       i18n.t("options.backup.errors.unsupportedVersion")
@@ -232,7 +249,7 @@ describe("BackupManager preview dialog", () => {
       phase: "loading",
       preview: null,
     }));
-    render(<BackupManager />);
+    renderManager();
 
     expect(screen.getByTestId("backup-busy")).toBeInTheDocument();
     expect(
@@ -253,7 +270,7 @@ describe("BackupManager preview dialog", () => {
       errorCode: code,
       preview: null,
     }));
-    render(<BackupManager />);
+    renderManager();
 
     expect(screen.getByTestId("backup-error")).toHaveTextContent(
       i18n.t(`options.backup.errors.${key}`)
@@ -273,7 +290,7 @@ describe("BackupManager preview dialog", () => {
       },
       resolutions: {},
     }));
-    render(<BackupManager />);
+    renderManager();
 
     expect(screen.getByTestId("backup-no-setting-changes")).toBeInTheDocument();
     expect(screen.getByTestId("backup-rejected-count")).toHaveTextContent("2");
@@ -287,7 +304,7 @@ describe("BackupManager preview dialog", () => {
       preview: null,
       result: null,
     }));
-    render(<BackupManager />);
+    renderManager();
 
     expect(document.getElementById("backup-dialog-title")).toHaveTextContent(
       i18n.t("options.backup.doneTitle")
@@ -311,7 +328,7 @@ describe("BackupManager preview dialog", () => {
         mediaFailed: [],
       },
     }));
-    render(<BackupManager />);
+    renderManager();
 
     expect(screen.getByTestId("backup-result")).toHaveTextContent("2");
     expect(screen.getByTestId("backup-result-skipped")).toBeInTheDocument();

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 
+import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
 import { highlightParts, SettingRow } from "./SettingRow";
 import { i18n } from "../../../../tests/mocks/i18n";
 
@@ -142,9 +144,13 @@ describe("highlightParts", () => {
   });
 });
 
+function renderRow(node: ReactNode) {
+  return render(<FeedbackProvider>{node}</FeedbackProvider>);
+}
+
 describe("SettingRow", () => {
   it("renders a compact row without optional decoration", () => {
-    render(
+    renderRow(
       <SettingRow title="Theme">
         <span data-testid="control" />
       </SettingRow>
@@ -152,7 +158,7 @@ describe("SettingRow", () => {
 
     expect(screen.getByText("Theme")).toBeInTheDocument();
     expect(screen.getByTestId("control")).toBeInTheDocument();
-    expect(screen.queryByRole("status")).toHaveTextContent("");
+    expect(screen.getByRole("status")).toHaveTextContent("");
     expect(
       screen.queryByRole("button", {
         name: i18n.t("options.row.resetToDefault"),
@@ -162,7 +168,7 @@ describe("SettingRow", () => {
 
   it("shows a saved tick and only enables reset for a changed value", () => {
     const onReset = vi.fn();
-    const { rerender } = render(
+    const { rerender } = renderRow(
       <SettingRow
         title="Prefix"
         description="Trigger"
@@ -177,7 +183,9 @@ describe("SettingRow", () => {
 
     expect(screen.getByTestId("prefix-row")).toHaveClass("extra");
     expect(screen.getByText("Trigger")).toBeInTheDocument();
-    expect(screen.getByRole("status").querySelector("svg")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: i18n.t("options.row.saved") })
+    ).toBeInTheDocument();
 
     const reset = screen.getByRole("button", {
       name: i18n.t("options.row.resetToDefault"),
@@ -186,24 +194,26 @@ describe("SettingRow", () => {
     expect(reset).toHaveAttribute("data-testid", "prefix-row-reset");
 
     rerender(
-      <SettingRow
-        title="Prefix"
-        description="Trigger"
-        status="saved"
-        testId="prefix-row"
-        className="extra"
-        onReset={onReset}
-        canReset
-      >
-        <span>control</span>
-      </SettingRow>
+      <FeedbackProvider>
+        <SettingRow
+          title="Prefix"
+          description="Trigger"
+          status="saved"
+          testId="prefix-row"
+          className="extra"
+          onReset={onReset}
+          canReset
+        >
+          <span>control</span>
+        </SettingRow>
+      </FeedbackProvider>
     );
     fireEvent.click(reset);
     expect(onReset).toHaveBeenCalledTimes(1);
   });
 
   it("reports a failed save with an alert beside the title", () => {
-    render(
+    renderRow(
       <SettingRow title="Prefix" status="error" testId="prefix-row">
         <span>control</span>
       </SettingRow>
@@ -212,6 +222,9 @@ describe("SettingRow", () => {
     expect(screen.getByTestId("prefix-row-error")).toHaveTextContent(
       i18n.t("options.row.saveFailed")
     );
-    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      i18n.t("options.row.saveFailed")
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("");
   });
 });

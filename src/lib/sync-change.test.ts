@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   SIGN_OUT_KEY_THRESHOLD,
+  isExternalLocalSnippetChange,
   needsCacheRefresh,
   readSyncChange,
   type StorageChanges,
@@ -242,6 +243,62 @@ describe("needsCacheRefresh", () => {
     expect(
       needsCacheRefresh(
         readSyncChange({ themeMode: { newValue: "dark" } }, "sync")
+      )
+    ).toBe(false);
+  });
+});
+
+describe("isExternalLocalSnippetChange", () => {
+  it("ignores the popup's own queue commit", () => {
+    expect(
+      isExternalLocalSnippetChange(
+        { "snip:a": { newValue: { id: "a", updatedBy: "writer-1" } } },
+        "local",
+        "writer-1"
+      )
+    ).toBe(false);
+  });
+
+  it("detects a snippet written by another context", () => {
+    expect(
+      isExternalLocalSnippetChange(
+        { "snip:a": { newValue: { id: "a", updatedBy: "options" } } },
+        "local",
+        "writer-1"
+      )
+    ).toBe(true);
+  });
+
+  it("uses the old value for a deletion", () => {
+    expect(
+      isExternalLocalSnippetChange(
+        { "snip:a": { oldValue: { id: "a", updatedBy: "options" } } },
+        "local",
+        "writer-1"
+      )
+    ).toBe(true);
+  });
+
+  it("ignores draft, queue and writer-id keys", () => {
+    expect(
+      isExternalLocalSnippetChange(
+        {
+          editorDrafts: { newValue: { a: {} } },
+          writeQueue: { newValue: { operations: [], sentAt: [] } },
+          writerId: { newValue: "writer-2" },
+        },
+        "local",
+        "writer-1"
+      )
+    ).toBe(false);
+  });
+
+  it("ignores the sync area", () => {
+    expect(
+      isExternalLocalSnippetChange(
+        { "snip:a": { newValue: { id: "a", updatedBy: "options" } } },
+        "sync",
+        "writer-1"
       )
     ).toBe(false);
   });

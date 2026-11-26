@@ -27,6 +27,16 @@ describe("createSnippet", () => {
     expect(snippet).toHaveProperty("usageCount");
     expect(snippet).toHaveProperty("createdAt");
     expect(snippet).toHaveProperty("updatedAt");
+    expect(snippet.rev).toBe(1);
+    expect(snippet.updatedBy).toBe("unknown");
+  });
+
+  it("records the writer id when one is supplied", () => {
+    const snippet = createSnippet(
+      { label: "Hello", shortcut: "hi", content: "Hello world!" },
+      "device-a"
+    );
+    expect(snippet.updatedBy).toBe("device-a");
   });
 
   // MUST generate a unique id using crypto.randomUUID()

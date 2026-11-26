@@ -3,7 +3,47 @@ import {
   normalizeHostname,
   isHostnameBlocked,
   addBlockedSite,
+  parseRegexEntry,
+  getFaviconDomain,
 } from "./blocked-sites";
+
+// ---------------------------------------------------------------------------
+// parseRegexEntry
+// ---------------------------------------------------------------------------
+
+describe("parseRegexEntry", () => {
+  it("parses a delimited pattern with its flags", () => {
+    const regex = parseRegexEntry("/^mail\\..*example\\.com$/i");
+
+    // The pattern must actually be compiled, not only recognised by shape.
+    expect(regex?.test("MAIL.example.com")).toBe(true);
+    expect(regex?.test("www.example.com")).toBe(false);
+    expect(regex?.flags).toBe("i");
+  });
+
+  it("keeps escaped slashes inside the source", () => {
+    expect(parseRegexEntry("/a\\/b/i")?.source).toBe("a\\/b");
+  });
+
+  it("rejects plain hostnames, partial patterns and invalid regexes", () => {
+    // Each of these would be stored as an ineffective entry if accepted.
+    expect(parseRegexEntry("example.com")).toBeNull();
+    expect(parseRegexEntry("/mail\\.")).toBeNull();
+    expect(parseRegexEntry("/(/i")).toBeNull();
+    expect(parseRegexEntry("//i")).toBeNull();
+  });
+
+  it("rejects stateful and unknown flags", () => {
+    // `g`/`y` make repeated .test() calls alternate results on one page.
+    expect(parseRegexEntry("/example/g")).toBeNull();
+    expect(parseRegexEntry("/example/y")).toBeNull();
+    expect(parseRegexEntry("/example/x")).toBeNull();
+  });
+
+  it("rejects an unbounded pattern source", () => {
+    expect(parseRegexEntry(`/${"a".repeat(201)}/i`)).toBeNull();
+  });
+});
 
 // ---------------------------------------------------------------------------
 // normalizeHostname
@@ -52,6 +92,12 @@ describe("normalizeHostname", () => {
 
   it("preserves a wildcard prefix", () => {
     expect(normalizeHostname("*.Example.com")).toBe("*.example.com");
+  });
+
+  it("preserves a regex entry instead of lowering or splitting its source", () => {
+    expect(normalizeHostname("  /MAIL\\.(Example|Test)\\.com/i ")).toBe(
+      "/MAIL\\.(Example|Test)\\.com/i"
+    );
   });
 
   it("returns an empty string for input that is only a scheme", () => {
@@ -127,6 +173,32 @@ describe("isHostnameBlocked", () => {
       const patterns = ["*.example.com", "example.com"];
       expect(isHostnameBlocked("mail.example.com", patterns)).toBe(true);
       expect(isHostnameBlocked("example.com", patterns)).toBe(true);
+    });
+  });
+
+  describe("full regex entries", () => {
+    it("blocks a hostname matched by the regex", () => {
+      expect(
+        isHostnameBlocked("mail.example.com", ["/^mail\\..*example\\.com$/i"])
+      ).toBe(true);
+    });
+
+    it("does not block a hostname the regex rejects", () => {
+      expect(
+        isHostnameBlocked("www.example.com", ["/^mail\\..*example\\.com$/i"])
+      ).toBe(false);
+    });
+
+    it("honours a case-sensitive pattern", () => {
+      expect(isHostnameBlocked("mail.example.com", ["/MAIL/"])).toBe(false);
+    });
+
+    it("ignores a malformed regex instead of blocking every site", () => {
+      expect(isHostnameBlocked("example.com", ["/(/i"])).toBe(false);
+    });
+
+    it("ignores a stateful regex", () => {
+      expect(isHostnameBlocked("example.com", ["/example/g"])).toBe(false);
     });
   });
 
@@ -242,6 +314,32 @@ describe("addBlockedSite", () => {
   it("stores a wildcard pattern as a wildcard", () => {
     expect(addBlockedSite([], "*.Example.com")).toEqual(["*.example.com"]);
   });
+
+  it("stores a regex entry with its source and flags intact", () => {
+    expect(addBlockedSite([], " /MAIL\\.(Example|Test)\\.com/i ")).toEqual([
+      "/MAIL\\.(Example|Test)\\.com/i",
+    ]);
+  });
+
+  it("does not duplicate an existing regex entry", () => {
+    expect(addBlockedSite(["/mail\\./i"], "/mail\\./i")).toEqual([
+      "/mail\\./i",
+    ]);
+  });
+
+  it("treats the same regex with different flags as a new entry", () => {
+    expect(addBlockedSite(["/mail\\./i"], "/mail\\./m")).toEqual([
+      "/mail\\./i",
+      "/mail\\./m",
+    ]);
+  });
+
+  it("still returns a new array when a regex is rejected", () => {
+    const original = ["/mail\\./i"];
+    const result = addBlockedSite(original, "");
+    expect(result).not.toBe(original);
+    expect(result).toEqual(original);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -262,6 +360,12 @@ describe("normalizeHostname / isHostnameBlocked round trip", () => {
   it("a wildcard stored via addBlockedSite blocks subdomains but not the apex", () => {
     const patterns = addBlockedSite([], "*.example.com");
     expect(isHostnameBlocked("mail.example.com", patterns)).toBe(true);
+    expect(isHostnameBlocked("example.com", patterns)).toBe(false);
+  });
+
+  it("a regex stored via addBlockedSite blocks only what it matches", () => {
+    const patterns = addBlockedSite([], "/^mail\\..*example\\.com$/i");
+    expect(isHostnameBlocked("MAIL.Example.com", patterns)).toBe(true);
     expect(isHostnameBlocked("example.com", patterns)).toBe(false);
   });
 });
@@ -318,5 +422,35 @@ describe("isHostnameBlocked — legacy stored entries", () => {
 
   it("still never blocks an empty-string pattern against an empty hostname", () => {
     expect(isHostnameBlocked("", [""])).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getFaviconDomain
+// ---------------------------------------------------------------------------
+
+describe("getFaviconDomain", () => {
+  it("derives a domain from a wildcard entry", () => {
+    expect(getFaviconDomain("*.example.com")).toBe("example.com");
+  });
+
+  it("derives a domain from a pasted URL", () => {
+    expect(getFaviconDomain("https://Mail.Example.com/inbox")).toBe(
+      "mail.example.com"
+    );
+  });
+
+  it("returns null while the typed text is not yet a domain", () => {
+    expect(getFaviconDomain("exa")).toBeNull();
+    expect(getFaviconDomain("")).toBeNull();
+  });
+
+  it("returns null for a regex entry, which has no single domain", () => {
+    expect(getFaviconDomain("/mail\\..*\\.example\\.com/i")).toBeNull();
+  });
+
+  it("returns null for text that is not a hostname", () => {
+    expect(getFaviconDomain("not a hostname")).toBeNull();
+    expect(getFaviconDomain("example.com-")).toBeNull();
   });
 });

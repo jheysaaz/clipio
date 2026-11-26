@@ -13,6 +13,8 @@ import { i18n } from "#i18n";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InputHTMLAttributes, ReactNode } from "react";
 
+import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
+
 const mocks = vi.hoisted(() => ({
   setThemeMode: vi.fn(),
   captureError: vi.fn(),
@@ -169,6 +171,10 @@ vi.mock("./ShortcutRecorder", () => ({
 import { SettingControl } from "./SettingControl";
 import type { SettingEntry } from "./registry";
 
+function renderControl(node: ReactNode) {
+  return render(<FeedbackProvider>{node}</FeedbackProvider>);
+}
+
 function makeEntry(overrides: Partial<SettingEntry> = {}): SettingEntry {
   const id = overrides.id ?? "test-setting";
   return {
@@ -226,7 +232,7 @@ describe("SettingControl", () => {
     const entry = makeEntry({
       useValue: vi.fn().mockResolvedValue("from-storage"),
     });
-    render(<SettingControl entry={entry} />);
+    renderControl(<SettingControl entry={entry} />);
 
     expect(screen.getByRole("textbox")).toBeDisabled();
     await settle();
@@ -238,7 +244,7 @@ describe("SettingControl", () => {
   it("reports a failed initial read and leaves the control usable", async () => {
     const failure = new Error("read failed");
     const entry = makeEntry({ useValue: vi.fn().mockRejectedValue(failure) });
-    render(<SettingControl entry={entry} />);
+    renderControl(<SettingControl entry={entry} />);
     await settle();
 
     expect(mocks.captureError).toHaveBeenCalledWith(failure, {
@@ -258,7 +264,7 @@ describe("SettingControl", () => {
           })
       ),
     });
-    render(<SettingControl entry={entry} />);
+    renderControl(<SettingControl entry={entry} />);
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "typed" },
     });
@@ -277,15 +283,53 @@ describe("SettingControl", () => {
       control: "switch",
       useValue: vi.fn().mockResolvedValue(false),
     });
-    render(<SettingControl entry={entry} />);
+    renderControl(<SettingControl entry={entry} />);
     await settle();
 
     fireEvent.click(screen.getByRole("switch"));
     await settle();
 
     expect(entry.setValue).toHaveBeenCalledWith(true);
-    expect(screen.getByRole("status")).toBeEmptyDOMElement();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("");
+    expect(screen.getByRole("alert")).toHaveTextContent("");
+  });
+
+  it("renders a declared preview action that runs without writing the setting", async () => {
+    const run = vi.fn();
+    const entry = makeEntry({
+      control: "switch",
+      useValue: vi.fn().mockResolvedValue(false),
+      preview: {
+        labelKey: "options.row.preview",
+        icon: SunIcon,
+        testId: "test-preview",
+        run,
+      },
+    });
+    renderControl(<SettingControl entry={entry} />);
+    await settle();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: i18n.t("options.row.preview") })
+    );
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(entry.setValue).not.toHaveBeenCalled();
+    const preview = screen.getByTestId("test-preview");
+    // The icon is decorative: the button's accessible name stays the label.
+    expect(
+      preview.querySelector('[data-testid="mock-icon"]')
+    ).toBeInTheDocument();
+  });
+
+  it("does not render a preview action on rows that do not declare one", async () => {
+    const entry = makeEntry({ useValue: vi.fn().mockResolvedValue("value") });
+    renderControl(<SettingControl entry={entry} />);
+    await settle();
+
+    expect(
+      screen.queryByRole("button", { name: i18n.t("options.row.preview") })
+    ).not.toBeInTheDocument();
   });
 
   it("routes theme changes through the theme store instead of writing storage", async () => {
@@ -294,7 +338,7 @@ describe("SettingControl", () => {
       control: "switch",
       useValue: vi.fn().mockResolvedValue(false),
     });
-    render(<SettingControl entry={entry} />);
+    renderControl(<SettingControl entry={entry} />);
     await settle();
 
     fireEvent.click(screen.getByRole("switch"));
@@ -317,7 +361,7 @@ describe("SettingControl", () => {
       ],
       useValue: vi.fn().mockResolvedValue("light"),
     });
-    render(<SettingControl entry={entry} />);
+    renderControl(<SettingControl entry={entry} />);
     await settle();
 
     const radiogroup = screen.getByRole("radiogroup");
@@ -351,7 +395,7 @@ describe("SettingControl", () => {
       optionFonts: { dark: "Dyslexic" },
       useValue: vi.fn().mockResolvedValue("light"),
     });
-    render(<SettingControl entry={entry} />);
+    renderControl(<SettingControl entry={entry} />);
     await settle();
 
     expect(screen.getByTestId("mock-select")).toContainElement(
@@ -371,7 +415,7 @@ describe("SettingControl", () => {
       options: [{ value: "dark", labelKey: "options.theme.dark" }],
       useValue: vi.fn().mockResolvedValue("dark"),
     });
-    render(<SettingControl entry={entry} />);
+    renderControl(<SettingControl entry={entry} />);
     await settle();
 
     const trigger = screen.getByTestId("setting-test-setting-select");
@@ -393,7 +437,7 @@ describe("SettingControl", () => {
       range: { min: 0, max: 500, step: 50 },
       useValue: vi.fn().mockResolvedValue(100),
     });
-    render(<SettingControl entry={entry} />);
+    renderControl(<SettingControl entry={entry} />);
     await settle();
 
     fireEvent.change(screen.getByRole("slider"), { target: { value: "250" } });
@@ -413,7 +457,7 @@ describe("SettingControl", () => {
       control: "shortcut",
       useValue: vi.fn().mockResolvedValue("Mod+Shift+Space"),
     });
-    render(<SettingControl entry={entry} />);
+    renderControl(<SettingControl entry={entry} />);
     await settle();
 
     fireEvent.click(screen.getByTestId("setting-test-setting-recorder"));
@@ -423,6 +467,34 @@ describe("SettingControl", () => {
     expect(screen.getByRole("status")).not.toBeEmptyDOMElement();
   });
 
+  it("hides reset when a shortcut is semantically the default", async () => {
+    const entry = makeEntry({
+      control: "shortcut",
+      defaultValue: "Mod+Shift+Space",
+      reset: vi.fn().mockResolvedValue(undefined),
+      useValue: vi.fn().mockResolvedValue("Ctrl+Shift+Space"),
+    });
+    renderControl(<SettingControl entry={entry} />);
+    await settle();
+
+    // `Ctrl` and `Mod` parse to the same chord; a clean install must not look
+    // dirty just because storage uses a different spelling.
+    expect(screen.getByTestId("setting-test-setting-reset")).toBeDisabled();
+  });
+
+  it("keeps reset enabled when a shortcut is genuinely changed", async () => {
+    const entry = makeEntry({
+      control: "shortcut",
+      defaultValue: "Mod+Shift+Space",
+      reset: vi.fn().mockResolvedValue(undefined),
+      useValue: vi.fn().mockResolvedValue("Mod+Shift+K"),
+    });
+    renderControl(<SettingControl entry={entry} />);
+    await settle();
+
+    expect(screen.getByTestId("setting-test-setting-reset")).toBeEnabled();
+  });
+
   it("masks a secret text field and highlights search matches", async () => {
     const entry = makeEntry({
       secret: true,
@@ -430,7 +502,9 @@ describe("SettingControl", () => {
       useValue: vi.fn().mockResolvedValue("secret-value"),
     });
     const title = i18n.t(entry.titleKey);
-    render(<SettingControl entry={entry} highlight={[{ start: 0, end: 3 }]} />);
+    renderControl(
+      <SettingControl entry={entry} highlight={[{ start: 0, end: 3 }]} />
+    );
     await settle();
 
     const input = screen.getByTestId("setting-test-setting-input");
@@ -444,7 +518,7 @@ describe("SettingControl", () => {
       control: "site-list",
       useValue: vi.fn().mockResolvedValue(["example.com"]),
     });
-    render(<SettingControl entry={entry} />);
+    renderControl(<SettingControl entry={entry} />);
     await settle();
 
     expect(
@@ -461,7 +535,7 @@ describe("SettingControl", () => {
         .mockResolvedValueOnce("actually-stored"),
       setValue: vi.fn().mockRejectedValue(failure),
     });
-    render(<SettingControl entry={entry} />);
+    renderControl(<SettingControl entry={entry} />);
     await settle();
 
     fireEvent.change(screen.getByRole("textbox"), {
@@ -486,7 +560,7 @@ describe("SettingControl", () => {
         .mockRejectedValueOnce(new Error("re-read failed")),
       setValue: vi.fn().mockRejectedValue(new Error("write failed")),
     });
-    render(<SettingControl entry={entry} />);
+    renderControl(<SettingControl entry={entry} />);
     await settle();
 
     fireEvent.change(screen.getByRole("textbox"), {
@@ -508,7 +582,7 @@ describe("SettingControl", () => {
         .mockResolvedValueOnce("changed")
         .mockResolvedValueOnce("default"),
     });
-    render(<SettingControl entry={entry} />);
+    renderControl(<SettingControl entry={entry} />);
     await settle();
 
     const reset = screen.getByTestId("setting-test-setting-reset");
@@ -530,7 +604,7 @@ describe("SettingControl", () => {
       reset: vi.fn().mockResolvedValue(undefined),
       useValue: vi.fn().mockResolvedValue("dark"),
     });
-    render(<SettingControl entry={entry} />);
+    renderControl(<SettingControl entry={entry} />);
     await settle();
 
     fireEvent.click(screen.getByTestId("setting-theme-reset"));
@@ -546,7 +620,9 @@ describe("SettingControl", () => {
       reset: vi.fn().mockResolvedValue(undefined),
       useValue: vi.fn().mockResolvedValue("changed"),
     });
-    const { unmount } = render(<SettingControl entry={withoutDefault} />);
+    const { unmount } = renderControl(
+      <SettingControl entry={withoutDefault} />
+    );
     await settle();
 
     const hiddenReset = screen.getByTestId("setting-test-setting-reset");
@@ -559,7 +635,7 @@ describe("SettingControl", () => {
       reset: vi.fn().mockRejectedValue(failure),
       useValue: vi.fn().mockResolvedValue("changed"),
     });
-    render(<SettingControl entry={failing} />);
+    renderControl(<SettingControl entry={failing} />);
     await settle();
 
     fireEvent.click(screen.getByTestId("setting-test-setting-reset"));
@@ -573,7 +649,7 @@ describe("SettingControl", () => {
   });
 
   it("does not render a reset button when the registry offers no reset", async () => {
-    render(<SettingControl entry={makeEntry()} />);
+    renderControl(<SettingControl entry={makeEntry()} />);
     await settle();
 
     expect(

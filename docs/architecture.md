@@ -32,7 +32,7 @@ Three surfaces, one service worker:
 | Path            | Role                                                                                                                                  |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `content.ts`    | Runs on every page. Watches for shortcut prefixes, builds the index, expands on selection. The only entrypoint that touches page DOM. |
-| `background.ts` | Service worker. Owns storage sync, alarms, context menus, notifications. Survives no tab, so it holds nothing that belongs to a page. |
+| `background.ts` | Service worker. Owns storage sync, the write queue drain, alarms, context menus and notifications. Survives no tab, so it holds nothing that belongs to a page. |
 | `popup/`        | The dashboard. Lists and searches snippets.                                                                                           |
 | `options/`      | Settings, import/export, diagnostics.                                                                                                 |
 
@@ -44,22 +44,46 @@ Four backends behind one manager (`src/storage/manager.ts`):
 | -------------- | --------------------------------------------------------------------------------------------------------------- |
 | `sync.ts`      | Snippets and settings. Cross-device. Hard quota — see [0004](./decisions/0004-refuse-sync-writes-over-quota.md) |
 | `local.ts`     | Explicit fallback when sync is unavailable                                                                      |
-| `indexeddb.ts` | Media blobs, and a shadow backup of snippets                                                                    |
+| `indexeddb.ts` | Media blobs, a shadow backup of snippets, and local-only version history (schema v4)                            |
 | `media.ts`     | Blobs only. Content-hashed, so the same image pasted twice is one record.                                       |
 
-28 typed items in `src/storage/items.ts`. Every one has a default and a validator —
+37 typed items in `src/storage/items.ts`. Every one has a default and a validator —
 an untrusted import payload runs the same validator as a fresh write.
 
 **The content script keeps a cache and is not a writer.** It receives an index from
 the background and re-reads on change. Several contexts writing the same key was
 the source of real clobbering bugs.
 
+### Writes, queue and recovery
+
+The popup can disappear on blur (ADR [0011](./decisions/0011-router-in-the-popup-is-replace-only.md)),
+so the editor never writes authoritative storage itself. It stages fields in
+`local:editorDrafts`; the popup store enqueues changes in `local:writeQueue`, and
+the background worker drains that queue with rate limits and retries.
+`StorageManager.commitChange` is the one revision-aware write path: it applies the
+change to the record as it exists at commit time, resolves competing writes with
+last-writer-wins, and snapshots the state being replaced into the IndexedDB
+`history` store. Quota remains a terminal refusal, not a retry (ADR
+[0004](./decisions/0004-refuse-sync-writes-over-quota.md)).
+
+`local:writerId` identifies this install for that resolution and lets local-mode
+storage changes from our own commits be ignored. `local:undoStacks` holds only the
+popup's step direction; the long-term record is version history. These four keys
+and the `history` store are local-only: they are not synced, exported, backed up,
+cached for the content script, or used by search and usage counts.
+
+The detail top bar has no Save control. It shows undo/redo and a compact sync
+status; sidebar, delete, copy and insert commands stay. The create form keeps its
+explicit **Create** button as the way to finish and navigate, even though its
+fields autosave too. The full reasoning is in ADR
+[0015](./decisions/0015-autosave-and-local-version-history.md).
+
 ## Code layout
 
 | Directory         | Holds                                | Test approach                       |
 | ----------------- | ------------------------------------ | ----------------------------------- |
 | `src/lib/`        | Pure logic. No DOM, no browser APIs. | Fast unit tests                     |
-| `src/storage/`    | The backends and the manager.        | Unit tests against `fake-indexeddb` |
+| `src/storage/`    | The backends, manager, queue drain and local history. | Unit tests against `fake-indexeddb` |
 | `src/components/` | React. Thin — logic lives in `lib/`. | Mostly E2E                          |
 | `src/pages/`      | Page composition.                    | E2E                                 |
 

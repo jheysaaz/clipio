@@ -50,6 +50,30 @@ export const getRelativeTime = (date: string | Date): string => {
   return years === 1 ? "1 year ago" : `${years} years ago`;
 };
 
+const RELATIVE_TIME_UNITS = {
+  second: "s",
+  minute: "m",
+  hour: "h",
+  day: "d",
+  week: "w",
+  month: "mo",
+  year: "y",
+} as const;
+
+/**
+ * Shorten a relative time for the footer's narrow layout ("1 day ago" → "1d ago").
+ * Unknown values are returned unchanged rather than inventing a label.
+ */
+export const shortenRelativeTime = (value: string): string => {
+  if (value === "just now") return "now";
+  const match = /^(\d+) (second|minute|hour|day|week|month|year)s? ago$/.exec(
+    value
+  );
+  if (!match) return value;
+  const unit = match[2] as keyof typeof RELATIVE_TIME_UNITS;
+  return `${match[1]}${RELATIVE_TIME_UNITS[unit]} ago`;
+};
+
 /**
  * Format a date to a short string (e.g., "Nov 11")
  */

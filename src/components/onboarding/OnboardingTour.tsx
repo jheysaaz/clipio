@@ -109,12 +109,10 @@ function stepsFor(
   });
 }
 
-function runStepAction(action: OnboardingStepAction): void {
-  const selector =
-    action === "open-create"
-      ? '[data-testid="add-snippet"]'
-      : '[data-testid="snippet-create-cancel"]';
-  document.querySelector<HTMLElement>(selector)?.click();
+function runStepAction(_action: OnboardingStepAction): void {
+  // The tour's only routing action is opening the editor; leaving it is an
+  // ordinary "Next" now that there is no Create/Cancel bar to click.
+  document.querySelector<HTMLElement>('[data-testid="add-snippet"]')?.click();
 }
 
 function buildConfig(

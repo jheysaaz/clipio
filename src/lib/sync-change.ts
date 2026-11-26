@@ -134,3 +134,29 @@ export function readSyncChange(
 export function needsCacheRefresh(reading: SyncChangeReading): boolean {
   return reading.gainedOrChanged;
 }
+
+/**
+ * Whether a `storage.local` change came from *another* writer.
+ *
+ * Local mode still stores snippets under `snip:` keys, and the queue's own
+ * commits fire `onChanged` in this context too. Treating those as external edits
+ * would refresh the list from under an open editor after every autosave. The
+ * writer id on the record is the only stable way to tell a self-write from an
+ * edit made in Options or another device's merged local copy.
+ *
+ * Draft, queue, undo and writer-id keys carry no snippet prefix, so they are
+ * excluded by the key check rather than by a growing denylist.
+ */
+export function isExternalLocalSnippetChange(
+  changes: StorageChanges,
+  areaName: string,
+  writerId: string
+): boolean {
+  if (areaName !== "local") return false;
+  return Object.entries(changes).some(([key, change]) => {
+    if (!key.startsWith(SNIPPET_KEY_PREFIX)) return false;
+    const record = (change.newValue ?? change.oldValue) as
+      { updatedBy?: unknown } | undefined;
+    return record?.updatedBy !== writerId;
+  });
+}

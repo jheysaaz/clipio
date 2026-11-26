@@ -2,8 +2,6 @@ extName: "Clipio: Snippets Manager"
 extDescription: "A powerful browser extension for managing and inserting snippets with lightning speed and increase your productivity."
 
 common:
-  hideSidebar: Hide sidebar
-  showSidebar: Show sidebar
   resizeSidebar: Resize sidebar
   cancel: Cancel
   closeModal: Close
@@ -13,6 +11,7 @@ common:
   dismissError: Dismiss error
   close: Close
   reload: Reload
+  loading: Loading…
   # Error-boundary copy. The two fallbacks differ only in what the user should
   # do next, so they need two strings rather than one generic apology.
   errorOptions: Something went wrong. Please reload the options page.
@@ -39,11 +38,6 @@ dashboard:
     heading: No snippets yet
     body: Create your first snippet to start saving and reusing text quickly.
     action: Create your first snippet
-  toast:
-    snippetSaved: Snippet saved
-    snippetDeleted: Snippet deleted
-    snippetUpdated: Snippet updated
-  detailPlaceholder: Select a snippet to view details
   snippetListLabel: Snippets
   warnings:
     quotaFull:
@@ -73,67 +67,73 @@ dashboard:
     quotaTotal: Your snippets total $1 and sync allows $2.
     quotaCount: You have $1 snippets and sync allows $2.
 
-newSnippet:
-  cancel: Cancel
-  creating: Creating...
-  create: Create
-  name: Name
-  namePlaceholder: "e.g., Email Signature"
+snippetEditor:
+  name: Snippet name
+  namePlaceholder: Untitled snippet
   shortcut: Shortcut
-  shortcutPlaceholder: "e.g., $1sig"
+  shortcutPlaceholder: "Add shortcut"
+  shortcutLabel: "Shortcut: $1"
+  shortcutTip: Type this on any page to expand the snippet.
   shortcutError: Shortcut cannot contain spaces
   shortcutErrorDuplicate: 'Shortcut "$1" is already used by "$2". Choose a different shortcut.'
   shortcutErrorPrefix: 'Shortcut "$1" conflicts with "$2" — one may prevent the other from expanding.'
-  shortcutTip: Type the trigger and this shortcut on any page to expand the snippet.
-  content: Content
-  contentPlaceholder: Enter your snippet content...
-  placeholderTip: "Type / in the editor for commands like Clipboard, Today, Place Cursor and Pick Date."
-  footer: New snippet
+  content: Snippet content
+  contentPlaceholder: "Type / for commands…"
+  removeTag: "Remove $1 tag"
+  more: More actions
+  moreTooltip: "More actions (Alt+O)"
+  deleteTooltip: Delete snippet
+  copyTooltip: "Copy to clipboard ($1C)"
+  copiedTooltip: "Copied ($1C)"
+  undoTooltip: "Restore previous version ($1Z)"
+  undoLabel: Restore previous version
+  redoTooltip: "Restore next version ($1)"
+  redoLabel: Restore next version
+  sidebarHideTooltip: Hide sidebar (Alt+B)
+  sidebarShowTooltip: Show sidebar (Alt+B)
+  sidebarHideLabel: Hide sidebar
+  sidebarShowLabel: Show sidebar
+  retryTooltip: Retry the last save
 
 snippetDetail:
   deleteSnippet: Delete snippet
   copyToClipboard: Copy to clipboard
-  insertCommand: Insert command
-  saving: Saving...
-  save: Save
-  savedLabel: Saved
-  copiedLabel: Copied!
-  editorPlaceholder: "Start typing your snippet content here or use '/' for commands..."
+  copiedLabel: Copied
   tags: Tags
   tagPlaceholder: Tag name...
   addTag: Add tag
-  addTagTitle: Add a new tag
+  newTag: New Tag
   uses: uses
   updated: Updated
-  deleteDialog:
-    title: Delete Snippet
-    message: 'Are you sure you want to delete "$1"? This action cannot be undone.'
-    confirm: Delete
-    cancel: Cancel
-  unsavedChanges:
-    title: Unsaved changes
-    message: You have unsaved changes. If you switch snippets now, your changes will be lost.
-    discard: Discard changes
-    keepEditing: Keep editing
+  draft: Draft
+  hiddenTags: Hidden tags
+  moreTags: "+$1"
+  deleted:
+    title: Snippet deleted
+    undo: Undo
+    live: "Snippet deleted. Undo available."
+  syncStatus:
+    saved: "Saved"
+    saving: "Saving…"
+    failed: "Couldn't save · Retry"
+    refused: Storage full — changes kept locally
   errors:
     failedToCopy: Failed to copy to clipboard
     failedToSave: Failed to save snippet. Please try again.
     failedToDelete: Failed to delete snippet. Please try again.
-  status:
-    saved: Snippet saved!
-
-confirmDialog:
-  loading: Loading...
-  defaultConfirm: Confirm
-  defaultCancel: Cancel
+    failedToStage: The edit is saved locally but could not be queued.
+    emptyLabel: A snippet needs a name before it can be saved.
+    emptyShortcut: A snippet needs a shortcut before it can be saved.
+    shortcutSpaces: A shortcut cannot contain spaces.
+    shortcutConflict: That shortcut belongs to another snippet.
+    emptyContent: A snippet needs content before it can be saved.
+    malformedMedia: One of the media placeholders is incomplete.
 
 options:
   # Options page — component copy that was previously hardcoded English.
   copy:
     extensionVersion: Extension Version
     extensionVersionHint: Current installed version and available updates.
-    topUsageHeading: Top 5 Usage
-    topUsageEmpty: No usage data yet.
     viewRelease: View release
     upToDate: Up to date
   # Accessible names for controls that carry no visible text. Read by screen
@@ -174,7 +174,9 @@ options:
   row:
     resetToDefault: Reset to default
     saveFailed: Could not save
+    saved: Saved
     managedInSection: Managed in its section
+    preview: Preview
   shortcut:
     recorder: Record a keyboard shortcut
     pressKeys: Press keys…
@@ -195,7 +197,7 @@ options:
       desc: How long Clipio waits after you stop typing before expanding. Lower is faster but can fire mid-word.
     blockedSites:
       title: Blocked sites
-      desc: Snippet expansion is disabled on these sites. Add them from the page context menu.
+      desc: Snippet expansion is disabled on these sites. Add hostnames, wildcards or /pattern/i regexes here, or from the page context menu.
     theme:
       title: Theme
       desc: Follow the system setting, or pin Clipio to light or dark.
@@ -237,6 +239,8 @@ options:
     exported: Snippets exported
     exportedWithMedia: Snippets + images exported
     uses: "$1 uses"
+    totalUses: Total uses
+    mostUsed: Most used
   theme:
     light: Light
     dark: Dark
@@ -251,14 +255,14 @@ options:
     localStorage: Local storage estimate
   generalSection:
     blockedSites:
-      addPlaceholder: "e.g. example.com or *.slack.com"
+      addPlaceholder: "e.g. example.com, *.slack.com or /pattern/i"
       addButton: Add site
       empty: No sites blocked yet.
       remove: Remove
       removed: Site removed
       added: Site added
       errorDuplicate: This site is already blocked.
-      errorInvalid: Enter a valid hostname (e.g. example.com or *.slack.com).
+      errorInvalid: Enter a hostname, wildcard or regex (e.g. example.com, *.slack.com, /pattern/i).
   feedback:
     title: Feedback
     description: Help us improve Clipio by sharing your thoughts, suggestions, or bug reports. Your feedback is valuable!
@@ -284,7 +288,6 @@ options:
     reviewBannerTitle: "Enjoying Clipio?"
     reviewBannerDescription: A quick review helps others discover Clipio and motivates continued development.
     reviewBannerAction: Rate on the Store
-    reviewBannerDismiss: Dismiss
   importExport:
     exportCard:
       title: Export snippets
@@ -563,18 +566,9 @@ onboarding:
     shortcut:
       title: Pick a shortcut
       description: Add a short suffix without spaces, such as `sig`, to expand this snippet from any text field.
-    shortcutTip:
-      title: Use it anywhere
-      description: On a web page, type the trigger prefix followed by your shortcut and press Space.
     content:
       title: Write the content
       description: Type or paste anything you reuse often. The editor keeps formatting, links and images.
-    placeholders:
-      title: Add dynamic placeholders
-      description: Type / in the editor to insert commands such as Clipboard, Today, Place Cursor and Pick Date.
-    save:
-      title: Create the snippet
-      description: Create saves it to your library. For this tour, Next leaves the form without saving your sample draft.
     library:
       title: Find it again
       description: Select a snippet here to copy, edit or insert it into a page.

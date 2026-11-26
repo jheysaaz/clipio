@@ -402,3 +402,49 @@
   background-color: var(--primary);
   color: var(--primary-foreground);
 }
+
+/* The editor footer degrades in order: short time, no "Updated", fewer chips
+   (measured in JS). Container queries key off the footer itself, not the window,
+   because the sidebar can be resized inside a fixed-width popup. */
+.editor-footer {
+  container: editor-footer / inline-size;
+}
+
+.editor-time-short {
+  display: none;
+}
+
+/* Measuring chips paint their label through a pseudo-element so the real text
+   exists only once in the DOM and assistive tech/text queries never see a copy. */
+.tag-measure-chip::before,
+.tag-measure-more::before {
+  content: attr(data-measure-text);
+}
+
+@container editor-footer (max-width: 25rem) {
+  .editor-time-long {
+    display: none;
+  }
+
+  .editor-time-short {
+    display: inline;
+  }
+}
+
+@container editor-footer (max-width: 21rem) {
+  .editor-updated-label {
+    display: none;
+  }
+}
+
+/* Status fades and spinners still convey meaning with motion removed. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

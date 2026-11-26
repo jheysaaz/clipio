@@ -31,7 +31,9 @@ describe("i18n stub — plain messages", () => {
   });
 
   it("substitutes positional placeholders", () => {
-    expect(i18n.t("newSnippet.shortcutErrorDuplicate", ["/x", "Address"])).toBe(
+    expect(
+      i18n.t("snippetEditor.shortcutErrorDuplicate", ["/x", "Address"])
+    ).toBe(
       'Shortcut "/x" is already used by "Address". Choose a different shortcut.'
     );
   });
@@ -46,7 +48,9 @@ describe("i18n stub — plain messages", () => {
   it("leaves an unmatched placeholder visible", () => {
     // Matching Chrome: a missing substitution shows the template rather than
     // silently producing "Shortcut \"\" is already used".
-    expect(i18n.t("newSnippet.shortcutErrorDuplicate", ["/x"])).toContain("$2");
+    expect(i18n.t("snippetEditor.shortcutErrorDuplicate", ["/x"])).toContain(
+      "$2"
+    );
   });
 });
 

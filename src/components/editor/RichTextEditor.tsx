@@ -96,7 +96,10 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
     ref
   ) {
     const initialValueRef = useRef(value);
-    const isExternalUpdate = useRef(false);
+    // The last `value` prop this editor has accounted for. Comparing against the
+    // *initial* value instead made a value that came back after an undo look like
+    // "no change", so the document kept showing the undone text.
+    const lastValueRef = useRef(value);
     // Overlay visibility lives in `@/store/editor-selection` as one field, so two
     // overlays being open is not representable. With three `useState` booleans
     // nothing stopped the GIF picker opening over the image picker — two floating
@@ -204,18 +207,17 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
       [editor]
     );
 
-    // Sync external value changes
+    // Sync external value changes. A keystroke echoes the serialised document
+    // back as `value`, so by the time this effect runs the two already match and
+    // there is nothing to set. An undo/redo restores an earlier value — including
+    // the value the editor mounted with — and that always differs from the last
+    // value seen, so the document follows it.
     useEffect(() => {
-      if (isExternalUpdate.current) {
-        isExternalUpdate.current = false;
-        return;
-      }
-
+      if (value === lastValueRef.current) return;
+      lastValueRef.current = value;
       const currentMarkdown = serializeToMarkdown(editor.children);
-      if (currentMarkdown !== value && value !== initialValueRef.current) {
-        const newValue = deserializeContent(value);
-        editor.tf.setValue(newValue);
-        initialValueRef.current = value;
+      if (currentMarkdown !== value) {
+        editor.tf.setValue(deserializeContent(value));
       }
     }, [value, editor]);
 
@@ -231,7 +233,6 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
             (newValue[0] as TElement).children.length === 1 &&
             ((newValue[0] as TElement).children[0] as TText).text === "");
 
-        isExternalUpdate.current = true;
         onChange(isEmpty ? "" : markdown);
 
         // Check for slash command trigger
@@ -744,8 +745,9 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
             <PlateContent
               aria-label={ariaLabel}
               placeholder={placeholder}
+              spellCheck={false}
               className={cn(
-                "h-full overflow-auto outline-none text-sm leading-relaxed",
+                "h-full overflow-auto font-normal text-base leading-[1.6] outline-none",
                 "text-foreground",
                 "**:data-slate-placeholder:text-muted-foreground",
                 "**:data-slate-placeholder:opacity-100!"

@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Command, Keyboard, Option, ArrowUp } from "lucide-react";
 
+import { useFeedback } from "@/components/feedback/FeedbackProvider";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import {
@@ -66,6 +67,12 @@ export function ShortcutRecorder({
 }) {
   const [state, setState] = useState<ArmState>({ armed: false });
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const { announceError } = useFeedback();
+
+  useEffect(() => {
+    const error = "error" in state ? state.error : null;
+    if (state.armed && error) announceError(error);
+  }, [state, announceError]);
 
   const parsed: ParsedShortcut | null = parseShortcut(value);
   const display = parsed
@@ -208,7 +215,6 @@ export function ShortcutRecorder({
       </button>
       {state.armed && state.error && (
         <p
-          role="alert"
           data-testid={`${testId ?? "shortcut"}-error`}
           className="text-xs text-destructive"
         >

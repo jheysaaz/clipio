@@ -16,10 +16,7 @@ const POPUP_STEPS = [
   "add-snippet",
   "snippet-label-input",
   "snippet-shortcut-input",
-  "snippet-shortcut-tip",
   "snippet-content-editor",
-  "snippet-placeholder-tip",
-  "snippet-create-save",
   "snippet-library",
   "settings-button",
 ] as const;
@@ -52,14 +49,6 @@ test.describe("first-run onboarding", () => {
         await expect(
           popupPage.getByTestId("snippet-label-input")
         ).toBeVisible();
-        continue;
-      }
-
-      if (index === 7) {
-        await popupPage.getByTestId("onboarding-next").click();
-        await expect(popupPage.getByTestId("snippet-label-input")).toHaveCount(
-          0
-        );
         continue;
       }
 

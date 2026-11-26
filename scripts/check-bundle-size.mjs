@@ -59,14 +59,71 @@ const posix = (p) => p.split(sep).join("/");
  * bytes and the aggregate by 173; the popup, background and content budgets did
  * not move. All affected sizes were measured twice from clean builds and did
  * not vary.
+ *
+ * Raised a sixth time for autosave, the persisted write queue and local version
+ * history. The background gains the queue drain and rate limiting, the popup
+ * gains draft staging plus undo/redo, and the options entry grows because the
+ * same storage and history modules are shared there. The content script grows
+ * slightly from the shared LWW/queue types. The popup entry chunk itself shrank
+ * (the Save button and its wiring are gone), so its budget is left high. All
+ * raised sizes were measured twice from clean builds and did not vary.
+ *
+ * Raised a seventh time for the queue drain's wake-up scheduling: operations
+ * blocked by the inter-send gap or backoff now get a timer so they are retried
+ * without waiting for another storage write. That adds 646 bytes to
+ * background.js and therefore to the all-JavaScript total; no other budget
+ * moved. Both sizes were measured twice from clean builds and did not vary.
+ *
+ * Raised an eighth time because the create form now lives in the detail pane
+ * instead of a second full-page view. Removing NewSnippetView and its own
+ * validation code is offset by sharing the detail pane's editor with the
+ * create flow: the popup chunk shrinks further, while the options chunk and
+ * shared chunks grow slightly because they already import that pane. Three
+ * budgets move up by 28/260/28 bytes; all were measured twice from clean
+ * builds and did not vary.
+ *
+ * Raised a ninth time for the queue review fixes: the cross-context Web Lock,
+ * in-flight claims and startup reconciliation in the background, the popup's
+ * per-snippet outcomes and commit waiting, and self-write metadata handling.
+ * The background grows 1,266 bytes, the options entry 2, the shared chunks
+ * 3,035, and the all-JavaScript total 4,301. The content and popup budgets did
+ * not move. All raised sizes were measured twice from clean builds and did not
+ * vary.
+ *
+ * Raised a tenth time for the Sentry context guard that keeps DOM-only browser
+ * tracing out of the service worker. The background grows 83 bytes and the
+ * all-JavaScript total 82; the shared chunks shrink by one byte, so that
+ * budget is unchanged. Both raised sizes were measured twice from clean builds
+ * and did not vary.
+ *
+ * Raised an eleventh time when the delete confirmation dialog was removed. The
+ * dialog was the popup's only other importer of Base UI's floating internals, so
+ * Rollup no longer puts them in a shared chunk with the options Select and moves
+ * them into the options entry instead. Total JavaScript and all shared chunks
+ * both shrink; only the options entry grows. Its new size was measured twice
+ * from clean builds and did not vary.
+ *
+ * Raised a twelfth time for replacing Sonner with the shared inline feedback
+ * provider. Options now mounts the provider, owns the two live regions, and
+ * drives the review banner through the one Tier 2 slot; dropping Sonner shrinks
+ * the aggregate and shared chunks, but this entry grows by 383 bytes. Measured
+ * twice from clean builds and did not vary.
+ *
+ * Raised a thirteenth time for full-regex blocked-site entries and the live
+ * favicon preview in the add field. Background gains regex-aware dedupe when
+ * the context menu adds a site, the content script gains regex matching, and
+ * the options entry gains the parser, the favicon component and the preview.
+ * The all-JavaScript and shared-chunk totals went down over the same change, so
+ * those budgets are unchanged. All raised sizes were measured twice from clean
+ * builds and did not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_722_054 },
-  { name: "background entry", pattern: "background.js", maxBytes: 217_475 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_757_453 },
+  { name: "background entry", pattern: "background.js", maxBytes: 226_150 },
   {
     name: "content script entry",
     pattern: "content-scripts/content.js",
-    maxBytes: 916_870,
+    maxBytes: 918_507,
   },
   {
     name: "popup entry chunk",
@@ -76,14 +133,14 @@ const BUDGETS = [
   {
     name: "options entry chunk",
     pattern: "chunks/options-*.js",
-    maxBytes: 187_989,
+    maxBytes: 239_489,
   },
   {
     // Shared chunks are included here even when their individual hashed names
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_587_709,
+    maxBytes: 1_613_348,
   },
 ];
 

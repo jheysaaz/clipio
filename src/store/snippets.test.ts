@@ -70,6 +70,10 @@ vi.mock("@/storage/items", () => ({
   },
 }));
 
+vi.mock("@/storage/writer-id", () => ({
+  getWriterId: vi.fn(async () => "self-writer"),
+}));
+
 vi.mock("@/lib/sentry", () => ({ captureError: vi.fn() }));
 
 import { captureError } from "@/lib/sentry";
@@ -552,7 +556,6 @@ describe("removeSnippet", () => {
   it("rethrows so the caller cannot report a failure as a success", async () => {
     snippetsStore.setState((prev) => ({ ...prev, snippets: [makeSnippet()] }));
     storage.deleteSnippet.mockRejectedValue(new Error("locked"));
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
 
     await expect(removeSnippet("s1")).rejects.toThrow("locked");
     // The library is untouched: a failed delete must not look like a delete.
@@ -615,6 +618,78 @@ describe("live cross-context sync", () => {
     await vi.waitFor(() =>
       expect(state().snippets.map((s) => s.id)).toEqual(["elsewhere"])
     );
+  });
+
+  it("re-reads a local change made by another writer", async () => {
+    await loadSnippets();
+    storage.getSnippets.mockResolvedValue([
+      makeSnippet({ id: "from-options", updatedBy: "options-writer" }),
+    ]);
+
+    emitStorageChange(
+      {
+        "snip:from-options": {
+          oldValue: undefined,
+          newValue: makeSnippet({
+            id: "from-options",
+            updatedBy: "options-writer",
+          }),
+        },
+      },
+      "local"
+    );
+    await vi.waitFor(() =>
+      expect(state().snippets.map((s) => s.id)).toEqual(["from-options"])
+    );
+  });
+
+  it("takes only write metadata from our own local commit", async () => {
+    const before = makeSnippet({
+      id: "s1",
+      label: "Old",
+      content: "old body",
+      rev: 3,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      updatedBy: "options-writer",
+    });
+    const committed = makeSnippet({
+      id: "s1",
+      label: "New",
+      content: "new body",
+      rev: 4,
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      updatedBy: "self-writer",
+    });
+    snippetsStore.setState((prev) => ({ ...prev, snippets: [before] }));
+    storage.getSnippets.mockClear();
+
+    emitStorageChange(
+      { "snip:s1": { oldValue: before, newValue: committed } },
+      "local"
+    );
+
+    await vi.waitFor(() => expect(state().snippets[0].rev).toBe(4));
+    // Replacing the fields would snap the open editor back to the committed
+    // text; only the write bookkeeping may change here.
+    expect(state().snippets[0]).toMatchObject({
+      label: "Old",
+      content: "old body",
+      updatedAt: committed.updatedAt,
+      updatedBy: "self-writer",
+    });
+    expect(storage.getSnippets).not.toHaveBeenCalled();
+  });
+
+  it("removes a locally deleted snippet when our own writer deleted it", async () => {
+    const before = makeSnippet({ id: "s1", updatedBy: "self-writer" });
+    snippetsStore.setState((prev) => ({ ...prev, snippets: [before] }));
+
+    emitStorageChange(
+      { "snip:s1": { oldValue: before, newValue: undefined } },
+      "local"
+    );
+
+    await vi.waitFor(() => expect(state().snippets).toHaveLength(0));
   });
 
   it("ignores a change to a key that is not a snippet", async () => {

@@ -9,6 +9,7 @@
 
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { i18n } from "#i18n";
+import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type MockImageItem = {
@@ -105,6 +106,14 @@ vi.mock("@/components/ui/icon", () => ({
 
 import { ImagesSection } from "./ImagesSection";
 
+function renderSection() {
+  return render(
+    <FeedbackProvider>
+      <ImagesSection />
+    </FeedbackProvider>
+  );
+}
+
 function item(overrides: Partial<MockImageItem> = {}): MockImageItem {
   return {
     meta: {
@@ -173,7 +182,7 @@ afterEach(() => {
 
 describe("ImagesSection", () => {
   it("loads the library on mount and disposes object URLs on unmount", () => {
-    const { unmount } = render(<ImagesSection />);
+    const { unmount } = renderSection();
 
     expect(mocks.loadMediaLibrary).toHaveBeenCalledTimes(1);
     expect(mocks.disposeObjectUrls).not.toHaveBeenCalled();
@@ -186,7 +195,7 @@ describe("ImagesSection", () => {
   it("shows a loading state and no library actions", () => {
     setState({ loading: true });
 
-    render(<ImagesSection />);
+    renderSection();
 
     expect(
       screen.getByText(i18n.t("options.images.loading"))
@@ -199,7 +208,7 @@ describe("ImagesSection", () => {
   it("shows a dismissible load error", () => {
     setState({ loadError: "Could not load images" });
 
-    render(<ImagesSection />);
+    renderSection();
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Could not load images"
@@ -211,7 +220,7 @@ describe("ImagesSection", () => {
   });
 
   it("shows the empty state when the library has no images", () => {
-    render(<ImagesSection />);
+    renderSection();
 
     expect(
       screen.getByText(i18n.t("options.images.empty"))
@@ -243,7 +252,7 @@ describe("ImagesSection", () => {
       deleteErrors: { "img-2": "Delete failed" },
     });
 
-    render(<ImagesSection />);
+    renderSection();
 
     const first = screen.getByTestId("image-row-img-1");
     const second = screen.getByTestId("image-row-img-2");
@@ -281,7 +290,7 @@ describe("ImagesSection", () => {
   it("switches between list and grid views", () => {
     setState({ items: [item()] });
 
-    const list = render(<ImagesSection />);
+    const list = renderSection();
 
     fireEvent.click(
       screen.getByRole("button", { name: i18n.t("options.images.viewGrid") })
@@ -290,7 +299,7 @@ describe("ImagesSection", () => {
     list.unmount();
 
     setState({ viewMode: "grid" });
-    render(<ImagesSection />);
+    renderSection();
 
     expect(screen.getByTestId("image-row-img-1")).toBeInTheDocument();
     fireEvent.click(
@@ -308,7 +317,7 @@ describe("ImagesSection", () => {
   it("reports storage use against the configured limit in both colour bands", () => {
     setState({ items: [item()] });
 
-    const { unmount } = render(<ImagesSection />);
+    const { unmount } = renderSection();
     expect(
       screen.getByRole("progressbar", {
         name: i18n.t("options.images.totalStorage"),
@@ -319,7 +328,7 @@ describe("ImagesSection", () => {
     const big = item();
     big.meta.size = 41 * 1024 * 1024;
     setState({ items: [big] });
-    render(<ImagesSection />);
+    renderSection();
 
     expect(
       screen.getByRole("progressbar", {
@@ -331,7 +340,7 @@ describe("ImagesSection", () => {
 
   it("saves alt text on click and on Enter, then clears the saved flash", async () => {
     setState({ items: [item()], altDraft: { "img-1": "new alt" } });
-    render(<ImagesSection />);
+    renderSection();
 
     const input = screen.getByRole("textbox", {
       name: i18n.t("options.images.altText.label"),
@@ -363,7 +372,7 @@ describe("ImagesSection", () => {
   it("does not schedule a saved flash when the alt write fails", async () => {
     mocks.saveAlt.mockResolvedValue(false);
     setState({ items: [item()] });
-    render(<ImagesSection />);
+    renderSection();
 
     await act(async () => {
       fireEvent.click(
@@ -378,7 +387,7 @@ describe("ImagesSection", () => {
 
   it("confirms deletion with the reference count and supports every exit", () => {
     setState({ items: [item()], confirmDeleteId: "img-1" });
-    const { unmount } = render(<ImagesSection />);
+    const { unmount } = renderSection();
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent(
@@ -405,7 +414,7 @@ describe("ImagesSection", () => {
       items: [item({ referencingSnippets: [] })],
       confirmDeleteId: "img-1",
     });
-    render(<ImagesSection />);
+    renderSection();
     expect(screen.getByRole("dialog")).toHaveTextContent(
       i18n.t("options.images.deleteConfirmMessageNoRefs")
     );
@@ -414,7 +423,7 @@ describe("ImagesSection", () => {
   it("does not open a confirmation for an id with no matching image", () => {
     setState({ items: [item()], confirmDeleteId: "missing" });
 
-    render(<ImagesSection />);
+    renderSection();
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });

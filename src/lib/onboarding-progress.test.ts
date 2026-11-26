@@ -14,18 +14,17 @@ import {
 
 describe("onboarding step registry", () => {
   it("defines the expanded popup walkthrough and the options portion", () => {
-    expect(ONBOARDING_STEPS.popup).toHaveLength(10);
+    expect(ONBOARDING_STEPS.popup).toHaveLength(7);
     expect(ONBOARDING_STEPS.options).toHaveLength(3);
-    expect(stepCountFor("popup")).toBe(10);
+    expect(stepCountFor("popup")).toBe(7);
     expect(stepCountFor("options")).toBe(3);
   });
 
-  it("opens and closes the create form where the walkthrough needs it", () => {
+  it("opens the editor once, without a Create or Cancel step to close", () => {
     expect(ONBOARDING_STEPS.popup[1]?.nextAction).toBe("open-create");
-    expect(ONBOARDING_STEPS.popup[7]?.nextAction).toBe("close-create");
     expect(
       ONBOARDING_STEPS.popup.filter((step) => step.nextAction)
-    ).toHaveLength(2);
+    ).toHaveLength(1);
   });
 
   it("uses distinct stable selectors for every step", () => {

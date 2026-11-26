@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Icon } from "@/components/ui/icon";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,7 @@ import { ShortcutRecorder } from "./ShortcutRecorder";
 import { setThemeMode } from "@/store/settings";
 import type { SettingEntry } from "./registry";
 import { captureError } from "@/lib/sentry";
+import { shortcutsEqual } from "@/lib/shortcuts";
 import { i18n } from "#i18n";
 
 type Status = "idle" | "saving" | "saved" | "error";
@@ -146,6 +148,16 @@ export function SettingControl({
 
   const canReset = !!entry.reset && loaded && !isDefaultValue(entry, value);
 
+  const control = (
+    <Control
+      entry={entry}
+      value={value}
+      loaded={loaded}
+      onChange={persist}
+      status={status}
+    />
+  );
+
   return (
     <SettingRow
       title={i18n.t(entry.titleKey)}
@@ -165,13 +177,24 @@ export function SettingControl({
             : status
       }
     >
-      <Control
-        entry={entry}
-        value={value}
-        loaded={loaded}
-        onChange={persist}
-        status={status}
-      />
+      {entry.preview ? (
+        <div className="flex w-full items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            data-testid={entry.preview.testId}
+            onClick={entry.preview.run}
+            className="text-muted-foreground"
+          >
+            {entry.preview.icon && <Icon icon={entry.preview.icon} size="sm" />}
+            {i18n.t(entry.preview.labelKey)}
+          </Button>
+          {control}
+        </div>
+      ) : (
+        control
+      )}
     </SettingRow>
   );
 }
@@ -184,6 +207,13 @@ export function SettingControl({
  */
 function isDefaultValue(entry: SettingEntry, value: unknown): boolean {
   if ("defaultValue" in entry) {
+    if (
+      entry.control === "shortcut" &&
+      typeof value === "string" &&
+      typeof entry.defaultValue === "string"
+    ) {
+      return shortcutsEqual(value, entry.defaultValue);
+    }
     return value === entry.defaultValue;
   }
   // No declared default: the row cannot prove it is dirty, so keep the reset

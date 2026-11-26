@@ -8,11 +8,12 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Heart, X } from "lucide-react";
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 
-import { Alert, AlertDescription, AlertAction } from "@/components/ui/alert";
-import { Icon } from "@/components/ui/icon";
+import {
+  FeedbackBanner,
+  useFeedback,
+} from "@/components/feedback/FeedbackProvider";
 import { i18n } from "#i18n";
 import type {
   SectionId,
@@ -38,6 +39,7 @@ const sectionHref = (id: SectionId) => `/${id}` as const;
 
 export function OptionsShell() {
   const navigate = useNavigate();
+  const { showBanner, dismissBanner } = useFeedback();
 
   // The active section is derived from the URL, never stored. A second piece of
   // state would be a source of truth that a back-button press could desynchronise
@@ -84,6 +86,34 @@ export function OptionsShell() {
     shouldShowReviewBanner().then(setShowReviewBanner).catch(console.warn);
   }, []);
 
+  useEffect(() => {
+    if (!showReviewBanner) {
+      dismissBanner("review", { runOnDismiss: false });
+      return;
+    }
+
+    showBanner({
+      source: "review",
+      severity: "info",
+      testId: "warning-review-banner",
+      dismissTestId: "warning-review-dismiss",
+      message: `${i18n.t("options.feedback.reviewBannerTitle")} ${i18n.t("options.feedback.reviewBannerDescription")}`,
+      onDismiss: () => {
+        setReviewPromptState("dismissed").catch(console.warn);
+        setShowReviewBanner(false);
+      },
+      action: {
+        label: i18n.t("options.feedback.reviewBannerAction"),
+        onClick: () => {
+          browser.tabs.create({ url: getStoreReviewUrl() });
+          dismissBanner("review", { runOnDismiss: false });
+          setReviewPromptState("rated").catch(console.warn);
+          setShowReviewBanner(false);
+        },
+      },
+    });
+  }, [showReviewBanner, showBanner, dismissBanner]);
+
   /** Leaving search hands the main column back to the route. */
   const goToSection = useCallback(
     (next: SectionId) => {
@@ -124,42 +154,7 @@ export function OptionsShell() {
 
       <main className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-2xl px-8 py-8">
-          {showReviewBanner && (
-            <Alert className="mb-6 border-blue-200 bg-blue-50 text-blue-800 [&>svg]:text-blue-500 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300 dark:[&>svg]:text-blue-400">
-              <Icon icon={Heart} size="lg" />
-              <AlertDescription className="text-blue-800 dark:text-blue-300">
-                <span className="font-medium">
-                  {i18n.t("options.feedback.reviewBannerTitle")}
-                </span>{" "}
-                {i18n.t("options.feedback.reviewBannerDescription")}
-              </AlertDescription>
-              <AlertAction>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      browser.tabs.create({ url: getStoreReviewUrl() });
-                      setReviewPromptState("rated").catch(console.warn);
-                      setShowReviewBanner(false);
-                    }}
-                    className="text-xs font-medium text-blue-700 hover:underline dark:text-blue-300"
-                  >
-                    {i18n.t("options.feedback.reviewBannerAction")}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setReviewPromptState("dismissed").catch(console.warn);
-                      setShowReviewBanner(false);
-                    }}
-                    className="opacity-50 transition-opacity hover:opacity-100"
-                    aria-label={i18n.t("options.feedback.reviewBannerDismiss")}
-                    data-testid="warning-review-dismiss"
-                  >
-                    <Icon icon={X} stroke="emphasis" />
-                  </button>
-                </div>
-              </AlertAction>
-            </Alert>
-          )}
+          <FeedbackBanner />
 
           {searching ? <SearchResults query={query} /> : <Outlet />}
         </div>

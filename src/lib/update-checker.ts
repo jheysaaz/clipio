@@ -34,6 +34,13 @@ export interface ReleaseInfo {
   publishedAt: string;
 }
 
+/**
+ * Build-time configs do not always carry `WXT_GITHUB_REPO` — `.env` is ignored
+ * and release builds do not set it — which used to make every check silently
+ * no-op. Keep the repository here so production builds still check.
+ */
+export const DEFAULT_GITHUB_REPO = "jheysaaz/clipio";
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -183,8 +190,10 @@ export function shouldCheckForUpdate(
 }
 
 export async function checkForUpdate(): Promise<void> {
-  const repo = (import.meta.env.WXT_GITHUB_REPO as string | undefined)?.trim();
-  if (!repo) return;
+  const configuredRepo = (
+    import.meta.env.WXT_GITHUB_REPO as string | undefined
+  )?.trim();
+  const repo = configuredRepo || DEFAULT_GITHUB_REPO;
 
   // Throttle before touching the network. The alarm is not a throttle on its
   // own: the background also calls this at the top level of the service worker,

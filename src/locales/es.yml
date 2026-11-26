@@ -2,8 +2,6 @@ extName: "Clipio: Gestor de Fragmentos"
 extDescription: "Una potente extensión de navegador para gestionar e insertar fragmentos de texto con velocidad y aumentar tu productividad."
 
 common:
-  hideSidebar: Ocultar barra lateral
-  showSidebar: Mostrar barra lateral
   resizeSidebar: Cambiar tamaño de la barra lateral
   cancel: Cancelar
   closeModal: Cerrar
@@ -13,6 +11,7 @@ common:
   dismissError: Cerrar aviso
   close: Cerrar
   reload: Recargar
+  loading: Cargando…
   errorOptions: Algo ha salido mal. Recarga la página de opciones.
   errorPopup: Algo ha salido mal. Cierra y vuelve a abrir la extensión.
 
@@ -37,11 +36,6 @@ dashboard:
     heading: Aún no hay fragmentos
     body: Crea tu primer fragmento para guardar y reutilizar texto rápidamente.
     action: Crear tu primer fragmento
-  toast:
-    snippetSaved: Fragmento guardado
-    snippetDeleted: Fragmento eliminado
-    snippetUpdated: Fragmento actualizado
-  detailPlaceholder: Selecciona un fragmento para ver los detalles
   snippetListLabel: Fragmentos
   warnings:
     quotaFull:
@@ -70,67 +64,73 @@ dashboard:
     quotaTotal: Tus fragmentos ocupan $1 y la sincronización permite $2.
     quotaCount: Tienes $1 fragmentos y la sincronización permite $2.
 
-newSnippet:
-  cancel: Cancelar
-  creating: Creando...
-  create: Crear
-  name: Nombre
-  namePlaceholder: "Ej: Firma de correo"
+snippetEditor:
+  name: Nombre del fragmento
+  namePlaceholder: Fragmento sin título
   shortcut: Atajo
-  shortcutPlaceholder: "Ej: $1firma"
+  shortcutPlaceholder: "Agregar atajo"
+  shortcutLabel: "Atajo: $1"
+  shortcutTip: Escribe esto en cualquier página para expandir el fragmento.
   shortcutError: El atajo no puede contener espacios
   shortcutErrorDuplicate: 'El atajo "$1" ya está en uso por "$2". Elige un atajo diferente.'
   shortcutErrorPrefix: 'El atajo "$1" entra en conflicto con "$2" — uno puede impedir que el otro se expanda.'
-  shortcutTip: Escribe el desencadenante y este atajo en cualquier página para expandir el fragmento.
-  content: Contenido
-  contentPlaceholder: Escribe el contenido de tu fragmento...
-  placeholderTip: "Escribe / en el editor para ver comandos como Portapapeles, Hoy, Colocar cursor y Elegir fecha."
-  footer: Nuevo fragmento
+  content: Contenido del fragmento
+  contentPlaceholder: "Escribe / para ver comandos…"
+  removeTag: "Quitar etiqueta $1"
+  more: Más acciones
+  moreTooltip: "Más acciones (Alt+O)"
+  deleteTooltip: Eliminar fragmento
+  copyTooltip: "Copiar al portapapeles ($1C)"
+  copiedTooltip: "Copiado ($1C)"
+  undoTooltip: "Restaurar versión anterior ($1Z)"
+  undoLabel: Restaurar versión anterior
+  redoTooltip: "Restaurar versión siguiente ($1)"
+  redoLabel: Restaurar versión siguiente
+  sidebarHideTooltip: Ocultar barra lateral (Alt+B)
+  sidebarShowTooltip: Mostrar barra lateral (Alt+B)
+  sidebarHideLabel: Ocultar barra lateral
+  sidebarShowLabel: Mostrar barra lateral
+  retryTooltip: Reintentar el último guardado
 
 snippetDetail:
   deleteSnippet: Eliminar fragmento
   copyToClipboard: Copiar al portapapeles
-  insertCommand: Insertar comando
-  saving: Guardando...
-  save: Guardar
-  savedLabel: Guardado
-  copiedLabel: "¡Copiado!"
-  editorPlaceholder: "Empieza a escribir el contenido del fragmento o usa '/' para comandos..."
+  copiedLabel: Copiado
   tags: Etiquetas
   tagPlaceholder: Nombre de etiqueta...
   addTag: Agregar etiqueta
-  addTagTitle: Agregar una nueva etiqueta
+  newTag: Nueva etiqueta
   uses: usos
   updated: Actualizado
-  deleteDialog:
-    title: Eliminar fragmento
-    message: '¿Estás seguro de que quieres eliminar "$1"? Esta acción no se puede deshacer.'
-    confirm: Eliminar
-    cancel: Cancelar
-  unsavedChanges:
-    title: Cambios sin guardar
-    message: Tienes cambios sin guardar. Si cambias de fragmento ahora, perderás los cambios.
-    discard: Descartar cambios
-    keepEditing: Seguir editando
+  draft: Borrador
+  hiddenTags: Etiquetas ocultas
+  moreTags: "+$1"
+  deleted:
+    title: Fragmento eliminado
+    undo: Deshacer
+    live: "Fragmento eliminado. Deshacer disponible."
+  syncStatus:
+    saved: "Guardado"
+    saving: "Guardando…"
+    failed: "No se pudo guardar · Reintentar"
+    refused: "Almacenamiento lleno: los cambios se conservan localmente"
   errors:
     failedToCopy: Error al copiar al portapapeles
     failedToSave: Error al guardar el fragmento. Por favor, inténtalo de nuevo.
     failedToDelete: Error al eliminar el fragmento. Por favor, inténtalo de nuevo.
-  status:
-    saved: "¡Fragmento guardado!"
-
-confirmDialog:
-  loading: Cargando...
-  defaultConfirm: Confirmar
-  defaultCancel: Cancelar
+    failedToStage: El cambio se guardó localmente pero no se pudo poner en cola.
+    emptyLabel: El fragmento necesita un nombre antes de guardarse.
+    emptyShortcut: El fragmento necesita un atajo antes de guardarse.
+    shortcutSpaces: El atajo no puede contener espacios.
+    shortcutConflict: Ese atajo pertenece a otro fragmento.
+    emptyContent: El fragmento necesita contenido antes de guardarse.
+    malformedMedia: Uno de los marcadores de contenido multimedia está incompleto.
 
 options:
   # Página de opciones — texto que antes estaba en inglés fijo.
   copy:
     extensionVersion: Versión de la extensión
     extensionVersionHint: Versión instalada actualmente y actualizaciones disponibles.
-    topUsageHeading: Los 5 más usados
-    topUsageEmpty: Todavía no hay datos de uso.
     viewRelease: Ver la publicación
     upToDate: Actualizado
   notFound:
@@ -168,7 +168,9 @@ options:
   row:
     resetToDefault: Restablecer al valor predeterminado
     saveFailed: No se pudo guardar
+    saved: Guardado
     managedInSection: Se gestiona en su sección
+    preview: Vista previa
   shortcut:
     recorder: Grabar un atajo de teclado
     pressKeys: Pulsa las teclas…
@@ -189,7 +191,7 @@ options:
       desc: Cuánto espera Clipio tras dejar de escribir antes de expandir. Un valor menor es más rápido, pero puede activarse a mitad de palabra.
     blockedSites:
       title: Sitios bloqueados
-      desc: La expansión de fragmentos está desactivada en estos sitios. Añádelos desde el menú contextual de la página.
+      desc: La expansión de fragmentos está desactivada en estos sitios. Añade dominios, comodines o regex /pattern/i aquí, o desde el menú contextual de la página.
     theme:
       title: Tema
       desc: Sigue el ajuste del sistema, o fija Clipio en claro u oscuro.
@@ -231,6 +233,8 @@ options:
     exported: Fragmentos exportados
     exportedWithMedia: Fragmentos e imágenes exportados
     uses: "$1 usos"
+    totalUses: Usos totales
+    mostUsed: Más usado
   theme:
     light: Claro
     dark: Oscuro
@@ -245,14 +249,14 @@ options:
     localStorage: Estimación de almacenamiento local
   generalSection:
     blockedSites:
-      addPlaceholder: "Ej: ejemplo.com o *.slack.com"
+      addPlaceholder: "Ej: ejemplo.com, *.slack.com o /pattern/i"
       addButton: Añadir sitio
       empty: Aún no hay sitios bloqueados.
       remove: Eliminar
       removed: Sitio eliminado
       added: Sitio añadido
       errorDuplicate: Este sitio ya está bloqueado.
-      errorInvalid: Introduce un dominio válido (ej. ejemplo.com o *.slack.com).
+      errorInvalid: Introduce un dominio, comodín o regex (ej. ejemplo.com, *.slack.com, /pattern/i).
   feedback:
     title: Comentarios
     description: ¡Ayúdanos a mejorar Clipio compartiendo tus opiniones, sugerencias o reportes de errores! ¡Tus comentarios son valiosos!
@@ -278,7 +282,6 @@ options:
     reviewBannerTitle: "¿Disfrutas Clipio?"
     reviewBannerDescription: Una reseña rápida ayuda a otros a descubrir Clipio y motiva el desarrollo continuo.
     reviewBannerAction: Valorar en la tienda
-    reviewBannerDismiss: Descartar
   importExport:
     exportCard:
       title: Exportar fragmentos
@@ -557,18 +560,9 @@ onboarding:
     shortcut:
       title: Elige un atajo
       description: Añade un sufijo corto sin espacios, como `firma`, para expandir el fragmento desde cualquier campo de texto.
-    shortcutTip:
-      title: Úsalo en cualquier lugar
-      description: En una página web, escribe el desencadenante seguido de tu atajo y pulsa Espacio.
     content:
       title: Escribe el contenido
       description: Escribe o pega cualquier texto que repitas a menudo. El editor conserva el formato, los enlaces y las imágenes.
-    placeholders:
-      title: Añade marcadores dinámicos
-      description: Escribe / en el editor para insertar comandos como Portapapeles, Hoy, Colocar cursor y Elegir fecha.
-    save:
-      title: Crea el fragmento
-      description: Crear lo guarda en tu biblioteca. En este recorrido, Siguiente sale del formulario sin guardar el borrador de ejemplo.
     library:
       title: Encuéntralo de nuevo
       description: Selecciona un fragmento aquí para copiarlo, editarlo o insertarlo en una página.

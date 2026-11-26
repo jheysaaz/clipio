@@ -9,7 +9,8 @@
  * All backends implement the StorageBackend interface below.
  */
 
-import type { Snippet } from "@/types";
+import type { Snippet, SnippetEditReason } from "@/types";
+import type { EditorFields } from "@/lib/snippet-draft";
 import type { QuotaBreach } from "./quota-preflight";
 
 // ---------------------------------------------------------------------------
@@ -89,6 +90,23 @@ export interface StorageStatus {
 }
 
 // ---------------------------------------------------------------------------
+// LWW commits
+// -------------------------------------------------------------------------
+
+/** One queued change, committed against the latest stored revision. */
+export type SnippetCommit = {
+  snippetId: string;
+  kind: "upsert" | "delete";
+  fields?: EditorFields;
+  baseRev: number;
+  updatedAt: string;
+  updatedBy: string;
+  reason: SnippetEditReason;
+};
+
+export type CommitResult =
+  { ok: true; snippet: Snippet | null } | { ok: false; conflict: Snippet };
+
 // Errors
 // ---------------------------------------------------------------------------
 

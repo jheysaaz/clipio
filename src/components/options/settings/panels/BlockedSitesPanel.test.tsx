@@ -13,8 +13,11 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
 
 const originalSetTimeout = globalThis.setTimeout;
 
@@ -31,7 +34,7 @@ vi.mock("@/storage/items", () => ({
 }));
 vi.mock("@/lib/sentry", () => ({ captureError: mocks.captureError }));
 
-import { BlockedSitesPanel, isValidHostname } from "./BlockedSitesPanel";
+import { BlockedSitesPanel, isValidSitePattern } from "./BlockedSitesPanel";
 import { i18n } from "../../../../../tests/mocks/i18n";
 
 const invalidCopy = i18n.t("options.generalSection.blockedSites.errorInvalid");
@@ -40,7 +43,11 @@ const duplicateCopy = i18n.t(
 );
 
 function renderPanel() {
-  return render(<BlockedSitesPanel />);
+  return render(
+    <FeedbackProvider>
+      <BlockedSitesPanel />
+    </FeedbackProvider>
+  );
 }
 
 async function typeSite(value: string) {
@@ -70,26 +77,38 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("isValidHostname", () => {
+describe("isValidSitePattern", () => {
   it("accepts dotted hostnames and wildcard subdomain patterns", () => {
     // A bare subdomain and a wildcard are the two shapes the UI advertises.
-    expect(isValidHostname("example.com")).toBe(true);
-    expect(isValidHostname("mail.example.com")).toBe(true);
-    expect(isValidHostname("*.example.com")).toBe(true);
-    expect(isValidHostname("a-b.example.co.uk")).toBe(true);
+    expect(isValidSitePattern("example.com")).toBe(true);
+    expect(isValidSitePattern("mail.example.com")).toBe(true);
+    expect(isValidSitePattern("*.example.com")).toBe(true);
+    expect(isValidSitePattern("a-b.example.co.uk")).toBe(true);
+  });
+
+  it("accepts compilable regex entries", () => {
+    expect(isValidSitePattern("/^mail\\..*example\\.com$/i")).toBe(true);
+    expect(isValidSitePattern("/example\\.(com|org)/")).toBe(true);
+  });
+
+  it("rejects invalid regexes and stateful flags", () => {
+    // A malformed pattern would sit in the list without blocking anything.
+    expect(isValidSitePattern("/(/i")).toBe(false);
+    expect(isValidSitePattern("/example/g")).toBe(false);
+    expect(isValidSitePattern("/mail\\.")).toBe(false);
   });
 
   it("rejects single labels, invalid wildcards and hyphen-edged labels", () => {
     // Each of these would silently never match `location.hostname`, so a write
     // would look successful while the blocklist stayed ineffective.
-    expect(isValidHostname("localhost")).toBe(false);
-    expect(isValidHostname("*.localhost")).toBe(false);
-    expect(isValidHostname("*")).toBe(false);
-    expect(isValidHostname("*.")).toBe(false);
-    expect(isValidHostname("-example.com")).toBe(false);
-    expect(isValidHostname("example.com-")).toBe(false);
-    expect(isValidHostname("bad_host.example")).toBe(false);
-    expect(isValidHostname("")).toBe(false);
+    expect(isValidSitePattern("localhost")).toBe(false);
+    expect(isValidSitePattern("*.localhost")).toBe(false);
+    expect(isValidSitePattern("*")).toBe(false);
+    expect(isValidSitePattern("*.")).toBe(false);
+    expect(isValidSitePattern("-example.com")).toBe(false);
+    expect(isValidSitePattern("example.com-")).toBe(false);
+    expect(isValidSitePattern("bad_host.example")).toBe(false);
+    expect(isValidSitePattern("")).toBe(false);
   });
 });
 
@@ -101,6 +120,24 @@ describe("BlockedSitesPanel", () => {
 
     expect(await screen.findByText("example.com")).toBeInTheDocument();
     expect(screen.getByTestId("panel-blocked-sites")).toBeInTheDocument();
+  });
+
+  it("gives each stored site its own tile with a named remove control", async () => {
+    const sites = ["example.com", "other.test"];
+    mocks.blockedSitesItem.getValue.mockResolvedValue(sites);
+
+    renderPanel();
+
+    const tiles = await screen.findAllByRole("listitem");
+    expect(tiles).toHaveLength(sites.length);
+    sites.forEach((hostname, index) => {
+      expect(within(tiles[index]).getByText(hostname)).toBeInTheDocument();
+      expect(
+        within(tiles[index]).getByRole("button", {
+          name: `${i18n.t("options.generalSection.blockedSites.remove")} ${hostname}`,
+        })
+      ).toBeInTheDocument();
+    });
   });
 
   it("shows the stored list as empty when the read returns null", async () => {
@@ -151,7 +188,10 @@ describe("BlockedSitesPanel", () => {
     );
     expect(await screen.findByText("mail.example.com")).toBeInTheDocument();
     expect(screen.getByTestId("blocked-site-input")).toHaveValue("");
-    expect(screen.getByTestId("blocked-site-status")).toHaveTextContent(
+    expect(
+      screen.getByTestId("blocked-site-add-confirmation")
+    ).toHaveTextContent(i18n.t("options.generalSection.blockedSites.added"));
+    expect(screen.getByRole("status")).toHaveTextContent(
       i18n.t("options.generalSection.blockedSites.added")
     );
   });
@@ -168,6 +208,60 @@ describe("BlockedSitesPanel", () => {
         "*.slack.com",
       ])
     );
+  });
+
+  it("previews the favicon in the add field once the text is a domain", async () => {
+    renderPanel();
+    const icon = screen.getByTestId("blocked-site-preview-icon");
+
+    expect(icon.querySelector("svg")).toBeInTheDocument();
+
+    await typeSite("example.com");
+
+    expect(icon.querySelector("img")).toHaveAttribute(
+      "src",
+      "https://www.google.com/s2/favicons?domain=example.com&sz=64"
+    );
+
+    await typeSite("exa");
+
+    // A partial hostname falls back to the globe instead of a broken image.
+    expect(icon.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("stores a regex entry and rejects a malformed one without writing", async () => {
+    renderPanel();
+    await screen.findByTestId("blocked-site-input");
+
+    await typeSite("/^mail\\..*example\\.com$/i");
+    await clickAdd();
+
+    await waitFor(() =>
+      expect(mocks.blockedSitesItem.setValue).toHaveBeenCalledWith([
+        "/^mail\\..*example\\.com$/i",
+      ])
+    );
+    expect(
+      await screen.findByText("/^mail\\..*example\\.com$/i")
+    ).toBeInTheDocument();
+
+    await typeSite("/([/i");
+    await clickAdd();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(invalidCopy);
+    expect(mocks.blockedSitesItem.setValue).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a duplicate regex entry", async () => {
+    mocks.blockedSitesItem.getValue.mockResolvedValue(["/mail\\./i"]);
+
+    renderPanel();
+    await screen.findByText("/mail\\./i");
+    await typeSite("/mail\\./i");
+    await clickAdd();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(duplicateCopy);
+    expect(mocks.blockedSitesItem.setValue).not.toHaveBeenCalled();
   });
 
   it("removes only the requested site", async () => {
@@ -192,7 +286,10 @@ describe("BlockedSitesPanel", () => {
     );
     expect(screen.queryByText("example.com")).not.toBeInTheDocument();
     expect(screen.getByText("other.test")).toBeInTheDocument();
-    expect(screen.getByTestId("blocked-site-status")).toHaveTextContent(
+    expect(
+      screen.getByTestId("blocked-site-remove-confirmation")
+    ).toHaveTextContent(i18n.t("options.generalSection.blockedSites.removed"));
+    expect(screen.getByRole("status")).toHaveTextContent(
       i18n.t("options.generalSection.blockedSites.removed")
     );
   });
@@ -212,7 +309,7 @@ describe("BlockedSitesPanel", () => {
       })
     );
     expect(screen.queryByText("example.com")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("blocked-site-status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("");
   });
 
   it("reports a rejected remove write and keeps the site on screen", async () => {
@@ -236,17 +333,16 @@ describe("BlockedSitesPanel", () => {
     expect(screen.getByText("example.com")).toBeInTheDocument();
   });
 
-  it("dismisses a validation error and clears the success flash on its timer", async () => {
-    // Only the 2s flash timer is captured; leaving the 8s error timer real
-    // keeps `findBy*` working, while advancing the flash manually avoids a
-    // two-second wait in the test.
-    const flashTimers: Array<() => void> = [];
+  it("dismisses a validation error and reverts the inline confirmation", async () => {
+    // The confirmation beside the control is informational, so it may revert on
+    // its short timer. The validation error stays until the user dismisses it.
+    const confirmationTimers: Array<() => void> = [];
     vi.spyOn(globalThis, "setTimeout").mockImplementation(((
       cb: () => void,
       ms?: number
     ) => {
       if (ms === 2000) {
-        flashTimers.push(cb);
+        confirmationTimers.push(cb);
         return 0;
       }
       return originalSetTimeout(cb, ms);
@@ -257,19 +353,26 @@ describe("BlockedSitesPanel", () => {
 
     await typeSite("localhost");
     await clickAdd();
-    const alert = await screen.findByRole("alert");
+    expect(await screen.findByTestId("inline-error")).toBeVisible();
     fireEvent.click(
       screen.getByRole("button", {
         name: i18n.t("common.dismissError"),
       })
     );
-    expect(alert).not.toBeInTheDocument();
+    expect(screen.queryByTestId("inline-error")).not.toBeInTheDocument();
 
     await typeSite("example.com");
     await clickAdd();
-    expect(await screen.findByTestId("blocked-site-status")).toBeVisible();
-    expect(flashTimers).toHaveLength(1);
-    act(() => flashTimers[0]());
-    expect(screen.queryByTestId("blocked-site-status")).not.toBeInTheDocument();
+    const addLabel = i18n.t("options.generalSection.blockedSites.added");
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("blocked-site-add-confirmation")
+      ).toHaveTextContent(addLabel)
+    );
+    expect(confirmationTimers).toHaveLength(1);
+    act(() => confirmationTimers[0]());
+    expect(
+      screen.queryByTestId("blocked-site-add-confirmation")
+    ).not.toBeInTheDocument();
   });
 });
