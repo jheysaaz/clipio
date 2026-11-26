@@ -163,32 +163,31 @@ export function BlockedSitesPanel() {
         />
       )}
 
+      {/* Each blocked site gets the same quiet tile treatment as the storage
+          figures: bordered, tinted, and one per hostname. */}
       {blockedSites.length === 0 ? (
         <p className="mt-3 text-xs italic text-muted-foreground">
           {i18n.t("options.generalSection.blockedSites.empty")}
         </p>
       ) : (
-        <ul className="mt-3 space-y-1">
+        <ul className="mt-3 grid gap-2 sm:grid-cols-2">
           {blockedSites.map((hostname) => (
             <li
               key={hostname}
-              className="flex items-center justify-between gap-2 py-1 text-sm"
+              className="flex items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/30 p-4"
             >
               <div className="flex min-w-0 items-center gap-2">
                 <SiteFavicon hostname={hostname} />
-                <span className="truncate font-mono text-foreground">
-                  {hostname}
-                </span>
+                <span className="truncate font-mono text-sm">{hostname}</span>
               </div>
               <Button
-                size="sm"
+                size="icon"
                 variant="ghost"
-                className="h-6 shrink-0 text-xs text-muted-foreground hover:text-destructive"
+                className="size-7 text-muted-foreground hover:text-destructive"
                 onClick={() => removeSite(hostname)}
                 aria-label={`${i18n.t("options.generalSection.blockedSites.remove")} ${hostname}`}
               >
-                <Icon icon={X} className="mr-1" />
-                {i18n.t("options.generalSection.blockedSites.remove")}
+                <Icon icon={X} size="sm" />
               </Button>
             </li>
           ))}

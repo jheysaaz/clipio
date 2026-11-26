@@ -13,6 +13,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -107,6 +108,24 @@ describe("BlockedSitesPanel", () => {
 
     expect(await screen.findByText("example.com")).toBeInTheDocument();
     expect(screen.getByTestId("panel-blocked-sites")).toBeInTheDocument();
+  });
+
+  it("gives each stored site its own tile with a named remove control", async () => {
+    const sites = ["example.com", "other.test"];
+    mocks.blockedSitesItem.getValue.mockResolvedValue(sites);
+
+    renderPanel();
+
+    const tiles = await screen.findAllByRole("listitem");
+    expect(tiles).toHaveLength(sites.length);
+    sites.forEach((hostname, index) => {
+      expect(within(tiles[index]).getByText(hostname)).toBeInTheDocument();
+      expect(
+        within(tiles[index]).getByRole("button", {
+          name: `${i18n.t("options.generalSection.blockedSites.remove")} ${hostname}`,
+        })
+      ).toBeInTheDocument();
+    });
   });
 
   it("shows the stored list as empty when the read returns null", async () => {
