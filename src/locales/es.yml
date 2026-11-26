@@ -99,6 +99,7 @@ snippetDetail:
   tags: Etiquetas
   tagPlaceholder: Nombre de etiqueta...
   addTag: Agregar etiqueta
+  newTag: Nueva etiqueta
   uses: usos
   updated: Actualizado
   draft: Borrador

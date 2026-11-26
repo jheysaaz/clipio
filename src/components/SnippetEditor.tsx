@@ -725,6 +725,7 @@ export default function SnippetEditor({
   const shownTags = tags.slice(0, Math.min(visibleTagLimit, tags.length));
   const hiddenTags = tags.slice(shownTags.length);
   const hiddenTagsLabel = i18n.t("snippetDetail.hiddenTags");
+  const showNewTagLabel = tags.length === 0;
 
   const tagAddControl = isAddingTag ? (
     <Input
@@ -747,23 +748,28 @@ export default function SnippetEditor({
         setIsAddingTag(false);
       }}
       placeholder={i18n.t("snippetDetail.tagPlaceholder")}
-      className="h-6 w-20 px-1.5 py-0 text-[10px] border-dashed"
+      className="-ml-1.5 h-6 w-20 px-1.5 py-0 text-[10px] border-dashed"
       autoFocus
     />
   ) : (
     <Button
       variant="ghost"
-      size="icon"
       data-testid="snippet-add-tag"
       onClick={() => {
         setIsAddingTag(true);
         setTimeout(() => tagInputRef.current?.focus(), 0);
       }}
-      className="size-8 rounded-md text-muted-foreground hover:text-foreground"
+      // The icon stays a standard 16px <Icon>; only its alignment inside the
+      // 32px target changes, so its left edge lines up with the footer padding.
+      className={cn(
+        "h-8 justify-start gap-1.5 rounded-md px-0 text-[11px] font-medium text-muted-foreground hover:text-foreground",
+        showNewTagLabel ? "w-auto pr-2.5" : "w-8 pr-4"
+      )}
       title={i18n.t("snippetDetail.addTag")}
       aria-label={i18n.t("snippetDetail.addTag")}
     >
       <Icon icon={TagPlus} size="lg" />
+      {showNewTagLabel && i18n.t("snippetDetail.newTag")}
     </Button>
   );
 
@@ -1162,7 +1168,7 @@ export default function SnippetEditor({
       {/* One tinted footer row: add tag, chips, and never-truncated metadata. */}
       <div
         data-testid="snippet-footer"
-        className="editor-footer flex h-9 shrink-0 flex-nowrap items-center gap-2 overflow-hidden bg-muted/30 px-4"
+        className="editor-footer flex h-8 shrink-0 flex-nowrap items-center gap-2 overflow-hidden bg-muted/30 px-4"
       >
         {tagAddControl}
         {tagEditor}

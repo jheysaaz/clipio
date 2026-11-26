@@ -649,6 +649,9 @@ test.describe("Popup (Dashboard)", () => {
     await expect(popupPage.getByTestId("snippet-label-input")).toBeFocused();
     await expect(popupPage.getByTestId("snippet-draft")).toHaveText("Draft");
     await expect(popupPage.getByTestId("snippet-metadata")).toHaveCount(0);
+    await expect(popupPage.getByTestId("snippet-add-tag")).toHaveText(
+      "New Tag"
+    );
     await expect(popupPage.getByText("TAGS", { exact: true })).toHaveCount(0);
     await expect(popupPage.getByText("+ Tag", { exact: true })).toHaveCount(0);
     for (const testId of [
@@ -734,7 +737,7 @@ test.describe("Popup (Dashboard)", () => {
     // One icon-only Add tag control, with no leftover label copy.
     const addTag = popupPage.getByRole("button", { name: "Add tag" });
     await expect(addTag).toHaveAttribute("title", "Add tag");
-    await expect(addTag).toHaveText("");
+    await expect(addTag).toHaveText("New Tag");
     await expect(popupPage.getByRole("group", { name: "Tags" })).toHaveCount(1);
     await expect(popupPage.getByText("TAGS", { exact: true })).toHaveCount(0);
     await expect(popupPage.getByText("+ Tag", { exact: true })).toHaveCount(0);
@@ -784,6 +787,9 @@ test.describe("Popup (Dashboard)", () => {
     ]);
     await popupPage.getByTestId("snippet-list-item").click();
 
+    // With tags present the control returns to icon-only; the icon's left edge
+    // still lines up with the footer padding.
+    await expect(popupPage.getByTestId("snippet-add-tag")).toHaveText("");
     const footer = popupPage.getByTestId("snippet-footer");
     const before = await footer.boundingBox();
     const overflow = popupPage.getByTestId("snippet-tag-overflow");

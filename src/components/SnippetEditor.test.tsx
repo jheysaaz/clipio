@@ -381,15 +381,32 @@ describe("one editor, two data states", () => {
     expect(input).toHaveAttribute("aria-describedby", "shortcut-tip");
   });
 
-  it("uses one icon-only Add tag control with no old tag labels", () => {
+  it("keeps the Add tag control icon-only once the snippet has tags", () => {
     renderView();
     const button = screen.getByTestId("snippet-add-tag");
 
     expect(button).toHaveAccessibleName("Add tag");
     expect(button).toHaveAttribute("title", "Add tag");
     expect(button).toHaveTextContent("");
+    expect(screen.queryByText("New Tag")).toBeNull();
     expect(screen.queryByText("TAGS")).toBeNull();
     expect(screen.queryByText("+ Tag")).toBeNull();
+  });
+
+  it("labels the empty Add tag control New Tag, then drops the label after the first tag", async () => {
+    const user = userEvent.setup();
+    renderDraft();
+    const button = screen.getByTestId("snippet-add-tag");
+
+    expect(button).toHaveAccessibleName("Add tag");
+    expect(button).toHaveTextContent("New Tag");
+
+    await user.click(button);
+    await user.type(screen.getByPlaceholderText(/tag name/i), "work{Enter}");
+
+    expect(screen.getByTestId("snippet-add-tag")).toHaveTextContent("");
+    expect(screen.queryByText("New Tag")).toBeNull();
+    expect(screen.getAllByText("work")).toHaveLength(1);
   });
 });
 

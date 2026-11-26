@@ -102,6 +102,7 @@ snippetDetail:
   tags: Tags
   tagPlaceholder: Tag name...
   addTag: Add tag
+  newTag: New Tag
   uses: uses
   updated: Updated
   draft: Draft
