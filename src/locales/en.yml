@@ -197,7 +197,7 @@ options:
       desc: How long Clipio waits after you stop typing before expanding. Lower is faster but can fire mid-word.
     blockedSites:
       title: Blocked sites
-      desc: Snippet expansion is disabled on these sites. Add them from the page context menu.
+      desc: Snippet expansion is disabled on these sites. Add hostnames, wildcards or /pattern/i regexes here, or from the page context menu.
     theme:
       title: Theme
       desc: Follow the system setting, or pin Clipio to light or dark.
@@ -255,14 +255,14 @@ options:
     localStorage: Local storage estimate
   generalSection:
     blockedSites:
-      addPlaceholder: "e.g. example.com or *.slack.com"
+      addPlaceholder: "e.g. example.com, *.slack.com or /pattern/i"
       addButton: Add site
       empty: No sites blocked yet.
       remove: Remove
       removed: Site removed
       added: Site added
       errorDuplicate: This site is already blocked.
-      errorInvalid: Enter a valid hostname (e.g. example.com or *.slack.com).
+      errorInvalid: Enter a hostname, wildcard or regex (e.g. example.com, *.slack.com, /pattern/i).
   feedback:
     title: Feedback
     description: Help us improve Clipio by sharing your thoughts, suggestions, or bug reports. Your feedback is valuable!

@@ -191,7 +191,7 @@ options:
       desc: Cuánto espera Clipio tras dejar de escribir antes de expandir. Un valor menor es más rápido, pero puede activarse a mitad de palabra.
     blockedSites:
       title: Sitios bloqueados
-      desc: La expansión de fragmentos está desactivada en estos sitios. Añádelos desde el menú contextual de la página.
+      desc: La expansión de fragmentos está desactivada en estos sitios. Añade dominios, comodines o regex /pattern/i aquí, o desde el menú contextual de la página.
     theme:
       title: Tema
       desc: Sigue el ajuste del sistema, o fija Clipio en claro u oscuro.
@@ -249,14 +249,14 @@ options:
     localStorage: Estimación de almacenamiento local
   generalSection:
     blockedSites:
-      addPlaceholder: "Ej: ejemplo.com o *.slack.com"
+      addPlaceholder: "Ej: ejemplo.com, *.slack.com o /pattern/i"
       addButton: Añadir sitio
       empty: Aún no hay sitios bloqueados.
       remove: Eliminar
       removed: Sitio eliminado
       added: Sitio añadido
       errorDuplicate: Este sitio ya está bloqueado.
-      errorInvalid: Introduce un dominio válido (ej. ejemplo.com o *.slack.com).
+      errorInvalid: Introduce un dominio, comodín o regex (ej. ejemplo.com, *.slack.com, /pattern/i).
   feedback:
     title: Comentarios
     description: ¡Ayúdanos a mejorar Clipio compartiendo tus opiniones, sugerencias o reportes de errores! ¡Tus comentarios son valiosos!

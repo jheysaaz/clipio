@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Globe, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 
 import { useFeedback } from "@/components/feedback/FeedbackProvider";
 import { useControlConfirmation } from "@/components/feedback/use-control-confirmation";
@@ -18,24 +18,29 @@ import { Input } from "@/components/ui/input";
 import { InlineError } from "@/components/ui/inline-error";
 import { SiteFavicon } from "@/components/options/SiteFavicon";
 import { blockedSitesItem } from "@/storage/items";
-import { normalizeHostname } from "@/lib/blocked-sites";
+import {
+  addBlockedSite,
+  normalizeHostname,
+  parseRegexEntry,
+} from "@/lib/blocked-sites";
 import { captureError } from "@/lib/sentry";
 import { i18n } from "#i18n";
 
 /**
- * A hostname is valid when it is a dotted, alphanumeric-or-hyphen label with
- * no leading or trailing hyphen. A wildcard prefix covers all subdomains.
+ * An entry is valid when it is a dotted hostname, a wildcard subdomain, or a
+ * compilable `/pattern/flags` regex. Anything else would sit in the list
+ * forever without ever blocking a site.
  */
-export function isValidHostname(hostname: string): boolean {
-  if (hostname.startsWith("*.")) {
-    const rest = hostname.slice(2);
+export function isValidSitePattern(entry: string): boolean {
+  if (parseRegexEntry(entry)) return true;
+  if (entry.startsWith("*.")) {
+    const rest = entry.slice(2);
     return (
       /^[a-z0-9]([a-z0-9\-.]*[a-z0-9])?$/i.test(rest) && rest.includes(".")
     );
   }
   return (
-    /^[a-z0-9]([a-z0-9\-.]*[a-z0-9])?$/i.test(hostname) &&
-    hostname.includes(".")
+    /^[a-z0-9]([a-z0-9\-.]*[a-z0-9])?$/i.test(entry) && entry.includes(".")
   );
 }
 
@@ -64,17 +69,19 @@ export function BlockedSitesPanel() {
   }
 
   const addSite = async () => {
-    const hostname = normalizeHostname(draft);
-    if (!isValidHostname(hostname)) {
+    // Normalisation leaves valid regex entries alone; hostnames are lowercased
+    // with schemes, ports and paths stripped before validation and storage.
+    const pattern = normalizeHostname(draft);
+    if (!isValidSitePattern(pattern)) {
       setError(i18n.t("options.generalSection.blockedSites.errorInvalid"));
       return;
     }
-    if (blockedSites.includes(hostname)) {
+    const updated = addBlockedSite(blockedSites, pattern);
+    if (updated.length === blockedSites.length) {
       setError(i18n.t("options.generalSection.blockedSites.errorDuplicate"));
       return;
     }
     try {
-      const updated = [...blockedSites, hostname];
       await blockedSitesItem.setValue(updated);
       setBlockedSites(updated);
       setDraft("");
@@ -113,10 +120,14 @@ export function BlockedSitesPanel() {
       </div>
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <Icon
-            icon={Globe}
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
+          {/* Like a browser address bar: the leading icon becomes the site's
+              favicon as soon as the typed text names a usable domain. */}
+          <span
+            data-testid="blocked-site-preview-icon"
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2"
+          >
+            <SiteFavicon hostname={draft} className="size-4" />
+          </span>
           <Input
             type="text"
             placeholder={i18n.t(
@@ -170,11 +181,11 @@ export function BlockedSitesPanel() {
           {i18n.t("options.generalSection.blockedSites.empty")}
         </p>
       ) : (
-        <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+        <ul className="mt-3 flex flex-col gap-2">
           {blockedSites.map((hostname) => (
             <li
               key={hostname}
-              className="flex items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/30 p-4"
+              className="flex w-full items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/30 px-4 py-2"
             >
               <div className="flex min-w-0 items-center gap-2">
                 <SiteFavicon hostname={hostname} />
@@ -183,7 +194,7 @@ export function BlockedSitesPanel() {
               <Button
                 size="icon"
                 variant="ghost"
-                className="size-7 text-muted-foreground hover:text-destructive"
+                className="size-8 text-muted-foreground hover:text-destructive"
                 onClick={() => removeSite(hostname)}
                 aria-label={`${i18n.t("options.generalSection.blockedSites.remove")} ${hostname}`}
               >

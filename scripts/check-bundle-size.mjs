@@ -108,14 +108,22 @@ const posix = (p) => p.split(sep).join("/");
  * drives the review banner through the one Tier 2 slot; dropping Sonner shrinks
  * the aggregate and shared chunks, but this entry grows by 383 bytes. Measured
  * twice from clean builds and did not vary.
+ *
+ * Raised a thirteenth time for full-regex blocked-site entries and the live
+ * favicon preview in the add field. Background gains regex-aware dedupe when
+ * the context menu adds a site, the content script gains regex matching, and
+ * the options entry gains the parser, the favicon component and the preview.
+ * The all-JavaScript and shared-chunk totals went down over the same change, so
+ * those budgets are unchanged. All raised sizes were measured twice from clean
+ * builds and did not vary.
  */
 const BUDGETS = [
   { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_757_453 },
-  { name: "background entry", pattern: "background.js", maxBytes: 225_859 },
+  { name: "background entry", pattern: "background.js", maxBytes: 226_150 },
   {
     name: "content script entry",
     pattern: "content-scripts/content.js",
-    maxBytes: 918_247,
+    maxBytes: 918_507,
   },
   {
     name: "popup entry chunk",
@@ -125,7 +133,7 @@ const BUDGETS = [
   {
     name: "options entry chunk",
     pattern: "chunks/options-*.js",
-    maxBytes: 238_772,
+    maxBytes: 239_489,
   },
   {
     // Shared chunks are included here even when their individual hashed names
