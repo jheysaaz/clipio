@@ -734,7 +734,7 @@ export default function ImportWizard({
           >
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="space-y-0.5">
-                <p className="text-muted-foreground/80 uppercase tracking-wide text-[10px] font-medium">
+                <p className="text-muted-foreground/80 uppercase tracking-wide text-ui-micro! font-medium">
                   {i18n.t("importWizard.conflicts.incomingColumn")}
                 </p>
                 <p className="font-medium text-foreground">
@@ -745,7 +745,7 @@ export default function ImportWizard({
                 </p>
               </div>
               <div className="space-y-0.5">
-                <p className="text-muted-foreground/80 uppercase tracking-wide text-[10px] font-medium">
+                <p className="text-muted-foreground/80 uppercase tracking-wide text-ui-micro! font-medium">
                   {i18n.t("importWizard.conflicts.existingColumn", [
                     entry.conflictType,
                   ])}

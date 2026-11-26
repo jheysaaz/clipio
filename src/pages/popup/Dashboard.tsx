@@ -927,11 +927,11 @@ export default function Dashboard() {
   // -------------------------------------------------------------------------
 
   return (
-    <div className="flex flex-col h-full select-none">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden select-none">
       <InlineError message={recoveryError} onDismiss={dismissRecoveryError} />
 
       {/* Master-Detail Layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Left Sidebar */}
         <div
           data-testid="snippet-library"
@@ -960,6 +960,7 @@ export default function Dashboard() {
             <div className="relative">
               <Icon
                 icon={Search}
+                size="lg"
                 className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
               />
               <Input
@@ -971,12 +972,12 @@ export default function Dashboard() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 aria-label={i18n.t("dashboard.searchPlaceholder")}
                 aria-describedby="search-help"
-                className="pl-8 pr-12 h-8 text-sm rounded-lg"
+                className="h-9 rounded-lg pl-8 pr-12 text-ui-sm!"
               />
               {!searchQuery && (
                 <kbd
                   id="search-help"
-                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 hidden h-5 select-none items-center rounded border bg-muted px-1 font-mono text-[10px] font-medium text-foreground/70 sm:flex"
+                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 hidden h-5 select-none items-center rounded border bg-muted px-1 font-mono text-ui-xs! font-medium text-foreground/70 sm:flex"
                 >
                   {/mac/i.test(navigator.platform) ? "⌘K" : "Ctrl+K"}
                 </kbd>
@@ -1093,7 +1094,7 @@ export default function Dashboard() {
             <Button
               data-testid="add-snippet"
               onClick={handleAddSnippet}
-              className="flex-1 h-8 text-xs rounded-lg"
+              className="h-9 flex-1 rounded-lg text-ui-sm!"
             >
               <Icon icon={Plus} size="lg" className="mr-1.5" />
               {i18n.t("dashboard.addSnippet")}
@@ -1106,11 +1107,11 @@ export default function Dashboard() {
                 setDeletedSnippet(null);
                 browser.runtime.openOptionsPage();
               }}
-              className="h-8 w-8 shrink-0 rounded-lg"
+              className="h-9 w-9 shrink-0 rounded-lg"
               title={i18n.t("dashboard.settingsAndExport")}
               aria-label={i18n.t("dashboard.settingsAndExport")}
             >
-              <Icon icon={Settings} />
+              <Icon icon={Settings} size="lg" />
             </Button>
           </div>
         </div>
@@ -1118,7 +1119,7 @@ export default function Dashboard() {
         {/* Right Content - Detail */}
         <div
           data-testid="dashboard-main-pane"
-          className="flex-1 flex flex-col bg-background"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
         >
           <FeedbackBanner />
 

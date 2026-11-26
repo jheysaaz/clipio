@@ -198,7 +198,7 @@ export function ShortcutRecorder({
                   {Glyph ? (
                     <Icon icon={Glyph} className="size-3" />
                   ) : (
-                    <span className="font-mono text-[10px] leading-none">
+                    <span className="font-mono text-ui-micro! leading-none">
                       {segment.label}
                     </span>
                   )}

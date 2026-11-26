@@ -196,7 +196,7 @@ export function ImagesSection() {
                   <p className="text-xs font-mono text-muted-foreground truncate">
                     {item.meta.id}
                   </p>
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-ui-micro! text-muted-foreground">
                     <span>{ext}</span>
                     {item.meta.width > 0 && item.meta.height > 0 && (
                       <span>
@@ -208,7 +208,7 @@ export function ImagesSection() {
                     )}
                     <span>{sizeKB} KB</span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-ui-micro! text-muted-foreground">
                     {item.referencingSnippets.length > 0 ? (
                       i18n.t("options.images.referencedBy", [
                         item.referencingSnippets.join(", "),
@@ -231,13 +231,13 @@ export function ImagesSection() {
                       }}
                       placeholder={i18n.t("options.images.altText.placeholder")}
                       aria-label={i18n.t("options.images.altText.label")}
-                      className="h-7 text-[11px] flex-1"
+                      className="h-7 text-ui-micro! flex-1"
                     />
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="shrink-0 h-7 text-[11px] px-2"
+                      className="shrink-0 h-7 text-ui-micro! px-2"
                       onClick={() => handleSaveAlt(item.meta.id)}
                     >
                       {altSaved[item.meta.id] ? (
@@ -252,12 +252,12 @@ export function ImagesSection() {
                     </Button>
                   </div>
                   {altErrors[item.meta.id] && (
-                    <p className="text-[11px] text-red-600 dark:text-red-400">
+                    <p className="text-ui-micro! text-red-600 dark:text-red-400">
                       {altErrors[item.meta.id]}
                     </p>
                   )}
                   {deleteErrors[item.meta.id] && (
-                    <p className="text-[11px] text-red-600 dark:text-red-400">
+                    <p className="text-ui-micro! text-red-600 dark:text-red-400">
                       {deleteErrors[item.meta.id]}
                     </p>
                   )}
@@ -323,7 +323,7 @@ export function ImagesSection() {
                 </div>
 
                 <div className="px-2.5 py-2 space-y-0.5">
-                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <div className="flex items-center gap-1.5 text-ui-micro! text-muted-foreground">
                     <span className="font-medium">{ext}</span>
                     <span>·</span>
                     <span>{sizeKB} KB</span>
@@ -336,7 +336,7 @@ export function ImagesSection() {
                       </>
                     )}
                   </div>
-                  <p className="text-[10px] text-muted-foreground truncate">
+                  <p className="text-ui-micro! text-muted-foreground truncate">
                     {item.referencingSnippets.length > 0 ? (
                       i18n.t("options.images.referencedBy", [
                         item.referencingSnippets.join(", "),
@@ -359,13 +359,13 @@ export function ImagesSection() {
                       }}
                       placeholder={i18n.t("options.images.altText.placeholder")}
                       aria-label={i18n.t("options.images.altText.label")}
-                      className="h-6 text-[10px] flex-1 px-1.5"
+                      className="h-6 text-ui-micro! flex-1 px-1.5"
                     />
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="shrink-0 h-6 text-[10px] px-1.5"
+                      className="shrink-0 h-6 text-ui-micro! px-1.5"
                       onClick={() => handleSaveAlt(item.meta.id)}
                     >
                       {altSaved[item.meta.id] ? (
@@ -380,12 +380,12 @@ export function ImagesSection() {
                     </Button>
                   </div>
                   {altErrors[item.meta.id] && (
-                    <p className="text-[10px] text-red-600 dark:text-red-400">
+                    <p className="text-ui-micro! text-red-600 dark:text-red-400">
                       {altErrors[item.meta.id]}
                     </p>
                   )}
                   {deleteErrors[item.meta.id] && (
-                    <p className="text-[10px] text-red-600 dark:text-red-400">
+                    <p className="text-ui-micro! text-red-600 dark:text-red-400">
                       {deleteErrors[item.meta.id]}
                     </p>
                   )}

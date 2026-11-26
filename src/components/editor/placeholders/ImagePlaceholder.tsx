@@ -90,7 +90,7 @@ export function ImagePlaceholderElement({
         className={cn(
           "inline-flex items-center gap-1 px-1.5 py-0.5 rounded align-baseline mx-0.5",
           "bg-muted border border-border animate-pulse",
-          "text-[11px] font-mono text-muted-foreground"
+          "text-ui-micro! font-mono text-muted-foreground"
         )}
       >
         <Icon icon={ImageIcon} size="xs" strokeWidth={ICON_STROKE.micro} />
@@ -108,7 +108,7 @@ export function ImagePlaceholderElement({
         onClick={() => editor.tf.focus()}
         className={cn(
           "inline-flex items-center gap-1 px-1.5 py-0.5 rounded cursor-pointer select-none align-baseline mx-0.5",
-          "font-mono text-[11px] leading-none",
+          "font-mono text-ui-micro! leading-none",
           "bg-destructive/10 border border-destructive/30 text-destructive",
           "hover:bg-destructive/20 transition-colors duration-150"
         )}

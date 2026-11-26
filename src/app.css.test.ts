@@ -59,3 +59,92 @@ describe("Chrome force-dark opt-out", () => {
     }
   });
 });
+
+describe("relative-size tokens", () => {
+  const theme = declarationsIn("@theme inline");
+
+  it("defines the one type scale, with px-free line heights", () => {
+    // The values are the design's 11/12/13/14/18px at a 16px root. Asserting
+    // the rem form is what proves the scale scales with the root font.
+    expect(theme).toMatch(/--text-ui-micro:\s*0\.6875rem\s*;/);
+    expect(theme).toMatch(/--text-ui-xs:\s*0\.75rem\s*;/);
+    expect(theme).toMatch(/--text-ui-sm:\s*0\.8125rem\s*;/);
+    expect(theme).toMatch(/--text-ui-base:\s*0\.875rem\s*;/);
+    expect(theme).toMatch(/--text-ui-lg:\s*1\.125rem\s*;/);
+    expect(theme).toMatch(/--leading-ui:\s*1\.5\s*;/);
+    expect(theme).toMatch(/--leading-editor:\s*1\.6\s*;/);
+  });
+
+  it("keeps the popup's non-scrolling box scoped away from Options", () => {
+    // app.css ships to both entrypoints. A global `body { overflow: hidden }`
+    // silently disables Options scrolling, so only the popup body may have it.
+    expect(declarationsIn("body")).not.toMatch(/overflow:/);
+    expect(declarationsIn("body.popup-shell")).toMatch(
+      /overflow:\s*hidden\s*;/
+    );
+  });
+
+  it("derives radii from --radius in rem, never px", () => {
+    for (const name of ["sm", "md", "lg", "xl"]) {
+      const declaration = theme.match(
+        new RegExp(`--radius-${name}:\\s*([^;]+);`)
+      );
+      expect(declaration, `${name} radius is missing`).not.toBeNull();
+      expect(declaration![1]).not.toMatch(/px/);
+    }
+  });
+
+  it("keeps the shipped size at a 16px root and caps at Chrome's maximum", () => {
+    const root = declarationsIn(":root");
+    expect(root).toMatch(/--popup-max-width:\s*800px\s*;/);
+    expect(root).toMatch(/--popup-max-height:\s*600px\s*;/);
+    expect(root).toMatch(
+      /--popup-width:\s*min\(42\.5rem,\s*var\(--popup-max-width\)\)\s*;/
+    );
+    expect(root).toMatch(
+      /--popup-height:\s*min\(28\.75rem,\s*var\(--popup-max-height\)\)\s*;/
+    );
+    // The negative case: a fixed px width would defeat both the rem scale and
+    // the cap, even though the numbers in the comment still look right.
+    expect(root).not.toMatch(/--popup-width:\s*680px\s*;/);
+    expect(root).not.toMatch(/--popup-height:\s*460px\s*;/);
+  });
+});
+
+describe("selected row fill", () => {
+  it("is one neutral token that is stronger than muted in both themes", () => {
+    const light = declarationsIn(":root");
+    const dark = declarationsIn(".dark");
+    expect(light).toMatch(/--selected:\s*oklch\(/);
+    expect(dark).toMatch(/--selected:\s*oklch\(/);
+
+    for (const [theme, label] of [
+      [light, "light"],
+      [dark, "dark"],
+    ] as const) {
+      const selected = Number(
+        theme.match(/--selected:\s*oklch\(([\d.]+)/)?.[1]
+      );
+      const muted = Number(theme.match(/--muted:\s*oklch\(([\d.]+)/)?.[1]);
+      expect(Number.isFinite(selected), `${label} selected lightness`).toBe(
+        true
+      );
+      expect(Number.isFinite(muted), `${label} muted lightness`).toBe(true);
+      // `muted` is translucent at 50% in the sidebar. In light that puts the
+      // hover fill near white, so selection must be darker; in dark it puts
+      // hover near 0.21, so selection must be lighter. Comparing the token to
+      // `muted` catches a fill that would vanish once composited.
+      if (label === "light") {
+        expect(
+          selected,
+          `${label} selection is not stronger than hover`
+        ).toBeLessThan(muted);
+      } else {
+        expect(
+          selected,
+          `${label} selection is not stronger than hover`
+        ).toBeGreaterThan(muted);
+      }
+    }
+  });
+});

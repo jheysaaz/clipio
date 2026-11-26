@@ -86,6 +86,11 @@ const FAST_STEPS = [
   },
   { name: "locale parity", cmd: ["pnpm", "run", "check:locales"] },
   { name: "hardcoded text", cmd: ["pnpm", "run", "check:hardcoded-text"] },
+  {
+    name: "relative units",
+    cmd: ["pnpm", "run", "check:no-px"],
+    note: "no new px in shipped UI source",
+  },
 ];
 
 const FULL_STEPS = [

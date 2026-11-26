@@ -79,11 +79,11 @@ function DialogContent({
         data-slot="dialog-content"
         data-size={size}
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:max-w-[425px]",
+          "fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:max-w-[26.5625rem]",
           {
-            "sm:max-w-[350px]": size === "sm",
-            "sm:max-w-[500px]": size === "lg",
-            "sm:max-w-[600px]": size === "xl",
+            "sm:max-w-[21.875rem]": size === "sm",
+            "sm:max-w-[31.25rem]": size === "lg",
+            "sm:max-w-[37.5rem]": size === "xl",
             "max-w-[90vw] min-h-[80vh]": size === "full",
           },
           className

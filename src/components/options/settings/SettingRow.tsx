@@ -69,7 +69,7 @@ export function highlightParts(
     parts.push(
       <mark
         key={i}
-        className="rounded-[3px] bg-primary/15 px-0.5 text-foreground"
+        className="rounded-[0.1875rem] bg-primary/15 px-0.5 text-foreground"
       >
         {text.slice(range.start, range.end)}
       </mark>

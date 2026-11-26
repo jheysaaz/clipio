@@ -281,7 +281,7 @@ export function ImagePicker({
       }}
       style={floating.style}
       className={cn(
-        "z-50 w-72 rounded-lg border border-border bg-popover shadow-lg flex flex-col max-h-[min(360px,80vh)]",
+        "z-50 w-72 rounded-lg border border-border bg-popover shadow-lg flex flex-col max-h-[min(22.5rem,80vh)]",
         isDragging && "ring-2 ring-primary"
       )}
       role="dialog"
@@ -350,7 +350,7 @@ export function ImagePicker({
               title={i18n.t("imagePicker.uploadNew")}
             >
               <Icon icon={Upload} />
-              <span className="text-[10px] text-center leading-tight">
+              <span className="text-ui-micro! text-center leading-tight">
                 {i18n.t("imagePicker.uploadNew")}
               </span>
             </button>
@@ -373,7 +373,7 @@ export function ImagePicker({
               title={i18n.t("imagePicker.uploadNew")}
             >
               <Icon icon={Upload} />
-              <span className="text-[10px] text-center leading-tight">
+              <span className="text-ui-micro! text-center leading-tight">
                 {i18n.t("imagePicker.uploadNew")}
               </span>
             </button>
@@ -396,7 +396,7 @@ export function ImagePicker({
               title={i18n.t("imagePicker.uploadNew")}
             >
               <Icon icon={Upload} />
-              <span className="text-[10px] text-center leading-tight">
+              <span className="text-ui-micro! text-center leading-tight">
                 {i18n.t("imagePicker.uploadNew")}
               </span>
             </button>

@@ -117,7 +117,7 @@ function BackupDialog({ onClose }: { onClose: () => void }) {
         aria-modal="true"
         aria-labelledby="backup-dialog-title"
         data-testid="backup-preview-dialog"
-        className="max-h-[min(90vh,640px)] w-full max-w-lg space-y-4 overflow-y-auto rounded-xl border bg-background p-6 shadow-xl"
+        className="max-h-[min(90vh,40rem)] w-full max-w-lg space-y-4 overflow-y-auto rounded-xl border bg-background p-6 shadow-xl"
       >
         <h2
           id="backup-dialog-title"

@@ -190,9 +190,11 @@ export function SettingsSidebar({
             {isMacModifier() ? (
               <Icon icon={Command} className="size-2.5" />
             ) : (
-              <span className="font-mono text-[9px] leading-none">Ctrl</span>
+              <span className="font-mono text-ui-micro! leading-none">
+                Ctrl
+              </span>
             )}
-            <span className="font-mono text-[9px] leading-none">K</span>
+            <span className="font-mono text-ui-micro! leading-none">K</span>
           </span>
         </div>
       </div>
@@ -217,7 +219,7 @@ export function SettingsSidebar({
                 uppercase + tracking is what makes these read as headings, so
                 the weight is dropped and the contrast carries the hierarchy.
               */}
-              <p className="px-2 pb-1.5 text-[11px] font-normal uppercase tracking-[0.06em] text-muted-foreground">
+              <p className="px-2 pb-1.5 text-ui-micro! font-normal uppercase tracking-[0.06em] text-muted-foreground">
                 {group.heading ? i18n.t(group.heading) : ""}
               </p>
               <ul className="space-y-0.5">

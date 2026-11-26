@@ -229,7 +229,7 @@ export function GifPicker({
         floating.refs.setFloating(node);
       }}
       style={floating.style}
-      className="z-50 w-72 rounded-lg border border-border bg-popover shadow-lg flex flex-col max-h-[min(360px,80vh)]"
+      className="z-50 w-72 rounded-lg border border-border bg-popover shadow-lg flex flex-col max-h-[min(22.5rem,80vh)]"
       role="dialog"
       aria-label={i18n.t("common.editor.gifPickerLabel")}
     >
@@ -260,7 +260,7 @@ export function GifPicker({
 
       {/* Section label */}
       {!query && (
-        <div className="text-[10px] font-medium text-muted-foreground px-2 pt-1.5 uppercase tracking-wide">
+        <div className="text-ui-micro! font-medium text-muted-foreground px-2 pt-1.5 uppercase tracking-wide">
           {i18n.t("gifPicker.trending")}
         </div>
       )}
@@ -342,7 +342,7 @@ export function GifPicker({
       </div>
 
       {/* Footer: Powered by GIPHY */}
-      <div className="border-t border-border px-2 py-1.5 text-[10px] text-muted-foreground text-right">
+      <div className="border-t border-border px-2 py-1.5 text-ui-micro! text-muted-foreground text-right">
         {i18n.t("gifPicker.poweredBy")}
       </div>
     </div>

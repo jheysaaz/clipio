@@ -85,11 +85,19 @@ vi.mock("@/components/editor", async () => {
   };
   const RichTextEditor = React.forwardRef(function RichTextEditor(
     { value, onChange, onCopyError, ariaLabel, placeholder }: Props,
-    _ref: React.Ref<unknown>
+    ref: React.Ref<{ focus: () => void; openCommandMenu: () => void }>
   ) {
+    // Mirror the real editor's ref contract: its focus action puts the caret in
+    // the editable surface. The test below proves SnippetEditor calls it.
+    const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+    React.useImperativeHandle(ref, () => ({
+      focus: () => textareaRef.current?.focus(),
+      openCommandMenu: () => textareaRef.current?.focus(),
+    }));
     return (
       <div>
         <textarea
+          ref={textareaRef}
           aria-label={ariaLabel ?? "Content"}
           placeholder={placeholder}
           value={value}
@@ -325,6 +333,42 @@ describe("one editor, two data states", () => {
 
     await user.click(screen.getByTestId("snippet-header"));
     expect(screen.getByTestId("snippet-label-input")).toHaveFocus();
+  });
+
+  it("reads name and shortcut as part of the document, not a tinted band", () => {
+    renderView();
+    const header = screen.getByTestId("snippet-header");
+    const name = screen.getByTestId("snippet-label-input");
+    const shortcut = screen.getByTestId("snippet-shortcut-input");
+
+    expect(header.className).not.toContain("bg-muted");
+    expect(name.className).toContain("text-ui-lg!");
+    expect(name.className).toContain("bg-transparent");
+    expect(name).toHaveAttribute("placeholder", "Untitled snippet");
+    // The shortcut has no pill: only a bottom border appears on hover/focus.
+    expect(shortcut.className).toContain("border-b");
+    expect(shortcut.className).toContain("border-transparent");
+    expect(shortcut.className).toContain("hover:border-ring/60");
+    expect(shortcut.className).not.toContain("bg-background");
+    expect(shortcut.className).not.toContain("rounded-md");
+  });
+
+  it("tabs name → shortcut → content and focuses content on Enter in the name", async () => {
+    const user = userEvent.setup();
+    renderView();
+    const name = screen.getByTestId("snippet-label-input");
+    const shortcut = screen.getByTestId("snippet-shortcut-input");
+    const content = screen.getByRole("textbox", { name: "Snippet content" });
+
+    name.focus();
+    await user.tab();
+    expect(shortcut).toHaveFocus();
+    await user.tab();
+    expect(content).toHaveFocus();
+
+    name.focus();
+    fireEvent.keyDown(name, { key: "Enter" });
+    expect(content).toHaveFocus();
   });
 
   it("names version-history controls honestly and gives icons accessible names", () => {

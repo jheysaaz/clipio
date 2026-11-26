@@ -81,11 +81,31 @@ describe("SnippetListItem", () => {
     expect(screen.getByText("123 Fake Street")).toBeInTheDocument();
   });
 
-  it("marks the item as selected when told to", () => {
+  it("marks selection with one neutral fill and a semibold name", () => {
     const { container } = renderItem({ isSelected: true });
     const item = container.querySelector("[data-testid='snippet-list-item']");
     expect(item).toBeTruthy();
-    expect(item?.className).toMatch(/blue|selected|active/i);
+    // One fill, no accent bar/ring/second marker. The focus-ring classes stay
+    // identical to the unselected row; they are not a selection indicator.
+    expect(item?.className).toContain("bg-selected");
+    expect(item?.className).not.toMatch(
+      /bg-primary|bg-accent|border-l-|before:/
+    );
+    // The focus ring is unchanged: it is not a second selected-state marker.
+    expect(item?.className).toContain("focus-visible:ring-2");
+    expect(item).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Address").className).toContain("font-semibold");
+  });
+
+  it("does not mark an unselected row with the selected fill or weight", () => {
+    const { container } = renderItem({ isSelected: false });
+    const item = container.querySelector("[data-testid='snippet-list-item']");
+    expect(item?.className).not.toContain("bg-selected");
+    expect(item).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByText("Address").className).toContain("font-medium");
+    expect(screen.getByText("Address").className).not.toContain(
+      "font-semibold"
+    );
   });
 
   it("calls onClick when the row is activated", async () => {

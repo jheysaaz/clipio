@@ -174,7 +174,7 @@ export function LibraryPanel() {
           data-testid="import-formats"
           className="flex flex-wrap items-center gap-1.5 pt-1"
         >
-          <span className="self-center text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <span className="self-center text-ui-micro! font-medium uppercase tracking-wide text-muted-foreground">
             {i18n.t("options.importExport.importCard.supported")}
           </span>
           {IMPORT_PARSERS.map((parser) => (
@@ -241,7 +241,7 @@ export function LibraryPanel() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="import-wizard-title"
-            className="max-h-[min(90vh,640px)] w-full max-w-lg space-y-4 overflow-y-auto rounded-xl border bg-background p-6 shadow-xl"
+            className="max-h-[min(90vh,40rem)] w-full max-w-lg space-y-4 overflow-y-auto rounded-xl border bg-background p-6 shadow-xl"
           >
             <h2
               id="import-wizard-title"
