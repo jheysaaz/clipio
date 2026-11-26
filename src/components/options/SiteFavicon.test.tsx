@@ -20,7 +20,6 @@ describe("SiteFavicon", () => {
       "src",
       "https://www.google.com/s2/favicons?domain=example.org&sz=64"
     );
-    expect(container.querySelector("img")).toHaveAttribute("width", "24");
   });
 
   it("renders a globe while the typed text is not yet a domain", () => {

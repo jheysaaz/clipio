@@ -33,8 +33,6 @@ export function SiteFavicon({
     <img
       src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`}
       alt=""
-      width={24}
-      height={24}
       className={cn("size-6 shrink-0 rounded", className)}
       onError={() => setFailedDomain(domain)}
     />
