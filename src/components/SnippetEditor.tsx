@@ -56,8 +56,8 @@ import {
   discardUnflushedDraft,
   flushDraft,
   redoLastEdit,
-  refreshSyncStatus,
   refreshUndoAvailability,
+  requestSyncStatusRefresh,
   stageEdit,
   undoAvailabilityStore,
   undoLastEdit,
@@ -386,7 +386,7 @@ export default function SnippetEditor({
     autosave.discard();
     draftAutosave.discard();
     void refreshUndoAvailability(isDraft ? null : snippet.id);
-    void refreshSyncStatus();
+    void requestSyncStatusRefresh();
     // Keyed on identity only: a same-id echo from our own write must not reset
     // fields the user is still typing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
