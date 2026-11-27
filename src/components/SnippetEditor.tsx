@@ -787,23 +787,22 @@ export default function SnippetEditor({
         setIsAddingTag(false);
       }}
       placeholder={i18n.t("snippetDetail.tagPlaceholder")}
-      className="-ml-1.5 h-6 w-20 px-1.5 py-0 text-ui-micro! border-dashed"
+      className="h-6 w-20 px-1.5 py-0 text-ui-micro! border-dashed"
       autoFocus
     />
   ) : (
     <Button
       variant="ghost"
+      // The icon-only state is a centred icon target; the labelled state is a
+      // normal padded button. Both give the glyph the same inset on each side,
+      // and the shared footer padding sets the control's left edge.
+      size={showNewTagLabel ? "default" : "icon"}
       data-testid="snippet-add-tag"
       onClick={() => {
         setIsAddingTag(true);
         setTimeout(() => tagInputRef.current?.focus(), 0);
       }}
-      // The icon stays a standard 16px <Icon>; only its alignment inside the
-      // 32px target changes, so its left edge lines up with the footer padding.
-      className={cn(
-        "h-8 justify-start gap-1.5 rounded-md px-0 text-ui-micro! font-medium text-muted-foreground hover:text-foreground",
-        showNewTagLabel ? "w-auto pr-2.5" : "w-8 pr-4"
-      )}
+      className="h-8 gap-1.5 rounded-md text-ui-micro! font-medium text-muted-foreground hover:text-foreground"
       title={i18n.t("snippetDetail.addTag")}
       aria-label={i18n.t("snippetDetail.addTag")}
     >

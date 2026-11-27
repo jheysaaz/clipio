@@ -91,6 +91,11 @@ describe("SnippetListItem", () => {
     expect(item?.className).not.toMatch(
       /bg-primary|bg-accent|border-l-|before:/
     );
+    // Hovering a selected row must not swap in the weaker hover fill from the
+    // ghost button variant, in either theme.
+    expect(item?.className).toContain("hover:bg-selected");
+    expect(item?.className).toContain("dark:hover:bg-selected");
+    expect(item?.className).not.toMatch(/hover:bg-muted/);
     // The focus ring is unchanged: it is not a second selected-state marker.
     expect(item?.className).toContain("focus-visible:ring-2");
     expect(item).toHaveAttribute("aria-selected", "true");
