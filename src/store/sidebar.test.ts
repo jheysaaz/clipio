@@ -53,6 +53,10 @@ let mod: SidebarModule;
 async function load(
   stored: number = DEFAULT_SIDEBAR_WIDTH
 ): Promise<SidebarModule> {
+  // A re-import leaves the previous module's debounce timer alive. Cancel it
+  // before replacing the module: otherwise that old instance can write its width
+  // through the shared item mock while the new one is waiting for its read.
+  mod?.cancelPendingPersistForTests();
   vi.resetModules();
   items.sidebarWidthItem.getValue.mockReset();
   items.sidebarWidthItem.setValue.mockReset();

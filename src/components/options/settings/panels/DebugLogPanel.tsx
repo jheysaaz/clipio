@@ -98,6 +98,7 @@ export function DebugLogPanel() {
       reset();
       showBanner({
         source: "debug-copy",
+        scope: "diagnostics",
         severity: "error",
         message: i18n.t("options.developers.debugMode.copyFailed"),
       });

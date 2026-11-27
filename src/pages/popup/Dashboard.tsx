@@ -19,6 +19,7 @@ import {
   PanelLeft,
   PanelLeftClose,
   Trash2,
+  CloudOff,
 } from "lucide-react";
 import {
   FeedbackBanner,
@@ -43,8 +44,6 @@ import {
   restoreRecoveredSnippets,
   dismissRecoveryBanner,
   dismissRecoveryError,
-  dismissQuotaWarning,
-  dismissSyncPausedWarning,
   dismissLoadError,
   dismissCreateError,
   findSnippet,
@@ -114,7 +113,7 @@ export default function Dashboard() {
   );
   const deletedMessageRef = useRef<HTMLDivElement>(null);
   const [pendingNameFocus, setPendingNameFocus] = useState(false);
-  const { showBanner, dismissBanner, announce } = useFeedback();
+  const { showBanner, dismissBanner, announce, announceError } = useFeedback();
 
   // Which snippet is selected, and whether the create form is open, are now the
   // URL. That is what gives a selection an address: a future "open this specific
@@ -166,7 +165,7 @@ export default function Dashboard() {
   const searchQuery = useSearch((s) => s.query);
   const loading = useSnippets((s) => !s.isLoaded);
   const quotaWarning = useSnippets((s) => s.quotaWarning);
-  const syncPausedWarning = useSnippets((s) => s.syncPausedWarning);
+  const localOnly = useSnippets((s) => s.localOnly);
   const recoverySnippets = useSnippets((s) => s.recoverySnippets);
   const showRecoveryBanner = useSnippets((s) => s.showRecoveryBanner);
   const loadError = useSnippets((s) => s.loadError);
@@ -541,41 +540,21 @@ export default function Dashboard() {
     selectSnippet,
   ]);
 
+  // Storage errors are real errors, so they belong in the provider's assertive
+  // live region. The visible explanation lives in the editor's reserved status
+  // slot — a banner here would push the toolbar and editor down every time the
+  // popup opens. Announce once per unresolved condition, not on every render.
+  const announcedQuotaRef = useRef(false);
   useEffect(() => {
-    if (!quotaWarning) {
-      dismissBanner("quota", { runOnDismiss: false });
+    if (quotaWarning) {
+      if (!announcedQuotaRef.current) {
+        announceError(i18n.t("dashboard.storageError.message"));
+        announcedQuotaRef.current = true;
+      }
       return;
     }
-    showBanner({
-      source: "quota",
-      severity: "error",
-      testId: "warning-quota",
-      message: i18n.t("dashboard.warnings.quotaFull.body"),
-      action: {
-        label: i18n.t("dashboard.warnings.quotaFull.action"),
-        onClick: () => browser.runtime.openOptionsPage(),
-      },
-      onDismiss: dismissQuotaWarning,
-    });
-  }, [quotaWarning, dismissQuotaWarning, showBanner, dismissBanner]);
-
-  useEffect(() => {
-    if (!syncPausedWarning) {
-      dismissBanner("sync-paused", { runOnDismiss: false });
-      return;
-    }
-    showBanner({
-      source: "sync-paused",
-      severity: "error",
-      testId: "warning-sync-paused",
-      message: i18n.t("dashboard.warnings.syncPaused.body"),
-      action: {
-        label: i18n.t("dashboard.warnings.syncPaused.action"),
-        onClick: () => browser.runtime.openOptionsPage(),
-      },
-      onDismiss: dismissSyncPausedWarning,
-    });
-  }, [syncPausedWarning, dismissSyncPausedWarning, showBanner, dismissBanner]);
+    announcedQuotaRef.current = false;
+  }, [quotaWarning, announceError]);
 
   useEffect(() => {
     if (!showUpdateBanner || !updateRelease) {
@@ -1106,30 +1085,56 @@ export default function Dashboard() {
             </div>
           </ScrollArea>
 
-          {/* Add Snippet + Settings */}
-          <div className="flex items-center gap-1.5 px-2 py-2">
-            <Button
-              data-testid="add-snippet"
-              onClick={handleAddSnippet}
-              className="h-9 flex-1 rounded-lg text-ui-sm!"
+          {/* Add Snippet + Settings, with a state line beneath them. */}
+          <div className="px-2 py-2">
+            <div className="flex items-center gap-1.5">
+              <Button
+                data-testid="add-snippet"
+                onClick={handleAddSnippet}
+                className="h-9 min-w-0 flex-1 overflow-hidden rounded-lg text-ui-sm!"
+              >
+                <Icon icon={Plus} size="lg" className="mr-1.5" />
+                {i18n.t("dashboard.addSnippet")}
+              </Button>
+              <Button
+                data-testid="settings-button"
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  setDeletedSnippet(null);
+                  browser.runtime.openOptionsPage();
+                }}
+                className="h-9 w-9 shrink-0 rounded-lg"
+                title={i18n.t("dashboard.settingsAndExport")}
+                aria-label={i18n.t("dashboard.settingsAndExport")}
+              >
+                <Icon icon={Settings} size="lg" />
+              </Button>
+            </div>
+            {/*
+              The indicator has its own reserved line. Putting it in the button
+              row took width from Add Snippet and, at a narrow sidebar, pushed
+              Settings past the edge. This line keeps both buttons untouched in
+              every storage mode.
+            */}
+            <div
+              data-testid="storage-indicator-slot"
+              className="flex h-4 items-center overflow-hidden"
             >
-              <Icon icon={Plus} size="lg" className="mr-1.5" />
-              {i18n.t("dashboard.addSnippet")}
-            </Button>
-            <Button
-              data-testid="settings-button"
-              variant="outline"
-              size="icon"
-              onClick={() => {
-                setDeletedSnippet(null);
-                browser.runtime.openOptionsPage();
-              }}
-              className="h-9 w-9 shrink-0 rounded-lg"
-              title={i18n.t("dashboard.settingsAndExport")}
-              aria-label={i18n.t("dashboard.settingsAndExport")}
-            >
-              <Icon icon={Settings} size="lg" />
-            </Button>
+              {localOnly && (
+                <span
+                  data-testid="local-only-indicator"
+                  title={i18n.t("dashboard.localOnlyDetail")}
+                  aria-label={i18n.t("dashboard.localOnlyDetail")}
+                  className="flex min-w-0 items-center gap-1 whitespace-nowrap text-ui-micro! text-muted-foreground"
+                >
+                  <Icon icon={CloudOff} size="sm" />
+                  <span className="truncate">
+                    {i18n.t("dashboard.localOnly")}
+                  </span>
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

@@ -9,6 +9,7 @@ import {
 } from "@/config/constants";
 import {
   contextMenuDraftItem,
+  storageAttentionItem,
   syncDataLostItem,
   blockedSitesItem,
   latestVersionItem,
@@ -41,6 +42,7 @@ import {
   type StorageChanges,
 } from "@/lib/sync-change";
 import { debugLog } from "@/lib/debug";
+import { badgeForStorageState } from "@/lib/storage-badge";
 import {
   shouldShowReviewPrompt,
   setReviewPromptState,
@@ -200,6 +202,27 @@ export default defineBackground(() => {
   // Owned here, not in the popup: the popup dies on blur and would take a
   // pending commit with it. The queue is persisted in local storage.
   startWriteQueue();
+
+  // A badge, not a notification: the answer is one glyph, and the explanation
+  // waits in the popup's reserved status slot when the user opens it. The
+  // popup cannot own this — it is gone whenever the attention is needed.
+  async function syncStorageBadge(): Promise<void> {
+    try {
+      const [status, attention] = await Promise.all([
+        storageManager.getStorageStatus(),
+        storageAttentionItem.getValue(),
+      ]);
+      const badge = badgeForStorageState({ ...status, attention });
+      const action = browser.action ?? browser.browserAction;
+      await action.setBadgeText({ text: badge?.text ?? "" });
+      if (badge) {
+        await action.setBadgeBackgroundColor({ color: badge.color });
+      }
+    } catch (err) {
+      captureError(err, { action: "syncStorageBadge" });
+    }
+  }
+  void syncStorageBadge();
 
   // Dev-only: open the manual QA harness once per dev session.
   if ((import.meta.env.MODE as string) !== "production") {
@@ -580,6 +603,18 @@ export default defineBackground(() => {
   // ---------------------------------------------------------------------------
   browser.storage.onChanged.addListener((changes, areaName) => {
     const reading = readSyncChange(changes as StorageChanges, areaName);
+
+    // The popup can write any of these and then disappear. Listening to the
+    // browser event here, rather than to a WXT item watcher, keeps the badge in
+    // the one context that is alive while the popup is closed.
+    if (
+      areaName === "local" &&
+      ("storageMode" in changes ||
+        "storageModeReason" in changes ||
+        "storageAttention" in changes)
+    ) {
+      void syncStorageBadge();
+    }
 
     // -----------------------------------------------------------------------
     // Refresh the content-script cache when sync gains or changes a snippet.

@@ -874,6 +874,36 @@ describe("autosave status", () => {
     );
   });
 
+  it("shows a one-line storage error in the reserved slot and opens Storage settings", async () => {
+    const user = userEvent.setup();
+    vi.mocked((globalThis as any).browser.tabs.create).mockClear();
+    snippetsStore.setState((prev) => ({ ...prev, quotaWarning: true }));
+    renderView();
+
+    const status = screen.getByTestId("snippet-sync-status");
+    expect(status).toHaveTextContent(
+      "Sync storage full — snippets saved on this device only."
+    );
+    // One foreground colour for copy, icon and action, and no wrapping: the
+    // status slot must stay one line in the toolbar.
+    expect(status.className).toContain("text-destructive");
+    expect(status.className).toContain("whitespace-nowrap");
+    const link = screen.getByTestId("storage-settings-link");
+    expect(link.className).toContain("text-inherit");
+
+    await user.click(link);
+    expect((globalThis as any).browser.tabs.create).toHaveBeenCalledWith({
+      url: "chrome-extension://test-extension-id/options.html#/storage",
+    });
+  });
+
+  it("does not show a storage error when writes are not refused", () => {
+    renderView();
+
+    expect(screen.getByTestId("snippet-sync-status")).toBeEmptyDOMElement();
+    expect(screen.queryByTestId("storage-settings-link")).toBeNull();
+  });
+
   it("dismisses a failure and retries the pending draft", async () => {
     const user = userEvent.setup();
     queueOutcomesStore.setState(() => ({

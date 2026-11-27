@@ -31,6 +31,11 @@ export type BannerInput = {
   dismissTestId?: string;
   /** Lets an owner dismiss only its own banner, never a newer one. */
   source?: string;
+  /**
+   * The options section this message belongs to. Scoped banners are hidden and
+   * cleared when the user navigates away; an unscoped banner is page-wide.
+   */
+  scope?: string;
 };
 
 type BannerState = Omit<BannerInput, "severity"> & {
@@ -208,13 +213,17 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
 export function FeedbackBanner({
   className,
   testId,
+  scope,
 }: {
   className?: string;
   testId?: string;
+  /** The options section currently on screen. Unscoped banners pass through. */
+  scope?: string;
 }) {
   const { banner, dismissBanner } = useFeedback();
 
   if (!banner) return null;
+  if (scope && banner.scope && banner.scope !== scope) return null;
 
   const BannerIcon = BANNER_ICON[banner.severity];
   const rootTestId = banner.testId ?? testId ?? "feedback-banner";
@@ -223,16 +232,20 @@ export function FeedbackBanner({
     <div
       data-testid={rootTestId}
       data-severity={banner.severity}
+      data-scope={banner.scope}
       className={cn(
-        "mb-4 flex items-start gap-2 rounded-md px-3 py-2 text-sm",
+        "mb-3 flex items-center gap-1.5 rounded-md px-2 py-1 text-ui-xs! leading-snug font-normal",
         BANNER_TONE[banner.severity],
         className
       )}
     >
-      <Icon icon={BannerIcon} size="lg" />
-      <p className="min-w-0 flex-1 font-medium">{banner.message}</p>
+      <Icon icon={BannerIcon} size="sm" />
+      <p className="min-w-0 flex-1">{banner.message}</p>
       {banner.action && (
-        <InlineAction onClick={banner.action.onClick}>
+        <InlineAction
+          onClick={banner.action.onClick}
+          className="text-inherit hover:text-inherit"
+        >
           {banner.action.label}
         </InlineAction>
       )}
@@ -244,7 +257,7 @@ export function FeedbackBanner({
           onClick={() => dismissBanner(banner.source)}
           className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
         >
-          <Icon icon={X} size="lg" stroke="emphasis" />
+          <Icon icon={X} size="sm" stroke="emphasis" />
         </button>
       )}
     </div>

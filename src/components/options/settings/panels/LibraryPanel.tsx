@@ -42,8 +42,18 @@ export function LibraryPanel() {
   }>({ count: null, totalUses: null, mostUsed: null });
   const [showWizard, setShowWizard] = useState(false);
   const importButtonRef = useRef<HTMLButtonElement>(null);
-  const { confirmed, show, reset } = useControlConfirmation();
+  const {
+    confirmed: exportConfirmed,
+    show: showExportConfirmation,
+    reset: resetExportConfirmation,
+  } = useControlConfirmation();
+  const {
+    confirmed: importConfirmed,
+    show: showImportConfirmation,
+    reset: resetImportConfirmation,
+  } = useControlConfirmation();
   const [exportConfirmation, setExportConfirmation] = useState("");
+  const [importConfirmation, setImportConfirmation] = useState("");
   const { announce, showBanner, dismissBanner } = useFeedback();
 
   useEffect(() => {
@@ -76,14 +86,15 @@ export function LibraryPanel() {
           : "options.library.exported"
       );
       setExportConfirmation(message);
-      show();
+      showExportConfirmation();
       announce(message);
       dismissBanner("library-export", { runOnDismiss: false });
     } catch (err) {
       captureError(err, { action: "exportSnippets" });
-      reset();
+      resetExportConfirmation();
       showBanner({
         source: "library-export",
+        scope: "library",
         severity: "error",
         message:
           err instanceof Error
@@ -177,6 +188,13 @@ export function LibraryPanel() {
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {i18n.t("options.importExport.importCard.description")}
               </p>
+              {importConfirmed && (
+                <ControlConfirmation
+                  label={importConfirmation}
+                  testId="import-confirmation"
+                  className="mt-1"
+                />
+              )}
             </div>
             <DialogTrigger
               render={
@@ -184,7 +202,10 @@ export function LibraryPanel() {
                   ref={importButtonRef}
                   size="sm"
                   data-testid="import-open"
-                  onClick={() => setShowWizard(true)}
+                  onClick={() => {
+                    resetImportConfirmation();
+                    setShowWizard(true);
+                  }}
                   className="h-8 shrink-0"
                 />
               }
@@ -244,7 +265,7 @@ export function LibraryPanel() {
               <Icon icon={Download} className="mr-1.5" />
               {i18n.t("options.importExport.exportCard.button")}
             </Button>
-            {confirmed && (
+            {exportConfirmed && (
               <ControlConfirmation
                 label={exportConfirmation}
                 className="self-center"
@@ -282,14 +303,17 @@ export function LibraryPanel() {
                   importButtonRef.current?.focus();
                 }}
                 onImportComplete={(n) => {
-                  showBanner({
-                    source: "library-import",
-                    severity: "info",
-                    message: i18n.t(
-                      "options.importExport.importCard.successMessage",
-                      n
-                    ),
-                  });
+                  const message = i18n.t(
+                    "options.importExport.importCard.successMessage",
+                    n
+                  );
+                  setImportConfirmation(message);
+                  showImportConfirmation();
+                  announce(message);
+                  // A previously failed import may have left a scoped banner in
+                  // the shell. The local confirmation replaces it without
+                  // running its onDismiss side effect here.
+                  dismissBanner("library-import", { runOnDismiss: false });
                   setShowWizard(false);
                   importButtonRef.current?.focus();
                 }}

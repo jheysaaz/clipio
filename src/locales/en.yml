@@ -39,13 +39,15 @@ dashboard:
     body: Create your first snippet to start saving and reusing text quickly.
     action: Create your first snippet
   snippetListLabel: Snippets
+  # A chosen local-only mode is a state, not a warning: one neutral indicator,
+  # with the full explanation available as its title and in Storage settings.
+  localOnly: Local only
+  localOnlyDetail: Sync is off. Snippets are saved on this device only.
+  # An automatic quota fallback stays in the editor's reserved status slot.
+  storageError:
+    message: Sync storage full — snippets saved on this device only.
+    action: Storage settings →
   warnings:
-    quotaFull:
-      body: Sync storage full — snippets saved locally only.
-      action: Export backup →
-    syncPaused:
-      body: Sync paused — snippets are saved locally (switched manually).
-      action: Storage settings →
     recovery:
       body:
         1: "Your synced snippets were lost (sign-out detected). 1 snippet in backup."
@@ -300,8 +302,8 @@ options:
       description: Import from a Clipio or other tools export file. Conflicts and unsupported placeholders are resolved step-by-step.
       button: Import
       successMessage:
-        1: "✓ 1 snippet imported successfully."
-        n: "✓ $1 snippets imported successfully."
+        1: "1 snippet imported successfully."
+        n: "$1 snippets imported successfully."
       supported: "Supported:"
     modal:
       title: Import Snippets

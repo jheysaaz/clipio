@@ -59,15 +59,27 @@ function Probe() {
       >
         banner with controls
       </button>
+      <button
+        type="button"
+        onClick={() =>
+          showBanner({
+            message: "Library only",
+            source: "library-import",
+            scope: "library",
+          })
+        }
+      >
+        scoped banner
+      </button>
     </>
   );
 }
 
-function renderProvider() {
+function renderProvider(scope?: string) {
   return render(
     <FeedbackProvider>
       <Probe />
-      <FeedbackBanner testId="feedback-banner" />
+      <FeedbackBanner testId="feedback-banner" scope={scope} />
     </FeedbackProvider>
   );
 }
@@ -143,6 +155,32 @@ describe("FeedbackProvider", () => {
     );
   });
 
+  it("keeps a section-scoped banner inside its own section", () => {
+    const outside = renderProvider("diagnostics");
+    fireEvent.click(screen.getByRole("button", { name: "scoped banner" }));
+    expect(screen.queryByTestId("feedback-banner")).toBeNull();
+    outside.unmount();
+
+    renderProvider("library");
+    fireEvent.click(screen.getByRole("button", { name: "scoped banner" }));
+    const banner = screen.getByTestId("feedback-banner");
+    expect(banner).toHaveTextContent("Library only");
+    expect(banner).toHaveAttribute("data-scope", "library");
+  });
+
+  it("renders the banner as a compact caption rather than bold body copy", () => {
+    renderProvider();
+    fireEvent.click(screen.getByRole("button", { name: "info banner" }));
+
+    const banner = screen.getByTestId("feedback-banner");
+    expect(banner.className).toContain("text-ui-xs!");
+    expect(banner.className).toContain("font-normal");
+    expect(banner.querySelector("p")?.className).not.toContain("font-medium");
+    expect(banner.querySelector("svg")?.getAttribute("class")).toContain(
+      "size-3"
+    );
+  });
+
   it("renders banner actions as buttons and lets the user dismiss", () => {
     renderProvider();
 
@@ -152,6 +190,10 @@ describe("FeedbackProvider", () => {
 
     const action = screen.getByRole("button", { name: "Retry" });
     expect(action.tagName).toBe("BUTTON");
+    // The action, icon, copy and dismiss control all inherit the banner's one
+    // foreground colour; a primary-blue link inside a red error read as three
+    // unrelated treatments in the same component.
+    expect(action.className).toContain("text-inherit");
 
     const banner = screen.getByTestId("feedback-banner");
     expect(banner.getAttribute("role")).toBeNull();
