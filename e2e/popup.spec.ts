@@ -921,6 +921,75 @@ test.describe("Popup (Dashboard)", () => {
     expect(gap).toBeGreaterThan(0);
   });
 
+  test("places the caret beside an inline GIF when clicking next to it", async ({
+    popupPage,
+  }) => {
+    // A void at the end of a block used to be deserialised with no text leaf
+    // after it. There was then no Slate point for the browser click to land on,
+    // so typing did nothing. Stub the remote GIF so the failure is about the
+    // caret, not an offline image.
+    const gifId = "caretanchorgif";
+    await popupPage.route(
+      `https://media.giphy.com/media/${gifId}/giphy.gif`,
+      (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "image/gif",
+          body: Buffer.from(
+            "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+            "base64"
+          ),
+        })
+    );
+    const snippet = makeSnippet({
+      label: "Media caret",
+      shortcut: ";mc",
+      content: `{{gif:${gifId}}}`,
+    });
+    await seedAndReload(popupPage, [snippet]);
+    await popupPage.getByTestId("snippet-list-item").click();
+
+    const image = popupPage.getByRole("img", { name: "GIF" });
+    await expect(image).toBeVisible();
+    const box = await image.boundingBox();
+    expect(box).not.toBeNull();
+    await popupPage.mouse.click(
+      box!.x + box!.width + 4,
+      box!.y + box!.height / 2
+    );
+    await popupPage.keyboard.type(" tail");
+
+    await expect
+      .poll(() => syncedContent(popupPage, snippet.id), { timeout: 10_000 })
+      .toContain(" tail");
+  });
+
+  test("inserts a slash placeholder at the slash and leaves the caret after it", async ({
+    popupPage,
+  }) => {
+    const snippet = makeSnippet({
+      label: "Slash caret",
+      shortcut: ";sc",
+      content: "",
+    });
+    await seedAndReload(popupPage, [snippet]);
+    await popupPage.getByTestId("snippet-list-item").click();
+
+    const editor = popupPage.locator('[contenteditable="true"]');
+    await editor.click();
+    await popupPage.keyboard.type("/clip");
+    await expect(
+      popupPage.getByRole("listbox", { name: "Commands" })
+    ).toBeVisible();
+    await popupPage.keyboard.press("Enter");
+
+    await expect(editor).toContainText("clipboard");
+    await popupPage.keyboard.type(" after");
+    await expect
+      .poll(() => syncedContent(popupPage, snippet.id), { timeout: 10_000 })
+      .toBe("{{clipboard}} after");
+  });
+
   test("copies snippet to clipboard", async ({ popupPage }) => {
     await seedAndReload(popupPage, [helloSnippet()]);
 

@@ -73,6 +73,11 @@ const gifNode = (giphyId: string, width?: number): TElement =>
     children: [{ text: "" }],
   }) as TElement;
 
+// Inline voids now carry empty text leaves on each side so the caret has
+// somewhere to stand; the element itself is never at index 0 any more.
+const firstElementChild = (node: TElement): TElement =>
+  node.children.find((child) => !("text" in child)) as TElement;
+
 const tdNode = (content: string, align?: string): TElement =>
   ({
     type: "td",
@@ -376,35 +381,41 @@ describe("deserializeContent (markdown path)", () => {
   // MUST create CLIPBOARD_PLACEHOLDER for {{clipboard}}
   it("deserializes {{clipboard}} placeholder", () => {
     const result = deserializeContent("{{clipboard}}");
-    const firstChild = result[0].children[0] as TElement;
+    const firstChild = firstElementChild(result[0]);
     expect(firstChild.type).toBe(CLIPBOARD_PLACEHOLDER);
   });
 
   // MUST create DATE_PLACEHOLDER with format prop for {{date:X}}
   it("deserializes {{date:iso}} placeholder", () => {
     const result = deserializeContent("{{date:iso}}");
-    const firstChild = result[0].children[0] as TElement & { format: string };
+    const firstChild = firstElementChild(result[0]) as TElement & {
+      format: string;
+    };
     expect(firstChild.type).toBe(DATE_PLACEHOLDER);
     expect(firstChild.format).toBe("iso");
   });
 
   it("deserializes {{date:long}} placeholder", () => {
     const result = deserializeContent("{{date:long}}");
-    const firstChild = result[0].children[0] as TElement & { format: string };
+    const firstChild = firstElementChild(result[0]) as TElement & {
+      format: string;
+    };
     expect(firstChild.format).toBe("long");
   });
 
   // MUST create CURSOR_PLACEHOLDER for {{cursor}}
   it("deserializes {{cursor}} placeholder", () => {
     const result = deserializeContent("{{cursor}}");
-    const firstChild = result[0].children[0] as TElement;
+    const firstChild = firstElementChild(result[0]);
     expect(firstChild.type).toBe(CURSOR_PLACEHOLDER);
   });
 
   // MUST create DATEPICKER_PLACEHOLDER with date prop
   it("deserializes {{datepicker:YYYY-MM-DD}} placeholder", () => {
     const result = deserializeContent("{{datepicker:2025-06-15}}");
-    const firstChild = result[0].children[0] as TElement & { date: string };
+    const firstChild = firstElementChild(result[0]) as TElement & {
+      date: string;
+    };
     expect(firstChild.type).toBe(DATEPICKER_PLACEHOLDER);
     expect(firstChild.date).toBe("2025-06-15");
   });
@@ -413,7 +424,9 @@ describe("deserializeContent (markdown path)", () => {
   it("deserializes {{image:<uuid>}} placeholder", () => {
     const mediaId = "550e8400-e29b-41d4-a716-446655440000";
     const result = deserializeContent(`{{image:${mediaId}}}`);
-    const firstChild = result[0].children[0] as TElement & { mediaId: string };
+    const firstChild = firstElementChild(result[0]) as TElement & {
+      mediaId: string;
+    };
     expect(firstChild.type).toBe(IMAGE_PLACEHOLDER);
     expect(firstChild.mediaId).toBe(mediaId);
   });
@@ -421,14 +434,18 @@ describe("deserializeContent (markdown path)", () => {
   // MUST create GIF_PLACEHOLDER with giphyId prop
   it("deserializes {{gif:<giphyId>}} placeholder", () => {
     const result = deserializeContent("{{gif:abc123XYZ}}");
-    const firstChild = result[0].children[0] as TElement & { giphyId: string };
+    const firstChild = firstElementChild(result[0]) as TElement & {
+      giphyId: string;
+    };
     expect(firstChild.type).toBe(GIF_PLACEHOLDER);
     expect(firstChild.giphyId).toBe("abc123XYZ");
   });
 
   it("deserializes [label](url) as link element", () => {
     const result = deserializeContent("[Click here](https://example.com)");
-    const firstChild = result[0].children[0] as TElement & { url: string };
+    const firstChild = firstElementChild(result[0]) as TElement & {
+      url: string;
+    };
     expect(firstChild.type).toBe(LINK_ELEMENT);
     expect(firstChild.url).toBe("https://example.com");
   });
@@ -588,7 +605,7 @@ describe("image/gif width suffix", () => {
 
   it("deserializes {{image:<id>}} without width — no width prop", () => {
     const result = deserializeContent(`{{image:${mediaId}}}`);
-    const node = result[0].children[0] as TElement & {
+    const node = firstElementChild(result[0]) as TElement & {
       mediaId: string;
       width?: number;
     };
@@ -599,7 +616,7 @@ describe("image/gif width suffix", () => {
 
   it("deserializes {{image:<id>:200}} with width prop = 200", () => {
     const result = deserializeContent(`{{image:${mediaId}:200}}`);
-    const node = result[0].children[0] as TElement & {
+    const node = firstElementChild(result[0]) as TElement & {
       mediaId: string;
       width?: number;
     };
@@ -610,7 +627,7 @@ describe("image/gif width suffix", () => {
 
   it("deserializes {{gif:<id>}} without width — no width prop", () => {
     const result = deserializeContent("{{gif:abc123XYZ}}");
-    const node = result[0].children[0] as TElement & {
+    const node = firstElementChild(result[0]) as TElement & {
       giphyId: string;
       width?: number;
     };
@@ -621,7 +638,7 @@ describe("image/gif width suffix", () => {
 
   it("deserializes {{gif:<id>:350}} with width prop = 350", () => {
     const result = deserializeContent("{{gif:abc123XYZ:350}}");
-    const node = result[0].children[0] as TElement & {
+    const node = firstElementChild(result[0]) as TElement & {
       giphyId: string;
       width?: number;
     };

@@ -304,6 +304,7 @@ import {
   IMAGE_PLACEHOLDER_ANCHORED,
   GIF_PLACEHOLDER_ANCHORED,
 } from "@/lib/media-placeholders";
+import { withCaretAnchors } from "./caret-anchors";
 export function htmlToMarkdown(html: string): string {
   if (!html || html.trim() === "") return "";
   return serializeToMarkdown(deserializeFromHtml(html));
@@ -334,8 +335,8 @@ function deserializeFromMarkdown(markdown: string): TElement[] {
   // their `##`, lists became indistinguishable paragraphs, and a two-cell table
   // serialised to `"ab"` with no separator at all.
   //
-  const result = parseBlocks(markdown, (text) =>
-    parseMarkdownInline(text)
+  const result = withCaretAnchors(
+    parseBlocks(markdown, (text) => parseMarkdownInline(text)) as TElement[]
   ) as TElement[];
 
   return result.length > 0 ? result : [{ type: "p", children: [{ text: "" }] }];
@@ -506,7 +507,7 @@ function deserializeFromHtml(html: string): TElement[] {
 
   const nodes = deserializeNodes(body);
   return nodes.length > 0
-    ? wrapTextNodesInParagraphs(nodes)
+    ? (withCaretAnchors(wrapTextNodesInParagraphs(nodes)) as TElement[])
     : [{ type: "p", children: [{ text: "" }] }];
 }
 
