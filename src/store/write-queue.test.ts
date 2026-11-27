@@ -52,6 +52,7 @@ vi.mock("@/storage/writer-id", () => ({
 }));
 
 import {
+  claimOutcomeReport,
   clearCommittedFields,
   discardDraft,
   discardStaleCreateDraft,
@@ -62,6 +63,7 @@ import {
   queueOutcomesStore,
   refreshSyncStatus,
   refreshUndoAvailability,
+  resetReportedOutcomeReportsForTests,
   redoLastEdit,
   rememberCommittedFields,
   stageEdit,
@@ -99,6 +101,7 @@ const fields = {
 };
 
 function reset() {
+  resetReportedOutcomeReportsForTests();
   state.drafts = {};
   state.queue = emptyQueue();
   state.undo = {};
@@ -656,5 +659,28 @@ describe("popup write queue", () => {
     draftsGet.mockImplementation(original);
 
     expect(writeQueueStore.state.saving).toBe(false);
+  });
+});
+
+describe("terminal outcome reports", () => {
+  const outcome = {
+    opId: "op-1",
+    snippetId: "s1",
+    status: "failed" as const,
+    error: "conflict",
+  };
+
+  beforeEach(reset);
+
+  it("claims a stored failure only once", () => {
+    expect(claimOutcomeReport(outcome)).toBe(true);
+    // A remount reads the same persisted operation back as a fresh object. The
+    // identity changed, but the report has already been made.
+    expect(claimOutcomeReport({ ...outcome })).toBe(false);
+  });
+
+  it("does not let one reported failure suppress another operation", () => {
+    expect(claimOutcomeReport(outcome)).toBe(true);
+    expect(claimOutcomeReport({ ...outcome, opId: "op-2" })).toBe(true);
   });
 });

@@ -66,6 +66,34 @@ export type QueueOutcome = {
   error?: string;
 };
 
+const REPORTED_OUTCOMES_KEY = "__clipioReportedQueueOutcomes" as const;
+type ReportedOutcomeHost = typeof globalThis & {
+  [REPORTED_OUTCOMES_KEY]?: Set<string>;
+};
+
+/**
+ * Claim the right to announce a terminal outcome once per page.
+ *
+ * An editor can remount for reasons unrelated to the write — selection changes,
+ * Suspense, StrictMode, dev reload — and each mount rebuilds its own refs. The
+ * claim lives on `globalThis` so a remount (or a re-evaluated module) cannot
+ * replay an operation that has already been reported. A new operation id is a
+ * new failure and is still reported.
+ */
+export function claimOutcomeReport(outcome: QueueOutcome): boolean {
+  const host = globalThis as ReportedOutcomeHost;
+  const reported = host[REPORTED_OUTCOMES_KEY] ?? new Set<string>();
+  host[REPORTED_OUTCOMES_KEY] = reported;
+  const key = `${outcome.opId}|${outcome.status}|${outcome.error ?? ""}`;
+  if (reported.has(key)) return false;
+  reported.add(key);
+  return true;
+}
+
+export function resetReportedOutcomeReportsForTests(): void {
+  delete (globalThis as ReportedOutcomeHost)[REPORTED_OUTCOMES_KEY];
+}
+
 /**
  * Terminal outcomes keyed by snippet id, for per-snippet UI recovery.
  *
