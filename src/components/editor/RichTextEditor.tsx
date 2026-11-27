@@ -135,6 +135,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
 
     // Image upload state
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const contentHostRef = useRef<HTMLDivElement>(null);
     const imageUploadError = useEditorMedia((s) => s.imageUploadError);
     const setImageUploadError = (message: string | null) =>
       editorMediaStore.setState((prev) => ({
@@ -193,7 +194,8 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
       });
     }, []);
 
-    // Expose openCommandMenu method via ref
+    // Expose the two imperative actions callers need: the slash menu and a
+    // plain focus, which the name field uses when the user presses Enter.
     useImperativeHandle(
       ref,
       () => ({
@@ -202,6 +204,17 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
           setManualTrigger(true);
           setShowSlashMenu(true);
           setSlashSearchQuery("");
+        },
+        focus: () => {
+          editor.tf.focus();
+          // Plate's focus command handles selection placement in the browser.
+          // The explicit DOM focus makes the same contract observable in tests
+          // and in environments where Slate cannot apply a DOM selection.
+          contentHostRef.current
+            ?.querySelector<HTMLElement>(
+              '[data-slate-editor], [contenteditable="true"], textarea'
+            )
+            ?.focus();
         },
       }),
       [editor]
@@ -741,13 +754,13 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
           </div>
         )}
         <Plate editor={editor} onChange={handleChange}>
-          <div className="relative flex-1 min-h-0">
+          <div className="relative flex-1 min-h-0" ref={contentHostRef}>
             <PlateContent
               aria-label={ariaLabel}
               placeholder={placeholder}
               spellCheck={false}
               className={cn(
-                "h-full overflow-auto font-normal text-base leading-[1.6] outline-none",
+                "h-full overflow-auto font-normal text-ui-base! leading-editor outline-none",
                 "text-foreground",
                 "**:data-slate-placeholder:text-muted-foreground",
                 "**:data-slate-placeholder:opacity-100!"

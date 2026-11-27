@@ -68,6 +68,7 @@ describe("MESSAGE wire strings", () => {
     expect(MESSAGE.CONTENT_PING).toBe("content:ping");
     expect(MESSAGE.SENTRY_TEST).toBe("dev:sentry-test");
     expect(MESSAGE.SENTRY_RELAY).toBe("sentry:relay");
+    expect(MESSAGE.POPUP_SNIPPET).toBe("popup:open-snippet");
   });
 
   it("keeps the wire strings distinct from each other", () => {
@@ -159,6 +160,18 @@ describe("onMessageFromSelf — sender enforcement", () => {
 
     expect(handler).not.toHaveBeenCalled();
   });
+
+  it("does not open a popup snippet for a foreign sender", async () => {
+    // A page must not be able to drive the extension's UI or its tab fallback.
+    const handler = vi.fn(() => ({ ok: true }) as const);
+    onMessageFromSelf(MESSAGE.POPUP_SNIPPET, handler);
+
+    await sendFromHostilePage(MESSAGE.POPUP_SNIPPET, {
+      snippetId: "snip-1",
+    });
+
+    expect(handler).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -188,6 +201,16 @@ describe("protocol round trips", () => {
       dataUrl: `data:image/png;base64,${btoa("abc")}`,
       alt: "a description",
     });
+  });
+
+  it("carries a snippet id from an open-this-snippet link to the background", async () => {
+    onMessageFromSelf(MESSAGE.POPUP_SNIPPET, ({ data }) => ({
+      ok: true as const,
+    }));
+
+    await expect(
+      sendMessage(MESSAGE.POPUP_SNIPPET, { snippetId: "snip-1" })
+    ).resolves.toEqual({ ok: true });
   });
 
   it("carries a null alt through without the caller substituting a default", async () => {

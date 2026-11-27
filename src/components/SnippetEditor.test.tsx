@@ -85,11 +85,19 @@ vi.mock("@/components/editor", async () => {
   };
   const RichTextEditor = React.forwardRef(function RichTextEditor(
     { value, onChange, onCopyError, ariaLabel, placeholder }: Props,
-    _ref: React.Ref<unknown>
+    ref: React.Ref<{ focus: () => void; openCommandMenu: () => void }>
   ) {
+    // Mirror the real editor's ref contract: its focus action puts the caret in
+    // the editable surface. The test below proves SnippetEditor calls it.
+    const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+    React.useImperativeHandle(ref, () => ({
+      focus: () => textareaRef.current?.focus(),
+      openCommandMenu: () => textareaRef.current?.focus(),
+    }));
     return (
       <div>
         <textarea
+          ref={textareaRef}
           aria-label={ariaLabel ?? "Content"}
           placeholder={placeholder}
           value={value}
@@ -253,8 +261,11 @@ function stubTagWidths(available: number, each: number, more: number) {
   return () => rect.mockRestore();
 }
 
+let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
+
 beforeEach(() => {
   vi.clearAllMocks();
+  consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   writeQueueStore.setState(() => ({
     pending: 0,
     failed: 0,
@@ -279,6 +290,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  consoleErrorSpy?.mockRestore();
+  consoleErrorSpy = null;
   vi.useRealTimers();
 });
 
@@ -325,6 +338,42 @@ describe("one editor, two data states", () => {
 
     await user.click(screen.getByTestId("snippet-header"));
     expect(screen.getByTestId("snippet-label-input")).toHaveFocus();
+  });
+
+  it("reads name and shortcut as part of the document, not a tinted band", () => {
+    renderView();
+    const header = screen.getByTestId("snippet-header");
+    const name = screen.getByTestId("snippet-label-input");
+    const shortcut = screen.getByTestId("snippet-shortcut-input");
+
+    expect(header.className).not.toContain("bg-muted");
+    expect(name.className).toContain("text-ui-lg!");
+    expect(name.className).toContain("bg-transparent");
+    expect(name).toHaveAttribute("placeholder", "Untitled snippet");
+    // The shortcut has no pill: only a bottom border appears on hover/focus.
+    expect(shortcut.className).toContain("border-b");
+    expect(shortcut.className).toContain("border-transparent");
+    expect(shortcut.className).toContain("hover:border-ring/60");
+    expect(shortcut.className).not.toContain("bg-background");
+    expect(shortcut.className).not.toContain("rounded-md");
+  });
+
+  it("tabs name → shortcut → content and focuses content on Enter in the name", async () => {
+    const user = userEvent.setup();
+    renderView();
+    const name = screen.getByTestId("snippet-label-input");
+    const shortcut = screen.getByTestId("snippet-shortcut-input");
+    const content = screen.getByRole("textbox", { name: "Snippet content" });
+
+    name.focus();
+    await user.tab();
+    expect(shortcut).toHaveFocus();
+    await user.tab();
+    expect(content).toHaveFocus();
+
+    name.focus();
+    fireEvent.keyDown(name, { key: "Enter" });
+    expect(content).toHaveFocus();
   });
 
   it("names version-history controls honestly and gives icons accessible names", () => {
@@ -650,7 +699,10 @@ describe("shortcut validation", () => {
     // The duplicate hint outlives focus; only changing the value dismisses it.
     const error = screen.getByTestId("snippet-shortcut-error");
     expect(error).toHaveTextContent("already used");
-    expect(error).toBeVisible();
+    // Base UI's positioner keeps opacity: 0 until layout in a real browser, so
+    // happy-dom cannot report the popup as visible. `data-open` is the
+    // primitive's own open-state contract.
+    expect(error).toHaveAttribute("data-open", "");
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
     expect(onAutoSave).toHaveBeenCalledWith(
       expect.objectContaining({ shortcut: "/valid" })
@@ -676,7 +728,11 @@ describe("shortcut validation", () => {
     fireEvent.change(screen.getByTestId("snippet-shortcut-input"), {
       target: { value: "/addr " },
     });
-    expect(screen.getByTestId("snippet-shortcut-error")).toBeVisible();
+    // The error outlives focus; see the data-open note in the duplicate test.
+    expect(screen.getByTestId("snippet-shortcut-error")).toHaveAttribute(
+      "data-open",
+      ""
+    );
 
     await user.clear(screen.getByTestId("snippet-shortcut-input"));
     await user.type(screen.getByTestId("snippet-shortcut-input"), "/home");
@@ -751,7 +807,7 @@ describe("autosave status", () => {
     expect(status).toBeEmptyDOMElement();
   });
 
-  it("shows a sticky retry status and announces a queued failure", () => {
+  it("shows a sticky retry status without a banner and logs the failure", async () => {
     queueOutcomesStore.setState(() => ({
       s1: {
         opId: "op-1",
@@ -770,8 +826,52 @@ describe("autosave status", () => {
 
     const status = screen.getByTestId("snippet-sync-status");
     expect(status).toHaveTextContent("Couldn't save · Retry");
-    expect(status.querySelector("button")).not.toBeNull();
-    expect(screen.getByRole("alert")).toHaveTextContent("Storage is full");
+    expect(status.querySelector("button")?.getAttribute("title")).toMatch(
+      /Storage is full/
+    );
+    expect(screen.queryByTestId("inline-error")).toBeNull();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Storage is full"
+    );
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[Clipio] snippet save failed",
+      expect.objectContaining({
+        snippetId: "s1",
+        opId: "op-1",
+        status: "refused",
+        error: "Storage is full",
+      })
+    );
+  });
+
+  it("translates a conflict token into hover copy instead of showing it", async () => {
+    queueOutcomesStore.setState(() => ({
+      s1: {
+        opId: "op-2",
+        snippetId: "s1",
+        status: "failed",
+        error: "conflict",
+      },
+    }));
+    writeQueueStore.setState(() => ({
+      pending: 0,
+      failed: 1,
+      refused: 0,
+      saving: false,
+    }));
+    renderView();
+
+    expect(screen.queryByTestId("inline-error")).toBeNull();
+    const retry = await screen.findByRole("button", {
+      name: "Couldn't save · Retry",
+    });
+    expect(retry.getAttribute("title")).toMatch(/A newer version/);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[Clipio] snippet save failed",
+      expect.objectContaining({
+        error: "A newer version of this snippet was saved first",
+      })
+    );
   });
 
   it("dismisses a failure and retries the pending draft", async () => {

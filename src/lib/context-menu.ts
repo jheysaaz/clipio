@@ -173,6 +173,19 @@ export function popupHashRoute(path: string): string {
 }
 
 /**
+ * The popup path for one specific snippet, e.g. `/snippet/abc`.
+ *
+ * Imported ids are not guaranteed to be UUIDs — a backup can carry `a/b` — so
+ * the id is encoded rather than concatenated. `viewFromPath` decodes it again,
+ * and the test checks both halves against the real router.
+ */
+export function popupRouteForSnippet(snippetId: string): string {
+  if (!snippetId)
+    throw new Error("Cannot open a popup view without a snippet id");
+  return `/snippet/${encodeURIComponent(snippetId)}`;
+}
+
+/**
  * The popup route an action asks the popup to boot into, or `null` for none.
  *
  * ── Why this exists ──────────────────────────────────────────────────────────

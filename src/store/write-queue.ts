@@ -364,6 +364,28 @@ export async function stageProvisionalDraft(
   return draft;
 }
 
+/**
+ * Drop a create draft that outlived its own commit.
+ *
+ * The background clears only the exact draft the operation was built from. A
+ * keystroke after that flush replaces the draft with a newer one still marked
+ * `isNew`; once the record exists its `baseRev: 0` conflicts with our own write.
+ * The detail editor already shows the committed fields, so this leftover holds
+ * no work worth keeping — it only pins the status to Saving… and hands the next
+ * create session an id that is no longer new.
+ */
+export async function discardStaleCreateDraft(
+  snippetId: string,
+  stored: Snippet[]
+): Promise<void> {
+  const drafts = await editorDraftsItem.getValue();
+  const draft = drafts[snippetId];
+  if (!draft?.isNew) return;
+  if (stored.some((item) => item.id === snippetId)) {
+    await discardUnflushedDraft(snippetId);
+  }
+}
+
 function sameFields(a: EditorFields, b: EditorFields): boolean {
   return (
     a.label === b.label &&

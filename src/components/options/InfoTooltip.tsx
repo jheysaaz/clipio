@@ -1,42 +1,31 @@
 import { Info } from "lucide-react";
-import { useState } from "react";
 import { Icon } from "@/components/ui/icon";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function InfoTooltip({ text }: { text: string }) {
-  const [isVisible, setIsVisible] = useState(false);
   const id = `info-tooltip-${text.slice(0, 10).replace(/\s+/g, "-")}`;
 
   return (
-    <div
-      className="group relative inline-flex items-center"
-      onMouseEnter={() => setIsVisible(true)}
-      onMouseLeave={() => setIsVisible(false)}
-    >
-      {/* Accessible name lives on the button, not the icon (lucide a11y guide). */}
-      <button
-        type="button"
-        tabIndex={0}
-        aria-label={text}
-        aria-describedby={id}
-        className="rounded-full text-muted-foreground cursor-help focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        onFocus={() => setIsVisible(true)}
-        onBlur={() => setIsVisible(false)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") setIsVisible(false);
-        }}
-      >
-        <Icon icon={Info} />
-      </button>
-      <div
-        id={id}
-        role="tooltip"
-        className={`pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 rounded-lg bg-foreground text-background text-xs px-3 py-2 z-50 shadow-xl transition-opacity ${
-          isVisible ? "opacity-100" : "opacity-0"
-        }`}
-      >
-        {text}
-        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-foreground" />
-      </div>
-    </div>
+    <TooltipProvider>
+      <Tooltip>
+        {/* Accessible name lives on the trigger, not the icon (lucide a11y guide). */}
+        <TooltipTrigger
+          type="button"
+          aria-label={text}
+          aria-describedby={id}
+          className="rounded-full text-muted-foreground cursor-help focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <Icon icon={Info} />
+        </TooltipTrigger>
+        <TooltipContent id={id} role="tooltip">
+          {text}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }

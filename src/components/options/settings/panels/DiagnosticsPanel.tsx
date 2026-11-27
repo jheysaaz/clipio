@@ -7,13 +7,12 @@
  */
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
 
 import { useFeedback } from "@/components/feedback/FeedbackProvider";
 import { useControlConfirmation } from "@/components/feedback/use-control-confirmation";
 import { Button } from "@/components/ui/button";
 import { ControlConfirmation } from "@/components/ui/control-confirmation";
-import { Icon } from "@/components/ui/icon";
+import { Spinner } from "@/components/ui/spinner";
 import { MESSAGE, sendMessage } from "@/lib/protocol";
 import { i18n } from "#i18n";
 
@@ -96,13 +95,17 @@ export function DiagnosticsPanel() {
         className="h-8"
         onClick={ping}
         disabled={pinging}
+        // The spinner carries its own accessible name; without this the button
+        // would be announced as "Loading… Pinging…" instead of its visible label.
+        aria-label={
+          pinging
+            ? i18n.t("options.developers.contentScriptHealth.pinging")
+            : undefined
+        }
       >
         {pinging ? (
           <>
-            <Icon
-              icon={Loader2}
-              className="mr-1.5 animate-spin motion-reduce:hidden"
-            />
+            <Spinner className="mr-1.5 size-3.5 motion-reduce:hidden" />
             {i18n.t("options.developers.contentScriptHealth.pinging")}
           </>
         ) : (

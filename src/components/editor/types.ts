@@ -44,6 +44,8 @@ export interface RichTextEditorProps {
 
 export interface RichTextEditorRef {
   openCommandMenu: () => void;
+  /** Move focus into the editable surface (used by the name field's Enter). */
+  focus: () => void;
 }
 
 export interface SlashCommandMenuProps {

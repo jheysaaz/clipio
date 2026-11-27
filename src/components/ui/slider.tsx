@@ -1,78 +1,57 @@
 "use client";
 
-import * as React from "react";
 import { Slider as SliderPrimitive } from "@base-ui/react/slider";
 
 import { cn } from "@/lib/utils";
 
-/**
- * A single-thumb slider.
- *
- * The options page previously used a bare `<input type="range">`, which has no
- * themable track or thumb: it rendered as the platform default, ignored the
- * design tokens, and gave no hook for the focus ring. This wraps Base UI's
- * Slider (the same primitive family as Switch/Select) so it matches the rest of
- * the UI and is keyboard- and screen-reader-operable.
- *
- */
+// Base UI exposes orientation as `data-orientation`, not `data-horizontal` /
+// `data-vertical`. The registry's shorthand only works in projects that register
+// those custom variants; here it silently produced a track with no height.
 function Slider({
   className,
-  value,
   defaultValue,
-  onValueChange,
-  disabled,
+  value,
   min = 0,
   max = 100,
-  step = 1,
-  "aria-label": ariaLabel,
   ...props
-}: Omit<React.ComponentProps<typeof SliderPrimitive.Root>, "children"> & {
-  "aria-label"?: string;
-}) {
+}: SliderPrimitive.Root.Props) {
+  const _values = Array.isArray(value)
+    ? value
+    : Array.isArray(defaultValue)
+      ? defaultValue
+      : [min, max];
+
   return (
     <SliderPrimitive.Root
       className={cn(
-        "flex w-full touch-none select-none items-center py-2",
-        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        "data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full",
         className
       )}
-      value={value}
+      data-slot="slider"
       defaultValue={defaultValue}
-      onValueChange={onValueChange}
-      disabled={disabled}
+      value={value}
       min={min}
       max={max}
-      step={step}
-      aria-label={ariaLabel}
+      thumbAlignment="edge"
       {...props}
     >
-      <SliderPrimitive.Control
-        className={cn(
-          "relative flex w-full touch-none select-none items-center py-2",
-          "focus-visible:outline-none"
-        )}
-      >
+      <SliderPrimitive.Control className="relative flex w-full touch-none items-center select-none data-disabled:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-40 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col">
         <SliderPrimitive.Track
-          className={cn(
-            "relative h-1.5 w-full grow overflow-hidden rounded-full bg-muted",
-            // Base UI reflects state on the control as a bare `data-checked`-style
-            // attribute set; see the note in switch.tsx for why these classes
-            // are derived in JS rather than from a data variant.
-            disabled ? "opacity-50" : null
-          )}
+          data-slot="slider-track"
+          className="relative grow overflow-hidden rounded-full bg-muted select-none data-[orientation=horizontal]:h-1 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-1"
         >
-          <SliderPrimitive.Indicator className="h-full rounded-full bg-primary" />
+          <SliderPrimitive.Indicator
+            data-slot="slider-range"
+            className="bg-primary select-none data-[orientation=horizontal]:h-full data-[orientation=vertical]:w-full"
+          />
         </SliderPrimitive.Track>
-
-        <SliderPrimitive.Thumb
-          aria-label={ariaLabel}
-          className={cn(
-            "block size-4 rounded-full border-2 border-primary bg-background shadow-sm",
-            "transition-[color,box-shadow] duration-150",
-            "hover:ring-4 hover:ring-ring/20",
-            "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/30"
-          )}
-        />
+        {Array.from({ length: _values.length }, (_, index) => (
+          <SliderPrimitive.Thumb
+            data-slot="slider-thumb"
+            key={index}
+            className="relative block size-3 shrink-0 rounded-full border border-ring bg-white ring-ring/50 transition-[color,box-shadow] select-none after:absolute after:-inset-2 hover:ring-3 focus-visible:ring-3 focus-visible:outline-hidden active:ring-3 disabled:pointer-events-none disabled:opacity-50"
+          />
+        ))}
       </SliderPrimitive.Control>
     </SliderPrimitive.Root>
   );

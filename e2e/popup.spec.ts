@@ -1062,6 +1062,19 @@ test.describe("Popup (Dashboard)", () => {
   }) => {
     const version = "9.9.9";
     await seedAndReload(popupPage, []);
+    // Background's startup update check can still be in flight when this page
+    // opens. If it lands after the seed below, it clears `latestVersion` and the
+    // banner never appears. Its first completion always records a check time, so
+    // wait for that before seeding a release: the throttle then owns the value.
+    await expect
+      .poll(async () =>
+        popupPage.evaluate(async () => {
+          const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+          const result = await ext.storage.local.get("latestVersionCheckedAt");
+          return result.latestVersionCheckedAt ?? null;
+        })
+      )
+      .not.toBeNull();
     await popupPage.evaluate(async (v) => {
       const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
       await ext.storage.local.set({

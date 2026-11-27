@@ -133,6 +133,92 @@ test.describe("Options Page", () => {
     await page.close();
   });
 
+  test("keeps long feedback and import dialogs inside a short viewport", async ({
+    context,
+    extensionId,
+  }) => {
+    // A 320px-high window is shorter than either form. The shared dialog
+    // primitive caps the box and scrolls its own content, so no caller can
+    // silently clip the footer or let the dialog grow off-screen.
+    const page = await context.newPage();
+    await page.setViewportSize({ width: 800, height: 320 });
+
+    async function assertScrollable(
+      dialog: import("@playwright/test").Locator
+    ) {
+      await expect(dialog).toBeVisible();
+      const metrics = await dialog.evaluate((el) => ({
+        top: el.getBoundingClientRect().top,
+        bottom: el.getBoundingClientRect().bottom,
+        viewport: window.innerHeight,
+        overflowY: getComputedStyle(el).overflowY,
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+      }));
+
+      expect(metrics.top).toBeGreaterThanOrEqual(0);
+      expect(metrics.bottom).toBeLessThanOrEqual(metrics.viewport + 1);
+      expect(metrics.overflowY).toBe("auto");
+      expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+
+      await dialog.evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+      });
+      await expect
+        .poll(() => dialog.evaluate((el) => el.scrollTop))
+        .toBeGreaterThan(0);
+    }
+
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html#/about/feedback`
+    );
+    await waitForOptionsReady(page);
+    await assertScrollable(page.getByRole("dialog"));
+    await page.close();
+
+    const options = await context.newPage();
+    // The import form is shorter than the feedback form and still fits at 320px.
+    // A 160px viewport makes its content genuinely overflow, so this checks the
+    // scrolling path rather than only the absent-overflow case.
+    await options.setViewportSize({ width: 800, height: 160 });
+    await options.goto(
+      `chrome-extension://${extensionId}/options.html#/library`
+    );
+    await waitForOptionsReady(options);
+    await options.getByTestId("import-open").click();
+    await assertScrollable(options.getByRole("dialog"));
+    await options.close();
+  });
+
+  test("draws the typing-timeout slider track, not just its thumb", async ({
+    context,
+    extensionId,
+  }) => {
+    // The registry's `data-horizontal:` classes do nothing here because Base UI
+    // emits `data-orientation`. Without the attribute-selector form the track had
+    // no height, leaving a floating thumb with no bar to move it along.
+    const page = await context.newPage();
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html#/expansion`
+    );
+    await waitForOptionsReady(page);
+
+    const row = page.getByTestId("card-typing-timeout");
+    await expect(row).toBeVisible();
+
+    const track = row.locator('[data-slot="slider-track"]');
+    await expect(track).toHaveAttribute("data-orientation", "horizontal");
+    await expect
+      .poll(async () => (await track.boundingBox())?.height ?? 0)
+      .toBeGreaterThan(0);
+
+    const range = row.locator('[data-slot="slider-range"]');
+    await expect
+      .poll(async () => (await range.boundingBox())?.height ?? 0)
+      .toBeGreaterThan(0);
+    await page.close();
+  });
+
   test("shows a not-found page for an unknown hash instead of landing on Library", async ({
     context,
     extensionId,

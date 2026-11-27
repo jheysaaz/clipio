@@ -38,6 +38,9 @@ WXT owns the entrypoint layout. Don't restructure it.
   tests assert on real copy. `check:hardcoded-text` enforces the same in source.
 - Path aliases `~/*` and `@/*` both resolve to `src/*`.
 - Prefer `type` over `interface`; `import type` for type-only imports.
+- Always prefer relative sizes — `rem`, `em`, `%`, unitless line heights, flex or
+  grid — for type, spacing, sizing, radii and icons. A `px` literal is allowed
+  only via the explicit allowlist enforced by `pnpm check:no-px`.
 
 ## Testing rules
 

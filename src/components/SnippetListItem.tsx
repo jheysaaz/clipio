@@ -3,6 +3,7 @@ import { stripMediaPlaceholders } from "@/lib/media-placeholders";
 import { decodeHtmlEntities, stripHtmlTags } from "@/lib/html-text";
 import { useStore } from "@tanstack/react-store";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import type { Snippet } from "@/types";
 import { cn } from "@/lib/utils";
 import { draftPreviewsStore } from "@/store/write-queue";
@@ -63,28 +64,34 @@ export default function SnippetListItem({
       role="option"
       aria-selected={isSelected}
       className={cn(
-        "h-auto max-w-full w-full items-start justify-start overflow-hidden relative rounded-lg px-2.5 py-2 text-left transition-colors",
+        "h-auto min-h-12 max-w-full w-full items-start justify-start overflow-hidden relative rounded-lg px-2.5 py-2 text-left transition-colors",
         "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        // One fill, stronger than hover; no accent bar, ring or second marker.
         isSelected
-          ? "bg-muted text-foreground"
+          ? "bg-selected text-foreground"
           : "text-foreground hover:bg-muted/50"
       )}
       onClick={onClick}
     >
       <div className="flex flex-col gap-1 w-0 min-w-full overflow-hidden">
         <div className="flex items-center gap-2 w-full min-w-0 max-w-full overflow-hidden">
-          <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+          <h3
+            className={cn(
+              "min-w-0 flex-1 truncate text-ui-sm! text-foreground",
+              isSelected ? "font-semibold" : "font-medium"
+            )}
+          >
             {snippet.label}
           </h3>
-          <kbd
-            className="kbd-badge"
+          <Kbd
+            className="pointer-events-auto h-auto max-w-20 shrink-0 truncate rounded-sm border border-border bg-secondary px-1.5 py-0.75 font-mono text-ui-xs! leading-none shadow-xs [font-variant-ligatures:none]"
             title={i18n.t("snippetEditor.shortcutLabel", [snippet.shortcut])}
           >
             {snippet.shortcut}
-          </kbd>
+          </Kbd>
         </div>
         {contentPreview && (
-          <p className="truncate text-xs font-normal leading-snug text-muted-foreground">
+          <p className="truncate text-ui-xs! font-normal leading-snug text-muted-foreground">
             {contentPreview}
           </p>
         )}

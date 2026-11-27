@@ -8,9 +8,12 @@
   </head>
 
   <body
-    class="w-[680px] h-[460px] bg-background text-foreground transition-colors"
+    class="popup-shell w-[var(--popup-width)] h-[var(--popup-height)] bg-background text-foreground transition-colors"
   >
-    <div id="root" class="flex flex-col h-full font-sans"></div>
+    <div
+      id="root"
+      class="flex h-full min-h-0 flex-col overflow-hidden font-sans"
+    ></div>
     <script type="module" src="./main.tsx"></script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { InfoTooltip } from "./InfoTooltip";
@@ -6,55 +6,55 @@ import { InfoTooltip } from "./InfoTooltip";
 const text = "Trigger prefix";
 const tooltipId = `info-tooltip-${text.slice(0, 10).replace(/\s+/g, "-")}`;
 
-function visible() {
-  return screen.getByRole("tooltip").className.includes("opacity-100");
+function tooltip() {
+  return screen.queryByRole("tooltip");
 }
 
 describe("InfoTooltip", () => {
-  it("names the button with the tooltip text and links the two by id", () => {
+  it("names the trigger with the tooltip text and links the two by id", () => {
     render(<InfoTooltip text={text} />);
 
-    const button = screen.getByRole("button", { name: text });
-    expect(button).toHaveAttribute("aria-describedby", tooltipId);
-    expect(screen.getByRole("tooltip")).toHaveAttribute("id", tooltipId);
-    expect(screen.getByRole("tooltip")).toHaveTextContent(text);
-    expect(visible()).toBe(false);
+    const trigger = screen.getByRole("button", { name: text });
+    expect(trigger).toHaveAttribute("aria-describedby", tooltipId);
+    expect(tooltip()).toBeNull();
   });
 
-  it("shows on hover and hides when the pointer leaves", () => {
+  it("shows on hover and hides when the pointer leaves", async () => {
     render(<InfoTooltip text={text} />);
-    const trigger = screen.getByRole("button", { name: text }).parentElement!;
+    const trigger = screen.getByRole("button", { name: text });
 
     fireEvent.mouseEnter(trigger);
-    expect(visible()).toBe(true);
+    expect(screen.getByRole("tooltip")).toHaveAttribute("id", tooltipId);
+    expect(screen.getByRole("tooltip")).toHaveTextContent(text);
 
     fireEvent.mouseLeave(trigger);
-    expect(visible()).toBe(false);
+    await waitFor(() => expect(tooltip()).toBeNull());
   });
 
-  it("shows on focus and hides on blur", () => {
+  it("shows on focus and hides on blur", async () => {
     render(<InfoTooltip text={text} />);
-    const button = screen.getByRole("button", { name: text });
+    const trigger = screen.getByRole("button", { name: text });
 
-    fireEvent.focus(button);
-    expect(visible()).toBe(true);
+    fireEvent.focus(trigger);
+    expect(screen.getByRole("tooltip")).toHaveAttribute("id", tooltipId);
+    expect(screen.getByRole("tooltip")).toHaveTextContent(text);
 
-    fireEvent.blur(button);
-    expect(visible()).toBe(false);
+    fireEvent.blur(trigger);
+    await waitFor(() => expect(tooltip()).toBeNull());
   });
 
-  it("hides on Escape but ignores other keys", () => {
+  it("hides on Escape but ignores other keys", async () => {
     render(<InfoTooltip text={text} />);
-    const button = screen.getByRole("button", { name: text });
-    fireEvent.focus(button);
-    expect(visible()).toBe(true);
+    const trigger = screen.getByRole("button", { name: text });
+    fireEvent.focus(trigger);
+    expect(screen.getByRole("tooltip")).toHaveTextContent(text);
 
-    // Negative: Enter is used to activate the button and must not swallow the
+    // Negative: Enter is used to activate the trigger and must not swallow the
     // tooltip the user just opened with the keyboard.
-    fireEvent.keyDown(button, { key: "Enter" });
-    expect(visible()).toBe(true);
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    expect(screen.getByRole("tooltip")).toHaveTextContent(text);
 
-    fireEvent.keyDown(button, { key: "Escape" });
-    expect(visible()).toBe(false);
+    fireEvent.keyDown(trigger, { key: "Escape" });
+    await waitFor(() => expect(tooltip()).toBeNull());
   });
 });

@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { Film } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icon";
 import { ICON_STROKE } from "@/lib/icons";
 import { cn } from "@/lib/utils";
@@ -52,7 +53,7 @@ export function GifPlaceholderElement({
         contentEditable={false}
         className={cn(
           "inline-flex items-center gap-1 px-1.5 py-0.5 rounded select-none align-baseline mx-0.5",
-          "font-mono text-[11px] leading-none",
+          "font-mono text-ui-micro! leading-none",
           "bg-destructive/10 border border-destructive/30 text-destructive"
         )}
       >
@@ -61,7 +62,7 @@ export function GifPlaceholderElement({
         <button
           type="button"
           onClick={handleRetry}
-          className="underline hover:no-underline ml-1 text-[10px]"
+          className="underline hover:no-underline ml-1 text-ui-micro!"
         >
           {i18n.t("gifPlaceholder.retry")}
         </button>
@@ -93,16 +94,16 @@ export function GifPlaceholderElement({
             onError={() => setError(true)}
           />
           {/* "Powered by GIPHY" badge */}
-          <span
+          <Badge
             className={cn(
-              "absolute bottom-0.5 right-0.5",
-              "text-[9px] font-bold text-white",
+              "absolute bottom-0.5 right-0.5 h-auto border-0",
+              "text-ui-micro! font-bold text-white",
               "bg-black/50 px-1 py-0.5 rounded",
               "pointer-events-none select-none"
             )}
           >
             {i18n.t("gifPlaceholder.poweredBy")}
-          </span>
+          </Badge>
         </span>
         <span className="hidden">{children}</span>
       </ResizableMediaWrapper>

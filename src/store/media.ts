@@ -35,19 +35,26 @@ import { extractImageIds } from "@/lib/media-placeholders";
 import { captureError } from "@/lib/sentry";
 import { i18n } from "#i18n";
 
+/** A snippet that embeds an image, with both its id and the label a user reads. */
+export type SnippetReference = {
+  id: string;
+  label: string;
+};
+
 /** One row of the library: its metadata, a URL to show, and what uses it. */
 export type ImageItem = {
   meta: MediaMetadata;
   /** `null` when the blob was unreadable — the row still lists, without a preview. */
   objectUrl: string | null;
   /**
-   * Labels of the snippets whose content references this image.
+   * Snippets whose content references this image.
    *
-   * Labels rather than ids because this is shown to the user in the delete
-   * confirmation, and a label is what they recognise. Deduplicated, because the
-   * same image in two snippets of the same name is one thing to warn about.
+   * Both halves are needed: the label for the delete warning and the "Used in"
+   * list, the id to turn that list into a link that opens the right snippet.
+   * Deduplicated by id — two snippets may share a label but are still two
+   * different places the image is used.
    */
-  referencingSnippets: string[];
+  referencingSnippets: SnippetReference[];
 };
 
 export type MediaState = {
@@ -75,7 +82,9 @@ export const mediaStore = createStore<MediaState>({
   loadError: null,
   deleteErrors: {},
   confirmDeleteId: null,
-  viewMode: "list",
+  // Grid is the default: thumbnails answer "which image is this?" faster than a
+  // list of ids, and the list view stays one click away.
+  viewMode: "grid",
   altDraft: {},
   altSaved: {},
   altErrors: {},
@@ -88,19 +97,20 @@ export const mediaStore = createStore<MediaState>({
  * between a user and an image a snippet still needs. Its previous home was a
  * nested loop inside a load effect, where nothing could assert it.
  *
- * Deduplicates labels per image, because a user with `/greeting` in four
- * snippets called "Greeting" should see one warning, not four. Order follows the
- * library order, so the list does not reshuffle between loads.
+ * Deduplicates by snippet id, not label: two snippets called "Greeting" are two
+ * links the user may need to follow. Repeating one id inside a snippet is still
+ * one reference. Order follows the library order, so the list does not reshuffle
+ * between loads.
  */
 export function buildReferenceMap(
   snippets: readonly Snippet[]
-): Record<string, string[]> {
-  const refMap: Record<string, string[]> = {};
+): Record<string, SnippetReference[]> {
+  const refMap: Record<string, SnippetReference[]> = {};
   for (const snippet of snippets) {
     for (const id of extractImageIds(snippet.content)) {
       if (!refMap[id]) refMap[id] = [];
-      if (!refMap[id].includes(snippet.label)) {
-        refMap[id].push(snippet.label);
+      if (!refMap[id].some((ref) => ref.id === snippet.id)) {
+        refMap[id].push({ id: snippet.id, label: snippet.label });
       }
     }
   }
@@ -154,6 +164,11 @@ function releaseObjectUrl(id: string): void {
 let loadGeneration = 0;
 
 export async function loadMediaLibrary(): Promise<void> {
+  // A section switch unmounts Images while its last description write may still
+  // be in flight. Read after that write, or the new mount would seed its drafts
+  // from the pre-edit metadata and show the old text again.
+  if (pendingAltFlush) await pendingAltFlush;
+
   const generation = ++loadGeneration;
   const isStale = () => generation !== loadGeneration;
 
@@ -217,6 +232,38 @@ export async function loadMediaLibrary(): Promise<void> {
 // Actions
 // ---------------------------------------------------------------------------
 
+/** How long the user can keep typing before a description is committed. */
+export const ALT_SAVE_DEBOUNCE_MS = 600;
+/** How long the saved check stays visible. */
+export const ALT_SAVED_FLASH_MS = 2000;
+
+type QueuedAltSave = {
+  timer: ReturnType<typeof setTimeout>;
+  version: number;
+  generation: number;
+  session: number;
+};
+
+const altSaveQueue = new Map<string, QueuedAltSave>();
+const altFlashTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const altSaveVersions = new Map<string, number>();
+let altSaveGeneration = 0;
+/**
+ * Bumped when Images unmounts. An edit already in flight may still commit, but
+ * it must not light a "Saved" badge in the section that mounts afterwards.
+ */
+let altSessionGeneration = 0;
+/** Writes in progress, including ones started before a section switched. */
+const altInFlight = new Set<Promise<boolean>>();
+/** Writes started by a section switch; a new load waits for them. */
+let pendingAltFlush: Promise<void> | null = null;
+
+function trackAltWrite(write: Promise<boolean>): Promise<boolean> {
+  altInFlight.add(write);
+  void write.finally(() => altInFlight.delete(write));
+  return write;
+}
+
 export function setAltDraft(id: string, value: string): void {
   mediaStore.setState((prev) => ({
     ...prev,
@@ -225,39 +272,159 @@ export function setAltDraft(id: string, value: string): void {
 }
 
 /**
+ * Queue a description write after the user stops typing.
+ *
+ * No Save button means the component calls this on every change, so the timer is
+ * the throttle. A version is captured with each queue: a slower earlier write
+ * must not overwrite a later one when IndexedDB answers out of order.
+ */
+export function scheduleAltSave(
+  id: string,
+  delayMs = ALT_SAVE_DEBOUNCE_MS
+): void {
+  const version = (altSaveVersions.get(id) ?? 0) + 1;
+  altSaveVersions.set(id, version);
+  const generation = altSaveGeneration;
+
+  const pending = altSaveQueue.get(id);
+  if (pending) clearTimeout(pending.timer);
+
+  const session = altSessionGeneration;
+  const timer = setTimeout(() => {
+    altSaveQueue.delete(id);
+    void trackAltWrite(saveAlt(id, version, generation, session));
+  }, delayMs);
+  altSaveQueue.set(id, { timer, version, generation, session });
+}
+
+/**
+ * Commit queued edits when Images unmounts instead of dropping them.
+ *
+ * Switching options sections is an in-document navigation: the component goes
+ * away, but the store and document do not. Cancelling here silently lost the
+ * last keystrokes before the debounce fired. The saved flashes are cleared as
+ * part of teardown so returning to Images cannot show a stale check.
+ */
+export function flushPendingAltSaves(): Promise<void> {
+  altSessionGeneration++;
+  clearAltSavedFlashes();
+
+  const queued = [...altSaveQueue.entries()];
+  for (const [, save] of queued) clearTimeout(save.timer);
+  altSaveQueue.clear();
+  if (queued.length === 0 && altInFlight.size === 0) {
+    return pendingAltFlush ?? Promise.resolve();
+  }
+
+  const previous = pendingAltFlush ?? Promise.resolve();
+  const writes = queued.map(([id, save]) =>
+    trackAltWrite(saveAlt(id, save.version, save.generation, save.session))
+  );
+  const next = previous.then(async () => {
+    await Promise.all([...writes, ...altInFlight]);
+  });
+  pendingAltFlush = next;
+  void next.finally(() => {
+    if (pendingAltFlush === next) pendingAltFlush = null;
+  });
+  return next;
+}
+
+/**
+ * Hard-cancel queued writes and invalidate writes already in flight.
+ *
+ * Only test resets use this now. Bumping the generation means a write from the
+ * old state cannot land after the reset and silently change the new state.
+ */
+export function cancelPendingAltSaves(): void {
+  altSaveGeneration++;
+  altSessionGeneration++;
+  for (const { timer } of altSaveQueue.values()) clearTimeout(timer);
+  for (const timer of altFlashTimers.values()) clearTimeout(timer);
+  altSaveQueue.clear();
+  altFlashTimers.clear();
+  altSaveVersions.clear();
+  pendingAltFlush = null;
+}
+
+function clearAltSavedFlashes(): void {
+  for (const timer of altFlashTimers.values()) clearTimeout(timer);
+  altFlashTimers.clear();
+  mediaStore.setState((prev) => ({
+    ...prev,
+    altSaved: Object.fromEntries(
+      Object.keys(prev.altSaved).map((id) => [id, false])
+    ),
+  }));
+}
+
+function isCurrentAltSave(
+  id: string,
+  version: number,
+  generation: number
+): boolean {
+  return (
+    generation === altSaveGeneration &&
+    (altSaveVersions.get(id) ?? 0) === version
+  );
+}
+
+/**
  * Commit an alt-text edit.
  *
- * Returns whether it saved, so the caller can decide about focus — and so a test
- * can assert the outcome without reading the store.
+ * Returns whether it saved, so a test can assert the outcome without reading the
+ * store — and so a stale or cancelled write is not reported as a failure.
  *
  * A blank draft is stored as `undefined`, not `""`. That is the distinction
  * between "the user cleared the alt text" and "the user never filled it in", and
  * it is what the schema can express; `""` round-tripped into every reader.
  */
-export async function saveAlt(id: string): Promise<boolean> {
+export async function saveAlt(
+  id: string,
+  version = altSaveVersions.get(id) ?? 0,
+  generation = altSaveGeneration,
+  session = altSessionGeneration
+): Promise<boolean> {
   const draft = mediaStore.state.altDraft[id] ?? "";
   try {
     await updateMediaAlt(id, draft);
+    if (!isCurrentAltSave(id, version, generation)) return false;
+
     const alt = draft.trim() || undefined;
+    const showSaved = session === altSessionGeneration;
     mediaStore.setState((prev) => ({
       ...prev,
       items: prev.items.map((item) =>
         item.meta.id === id ? { ...item, meta: { ...item.meta, alt } } : item
       ),
       altErrors: { ...prev.altErrors, [id]: "" },
-      altSaved: { ...prev.altSaved, [id]: true },
+      altSaved: { ...prev.altSaved, [id]: showSaved },
     }));
+    if (showSaved) flashAltSaved(id, session);
     return true;
   } catch {
+    if (!isCurrentAltSave(id, version, generation)) return false;
     mediaStore.setState((prev) => ({
       ...prev,
       altErrors: {
         ...prev.altErrors,
         [id]: i18n.t("options.images.errors.failedToSaveDescription"),
       },
+      altSaved: { ...prev.altSaved, [id]: false },
     }));
     return false;
   }
+}
+
+function flashAltSaved(id: string, session: number): void {
+  if (session !== altSessionGeneration) return;
+  const existing = altFlashTimers.get(id);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    altFlashTimers.delete(id);
+    clearAltSaved(id);
+  }, ALT_SAVED_FLASH_MS);
+  altFlashTimers.set(id, timer);
 }
 
 export function clearAltSaved(id: string): void {
@@ -355,6 +522,7 @@ export function findImageItem(
  */
 export function resetMediaStoreForTests(): void {
   loadGeneration++;
+  cancelPendingAltSaves();
   disposeObjectUrls();
   mediaStore.setState(() => ({
     items: [],
@@ -362,7 +530,7 @@ export function resetMediaStoreForTests(): void {
     loadError: null,
     deleteErrors: {},
     confirmDeleteId: null,
-    viewMode: "list",
+    viewMode: "grid",
     altDraft: {},
     altSaved: {},
     altErrors: {},

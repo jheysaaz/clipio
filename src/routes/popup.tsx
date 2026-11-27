@@ -109,7 +109,14 @@ export function viewFromPath(pathname: string): PopupView {
   const segments = pathname.split("/").filter(Boolean);
   if (segments[0] === "new") return { kind: "new" };
   if (segments[0] === "snippet" && segments[1]) {
-    return { kind: "snippet", id: segments[1] };
+    // Imported ids may contain reserved path characters, so links encode them.
+    // A malformed escape is not a valid selection — fall back to the list rather
+    // than handing a nonsense id to the snippet store.
+    try {
+      return { kind: "snippet", id: decodeURIComponent(segments[1]) };
+    } catch {
+      return { kind: "list" };
+    }
   }
   return { kind: "list" };
 }

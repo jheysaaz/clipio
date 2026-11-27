@@ -91,6 +91,7 @@ snippetEditor:
   sidebarHideLabel: Ocultar barra lateral
   sidebarShowLabel: Mostrar barra lateral
   retryTooltip: Reintentar el último guardado
+  retryTooltipWithError: "Reintentar el último guardado — $1"
 
 snippetDetail:
   deleteSnippet: Eliminar fragmento
@@ -114,6 +115,7 @@ snippetDetail:
     saving: "Guardando…"
     failed: "No se pudo guardar · Reintentar"
     refused: "Almacenamiento lleno: los cambios se conservan localmente"
+    conflictDetail: "Se guardó primero una versión más reciente de este fragmento"
   errors:
     failedToCopy: Error al copiar al portapapeles
     failedToSave: Error al guardar el fragmento. Por favor, inténtalo de nuevo.
@@ -355,7 +357,7 @@ options:
     deleteConfirmTitle: "¿Eliminar imagen?"
     deleteConfirmMessage: "Eliminar esta imagen romperá $1 fragmento(s) que la referencian. Esta acción no se puede deshacer."
     deleteConfirmMessageNoRefs: Esta acción no se puede deshacer.
-    referencedBy: "Usada en: $1"
+    referencedBy: "Usada en:"
     noReferences: No se usa en ningún fragmento
     dimensions: "$1 × $2"
     errors:

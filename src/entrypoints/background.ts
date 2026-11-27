@@ -31,6 +31,7 @@ import {
   OPTIONS_HOME_ROUTE,
   popupHashRoute,
   popupRouteForAction,
+  popupRouteForSnippet,
   resolveContextMenuAction,
   type ContextMenuAction,
 } from "@/lib/context-menu";
@@ -344,6 +345,17 @@ export default defineBackground(() => {
       captureError(err, { action: "mediaGetDataUrl", mediaId });
       throw err;
     }
+  });
+
+  // Options page → popup: "Used in" links open the snippet they name. The
+  // background owns this because only it can hand the popup a route and provide
+  // the tab fallback when `openPopup()` is refused. `onMessageFromSelf` refuses a
+  // page pretending to be the options page before this handler ever runs.
+  onMessageFromSelf(MESSAGE.POPUP_SNIPPET, async ({ data }) => {
+    const route = popupRouteForSnippet(data.snippetId);
+    await requestPopupView(route);
+    await openPopupOrFallback("openSnippet", popupHashRoute(route));
+    return { ok: true } as const;
   });
 
   // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { CalendarDays } from "lucide-react";
 import { Icon } from "@/components/ui/icon";
+import { Input } from "@/components/ui/input";
 import { ICON_STROKE } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
@@ -76,11 +77,11 @@ export function DatepickerPlaceholderElement({
         onClick={handleClick}
         className={cn(
           "inline-flex items-center gap-1 px-1.5 py-0.5 rounded cursor-pointer select-none align-baseline mx-0.5",
-          "font-mono text-[10px] leading-none",
+          "font-mono text-ui-micro! leading-none",
           "bg-muted border border-border",
-          "shadow-[0_1px_0_1px_var(--secondary),0_2px_3px_rgba(0,0,0,0.05)]",
+          "shadow-[0_1px_0_1px_var(--secondary),0_0.125rem_0.1875rem_rgba(0,0,0,0.05)]",
           "text-muted-foreground",
-          "dark:shadow-[0_1px_0_1px_rgba(0,0,0,0.3),0_2px_3px_rgba(0,0,0,0.2)]",
+          "dark:shadow-[0_1px_0_1px_rgba(0,0,0,0.3),0_0.125rem_0.1875rem_rgba(0,0,0,0.2)]",
           "hover:bg-accent",
           "transition-colors duration-150"
         )}
@@ -98,7 +99,7 @@ export function DatepickerPlaceholderElement({
             "bg-popover shadow-lg p-2"
           )}
         >
-          <input
+          <Input
             type="date"
             value={date}
             onChange={(e) => handleDateChange(e.target.value)}

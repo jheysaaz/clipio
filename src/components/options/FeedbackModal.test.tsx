@@ -16,23 +16,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
-import { mockTabs, resetBrowserMocks } from "../../../tests/mocks/browser";
+import { resetBrowserMocks } from "../../../tests/mocks/browser";
 import { i18n } from "../../../tests/mocks/i18n";
 
 const mocks = vi.hoisted(() => ({
   sendUserFeedback: vi.fn(),
   captureError: vi.fn(),
-  setReviewPromptState: vi.fn(),
-  getStoreReviewUrl: vi.fn(() => "https://store.example/review"),
 }));
 
 vi.mock("@/lib/sentry", () => ({
   sendUserFeedback: mocks.sendUserFeedback,
   captureError: mocks.captureError,
-}));
-vi.mock("@/lib/review-prompt", () => ({
-  setReviewPromptState: mocks.setReviewPromptState,
-  getStoreReviewUrl: mocks.getStoreReviewUrl,
 }));
 
 import { FeedbackModal } from "./FeedbackModal";
@@ -63,8 +57,6 @@ beforeEach(() => {
   resetBrowserMocks();
   mocks.sendUserFeedback.mockReset().mockResolvedValue(undefined);
   mocks.captureError.mockReset();
-  mocks.setReviewPromptState.mockReset().mockResolvedValue(undefined);
-  mocks.getStoreReviewUrl.mockClear();
   URL.createObjectURL = vi.fn(
     () => "blob:preview"
   ) as unknown as typeof URL.createObjectURL;
@@ -88,16 +80,16 @@ describe("FeedbackModal", () => {
 
     // The provider's two live regions are intentionally mounted for the whole
     // surface; only the modal's own form should be absent while it is closed.
-    expect(container.querySelector("form")).toBeNull();
+    expect(document.querySelector("form")).toBeNull();
     expect(screen.getByRole("status")).toHaveTextContent("");
     expect(screen.getByRole("alert")).toHaveTextContent("");
   });
 
   it("requires a message and clears the validation error once the user types", async () => {
-    const { container } = renderModal(<FeedbackModal open onClose={vi.fn()} />);
+    renderModal(<FeedbackModal open onClose={vi.fn()} />);
 
     expect(submit()).toBeDisabled();
-    fireEvent.submit(container.querySelector("form")!);
+    fireEvent.submit(document.querySelector("form")!);
     await waitFor(() =>
       expect(screen.getByTestId("inline-error")).toHaveTextContent(
         i18n.t("options.feedback.error")
@@ -112,8 +104,8 @@ describe("FeedbackModal", () => {
   });
 
   it("accepts an image screenshot and rejects a non-image file", async () => {
-    const { container } = renderModal(<FeedbackModal open onClose={vi.fn()} />);
-    const fileInput = container.querySelector("#feedback-screenshot")!;
+    renderModal(<FeedbackModal open onClose={vi.fn()} />);
+    const fileInput = document.querySelector("#feedback-screenshot")!;
 
     fireEvent.change(fileInput, { target: { files: [imageFile()] } });
     expect(
@@ -122,7 +114,7 @@ describe("FeedbackModal", () => {
       )
     ).toBeInTheDocument();
     expect(
-      container.querySelector('img[src="blob:preview"]')
+      document.querySelector('img[src="blob:preview"]')
     ).toBeInTheDocument();
 
     fireEvent.click(
@@ -149,8 +141,8 @@ describe("FeedbackModal", () => {
   it("submits trimmed fields with the chosen screenshot and clears the form", async () => {
     const timeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const file = imageFile();
-    const { container } = renderModal(<FeedbackModal open onClose={vi.fn()} />);
-    const fileInput = container.querySelector("#feedback-screenshot")!;
+    renderModal(<FeedbackModal open onClose={vi.fn()} />);
+    const fileInput = document.querySelector("#feedback-screenshot")!;
 
     fireEvent.change(
       screen.getByRole("textbox", {
@@ -190,7 +182,7 @@ describe("FeedbackModal", () => {
       )
     );
     expect(messageField()).toHaveValue("");
-    expect(container.querySelector("img")).not.toBeInTheDocument();
+    expect(document.querySelector("img")).not.toBeInTheDocument();
 
     const flashReset = timeoutSpy.mock.calls.find(
       ([, delay]) => delay === 3000
@@ -258,26 +250,21 @@ describe("FeedbackModal", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("opens the donation page and marks the store review as rated", () => {
+  it("keeps support and review prompts out of the feedback form", () => {
+    // The review banner already lives in the options shell and is governed by
+    // its own eligibility rules. Repeating it here would prompt a user who came
+    // to report a problem, and give the same decision two owners.
     renderModal(<FeedbackModal open onClose={vi.fn()} />);
 
-    fireEvent.click(
-      screen.getByRole("button", {
+    expect(
+      screen.queryByRole("button", {
         name: i18n.t("options.feedback.donationAction"),
       })
-    );
-    expect(mockTabs.create).toHaveBeenCalledWith({
-      url: "https://github.com/sponsors/jheysaaz",
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", {
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
         name: i18n.t("options.feedback.reviewBannerAction"),
       })
-    );
-    expect(mockTabs.create).toHaveBeenCalledWith({
-      url: "https://store.example/review",
-    });
-    expect(mocks.setReviewPromptState).toHaveBeenCalledWith("rated");
+    ).not.toBeInTheDocument();
   });
 });

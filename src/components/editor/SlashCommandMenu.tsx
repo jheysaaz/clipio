@@ -246,7 +246,7 @@ export function SlashCommandMenu({
       }
       className="z-50 min-w-50 rounded-lg border border-border bg-popover shadow-lg p-1"
     >
-      <div className="text-[10px] font-medium text-muted-foreground px-2 py-1 uppercase tracking-wide">
+      <div className="text-ui-micro! font-medium text-muted-foreground px-2 py-1 uppercase tracking-wide">
         {i18n.t("editor.slashMenu.header")}
         {searchQuery && ` · "${searchQuery}"`}
       </div>
@@ -255,7 +255,7 @@ export function SlashCommandMenu({
           {i18n.t("editor.slashMenu.noMatches")}
         </div>
       ) : (
-        <div className="overflow-y-auto max-h-[280px]">
+        <div className="overflow-y-auto max-h-[17.5rem]">
           {commands.map((command, index) => {
             const CommandIcon = command.icon;
             return (

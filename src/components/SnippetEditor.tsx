@@ -26,6 +26,13 @@ import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { InlineAction } from "@/components/ui/inline-action";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { RichTextEditor, type RichTextEditorRef } from "@/components/editor";
 import { Badge } from "@/components/ui/badge";
 import type { Snippet, SnippetFormData } from "@/types";
@@ -76,7 +83,7 @@ const SAVED_ANNOUNCE_THROTTLE_MS = 10_000;
 
 const EMPTY_TAGS: readonly string[] = [];
 const TAG_CHIP_CLASS =
-  "inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border border-border px-2 py-0.5 text-[10px] font-normal whitespace-nowrap text-muted-foreground";
+  "inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border border-border px-2 py-0.5 text-ui-micro! font-normal whitespace-nowrap text-muted-foreground";
 
 interface SnippetEditorProps {
   /** A saved snippet, or the provisional shape that backs an empty draft. */
@@ -236,6 +243,19 @@ export default function SnippetEditor({
   const queuedOutcome = useStore(queueOutcomesStore)[snippet.id];
   const outcome =
     queuedOutcome?.opId === dismissedOutcomeId ? undefined : queuedOutcome;
+  // The retry button replaces the old red banner. Its hover text is the only
+  // place the reason appears, so a raw backend token like "conflict" is mapped
+  // to copy a person can act on.
+  const outcomeMessage = outcome
+    ? outcome.error === "conflict"
+      ? i18n.t("snippetDetail.syncStatus.conflictDetail")
+      : (outcome.error ??
+        i18n.t(
+          outcome.status === "refused"
+            ? "snippetDetail.syncStatus.refused"
+            : "snippetDetail.syncStatus.failed"
+        ))
+    : null;
   const undoState = useStore(undoAvailabilityStore);
   const controlsForThisSnippet = !isDraft && undoState.snippetId === snippet.id;
   const canUndo = controlsForThisSnippet && undoState.canUndo;
@@ -375,6 +395,25 @@ export default function SnippetEditor({
   useEffect(() => {
     if (shortcutError) announceError(shortcutError);
   }, [shortcutError, announceError]);
+
+  useEffect(() => {
+    if (!outcome) return;
+    const detail =
+      outcome.error === "conflict"
+        ? i18n.t("snippetDetail.syncStatus.conflictDetail")
+        : (outcome.error ??
+          outcomeMessage ??
+          i18n.t("snippetDetail.errors.failedToSave"));
+    // The popup has no banner for queue failures now. Without this the only
+    // trace of a refused or conflicted write lived in background storage.
+    console.error("[Clipio] snippet save failed", {
+      snippetId: snippet.id,
+      opId: outcome.opId,
+      status: outcome.status,
+      error: detail,
+    });
+    announceError(detail);
+  }, [outcome, outcomeMessage, announceError, snippet.id]);
 
   useEffect(() => {
     if (isDraft) return;
@@ -748,7 +787,7 @@ export default function SnippetEditor({
         setIsAddingTag(false);
       }}
       placeholder={i18n.t("snippetDetail.tagPlaceholder")}
-      className="-ml-1.5 h-6 w-20 px-1.5 py-0 text-[10px] border-dashed"
+      className="-ml-1.5 h-6 w-20 px-1.5 py-0 text-ui-micro! border-dashed"
       autoFocus
     />
   ) : (
@@ -762,7 +801,7 @@ export default function SnippetEditor({
       // The icon stays a standard 16px <Icon>; only its alignment inside the
       // 32px target changes, so its left edge lines up with the footer padding.
       className={cn(
-        "h-8 justify-start gap-1.5 rounded-md px-0 text-[11px] font-medium text-muted-foreground hover:text-foreground",
+        "h-8 justify-start gap-1.5 rounded-md px-0 text-ui-micro! font-medium text-muted-foreground hover:text-foreground",
         showNewTagLabel ? "w-auto pr-2.5" : "w-8 pr-4"
       )}
       title={i18n.t("snippetDetail.addTag")}
@@ -890,7 +929,7 @@ export default function SnippetEditor({
   return (
     <div className="flex flex-col h-full min-h-0" onKeyDown={handleKeyDown}>
       {/* Toolbar: identical landmarks in both draft and saved modes. */}
-      <div className="flex items-center gap-0.5 px-1.5 py-1 border-b border-border shrink-0">
+      <div className="flex h-10 shrink-0 items-center gap-0.5 border-b border-border px-1.5 py-1">
         <Button
           variant="ghost"
           size="icon"
@@ -909,9 +948,9 @@ export default function SnippetEditor({
           )}
         >
           {sidebarOpen ? (
-            <Icon icon={PanelLeftClose} stroke="emphasis" />
+            <Icon icon={PanelLeftClose} size="lg" stroke="emphasis" />
           ) : (
-            <Icon icon={PanelLeft} stroke="emphasis" />
+            <Icon icon={PanelLeft} size="lg" stroke="emphasis" />
           )}
         </Button>
         <Button
@@ -924,7 +963,7 @@ export default function SnippetEditor({
           title={i18n.t("snippetEditor.undoTooltip", [mod])}
           aria-label={i18n.t("snippetEditor.undoLabel")}
         >
-          <Icon icon={Undo2} stroke="emphasis" />
+          <Icon icon={Undo2} size="lg" stroke="emphasis" />
         </Button>
         <Button
           variant="ghost"
@@ -936,7 +975,7 @@ export default function SnippetEditor({
           title={i18n.t("snippetEditor.redoTooltip", [redoShortcut])}
           aria-label={i18n.t("snippetEditor.redoLabel")}
         >
-          <Icon icon={Redo2} stroke="emphasis" />
+          <Icon icon={Redo2} size="lg" stroke="emphasis" />
         </Button>
 
         {/*
@@ -946,7 +985,7 @@ export default function SnippetEditor({
         */}
         <span
           data-testid="snippet-sync-status"
-          className="flex h-4 min-w-32 items-center gap-1 px-2 text-xs font-medium text-muted-foreground"
+          className="flex h-4 min-w-32 items-center gap-1 px-2 text-ui-xs! font-medium text-muted-foreground"
         >
           {statusIsError ? (
             <>
@@ -957,9 +996,17 @@ export default function SnippetEditor({
                 className="text-destructive"
               />
               <InlineAction
+                data-testid="retry-save"
+                data-error-detail={outcomeMessage ?? undefined}
                 onClick={() => void handleRetry()}
                 aria-label={i18n.t("snippetDetail.syncStatus.failed")}
-                title={i18n.t("snippetEditor.retryTooltip")}
+                title={
+                  outcomeMessage
+                    ? i18n.t("snippetEditor.retryTooltipWithError", [
+                        outcomeMessage,
+                      ])
+                    : i18n.t("snippetEditor.retryTooltip")
+                }
                 className="text-destructive"
               >
                 {i18n.t("snippetDetail.syncStatus.failed")}
@@ -1013,7 +1060,7 @@ export default function SnippetEditor({
           }
           aria-pressed={copied}
         >
-          <Icon icon={copied ? Check : Copy} stroke="emphasis" />
+          <Icon icon={copied ? Check : Copy} size="lg" stroke="emphasis" />
           {copied && <span>{i18n.t("snippetDetail.copiedLabel")}</span>}
         </Button>
 
@@ -1030,7 +1077,7 @@ export default function SnippetEditor({
             aria-haspopup="menu"
             aria-expanded={menuOpen}
           >
-            <Icon icon={MoreHorizontal} stroke="emphasis" />
+            <Icon icon={MoreHorizontal} size="lg" stroke="emphasis" />
           </Button>
           {menuOpen && (
             <div
@@ -1058,19 +1105,7 @@ export default function SnippetEditor({
       </div>
 
       <InlineError
-        message={
-          isDraft
-            ? createError
-            : (actionError ??
-              (outcome
-                ? (outcome.error ??
-                  i18n.t(
-                    outcome.status === "refused"
-                      ? "snippetDetail.syncStatus.refused"
-                      : "snippetDetail.syncStatus.failed"
-                  ))
-                : null))
-        }
+        message={isDraft ? createError : actionError}
         onDismiss={() => {
           setActionError(null);
           if (outcome) setDismissedOutcomeId(outcome.opId);
@@ -1078,91 +1113,108 @@ export default function SnippetEditor({
         }}
       />
 
-      {/* Metadata reads as chrome: one tinted row, never part of the content. */}
-      <div
-        data-testid="snippet-header"
-        onClick={(event) => {
-          if (!(event.target as HTMLElement).closest("input")) {
-            nameInputRef.current?.focus();
-          }
-        }}
-        className="relative flex h-11 shrink-0 items-center gap-2 bg-muted/30 px-4"
-      >
-        <label className="sr-only" htmlFor="snippet-name">
-          {i18n.t("snippetEditor.name")}
-        </label>
-        <Input
-          ref={nameInputRef}
-          id="snippet-name"
-          data-testid="snippet-label-input"
-          value={fields.label}
-          onChange={(e) => commitFields({ ...fields, label: e.target.value })}
-          placeholder={i18n.t("snippetEditor.namePlaceholder")}
-          aria-label={i18n.t("snippetEditor.name")}
-          autoFocus={isDraft}
-          className="h-8 w-auto min-w-[8ch] max-w-[65%] overflow-hidden border-0 bg-transparent px-1 text-[18px] font-semibold leading-tight text-ellipsis whitespace-nowrap shadow-none outline-none transition-colors [field-sizing:content] hover:bg-background/60 focus-visible:border-0 focus-visible:bg-background focus-visible:text-clip focus-visible:ring-2 focus-visible:ring-ring/50 placeholder:text-muted-foreground"
-        />
+      {/* Document header: the name and shortcut are part of the document, not
+          a tinted chrome band with bordered pill fields. */}
+      <div className="flex min-h-0 flex-1 flex-col bg-background px-4 pb-3 pt-3">
         <div
-          className="relative shrink-0"
-          onFocus={() => setShortcutFocused(true)}
-          onBlur={() => setShortcutFocused(false)}
-          onMouseEnter={() => setShortcutHovered(true)}
-          onMouseLeave={() => setShortcutHovered(false)}
+          data-testid="snippet-header"
+          onClick={(event) => {
+            if (!(event.target as HTMLElement).closest("input")) {
+              nameInputRef.current?.focus();
+            }
+          }}
+          className="relative mb-2 flex min-h-9 shrink-0 items-center gap-2"
         >
-          <label className="sr-only" htmlFor="snippet-shortcut">
-            {i18n.t("snippetEditor.shortcut")}
-          </label>
+          <Label className="sr-only" htmlFor="snippet-name">
+            {i18n.t("snippetEditor.name")}
+          </Label>
           <Input
-            id="snippet-shortcut"
-            data-testid="snippet-shortcut-input"
-            value={shortcutInput}
-            onChange={(e) => handleShortcutChange(e.target.value)}
-            placeholder={i18n.t("snippetEditor.shortcutPlaceholder")}
-            aria-label={i18n.t("snippetEditor.shortcut")}
-            aria-invalid={!!shortcutError}
-            aria-describedby={showShortcutHint ? shortcutHintId : undefined}
-            className={cn(
-              "h-7 w-auto min-w-[9ch] shrink-0 rounded-md border-border bg-background px-2 text-center font-mono text-[10px]! shadow-none transition-colors [field-sizing:content] hover:border-ring/60 placeholder:text-muted-foreground",
-              shortcutError && "border-destructive"
-            )}
-          />
-          {showShortcutHint && (
-            <div
-              id={shortcutHintId}
-              role="tooltip"
-              data-testid={
-                shortcutError
-                  ? "snippet-shortcut-error"
-                  : "snippet-shortcut-tip"
+            ref={nameInputRef}
+            id="snippet-name"
+            data-testid="snippet-label-input"
+            value={fields.label}
+            onChange={(e) => commitFields({ ...fields, label: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                editorRef.current?.focus();
               }
-              className={cn(
-                "pointer-events-none absolute left-0 top-full z-30 mt-1 w-56 rounded-md border px-2 py-1 text-[10px] leading-snug shadow-md",
-                shortcutError
-                  ? "border-destructive/30 bg-destructive/5 text-destructive"
-                  : "border-border bg-popover text-popover-foreground"
-              )}
-            >
-              {shortcutError || i18n.t("snippetEditor.shortcutTip")}
-            </div>
-          )}
+            }}
+            placeholder={i18n.t("snippetEditor.namePlaceholder")}
+            aria-label={i18n.t("snippetEditor.name")}
+            autoFocus={isDraft}
+            className="h-9 min-w-0 flex-1 overflow-hidden border-0 bg-transparent px-0 text-ui-lg! font-semibold leading-[1.3] text-ellipsis whitespace-nowrap shadow-none outline-none transition-colors focus-visible:border-0 focus-visible:text-clip focus-visible:ring-2 focus-visible:ring-ring/50 placeholder:text-muted-foreground"
+          />
+          <div
+            className="relative max-w-[45%] shrink-0"
+            onFocus={() => setShortcutFocused(true)}
+            onBlur={() => setShortcutFocused(false)}
+            onMouseEnter={() => setShortcutHovered(true)}
+            onMouseLeave={() => setShortcutHovered(false)}
+          >
+            <Label className="sr-only" htmlFor="snippet-shortcut">
+              {i18n.t("snippetEditor.shortcut")}
+            </Label>
+            <TooltipProvider>
+              <Tooltip open={showShortcutHint}>
+                <TooltipTrigger
+                  render={
+                    <Input
+                      id="snippet-shortcut"
+                      data-testid="snippet-shortcut-input"
+                      value={shortcutInput}
+                      onChange={(e) => handleShortcutChange(e.target.value)}
+                      placeholder={i18n.t("snippetEditor.shortcutPlaceholder")}
+                      aria-label={i18n.t("snippetEditor.shortcut")}
+                      aria-invalid={!!shortcutError}
+                      aria-describedby={
+                        showShortcutHint ? shortcutHintId : undefined
+                      }
+                      className={cn(
+                        "h-7 w-auto min-w-[9ch] max-w-full shrink-0 overflow-hidden rounded-none border-0 border-b border-transparent bg-transparent px-0 text-center font-mono text-ui-xs! text-ellipsis whitespace-nowrap shadow-none transition-colors [field-sizing:content] hover:border-ring/60 focus-visible:border-ring focus-visible:ring-0 placeholder:text-muted-foreground",
+                        shortcutError && "border-destructive"
+                      )}
+                    />
+                  }
+                />
+                {showShortcutHint && (
+                  <TooltipContent
+                    id={shortcutHintId}
+                    role="tooltip"
+                    data-testid={
+                      shortcutError
+                        ? "snippet-shortcut-error"
+                        : "snippet-shortcut-tip"
+                    }
+                    side="bottom"
+                    align="start"
+                    className={cn(
+                      "pointer-events-none w-56 max-w-none rounded-md border px-2 py-1 text-ui-micro! leading-snug shadow-md",
+                      shortcutError
+                        ? "border-destructive/30 bg-destructive/5 text-destructive"
+                        : "border-border bg-popover text-popover-foreground"
+                    )}
+                  >
+                    {shortcutError || i18n.t("snippetEditor.shortcutTip")}
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
-      </div>
 
-      {/* Content fills the space between the two fixed chrome rows. */}
-      <div
-        className="min-h-0 flex-1 bg-background px-4 pb-3 pt-3"
-        data-testid="snippet-content-editor"
-      >
-        <RichTextEditor
-          ref={editorRef}
-          value={fields.content}
-          onChange={(value) => commitFields({ ...fields, content: value })}
-          placeholder={i18n.t("snippetEditor.contentPlaceholder")}
-          ariaLabel={i18n.t("snippetEditor.content")}
-          onCopyError={() =>
-            setActionError(i18n.t("snippetDetail.errors.failedToCopy"))
-          }
-        />
+        <div className="min-h-0 flex-1" data-testid="snippet-content-editor">
+          <RichTextEditor
+            ref={editorRef}
+            value={fields.content}
+            onChange={(value) => commitFields({ ...fields, content: value })}
+            placeholder={i18n.t("snippetEditor.contentPlaceholder")}
+            ariaLabel={i18n.t("snippetEditor.content")}
+            onCopyError={() =>
+              setActionError(i18n.t("snippetDetail.errors.failedToCopy"))
+            }
+          />
+        </div>
       </div>
 
       {/* One tinted footer row: add tag, chips, and never-truncated metadata. */}
@@ -1175,14 +1227,14 @@ export default function SnippetEditor({
         {isDraft ? (
           <span
             data-testid="snippet-draft"
-            className="ml-auto shrink-0 text-[10px] font-medium text-muted-foreground"
+            className="ml-auto shrink-0 text-ui-micro! font-medium text-muted-foreground"
           >
             {i18n.t("snippetDetail.draft")}
           </span>
         ) : (
           <div
             data-testid="snippet-metadata"
-            className="ml-auto flex shrink-0 items-center gap-1 whitespace-nowrap text-[10px] text-muted-foreground"
+            className="ml-auto flex shrink-0 items-center gap-1 whitespace-nowrap text-ui-micro! text-muted-foreground"
           >
             <span>
               <span className="font-semibold text-foreground">

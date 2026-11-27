@@ -161,7 +161,7 @@ export function ResizableMediaWrapper({
           stroke="emphasis"
           className={cn(
             "h-8 w-3 text-white drop-shadow",
-            "[filter:drop-shadow(0_0_2px_rgba(0,0,0,0.8))]"
+            "[filter:drop-shadow(0_0_0.125rem_rgba(0,0,0,0.8))]"
           )}
         />
       </span>
