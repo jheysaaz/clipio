@@ -144,14 +144,25 @@ const posix = (p) => p.split(sep).join("/");
  * GIFs. The content script grows 87 bytes, shared chunks 378, and the aggregate
  * 465; the background, popup and options entries do not move. All three sizes
  * were measured twice from clean builds and did not vary.
+ *
+ * Raised again for the Diagnostics toolkit. The snapshot panel, log filters,
+ * report formatter and their English/Spanish copy live in the options entry;
+ * generated locale messages also reach the background worker. On its own the
+ * aggregate grows 13,317 bytes, shared chunks 13,258 and the background entry
+ * 59; the options entry stays below its existing budget. Combined with the
+ * media-placeholder raise and the other merged fixes, the aggregate is
+ * 2,782,587 bytes, the content script 919,205 and shared chunks 1,636,895.
+ * The autosave-race fix adds 3 bytes to the aggregate and shared chunks; the
+ * other entries do not move. All sizes were measured twice from clean builds
+ * and did not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_767_736 },
-  { name: "background entry", pattern: "background.js", maxBytes: 226_428 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_782_587 },
+  { name: "background entry", pattern: "background.js", maxBytes: 226_487 },
   {
     name: "content script entry",
     pattern: "content-scripts/content.js",
-    maxBytes: 918_629,
+    maxBytes: 919_205,
   },
   {
     name: "popup entry chunk",
@@ -168,7 +179,7 @@ const BUDGETS = [
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_622_679,
+    maxBytes: 1_636_895,
   },
 ];
 

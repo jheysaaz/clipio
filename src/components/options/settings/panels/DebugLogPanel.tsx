@@ -7,7 +7,7 @@
  *
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, Trash2 } from "lucide-react";
 
 import { useFeedback } from "@/components/feedback/FeedbackProvider";
@@ -19,6 +19,12 @@ import {
   debugModeItem,
   type DebugLogEntry,
 } from "@/storage/items";
+import {
+  filterLogEntries,
+  normaliseLogEntries,
+  summarizeLog,
+  type DiagnosticContext,
+} from "@/lib/diagnostics";
 import { captureError } from "@/lib/sentry";
 import { cn } from "@/lib/utils";
 import { i18n } from "#i18n";
@@ -26,6 +32,8 @@ import { i18n } from "#i18n";
 export function DebugLogPanel() {
   const [enabled, setEnabled] = useState(false);
   const [log, setLog] = useState<DebugLogEntry[]>([]);
+  const [context, setContext] = useState<DiagnosticContext | "all">("all");
+  const [query, setQuery] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
   const { confirmed, show, reset } = useControlConfirmation();
   const { announce, showBanner, dismissBanner } = useFeedback();
@@ -46,12 +54,12 @@ export function DebugLogPanel() {
       .getValue()
       .then((entries) => {
         if (cancelled) return;
-        setLog(Array.isArray(entries) ? entries : []);
+        setLog(normaliseLogEntries(entries));
       })
       .catch(console.warn);
 
     const unwatch = debugLogItem.watch((entries) => {
-      if (!cancelled) setLog(Array.isArray(entries) ? entries : []);
+      if (!cancelled) setLog(normaliseLogEntries(entries));
     });
     return () => {
       cancelled = true;
@@ -64,6 +72,12 @@ export function DebugLogPanel() {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [log]);
+
+  const filtered = useMemo(
+    () => filterLogEntries(log, { context, query }),
+    [log, context, query]
+  );
+  const summary = useMemo(() => summarizeLog(log), [log]);
 
   const copyLog = async () => {
     if (log.length === 0) return;
@@ -134,6 +148,76 @@ export function DebugLogPanel() {
         </div>
       </div>
 
+      <div className="mb-2 flex flex-wrap items-end gap-2">
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="debug-log-context-filter"
+            className="text-xs text-muted-foreground"
+          >
+            {i18n.t("options.developers.debugMode.filterLabel")}
+          </label>
+          <select
+            id="debug-log-context-filter"
+            data-testid="debug-log-context-filter"
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+            value={context}
+            onChange={(event) =>
+              setContext(event.target.value as DiagnosticContext | "all")
+            }
+          >
+            <option value="all">
+              {i18n.t("options.developers.debugMode.allContexts")}
+            </option>
+            <option value="content">
+              {i18n.t("options.developers.debugMode.contentContext")}
+            </option>
+            <option value="background">
+              {i18n.t("options.developers.debugMode.backgroundContext")}
+            </option>
+            <option value="storage">
+              {i18n.t("options.developers.debugMode.storageContext")}
+            </option>
+          </select>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <label htmlFor="debug-log-search" className="sr-only">
+            {i18n.t("options.developers.debugMode.searchLabel")}
+          </label>
+          <input
+            id="debug-log-search"
+            data-testid="debug-log-search"
+            type="search"
+            className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+            placeholder={i18n.t(
+              "options.developers.debugMode.searchPlaceholder"
+            )}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </div>
+      </div>
+
+      <div
+        className="mb-2 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground"
+        data-testid="debug-log-counts"
+      >
+        <span>
+          {i18n.t("options.developers.debugMode.countsHeading")}: content=
+          {summary.content}, background={summary.background}, storage=
+          {summary.storage}
+        </span>
+        <span>
+          {i18n.t("options.developers.debugMode.suspiciousCount")}:{" "}
+          {summary.suspicious}
+        </span>
+        <span>
+          {i18n.t("options.developers.debugMode.showingCount", [
+            filtered.length,
+            log.length,
+          ])}
+        </span>
+      </div>
+
       {/* `[font-variant-ligatures:none]`: the log prints tokens like `->`,
           `!=` and `/*` where a programming ligature fuses two characters and
           misrepresents what was actually recorded. */}
@@ -146,8 +230,12 @@ export function DebugLogPanel() {
           <p className="py-2 text-center font-sans text-muted-foreground">
             {i18n.t("options.developers.debugMode.emptyLog")}
           </p>
+        ) : filtered.length === 0 ? (
+          <p className="py-2 text-center font-sans text-muted-foreground">
+            {i18n.t("options.developers.debugMode.noMatches")}
+          </p>
         ) : (
-          log.map((entry, i) => (
+          filtered.map((entry, i) => (
             <div key={`${entry.ts}-${i}`} className="flex gap-2 leading-5">
               <span className="shrink-0 text-muted-foreground">
                 {new Date(entry.ts).toTimeString().slice(0, 8)}
@@ -166,9 +254,7 @@ export function DebugLogPanel() {
               </span>
               <span className="shrink-0 text-foreground">{entry.event}</span>
               <span className="truncate text-muted-foreground">
-                {typeof entry.detail === "string"
-                  ? entry.detail
-                  : JSON.stringify(entry.detail)}
+                {entry.detail}
               </span>
             </div>
           ))

@@ -384,6 +384,52 @@ options:
       copiedLog: "¡Copiado!"
       copyFailed: Error al copiar el registro de depuración
       emptyLog: Aún no hay entradas en el registro.
+      filterLabel: Contexto
+      allContexts: Todos los contextos
+      contentContext: Script de contenido
+      backgroundContext: Segundo plano
+      storageContext: Almacenamiento
+      searchLabel: Buscar en el registro
+      searchPlaceholder: Filtrar por evento o detalle
+      countsHeading: Recuentos del registro
+      suspiciousCount: Eventos sospechosos
+      showingCount: Mostrando $1 de $2
+      noMatches: Ninguna entrada coincide con el filtro actual.
+    toolkit:
+      title: Instantánea de diagnóstico
+      description: Recopila el estado actual y copia o descarga un informe redactado para soporte.
+      collect: Recopilar instantánea
+      collecting: Recopilando instantánea...
+      refresh: Actualizar instantánea
+      collected: Instantánea recopilada
+      collectFailed: No se pudo recopilar el diagnóstico
+      copyReport: Copiar informe
+      copiedReport: "¡Informe copiado!"
+      copyFailed: No se pudo copiar el informe de diagnóstico
+      downloadReport: Descargar informe
+      downloaded: Informe descargado
+      downloadFailed: No se pudo descargar el informe de diagnóstico
+      storageMode: Modo de almacenamiento
+      quotaFallback: respaldo por cuota
+      snippets: Fragmentos
+      cachedSnippets: Caché del script de contenido
+      backupSnippets: Respaldo en IndexedDB
+      corruptKeys: Claves en cuarentena
+      syncDataLost: Bandera de pérdida de sincronización
+      customGiphyKey: Clave de Giphy personalizada configurada
+      lastSentryError: Último error informado
+      never: Nunca
+      yes: Sí
+      no: No
+      debugMode: Registro detallado
+      logEntries: Entradas del registro
+      suspiciousEvents: Eventos sospechosos
+      tabHealth: Estado de las pestañas
+      tabsActive: $1 activas
+      tabsMissing: $1 ausentes
+      tabQueryError: "Error al consultar las pestañas: $1"
+      warningsHeading: No se pudieron leer algunas fuentes
+      privacyNote: Los informes redactan texto escrito, URL de páginas, claves de API y valores opacos largos.
 
 importWizard:
   steps:

@@ -390,6 +390,52 @@ options:
       copiedLog: Copied!
       copyFailed: Failed to copy debug log
       emptyLog: No log entries yet.
+      filterLabel: Context
+      allContexts: All contexts
+      contentContext: Content script
+      backgroundContext: Background
+      storageContext: Storage
+      searchLabel: Search log
+      searchPlaceholder: Filter by event or detail
+      countsHeading: Log counts
+      suspiciousCount: Suspicious events
+      showingCount: Showing $1 of $2
+      noMatches: No entries match the current filter.
+    toolkit:
+      title: Diagnostics snapshot
+      description: Collect the current state, then copy or download a redacted support report.
+      collect: Collect snapshot
+      collecting: Collecting snapshot...
+      refresh: Refresh snapshot
+      collected: Snapshot collected
+      collectFailed: Failed to collect diagnostics
+      copyReport: Copy report
+      copiedReport: Report copied!
+      copyFailed: Failed to copy the diagnostics report
+      downloadReport: Download report
+      downloaded: Report downloaded
+      downloadFailed: Failed to download the diagnostics report
+      storageMode: Storage mode
+      quotaFallback: quota fallback
+      snippets: Snippets
+      cachedSnippets: Content-script cache
+      backupSnippets: IndexedDB backup
+      corruptKeys: Quarantined keys
+      syncDataLost: Sync data lost flag
+      customGiphyKey: Custom Giphy key configured
+      lastSentryError: Last reported error
+      never: Never
+      yes: Yes
+      no: No
+      debugMode: Verbose logging
+      logEntries: Log entries
+      suspiciousEvents: Suspicious events
+      tabHealth: Tab health
+      tabsActive: $1 active
+      tabsMissing: $1 missing
+      tabQueryError: "Tab query failed: $1"
+      warningsHeading: Some sources could not be read
+      privacyNote: Reports redact typed text, page URLs, API keys and long opaque values.
 
 importWizard:
   steps:

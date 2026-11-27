@@ -167,6 +167,50 @@ describe("DebugLogPanel", () => {
     expect(screen.getByTestId("debug-log")).toHaveTextContent('{"count":2}');
   });
 
+  it("shows per-context counts and a suspicious-event count", async () => {
+    enableLog([entry, { ...anotherEntry, event: "sync:rejected" }]);
+
+    renderPanel();
+    await screen.findByText("insert");
+
+    const counts = screen.getByTestId("debug-log-counts");
+    expect(counts).toHaveTextContent("content=1");
+    expect(counts).toHaveTextContent("background=1");
+    expect(counts).toHaveTextContent("storage=0");
+    expect(counts).toHaveTextContent("1");
+    expect(counts).toHaveTextContent(
+      i18n.t("options.developers.debugMode.showingCount", [2, 2])
+    );
+  });
+
+  it("filters entries by context and by a case-insensitive query", async () => {
+    enableLog([entry, anotherEntry]);
+
+    renderPanel();
+    await screen.findByText("insert");
+
+    fireEvent.change(screen.getByTestId("debug-log-context-filter"), {
+      target: { value: "background" },
+    });
+    expect(screen.getByTestId("debug-log")).toHaveTextContent("sync");
+    expect(screen.queryByText("insert")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId("debug-log-search"), {
+      target: { value: "NO MATCH" },
+    });
+    expect(screen.getByTestId("debug-log")).toHaveTextContent(
+      i18n.t("options.developers.debugMode.noMatches")
+    );
+
+    fireEvent.change(screen.getByTestId("debug-log-context-filter"), {
+      target: { value: "all" },
+    });
+    fireEvent.change(screen.getByTestId("debug-log-search"), {
+      target: { value: "SNIPPET-1" },
+    });
+    expect(screen.getByTestId("debug-log")).toHaveTextContent("insert");
+  });
+
   it("treats a non-array stored log as empty", async () => {
     enableLog({ unexpected: "shape" });
 
