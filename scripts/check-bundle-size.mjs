@@ -151,11 +151,13 @@ const posix = (p) => p.split(sep).join("/");
  * aggregate grows 13,317 bytes, shared chunks 13,258 and the background entry
  * 59; the options entry stays below its existing budget. Combined with the
  * media-placeholder raise and the other merged fixes, the aggregate is
- * 2,782,584 bytes, the content script 919,205 and shared chunks 1,636,892.
- * All sizes were measured twice from clean builds and did not vary.
+ * 2,782,587 bytes, the content script 919,205 and shared chunks 1,636,895.
+ * The autosave-race fix adds 3 bytes to the aggregate and shared chunks; the
+ * other entries do not move. All sizes were measured twice from clean builds
+ * and did not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_782_584 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_782_587 },
   { name: "background entry", pattern: "background.js", maxBytes: 226_487 },
   {
     name: "content script entry",
@@ -177,7 +179,7 @@ const BUDGETS = [
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_636_892,
+    maxBytes: 1_636_895,
   },
 ];
 

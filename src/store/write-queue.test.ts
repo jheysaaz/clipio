@@ -77,6 +77,7 @@ import {
   emitStorageChange,
   mockStorageOnChanged,
 } from "../../tests/mocks/browser";
+import { editorDraftsItem } from "@/storage/items";
 
 const snippet: Snippet = {
   id: "s1",
@@ -486,6 +487,10 @@ describe("popup write queue", () => {
       sentAt: [],
     };
 
+    // Status watching is explicit, owned by the popup's lifecycle. There is no
+    // module-level storage listener any more: a second owner raced with this one
+    // and published stale queue snapshots over fresh ones.
+    const stop = watchWriteQueueStatus();
     emitStorageChange(
       { writeQueue: { oldValue: null, newValue: state.queue } },
       "local"
@@ -497,6 +502,7 @@ describe("popup write queue", () => {
       status: "refused",
       error: "quota",
     });
+    stop();
   });
 
   it("ignores storage changes outside the local queue key", () => {
@@ -571,9 +577,11 @@ describe("popup write queue", () => {
     ]);
   });
 
-  it("does not subscribe to storage changes when no browser API exists", async () => {
+  it("installs no storage listener of its own — the watcher is the sole owner", async () => {
+    // A second, unchained listener on `writeQueue` used to refresh status on
+    // every background write. Two owners published overlapping snapshots, and
+    // the toolbar blinked between Saving… and Saved mid-edit.
     const before = mockStorageOnChanged.addListener.mock.calls.length;
-    vi.stubGlobal("browser", undefined);
     vi.resetModules();
     try {
       await import("./write-queue");
@@ -581,5 +589,36 @@ describe("popup write queue", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("discards a stale refresh that resolves after a newer one", async () => {
+    await stageEdit(snippet, fields);
+    expect(writeQueueStore.state.saving).toBe(true);
+
+    const draftsGet = vi.mocked(editorDraftsItem.getValue);
+    const original = draftsGet.getMockImplementation()!;
+    let resolveStale!: (value: DraftMap) => void;
+    draftsGet.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveStale = resolve;
+        })
+    );
+
+    // The older read starts while the draft is still staged. A newer read then
+    // sees the committed draft gone and publishes idle. When the old read finally
+    // lands with its stale snapshot it must not put Saving… back.
+    const staged = state.drafts.s1!;
+    const stale = refreshSyncStatus();
+    state.drafts = {};
+    const fresh = refreshSyncStatus();
+    await fresh;
+    expect(writeQueueStore.state.saving).toBe(false);
+
+    resolveStale({ s1: staged });
+    await stale;
+    draftsGet.mockImplementation(original);
+
+    expect(writeQueueStore.state.saving).toBe(false);
   });
 });

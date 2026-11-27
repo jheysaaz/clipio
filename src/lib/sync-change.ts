@@ -136,16 +136,34 @@ export function needsCacheRefresh(reading: SyncChangeReading): boolean {
 }
 
 /**
- * Whether a `storage.local` change came from *another* writer.
+ * Whether a snippet change came from *another* writer.
  *
- * Local mode still stores snippets under `snip:` keys, and the queue's own
- * commits fire `onChanged` in this context too. Treating those as external edits
- * would refresh the list from under an open editor after every autosave. The
- * writer id on the record is the only stable way to tell a self-write from an
- * edit made in Options or another device's merged local copy.
+ * Both storage areas carry `updatedBy` on each record: the queue's own commits
+ * fire `onChanged` in this context in local mode, and our sync writes are echoed
+ * back from `storage.sync` too. Treating either as an external edit refreshes the
+ * library from under an open editor after every autosave and drops the sidebar's
+ * live draft previews — the row flashes between the new text and the committed
+ * one. The writer id is the only stable discriminator.
  *
- * Draft, queue, undo and writer-id keys carry no snippet prefix, so they are
- * excluded by the key check rather than by a growing denylist.
+ * Non-snippet keys are excluded by the prefix check rather than by a growing
+ * denylist. `storage.session` is ignored: no snippet key lives there.
+ */
+export function isExternalSnippetChange(
+  changes: StorageChanges,
+  areaName: string,
+  writerId: string
+): boolean {
+  if (areaName !== "local" && areaName !== "sync") return false;
+  return Object.entries(changes).some(([key, change]) => {
+    if (!key.startsWith(SNIPPET_KEY_PREFIX)) return false;
+    const record = (change.newValue ?? change.oldValue) as
+      { updatedBy?: unknown } | undefined;
+    return record?.updatedBy !== writerId;
+  });
+}
+
+/**
+ * Local-mode alias, kept for callers and tests that name the area explicitly.
  */
 export function isExternalLocalSnippetChange(
   changes: StorageChanges,
@@ -153,10 +171,5 @@ export function isExternalLocalSnippetChange(
   writerId: string
 ): boolean {
   if (areaName !== "local") return false;
-  return Object.entries(changes).some(([key, change]) => {
-    if (!key.startsWith(SNIPPET_KEY_PREFIX)) return false;
-    const record = (change.newValue ?? change.oldValue) as
-      { updatedBy?: unknown } | undefined;
-    return record?.updatedBy !== writerId;
-  });
+  return isExternalSnippetChange(changes, areaName, writerId);
 }

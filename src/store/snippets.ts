@@ -49,7 +49,10 @@ import {
 } from "@/storage";
 import { lastViewedSnippetIdItem, syncDataLostItem } from "@/storage/items";
 import { selectNewest } from "@/lib/snippet-utils";
-import { isExternalLocalSnippetChange } from "@/lib/sync-change";
+import {
+  isExternalSnippetChange,
+  type StorageChanges,
+} from "@/lib/sync-change";
 import {
   clearCommittedFields,
   clearDraftPreviews,
@@ -254,7 +257,10 @@ export async function loadSnippets(): Promise<void> {
  * stays true until it stops being true", and that is not true of a path that only
  * ever re-reads the list.
  */
-export async function refreshSnippets(): Promise<void> {
+export async function refreshSnippets(options?: {
+  /** Keep the sidebar's live draft fields across this read. */
+  preserveDrafts?: boolean;
+}): Promise<void> {
   const { isStale } = takeTicket();
   try {
     // Read alongside the library rather than in a second effect: the remembered id
@@ -266,9 +272,13 @@ export async function refreshSnippets(): Promise<void> {
     ]);
     if (isStale()) return;
     // An external writer replaces the record underneath any local preview, so
-    // the preview must not keep shadowing the new content.
-    clearDraftPreviews();
-    clearCommittedFields();
+    // the preview must not keep shadowing the new content. Our own commit is
+    // different: its fields must reach the authoritative store (the next editor
+    // mount reads from there) while the sidebar keeps showing the live draft.
+    if (!options?.preserveDrafts) {
+      clearDraftPreviews();
+      clearCommittedFields();
+    }
     snippetsStore.setState((prev) => ({
       ...prev,
       snippets: list,
@@ -345,7 +355,7 @@ const SNIPPET_KEY_PREFIX = "snip:";
  * autosave stages an old `baseRev` and conflicts with our own write.
  */
 function applySelfWriteMetadata(
-  changes: Parameters<typeof isExternalLocalSnippetChange>[0],
+  changes: StorageChanges,
   writerId: string
 ): void {
   let nextSnippets: Snippet[] | null = null;
@@ -422,33 +432,21 @@ if (typeof browser !== "undefined" && browser.storage?.onChanged) {
     if (!touched) return;
     let selfWriterId: string | null = null;
 
-    void Promise.resolve()
-      .then(() => {
-        // In local mode the queue's own commits fire this listener. Re-reading
-        // from them would replace the list under an open editor; an edit from
-        // Options or another context carries a different writer id and still
-        // refreshes the list. Sync changes need no writer lookup.
-        if (areaName === "local") {
-          return getWriterId().then((writerId) => {
-            selfWriterId = writerId;
-            return isExternalLocalSnippetChange(
-              changes as Parameters<typeof isExternalLocalSnippetChange>[0],
-              areaName,
-              writerId
-            );
-          });
-        }
-        return true;
+    // Our own commits are echoed back in both areas. Treating the sync echo as
+    // external cleared every draft preview on each autosave, making the sidebar
+    // flash between the new text and the last committed one.
+    void getWriterId()
+      .then((writerId) => {
+        selfWriterId = writerId;
+        return isExternalSnippetChange(changes, areaName, writerId);
       })
-      .then((external) => {
+      .then(async (external) => {
         if (external) return refreshSnippets();
-        if (selfWriterId) {
-          applySelfWriteMetadata(
-            changes as Parameters<typeof isExternalLocalSnippetChange>[0],
-            selfWriterId
-          );
-        }
-        return undefined;
+        // Adopt the revision/timestamp first so the next autosave does not
+        // conflict with our own write, then re-read the committed fields. The
+        // previews survive so the sidebar never flashes back to old text.
+        applySelfWriteMetadata(changes, selfWriterId!);
+        await refreshSnippets({ preserveDrafts: true });
       })
       .catch((error: unknown) => {
         // `refreshSnippets` handles its own failures, so reaching here means

@@ -78,6 +78,7 @@ vi.mock("@/lib/sentry", () => ({ captureError: vi.fn() }));
 
 import { captureError } from "@/lib/sentry";
 import { lastViewedSnippetIdItem, syncDataLostItem } from "@/storage/items";
+import { draftPreviewsStore } from "@/store/write-queue";
 import {
   emitStorageChange,
   resetBrowserMocks,
@@ -110,6 +111,7 @@ function state(): SnippetsState {
 beforeEach(() => {
   resetBrowserMocks();
   resetSnippetsStoreForTests();
+  draftPreviewsStore.setState(() => ({}));
   vi.mocked(captureError).mockClear();
   storage.getSnippets.mockResolvedValue([]);
   storage.getStorageStatus.mockResolvedValue(OK_STATUS);
@@ -643,7 +645,7 @@ describe("live cross-context sync", () => {
     );
   });
 
-  it("takes only write metadata from our own local commit", async () => {
+  it("adopts our own local commit without losing the live preview", async () => {
     const before = makeSnippet({
       id: "s1",
       label: "Old",
@@ -661,6 +663,10 @@ describe("live cross-context sync", () => {
       updatedBy: "self-writer",
     });
     snippetsStore.setState((prev) => ({ ...prev, snippets: [before] }));
+    draftPreviewsStore.setState(() => ({
+      s1: { label: "New", shortcut: "/a", content: "new body", tags: [] },
+    }));
+    storage.getSnippets.mockResolvedValue([committed]);
     storage.getSnippets.mockClear();
 
     emitStorageChange(
@@ -668,16 +674,61 @@ describe("live cross-context sync", () => {
       "local"
     );
 
-    await vi.waitFor(() => expect(state().snippets[0].rev).toBe(4));
-    // Replacing the fields would snap the open editor back to the committed
-    // text; only the write bookkeeping may change here.
-    expect(state().snippets[0]).toMatchObject({
-      label: "Old",
-      content: "old body",
-      updatedAt: committed.updatedAt,
+    await vi.waitFor(() =>
+      expect(state().snippets[0]).toMatchObject({
+        label: "New",
+        content: "new body",
+        rev: 4,
+      })
+    );
+    // The fields reach the authoritative store so a later editor mount is not
+    // stale, but the sidebar keeps the live draft instead of snapping back.
+    expect(draftPreviewsStore.state.s1).toEqual({
+      label: "New",
+      shortcut: "/a",
+      content: "new body",
+      tags: [],
+    });
+    expect(storage.getSnippets).toHaveBeenCalled();
+  });
+
+  it("keeps draft previews when our own sync autosave is echoed back", async () => {
+    // The sync echo used to be classified as external, so refreshSnippets()
+    // cleared every preview and the sidebar flashed between the text being
+    // typed and the last committed copy on each autosave.
+    const before = makeSnippet({ id: "s1", rev: 3, updatedBy: "other" });
+    const committed = makeSnippet({
+      id: "s1",
+      label: "New",
+      content: "new body",
+      rev: 4,
       updatedBy: "self-writer",
     });
-    expect(storage.getSnippets).not.toHaveBeenCalled();
+    snippetsStore.setState((prev) => ({ ...prev, snippets: [before] }));
+    draftPreviewsStore.setState(() => ({
+      s1: { label: "New", shortcut: "/a", content: "new body", tags: [] },
+    }));
+    storage.getSnippets.mockResolvedValue([committed]);
+    storage.getSnippets.mockClear();
+
+    emitStorageChange(
+      { "snip:s1": { oldValue: before, newValue: committed } },
+      "sync"
+    );
+
+    await vi.waitFor(() =>
+      expect(state().snippets[0]).toMatchObject({
+        label: "New",
+        content: "new body",
+        rev: 4,
+      })
+    );
+    expect(draftPreviewsStore.state.s1).toEqual({
+      label: "New",
+      shortcut: "/a",
+      content: "new body",
+      tags: [],
+    });
   });
 
   it("removes a locally deleted snippet when our own writer deleted it", async () => {

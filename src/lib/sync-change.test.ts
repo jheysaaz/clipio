@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   SIGN_OUT_KEY_THRESHOLD,
   isExternalLocalSnippetChange,
+  isExternalSnippetChange,
   needsCacheRefresh,
   readSyncChange,
   type StorageChanges,
@@ -298,6 +299,51 @@ describe("isExternalLocalSnippetChange", () => {
       isExternalLocalSnippetChange(
         { "snip:a": { newValue: { id: "a", updatedBy: "options" } } },
         "sync",
+        "writer-1"
+      )
+    ).toBe(false);
+  });
+});
+
+describe("isExternalSnippetChange", () => {
+  it("treats a sync echo of our own autosave as internal", () => {
+    // Sync writes are echoed back on `onChanged`. Refreshing from that echo
+    // cleared draft previews and made the sidebar flash between the text being
+    // typed and the last committed version.
+    expect(
+      isExternalSnippetChange(
+        { "snip:a": { newValue: { id: "a", updatedBy: "writer-1" } } },
+        "sync",
+        "writer-1"
+      )
+    ).toBe(false);
+  });
+
+  it("detects a genuine change from another device", () => {
+    expect(
+      isExternalSnippetChange(
+        { "snip:a": { newValue: { id: "a", updatedBy: "other-device" } } },
+        "sync",
+        "writer-1"
+      )
+    ).toBe(true);
+  });
+
+  it("still treats a local self-write as internal", () => {
+    expect(
+      isExternalSnippetChange(
+        { "snip:a": { newValue: { id: "a", updatedBy: "writer-1" } } },
+        "local",
+        "writer-1"
+      )
+    ).toBe(false);
+  });
+
+  it("ignores areas that never carry snippets", () => {
+    expect(
+      isExternalSnippetChange(
+        { "snip:a": { newValue: { id: "a", updatedBy: "other" } } },
+        "session",
         "writer-1"
       )
     ).toBe(false);
