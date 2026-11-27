@@ -36,8 +36,8 @@ const q = vi.hoisted(() => ({
   redoLastEdit: vi.fn<typeof import("@/store/write-queue").redoLastEdit>(),
   discardUnflushedDraft:
     vi.fn<typeof import("@/store/write-queue").discardUnflushedDraft>(),
-  refreshSyncStatus:
-    vi.fn<typeof import("@/store/write-queue").refreshSyncStatus>(),
+  requestSyncStatusRefresh:
+    vi.fn<typeof import("@/store/write-queue").requestSyncStatusRefresh>(),
   refreshUndoAvailability:
     vi.fn<typeof import("@/store/write-queue").refreshUndoAvailability>(),
 }));
@@ -51,7 +51,7 @@ vi.mock("@/store/write-queue", async (importOriginal) => {
     undoLastEdit: q.undoLastEdit,
     redoLastEdit: q.redoLastEdit,
     discardUnflushedDraft: q.discardUnflushedDraft,
-    refreshSyncStatus: q.refreshSyncStatus,
+    requestSyncStatusRefresh: q.requestSyncStatusRefresh,
     refreshUndoAvailability: q.refreshUndoAvailability,
   };
 });

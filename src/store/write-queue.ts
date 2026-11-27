@@ -245,12 +245,20 @@ export function waitForSnippetCommit(
   });
 }
 
+let refreshGeneration = 0;
+
 /** Refresh the status shown in the top bar from the authoritative stores. */
 export async function refreshSyncStatus(): Promise<void> {
-  const [, drafts] = await Promise.all([
-    readQueue(),
+  const generation = ++refreshGeneration;
+  // Read both items in one shot. A generation that is no longer current has been
+  // superseded by a newer read: publishing its snapshot would retire a staged id
+  // or republish a queue summary from before the last background write.
+  const [queue, drafts] = await Promise.all([
+    writeQueueItem.getValue(),
     editorDraftsItem.getValue(),
   ]);
+  if (generation !== refreshGeneration) return;
+  cachedQueue = queue ?? emptyQueue();
   const stored = drafts ?? {};
   // Only drafts staged by *this* document count as Saving. A draft recovered
   // from storage on mount was staged by an earlier popup that may have closed
@@ -272,19 +280,29 @@ export async function refreshSyncStatus(): Promise<void> {
 let refreshChain: Promise<void> = Promise.resolve();
 
 /**
+ * Serialize a status refresh so an older read can never publish after a newer
+ * one. Every caller goes through here: a second, unchained listener used to call
+ * `refreshSyncStatus()` directly on each queue write, so two refreshes raced and
+ * the toolbar blinked between Saving… and Saved.
+ */
+export function requestSyncStatusRefresh(): Promise<void> {
+  refreshChain = refreshChain.then(refreshSyncStatus, refreshSyncStatus);
+  return refreshChain;
+}
+
+/**
  * Keep the toolbar status in step with the background-owned queue.
  *
  * The popup publishes `Saving…` when it stages a draft, but the background is
  * what later removes that draft and the queued operation. Without watching both
  * items the local store never hears about the commit and the toolbar sticks on
- * `Saving…` even though the write landed. Serialising refreshes stops an older
- * read from overwriting the result of a newer one.
+ * `Saving…` even though the write landed. This is the only subscriber: a direct
+ * `storage.onChanged` listener on the same key used to race with it.
  */
 export function watchWriteQueueStatus(): () => void {
   let disposed = false;
   const refresh = () => {
-    if (disposed) return;
-    refreshChain = refreshChain.then(refreshSyncStatus, refreshSyncStatus);
+    if (!disposed) void requestSyncStatusRefresh();
   };
   const unwatchDrafts = editorDraftsItem.watch(refresh);
   const unwatchQueue = writeQueueItem.watch(refresh);
@@ -541,12 +559,4 @@ export async function enqueueRestore(
     createdAt: Date.now(),
   };
   await updateQueue((state) => enqueue(state, change, Date.now()));
-}
-
-if (typeof browser !== "undefined" && browser.storage?.onChanged) {
-  browser.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === "local" && changes.writeQueue) {
-      void refreshSyncStatus();
-    }
-  });
 }
