@@ -137,9 +137,9 @@ async function readBadgeText(
 }
 
 /**
- * Use the narrowest sidebar the resize handle permits. The footer has to keep
- * its controls on screen there; a state indicator that only fits at the default
- * width has just moved the bug to a different setting.
+ * Use the narrowest sidebar the resize handle permits. The bottom bar has to
+ * keep its controls on screen there; a floating state field that only fits at
+ * the default width has just moved the bug to a different setting.
  */
 async function useMinimumSidebarWidth(
   page: import("@playwright/test").Page
@@ -834,15 +834,16 @@ test.describe("Popup (Dashboard)", () => {
     await expect(time).toHaveAttribute("datetime", seeded.updatedAt);
     await expect(time).toHaveAttribute("title", /.+/);
 
-    // The floating hint is linked as a tooltip but does not move the content.
+    // The native title hint does not open a floating layer or move the content.
     const shortcut = popupPage.getByTestId("snippet-shortcut-input");
     const content = popupPage.getByTestId("snippet-content-editor");
     const beforeFocus = await content.boundingBox();
     await shortcut.focus();
-    await expect(popupPage.getByRole("tooltip")).toHaveText(
-      /Type this on any page to expand the snippet\.\s*Letters, numbers, dots, dashes and underscores only\. The trigger prefix is kept for you\./
+    await expect(shortcut).toHaveAttribute(
+      "title",
+      "Type this to expand the snippet."
     );
-    await expect(shortcut).toHaveAttribute("aria-describedby", "shortcut-tip");
+    await expect(shortcut).not.toHaveAttribute("aria-describedby");
     const afterFocus = await content.boundingBox();
     expect(afterFocus?.y).toBe(beforeFocus?.y);
     expect(afterFocus?.height).toBe(beforeFocus?.height);
@@ -894,7 +895,7 @@ test.describe("Popup (Dashboard)", () => {
     expect(after?.height).toBe(before?.height);
   });
 
-  test("keeps an invalid shortcut visible while the rest keeps autosaving", async ({
+  test("turns spaces into dashes while the shortcut is typed", async ({
     popupPage,
   }) => {
     const snippet = makeSnippet({
@@ -905,10 +906,38 @@ test.describe("Popup (Dashboard)", () => {
     await seedAndReload(popupPage, [snippet]);
     await popupPage.getByTestId("snippet-list-item").click();
 
-    await popupPage.getByTestId("snippet-shortcut-input").fill("/orig bad");
-    const error = popupPage.getByTestId("snippet-shortcut-error");
-    await expect(error).toBeVisible();
-    await expect(error).toContainText("cannot contain spaces");
+    const input = popupPage.getByTestId("snippet-shortcut-input");
+    await input.fill("/orig bad");
+
+    await expect(input).toHaveValue("/orig-bad");
+    await expect(input).toHaveAttribute(
+      "title",
+      "Type this to expand the snippet."
+    );
+    await expect
+      .poll(async () => (await readSyncSnippets(popupPage))[0], {
+        timeout: 10_000,
+      })
+      .toMatchObject({ shortcut: "/orig-bad" });
+  });
+
+  test("keeps an unsupported shortcut visible while the rest keeps autosaving", async ({
+    popupPage,
+  }) => {
+    const snippet = makeSnippet({
+      label: "Original",
+      shortcut: "/orig",
+      content: "Original body",
+    });
+    await seedAndReload(popupPage, [snippet]);
+    await popupPage.getByTestId("snippet-list-item").click();
+
+    const input = popupPage.getByTestId("snippet-shortcut-input");
+    await input.fill("/orig$bad");
+    await expect(input).toHaveValue("/orig$bad");
+    await expect(input).toHaveAttribute("title", /Unsupported character/);
+    await expect(input).not.toHaveAttribute("aria-invalid");
+    await expect(input).toHaveCSS("border-bottom-width", "0px");
 
     await popupPage.getByTestId("snippet-label-input").fill("Renamed");
     // The rest of the edit is staged and enqueued by the debounced autosave, so
@@ -919,10 +948,8 @@ test.describe("Popup (Dashboard)", () => {
       })
       .toMatchObject({ label: "Renamed", shortcut: "/orig" });
     // The bad text is still on screen and still not committed.
-    await expect(popupPage.getByTestId("snippet-shortcut-input")).toHaveValue(
-      "/orig bad"
-    );
-    await expect(error).toBeVisible();
+    await expect(input).toHaveValue("/orig$bad");
+    await expect(input).toHaveAttribute("title", /Unsupported character/);
   });
 
   test("reports saving in one reserved status slot", async ({ popupPage }) => {
@@ -1228,14 +1255,30 @@ test.describe("Popup (Dashboard)", () => {
   test("undo restores the deleted snippet in place and focuses its name", async ({
     popupPage,
   }) => {
-    const first = makeSnippet({ label: "First", shortcut: "/first" });
+    // The list sorts by updatedAt. Pin the stamps: three separate `now()`
+    // calls can straddle a millisecond under load, which used to reorder this
+    // test's rows before it even reached the delete.
+    const stamp = "2026-01-01T00:00:00.000Z";
+    const first = makeSnippet({
+      label: "First",
+      shortcut: "/first",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
     const target = makeSnippet({
       label: "Undo Me",
       shortcut: "/undo-me",
       content: "Restore this exact body",
       tags: ["keep-me"],
+      createdAt: stamp,
+      updatedAt: stamp,
     });
-    const third = makeSnippet({ label: "Third", shortcut: "/third" });
+    const third = makeSnippet({
+      label: "Third",
+      shortcut: "/third",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
     await seedAndReload(popupPage, [first, target, third]);
 
     const rows = popupPage.getByTestId("snippet-list-item");
@@ -1376,12 +1419,12 @@ test.describe("Popup (Dashboard)", () => {
     await expect(popupPage.locator(TOAST_SELECTOR)).toHaveCount(0);
   });
 
-  test("treats a manual local switch as a neutral footer state, not a banner", async ({
+  test("floats a neutral local-only field above the sidebar's bottom bar", async ({
     popupPage,
   }) => {
     await seedAndReload(popupPage, [helloSnippet()]);
     await useMinimumSidebarWidth(popupPage);
-    // The sidebar controls must not move when the footer gains the indicator.
+    // The bottom bar must not move when the floating field appears.
     const settingsBefore = await popupPage
       .getByTestId("settings-button")
       .boundingBox();
@@ -1390,17 +1433,20 @@ test.describe("Popup (Dashboard)", () => {
     await setStorageMode(popupPage, "local", "manual");
     await popupPage.getByTestId("snippet-list-item").click();
 
-    const footer = popupPage.getByTestId("snippet-footer");
-    const indicator = footer.getByTestId("local-only-indicator");
+    const library = popupPage.getByTestId("snippet-library");
+    const indicator = library.getByTestId("local-only-indicator");
     await expect(indicator).toBeVisible();
     await expect(indicator).toHaveText("Local only");
     const detail = "Sync is off. Snippets are saved on this device only.";
     await expect(indicator).toHaveAttribute("title", detail);
     await expect(indicator).toHaveAttribute("aria-label", detail);
-    await expect(footer).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(indicator).not.toHaveCSS(
+      "background-color",
+      "rgba(0, 0, 0, 0)"
+    );
     await expect(
       popupPage
-        .getByTestId("snippet-library")
+        .getByTestId("snippet-footer")
         .getByTestId("local-only-indicator")
     ).toHaveCount(0);
     await expect(
@@ -1411,25 +1457,30 @@ test.describe("Popup (Dashboard)", () => {
     await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText("");
     await expect.poll(() => readBadgeText(popupPage)).toBe("");
 
-    const footerBox = await footer.boundingBox();
-    const addTagBox = await popupPage
-      .getByTestId("snippet-add-tag")
-      .boundingBox();
+    const libraryBox = await library.boundingBox();
     const indicatorBox = await indicator.boundingBox();
     const settingsAfter = await popupPage
       .getByTestId("settings-button")
       .boundingBox();
     const addAfter = await popupPage.getByTestId("add-snippet").boundingBox();
-    expect(footerBox).not.toBeNull();
-    expect(addTagBox).not.toBeNull();
+    expect(libraryBox).not.toBeNull();
     expect(indicatorBox).not.toBeNull();
     expect(settingsAfter).not.toBeNull();
     expect(addAfter).not.toBeNull();
-    // "Local only" is right-aligned in the transparent footer, after the tags.
-    expect(indicatorBox!.x).toBeGreaterThan(addTagBox!.x + addTagBox!.width);
+    // The compact island is centred in the sidebar, sized to its icon and
+    // text, and clear of the fixed bottom bar.
+    const libraryCentre = libraryBox!.x + libraryBox!.width / 2;
+    const indicatorCentre = indicatorBox!.x + indicatorBox!.width / 2;
+    expect(Math.abs(indicatorCentre - libraryCentre)).toBeLessThanOrEqual(1);
+    expect(indicatorBox!.width).toBeLessThanOrEqual(libraryBox!.width - 16);
+    expect(indicatorBox!.x).toBeGreaterThanOrEqual(libraryBox!.x);
     expect(indicatorBox!.x + indicatorBox!.width).toBeLessThanOrEqual(
-      footerBox!.x + footerBox!.width + 1
+      libraryBox!.x + libraryBox!.width
     );
+    const gapToBar = addAfter!.y - (indicatorBox!.y + indicatorBox!.height);
+    expect(gapToBar).toBeGreaterThanOrEqual(0);
+    expect(gapToBar).toBeLessThanOrEqual(16);
+    await expect(indicator).not.toHaveCSS("box-shadow", "none");
     expect(Math.abs(settingsAfter!.x - settingsBefore!.x)).toBeLessThanOrEqual(
       1
     );

@@ -243,8 +243,11 @@ test.describe("relative sizing and document editor", () => {
     await expect(name).toHaveCSS("font-size", "16px");
     await expect(name).toHaveCSS("font-weight", "500");
     await expect(shortcut).toHaveCSS("font-size", "12px");
-    await expect(shortcut).toHaveCSS("border-bottom-width", "1px");
-    await expect(shortcut).toHaveCSS("border-bottom-color", "rgba(0, 0, 0, 0)");
+    await expect(shortcut).toHaveCSS("border-bottom-width", "0px");
+    await expect(shortcut).toHaveAttribute(
+      "title",
+      "Type this to expand the snippet."
+    );
 
     // Long values truncate inside the header instead of being clipped by the
     // popup edge. An earlier version put the max-width on the input inside an

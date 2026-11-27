@@ -75,11 +75,9 @@ snippetEditor:
   shortcut: Shortcut
   shortcutPlaceholder: "Add shortcut"
   shortcutLabel: "Shortcut: $1"
-  shortcutTip: Type this on any page to expand the snippet.
-  shortcutTipRules: Letters, numbers, dots, dashes and underscores only. The trigger prefix is kept for you.
+  shortcutTip: Type this to expand the snippet.
   shortcutError: Shortcut cannot contain spaces
   shortcutErrorCharacters: 'Unsupported character: $1. Use letters, numbers, dots, dashes or underscores.'
-  shortcutPrefixTooltip: The trigger prefix is kept automatically
   duplicateTooltip: Duplicate snippet
   shortcutErrorDuplicate: 'Shortcut "$1" is already used by "$2". Choose a different shortcut.'
   shortcutErrorPrefix: 'Shortcut "$1" conflicts with "$2" — one may prevent the other from expanding.'

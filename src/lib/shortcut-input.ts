@@ -21,6 +21,15 @@ export function shortcutBody(value: string, prefix: string): string {
 }
 
 /**
+ * Turn spaces into dashes as they are typed. Shortcuts are single tokens, so a
+ * space is never useful; rewriting it keeps the edit valid without a visible
+ * error. Other unsupported characters stay untouched for validation to report.
+ */
+export function shortcutSpacesToDashes(value: string): string {
+  return value.replace(/\s/gu, "-");
+}
+
+/**
  * Normalise what the user typed back into a full stored shortcut.
  *
  * Leading whitespace is ignored and a different leading symbol is replaced by

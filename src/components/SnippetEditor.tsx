@@ -11,7 +11,6 @@ import {
   Copy,
   CopyPlus,
   Check,
-  CloudOff,
   Trash2,
   PanelLeftClose,
   PanelLeft,
@@ -29,12 +28,6 @@ import { Button } from "@/components/ui/button";
 import { InlineAction } from "@/components/ui/inline-action";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { RichTextEditor, type RichTextEditorRef } from "@/components/editor";
 import { Badge } from "@/components/ui/badge";
 import type { Snippet, SnippetFormData } from "@/types";
@@ -55,6 +48,7 @@ import { detectShortcutConflict } from "@/lib/snippet-utils";
 import { getRelativeTime, shortenRelativeTime } from "@/lib/date-utils";
 import {
   shortcutInputProblem,
+  shortcutSpacesToDashes,
   unsupportedShortcutCharacters,
   withProtectedPrefix,
 } from "@/lib/shortcut-input";
@@ -74,6 +68,7 @@ import {
   undoLastEdit,
   writeQueueStore,
   queueOutcomesStore,
+  claimOutcomeReport,
 } from "@/store/write-queue";
 import { snippetsStore } from "@/store/snippets";
 import {
@@ -206,8 +201,6 @@ export default function SnippetEditor({
   // value so the rest of the snippet can keep autosaving.
   const [shortcutInput, setShortcutInput] = useState(initialFields.shortcut);
   const [shortcutError, setShortcutError] = useState("");
-  const [shortcutFocused, setShortcutFocused] = useState(false);
-  const [shortcutHovered, setShortcutHovered] = useState(false);
   // Start from the shipped prefix so validation never treats the leading symbol
   // of a freshly rendered field as an unsupported character while storage reads.
   const [triggerPrefix, setTriggerPrefix] = useState(DEFAULT_TRIGGER_PREFIX);
@@ -262,10 +255,6 @@ export default function SnippetEditor({
   }>({ fade: null, hide: null });
   const showSavedRef = useRef(false);
   const sawBusyRef = useRef(false);
-  // One failure is one report. Outcomes are rebuilt from storage on each
-  // refresh, so identity alone would replay the same error indefinitely (and
-  // twice on a StrictMode mount).
-  const reportedOutcomeRef = useRef<string | null>(null);
 
   // The prefix is configuration, so read it once rather than hardcoding "/".
   // The input handler re-applies it after every keystroke; a saved snippet
@@ -282,7 +271,6 @@ export default function SnippetEditor({
 
   const status = useStore(writeQueueStore);
   const quotaWarning = useSnippets((s) => s.quotaWarning);
-  const localOnly = useSnippets((s) => s.localOnly);
   const queuedOutcome = useStore(queueOutcomesStore)[snippet.id];
   const outcome =
     queuedOutcome?.opId === dismissedOutcomeId ? undefined : queuedOutcome;
@@ -413,8 +401,6 @@ export default function SnippetEditor({
     setFields(initialFields);
     setShortcutInput(initialFields.shortcut);
     setShortcutError("");
-    setShortcutFocused(false);
-    setShortcutHovered(false);
     setNewTagInput("");
     setDismissedOutcomeId(null);
     setIsAddingTag(false);
@@ -440,12 +426,7 @@ export default function SnippetEditor({
   }, [shortcutError, announceError]);
 
   useEffect(() => {
-    const key = outcome
-      ? `${outcome.opId}|${outcome.status}|${outcome.error ?? ""}`
-      : null;
-    if (reportedOutcomeRef.current === key) return;
-    reportedOutcomeRef.current = key;
-    if (!outcome) return;
+    if (!outcome || !claimOutcomeReport(outcome)) return;
     const detail =
       outcome.error === "conflict"
         ? i18n.t("snippetDetail.syncStatus.conflictDetail")
@@ -702,7 +683,9 @@ export default function SnippetEditor({
     // The configured prefix is not a field the user is editing. Re-apply it
     // after every change so Backspace or selecting all cannot silently change
     // which trigger opens the snippet.
-    const protectedValue = withProtectedPrefix(value, triggerPrefix);
+    const protectedValue = shortcutSpacesToDashes(
+      withProtectedPrefix(value, triggerPrefix)
+    );
     setShortcutInput(protectedValue);
     const error = shortcutErrorFor(
       protectedValue,
@@ -991,9 +974,6 @@ export default function SnippetEditor({
   );
 
   const relativeTime = getRelativeTime(lastSavedAt);
-  const showShortcutHint =
-    !!shortcutError || shortcutFocused || shortcutHovered;
-  const shortcutHintId = shortcutError ? "shortcut-error" : "shortcut-tip";
 
   return (
     <div className="flex flex-col h-full min-h-0" onKeyDown={handleKeyDown}>
@@ -1246,71 +1226,20 @@ export default function SnippetEditor({
             autoFocus={isDraft}
             className="h-8 min-w-0 flex-1 overflow-hidden border-0 bg-transparent px-0 text-base! font-medium! leading-[1.3] text-ellipsis whitespace-nowrap outline-none transition-colors focus-visible:border-0 focus-visible:text-clip focus-visible:ring-0 placeholder:text-muted-foreground"
           />
-          <div
-            className="relative max-w-[45%] shrink-0"
-            title={i18n.t("snippetEditor.shortcutPrefixTooltip")}
-            onFocus={() => setShortcutFocused(true)}
-            onBlur={() => setShortcutFocused(false)}
-            onMouseEnter={() => setShortcutHovered(true)}
-            onMouseLeave={() => setShortcutHovered(false)}
-          >
+          <div className="relative max-w-[45%] shrink-0">
             <Label className="sr-only" htmlFor="snippet-shortcut">
               {i18n.t("snippetEditor.shortcut")}
             </Label>
-            <TooltipProvider>
-              <Tooltip open={showShortcutHint}>
-                <TooltipTrigger
-                  render={
-                    <Input
-                      id="snippet-shortcut"
-                      data-testid="snippet-shortcut-input"
-                      value={shortcutInput}
-                      onChange={(e) => handleShortcutChange(e.target.value)}
-                      placeholder={i18n.t("snippetEditor.shortcutPlaceholder")}
-                      aria-label={i18n.t("snippetEditor.shortcut")}
-                      aria-invalid={!!shortcutError}
-                      aria-describedby={
-                        showShortcutHint ? shortcutHintId : undefined
-                      }
-                      className={cn(
-                        "h-8 w-auto min-w-[9ch] max-w-full shrink-0 overflow-hidden rounded-none border-0 border-b border-transparent bg-transparent px-0 text-left font-mono text-xs! text-ellipsis whitespace-nowrap shadow-none transition-colors [field-sizing:content] hover:border-ring/40 focus-visible:border-ring/60 focus-visible:ring-0 placeholder:text-muted-foreground",
-                        shortcutError && "border-destructive"
-                      )}
-                    />
-                  }
-                />
-                {showShortcutHint && (
-                  <TooltipContent
-                    id={shortcutHintId}
-                    role="tooltip"
-                    data-testid={
-                      shortcutError
-                        ? "snippet-shortcut-error"
-                        : "snippet-shortcut-tip"
-                    }
-                    side="bottom"
-                    align="start"
-                    className={cn(
-                      "pointer-events-none w-72 max-w-none rounded-md border px-2 py-1.5 text-ui-micro! leading-snug shadow-md",
-                      shortcutError
-                        ? "border-destructive/30 bg-destructive/5 text-destructive"
-                        : "border-border bg-popover text-popover-foreground"
-                    )}
-                  >
-                    {shortcutError ? (
-                      shortcutError
-                    ) : (
-                      <>
-                        <span>{i18n.t("snippetEditor.shortcutTip")}</span>
-                        <span className="mt-0.5 block text-muted-foreground">
-                          {i18n.t("snippetEditor.shortcutTipRules")}
-                        </span>
-                      </>
-                    )}
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
+            <Input
+              id="snippet-shortcut"
+              data-testid="snippet-shortcut-input"
+              value={shortcutInput}
+              onChange={(e) => handleShortcutChange(e.target.value)}
+              placeholder={i18n.t("snippetEditor.shortcutPlaceholder")}
+              aria-label={i18n.t("snippetEditor.shortcut")}
+              title={shortcutError || i18n.t("snippetEditor.shortcutTip")}
+              className="h-8 w-auto min-w-[9ch] max-w-full shrink-0 overflow-hidden rounded-none border-0 bg-transparent px-0 text-left font-mono text-xs! text-ellipsis whitespace-nowrap shadow-none outline-none transition-colors [field-sizing:content] focus-visible:ring-0 placeholder:text-muted-foreground"
+            />
           </div>
         </div>
 
@@ -1336,17 +1265,6 @@ export default function SnippetEditor({
         {tagAddControl}
         {tagEditor}
         <div className="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap text-ui-micro! text-muted-foreground">
-          {localOnly && (
-            <span
-              data-testid="local-only-indicator"
-              title={i18n.t("dashboard.localOnlyDetail")}
-              aria-label={i18n.t("dashboard.localOnlyDetail")}
-              className="flex min-w-0 items-center gap-1"
-            >
-              <Icon icon={CloudOff} size="sm" />
-              <span className="truncate">{i18n.t("dashboard.localOnly")}</span>
-            </span>
-          )}
           {isDraft ? (
             <span
               data-testid="snippet-draft"

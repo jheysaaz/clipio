@@ -78,11 +78,13 @@ surface around the fields rather than a padded card. The title stays a real
 input at 16px/500 with Tailwind's `text-base`/`font-medium`; the Newsreader trial
 and the custom title tokens were both removed after visual review. The shortcut keeps
 its monospace treatment but shares the island's padding and baseline with the
-name instead of being a centred pill with an underline. Its configured trigger
-prefix is protected by input handling: deleting or replacing it restores it,
-while the editable body rejects whitespace and unsupported characters. Both
-inputs keep their i18n accessible names, the stored shortcut string and the
-inline duplicate-shortcut status. Tab order is name → shortcut → content; Enter
+name instead of being a centred pill with an underline. Typed spaces become
+dashes immediately; other unsupported characters stay visible so validation can
+name them. The browser's native `title` carries the hint or the error — there is
+no custom tooltip and no error border to repaint the field. Its configured
+trigger prefix is protected by input handling: deleting or replacing it restores
+it. Both inputs keep their i18n accessible names, the stored shortcut string and
+the duplicate-shortcut status in the title. Tab order is name → shortcut → content; Enter
 in the name focuses the editor. The change applies to both the new and saved
 views.
 

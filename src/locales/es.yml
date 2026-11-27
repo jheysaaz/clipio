@@ -72,11 +72,9 @@ snippetEditor:
   shortcut: Atajo
   shortcutPlaceholder: "Agregar atajo"
   shortcutLabel: "Atajo: $1"
-  shortcutTip: Escribe esto en cualquier página para expandir el fragmento.
-  shortcutTipRules: Solo letras, números, puntos, guiones y guiones bajos. El prefijo se conserva automáticamente.
+  shortcutTip: Escríbelo para expander el fragmento.
   shortcutError: El atajo no puede contener espacios
   shortcutErrorCharacters: 'Carácter no admitido: $1. Usa letras, números, puntos, guiones o guiones bajos.'
-  shortcutPrefixTooltip: El prefijo se conserva automáticamente
   duplicateTooltip: Duplicar fragmento
   shortcutErrorDuplicate: 'El atajo "$1" ya está en uso por "$2". Elige un atajo diferente.'
   shortcutErrorPrefix: 'El atajo "$1" entra en conflicto con "$2" — uno puede impedir que el otro se expanda.'

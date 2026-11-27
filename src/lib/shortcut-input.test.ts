@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   shortcutBody,
   shortcutInputProblem,
+  shortcutSpacesToDashes,
   unsupportedShortcutCharacters,
   withProtectedPrefix,
 } from "./shortcut-input";
@@ -17,6 +18,19 @@ describe("shortcutBody", () => {
     // saved under a prefix the user has since changed.
     expect(shortcutBody(";addr", "/")).toBe(";addr");
     expect(shortcutBody("addr", "/")).toBe("addr");
+  });
+});
+
+describe("shortcutSpacesToDashes", () => {
+  it("turns whitespace in a shortcut body into dashes", () => {
+    expect(shortcutSpacesToDashes("addr home")).toBe("addr-home");
+    expect(shortcutSpacesToDashes("addr\thome")).toBe("addr-home");
+  });
+
+  it("leaves other unsupported characters for validation to report", () => {
+    // Negative case: silently dropping them would make an invalid edit look
+    // accepted.
+    expect(shortcutSpacesToDashes("addr$home")).toBe("addr$home");
   });
 });
 
