@@ -73,6 +73,65 @@ test("a create draft left behind by its own commit does not conflict", async ({
   ).toHaveCount(0);
 });
 
+test("a shortcut edit after a committed save does not conflict with us", async ({
+  popupPage,
+  storageHelper,
+}) => {
+  const snippet = makeSnippet({
+    id: "stale-draft-shortcut",
+    label: "Shortcut",
+    shortcut: "/short",
+    content: "body",
+    rev: 2,
+    updatedBy: "writer-1",
+  });
+  await storageHelper.clearAll();
+  await storageHelper.seedSnippets([snippet]);
+  // Model the instant after our own commit: the snippet has advanced but the
+  // background has not yet removed the draft that was built from the old rev.
+  await storageHelper.setLocal("editorDrafts", {
+    [snippet.id]: {
+      id: snippet.id,
+      fields: {
+        label: snippet.label,
+        shortcut: snippet.shortcut,
+        content: snippet.content,
+        tags: [],
+      },
+      baseRev: 1,
+      updatedAt: new Date().toISOString(),
+      isNew: false,
+    },
+  });
+
+  const consoleErrors: string[] = [];
+  popupPage.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  await popupPage.reload();
+  await waitForPopupReady(popupPage);
+  await popupPage.getByTestId("snippet-list-item").click();
+
+  const input = popupPage.getByTestId("snippet-shortcut-input");
+  await input.click();
+  await input.press("End");
+  await popupPage.keyboard.type(" more");
+
+  // The space is rewritten to a dash before autosave. The write must use the
+  // revision the popup already knows about, not the stale draft's revision.
+  await expect
+    .poll(async () => (await storageHelper.readSyncSnippets())[0]?.shortcut, {
+      timeout: 10_000,
+    })
+    .toBe("/short-more");
+  await expect(
+    popupPage.getByTestId("snippet-sync-status").getByTestId("retry-save")
+  ).toHaveCount(0);
+  expect(
+    consoleErrors.filter((line) => line.includes("snippet save failed"))
+  ).toEqual([]);
+});
+
 test("a failed save retries from the status button without a banner", async ({
   popupPage,
   storageHelper,

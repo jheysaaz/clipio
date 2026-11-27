@@ -469,9 +469,17 @@ export async function stageEdit(
     drafts[snippet.id]?.fields ??
     committedFieldsStore.state[snippet.id] ??
     fieldsFromSnippet(snippet);
+  // A draft surviving our own commit still carries the revision it was first
+  // staged from. The authoritative store has already advanced, so reusing that
+  // stale baseRev makes the next keystroke conflict with the write we just made.
+  // Keep a draft that is newer than the store, but never move backwards.
+  const baseRev = Math.max(
+    snippetRev(snippet),
+    drafts[snippet.id]?.baseRev ?? 0
+  );
   await stageDraft({
     id: snippet.id,
-    baseRev: drafts[snippet.id]?.baseRev ?? snippetRev(snippet),
+    baseRev,
     fields,
     updatedAt: new Date().toISOString(),
     isNew: false,

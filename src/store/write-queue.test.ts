@@ -135,6 +135,51 @@ describe("popup write queue", () => {
     expect(state.queue?.operations).toHaveLength(0);
   });
 
+  it("advances a surviving draft past our own commit before the next write", async () => {
+    // The background deletes the exact draft a commit came from. If the next
+    // keystroke lands before that deletion reaches storage, the draft still
+    // carries the old baseRev even though the popup has already applied the new
+    // revision from its own write. Reusing it makes the next edit conflict with
+    // us — the failure seen when editing a shortcut right after another save.
+    state.drafts = {
+      s1: {
+        id: "s1",
+        baseRev: 3,
+        isNew: false,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        fields,
+      },
+    };
+    const committed = {
+      ...snippet,
+      rev: 4,
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      updatedBy: "writer-1",
+    };
+
+    await stageEdit(committed, { ...fields, shortcut: "/addr-more" });
+    await flushDraft("s1", [committed]);
+
+    expect(state.drafts.s1?.baseRev).toBe(4);
+    expect(state.queue?.operations[0].baseRev).toBe(4);
+  });
+
+  it("keeps a draft's newer baseRev when the authoritative store lags", async () => {
+    state.drafts = {
+      s1: {
+        id: "s1",
+        baseRev: 5,
+        isNew: false,
+        updatedAt: "2026-01-02T00:00:00.000Z",
+        fields,
+      },
+    };
+
+    await stageEdit(snippet, fields);
+
+    expect(state.drafts.s1?.baseRev).toBe(5);
+  });
+
   it("publishes the staged fields as a live preview and a saving status", async () => {
     await stageEdit(snippet, fields);
 
