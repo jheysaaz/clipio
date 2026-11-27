@@ -13,6 +13,7 @@ import { useFeedback } from "@/components/feedback/FeedbackProvider";
 import { useControlConfirmation } from "@/components/feedback/use-control-confirmation";
 import { Button } from "@/components/ui/button";
 import { ControlConfirmation } from "@/components/ui/control-confirmation";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Icon } from "@/components/ui/icon";
 import type { ConflictResolution } from "@/lib/importers/types";
 import { captureError } from "@/lib/sentry";
@@ -44,7 +45,7 @@ function errorCopy(code: string | null): string {
   }
 }
 
-function DialogFooter({
+function BackupActions({
   phase,
   onClose,
 }: {
@@ -111,225 +112,215 @@ function BackupDialog({ onClose }: { onClose: () => void }) {
   }, [missingMedia, announce]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 dark:bg-black/60">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="backup-dialog-title"
-        data-testid="backup-preview-dialog"
-        className="max-h-[min(90vh,40rem)] w-full max-w-lg space-y-4 overflow-y-auto rounded-xl border bg-background p-6 shadow-xl"
+    <DialogContent
+      data-testid="backup-preview-dialog"
+      showCloseButton={false}
+      className="w-full max-w-lg p-6"
+    >
+      <DialogTitle
+        id="backup-dialog-title"
+        className="text-base font-semibold text-foreground"
       >
-        <h2
-          id="backup-dialog-title"
-          className="text-base font-semibold text-foreground"
-        >
+        {i18n.t(
+          phase === "done"
+            ? "options.backup.doneTitle"
+            : "options.backup.dialogTitle"
+        )}
+      </DialogTitle>
+
+      {(phase === "loading" || phase === "restoring") && (
+        <p data-testid="backup-busy" className="text-sm text-muted-foreground">
           {i18n.t(
-            phase === "done"
-              ? "options.backup.doneTitle"
-              : "options.backup.dialogTitle"
+            phase === "restoring"
+              ? "options.backup.restoring"
+              : "options.backup.loading"
           )}
-        </h2>
+        </p>
+      )}
 
-        {(phase === "loading" || phase === "restoring") && (
-          <p
-            data-testid="backup-busy"
-            className="text-sm text-muted-foreground"
+      {phase === "error" && (
+        <p data-testid="backup-error" className="text-sm text-destructive">
+          {dialogError}
+        </p>
+      )}
+
+      {phase === "preview" && preview && (
+        <div className="space-y-4" data-testid="backup-preview-body">
+          <p className="text-sm text-muted-foreground">
+            {i18n.t("options.backup.previewIntro")}
+          </p>
+
+          <dl
+            data-testid="backup-summary"
+            className="grid grid-cols-2 gap-2 text-sm"
           >
-            {i18n.t(
-              phase === "restoring"
-                ? "options.backup.restoring"
-                : "options.backup.loading"
-            )}
-          </p>
-        )}
+            <dt className="text-muted-foreground">
+              {i18n.t("options.backup.summary.source")}
+            </dt>
+            <dd className="tabular-nums">
+              {i18n.t("options.backup.summary.sourceValue", [
+                String(preview.sourceVersion),
+              ])}
+            </dd>
+            <dt className="text-muted-foreground">
+              {i18n.t("options.backup.summary.exported")}
+            </dt>
+            <dd className="tabular-nums">{preview.exportedAt}</dd>
+            <dt className="text-muted-foreground">
+              {i18n.t("options.backup.summary.snippets")}
+            </dt>
+            <dd className="tabular-nums">
+              {i18n.t("options.backup.summary.snippetValue", [
+                String(preview.snippetCount),
+                String(preview.newSnippetCount),
+              ])}
+            </dd>
+            <dt className="text-muted-foreground">
+              {i18n.t("options.backup.summary.conflicts")}
+            </dt>
+            <dd data-testid="backup-conflict-count" className="tabular-nums">
+              {String(preview.conflictCount)}
+            </dd>
+            <dt className="text-muted-foreground">
+              {i18n.t("options.backup.summary.media")}
+            </dt>
+            <dd className="tabular-nums">
+              {i18n.t("options.backup.summary.mediaValue", [
+                String(preview.mediaCount),
+              ])}
+            </dd>
+          </dl>
 
-        {phase === "error" && (
-          <p data-testid="backup-error" className="text-sm text-destructive">
-            {dialogError}
-          </p>
-        )}
-
-        {phase === "preview" && preview && (
-          <div className="space-y-4" data-testid="backup-preview-body">
-            <p className="text-sm text-muted-foreground">
-              {i18n.t("options.backup.previewIntro")}
-            </p>
-
-            <dl
-              data-testid="backup-summary"
-              className="grid grid-cols-2 gap-2 text-sm"
+          {preview.rejectedSnippetCount > 0 && (
+            <p
+              data-testid="backup-rejected-count"
+              className="text-xs text-muted-foreground"
             >
-              <dt className="text-muted-foreground">
-                {i18n.t("options.backup.summary.source")}
-              </dt>
-              <dd className="tabular-nums">
-                {i18n.t("options.backup.summary.sourceValue", [
-                  String(preview.sourceVersion),
-                ])}
-              </dd>
-              <dt className="text-muted-foreground">
-                {i18n.t("options.backup.summary.exported")}
-              </dt>
-              <dd className="tabular-nums">{preview.exportedAt}</dd>
-              <dt className="text-muted-foreground">
-                {i18n.t("options.backup.summary.snippets")}
-              </dt>
-              <dd className="tabular-nums">
-                {i18n.t("options.backup.summary.snippetValue", [
-                  String(preview.snippetCount),
-                  String(preview.newSnippetCount),
-                ])}
-              </dd>
-              <dt className="text-muted-foreground">
-                {i18n.t("options.backup.summary.conflicts")}
-              </dt>
-              <dd data-testid="backup-conflict-count" className="tabular-nums">
-                {String(preview.conflictCount)}
-              </dd>
-              <dt className="text-muted-foreground">
-                {i18n.t("options.backup.summary.media")}
-              </dt>
-              <dd className="tabular-nums">
-                {i18n.t("options.backup.summary.mediaValue", [
-                  String(preview.mediaCount),
-                ])}
-              </dd>
-            </dl>
-
-            {preview.rejectedSnippetCount > 0 && (
-              <p
-                data-testid="backup-rejected-count"
-                className="text-xs text-muted-foreground"
-              >
-                {i18n.t("options.backup.summary.rejected", [
-                  String(preview.rejectedSnippetCount),
-                ])}
-              </p>
-            )}
-            {preview.missingMediaCount > 0 && (
-              <p
-                data-testid="backup-missing-media"
-                className="text-xs text-muted-foreground"
-              >
-                {missingMedia}
-              </p>
-            )}
-
-            <section
-              data-testid="backup-settings-preview"
-              className="space-y-1"
-            >
-              <h3 className="text-sm font-medium">
-                {i18n.t("options.backup.settingsTitle")}
-              </h3>
-              {preview.settingsChanges.length === 0 ? (
-                <p
-                  data-testid="backup-no-setting-changes"
-                  className="text-xs text-muted-foreground"
-                >
-                  {i18n.t("options.backup.noChanges")}
-                </p>
-              ) : (
-                <ul className="space-y-1">
-                  {preview.settingsChanges.map((change) => (
-                    <li
-                      key={change.key}
-                      data-testid="backup-setting-change"
-                      className="font-mono text-xs text-foreground"
-                    >
-                      {change.key}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {preview.settingsSkipped.map((skip) => (
-                <p
-                  key={skip.key}
-                  data-testid="backup-settings-skipped"
-                  className="text-xs text-muted-foreground"
-                >
-                  {i18n.t("options.backup.skippedSetting", [
-                    skip.key,
-                    skip.reason,
-                  ])}
-                </p>
-              ))}
-            </section>
-
-            {preview.conflicts.length > 0 && (
-              <section data-testid="backup-conflicts" className="space-y-2">
-                <h3 className="text-sm font-medium">
-                  {i18n.t("options.backup.conflictsTitle")}
-                </h3>
-                <ul className="space-y-2">
-                  {preview.conflicts.map((conflict) => (
-                    <li
-                      key={conflict.rowKey}
-                      data-testid="backup-conflict-row"
-                      data-conflict-id={conflict.rowKey}
-                      className="flex items-center justify-between gap-3"
-                    >
-                      <span className="min-w-0 truncate text-sm">
-                        {i18n.t("options.backup.conflictRow", [
-                          conflict.incoming.label,
-                          conflict.existing.shortcut,
-                        ])}
-                      </span>
-                      <select
-                        data-testid="backup-conflict-resolution"
-                        aria-label={i18n.t("options.backup.resolutionLabel")}
-                        className="h-8 shrink-0 rounded-md border border-input bg-background px-2 text-sm"
-                        value={resolutions[conflict.rowKey] ?? "skip"}
-                        onChange={(event) =>
-                          setBackupConflictResolution(
-                            conflict.rowKey,
-                            event.target.value as ConflictResolution
-                          )
-                        }
-                      >
-                        <option value="skip">
-                          {i18n.t("options.backup.resolutionSkip")}
-                        </option>
-                        <option value="overwrite">
-                          {i18n.t("options.backup.resolutionOverwrite")}
-                        </option>
-                        <option value="rename">
-                          {i18n.t("options.backup.resolutionRename")}
-                        </option>
-                      </select>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-          </div>
-        )}
-
-        {phase === "done" && result && (
-          <div className="space-y-2" data-testid="backup-result">
-            <p className="text-sm text-foreground">
-              {i18n.t("options.backup.doneSummary", [
-                String(result.snippetCount),
-                String(result.settingsApplied.length),
-                String(result.mediaRestored),
+              {i18n.t("options.backup.summary.rejected", [
+                String(preview.rejectedSnippetCount),
               ])}
             </p>
-            {result.settingsFailed.length > 0 && (
+          )}
+          {preview.missingMediaCount > 0 && (
+            <p
+              data-testid="backup-missing-media"
+              className="text-xs text-muted-foreground"
+            >
+              {missingMedia}
+            </p>
+          )}
+
+          <section data-testid="backup-settings-preview" className="space-y-1">
+            <h3 className="text-sm font-medium">
+              {i18n.t("options.backup.settingsTitle")}
+            </h3>
+            {preview.settingsChanges.length === 0 ? (
               <p
-                data-testid="backup-result-skipped"
+                data-testid="backup-no-setting-changes"
                 className="text-xs text-muted-foreground"
               >
-                {i18n.t("options.backup.doneSkipped", [
-                  String(result.settingsFailed.length),
+                {i18n.t("options.backup.noChanges")}
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {preview.settingsChanges.map((change) => (
+                  <li
+                    key={change.key}
+                    data-testid="backup-setting-change"
+                    className="font-mono text-xs text-foreground"
+                  >
+                    {change.key}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {preview.settingsSkipped.map((skip) => (
+              <p
+                key={skip.key}
+                data-testid="backup-settings-skipped"
+                className="text-xs text-muted-foreground"
+              >
+                {i18n.t("options.backup.skippedSetting", [
+                  skip.key,
+                  skip.reason,
                 ])}
               </p>
-            )}
-          </div>
-        )}
+            ))}
+          </section>
 
-        <DialogFooter phase={phase} onClose={onClose} />
-      </div>
-    </div>
+          {preview.conflicts.length > 0 && (
+            <section data-testid="backup-conflicts" className="space-y-2">
+              <h3 className="text-sm font-medium">
+                {i18n.t("options.backup.conflictsTitle")}
+              </h3>
+              <ul className="space-y-2">
+                {preview.conflicts.map((conflict) => (
+                  <li
+                    key={conflict.rowKey}
+                    data-testid="backup-conflict-row"
+                    data-conflict-id={conflict.rowKey}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span className="min-w-0 truncate text-sm">
+                      {i18n.t("options.backup.conflictRow", [
+                        conflict.incoming.label,
+                        conflict.existing.shortcut,
+                      ])}
+                    </span>
+                    <select
+                      data-testid="backup-conflict-resolution"
+                      aria-label={i18n.t("options.backup.resolutionLabel")}
+                      className="h-8 shrink-0 rounded-md border border-input bg-background px-2 text-sm"
+                      value={resolutions[conflict.rowKey] ?? "skip"}
+                      onChange={(event) =>
+                        setBackupConflictResolution(
+                          conflict.rowKey,
+                          event.target.value as ConflictResolution
+                        )
+                      }
+                    >
+                      <option value="skip">
+                        {i18n.t("options.backup.resolutionSkip")}
+                      </option>
+                      <option value="overwrite">
+                        {i18n.t("options.backup.resolutionOverwrite")}
+                      </option>
+                      <option value="rename">
+                        {i18n.t("options.backup.resolutionRename")}
+                      </option>
+                    </select>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
+      )}
+
+      {phase === "done" && result && (
+        <div className="space-y-2" data-testid="backup-result">
+          <p className="text-sm text-foreground">
+            {i18n.t("options.backup.doneSummary", [
+              String(result.snippetCount),
+              String(result.settingsApplied.length),
+              String(result.mediaRestored),
+            ])}
+          </p>
+          {result.settingsFailed.length > 0 && (
+            <p
+              data-testid="backup-result-skipped"
+              className="text-xs text-muted-foreground"
+            >
+              {i18n.t("options.backup.doneSkipped", [
+                String(result.settingsFailed.length),
+              ])}
+            </p>
+          )}
+        </div>
+      )}
+
+      <BackupActions phase={phase} onClose={onClose} />
+    </DialogContent>
   );
 }
 
@@ -422,7 +413,15 @@ export function BackupManager() {
         </div>
       </div>
 
-      {phase !== "idle" && <BackupDialog onClose={closeDialog} />}
+      <Dialog
+        open={phase !== "idle"}
+        disablePointerDismissal
+        onOpenChange={(next) => {
+          if (!next) closeDialog();
+        }}
+      >
+        {phase !== "idle" && <BackupDialog onClose={closeDialog} />}
+      </Dialog>
     </section>
   );
 }

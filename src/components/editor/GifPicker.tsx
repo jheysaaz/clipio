@@ -7,6 +7,7 @@ import {
 } from "react";
 import { Search, X, RefreshCw } from "lucide-react";
 import { Icon } from "@/components/ui/icon";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   useVirtualFloating,
@@ -236,7 +237,7 @@ export function GifPicker({
       {/* Search header */}
       <div className="flex items-center gap-2 p-2 border-b border-border">
         <Icon icon={Search} className="text-muted-foreground shrink-0" />
-        <input
+        <Input
           ref={searchInputRef}
           type="text"
           value={query}

@@ -16,6 +16,8 @@ import {
   ChevronRight,
   ChevronLeft,
 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Progress } from "@/components/ui/progress";
@@ -494,7 +496,7 @@ export default function ImportWizard({
               {i18n.t("importWizard.upload.detectedFormat")}
             </p>
             {detectedParser ? (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground">
+              <Badge variant="secondary" className="gap-1.5 rounded-full">
                 {detectedParser.iconUrl && (
                   <img
                     src={detectedParser.iconUrl}
@@ -506,11 +508,14 @@ export default function ImportWizard({
                   />
                 )}
                 {detectedParser.displayName}
-              </span>
+              </Badge>
             ) : (
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">
+              <Badge
+                variant="secondary"
+                className="rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400"
+              >
                 {i18n.t("importWizard.upload.unknownFormat")}
-              </span>
+              </Badge>
             )}
           </div>
 
@@ -552,16 +557,20 @@ export default function ImportWizard({
 
       {/* Parse result */}
       {parseError && (
-        <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs">
-          <Icon icon={AlertTriangle} className="mt-0.5 shrink-0" />
-          {parseError}
-        </div>
+        <Alert className="border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+          <Icon icon={AlertTriangle} className="mt-0.5" />
+          <AlertDescription className="text-xs text-destructive">
+            {parseError}
+          </AlertDescription>
+        </Alert>
       )}
       {parsedSnippets.length > 0 && !parseError && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-muted border text-xs text-muted-foreground">
-          <Icon icon={CheckCircle2} className="text-green-500 shrink-0" />
-          {i18n.t("importWizard.upload.foundSnippets", parsedSnippets.length)}
-        </div>
+        <Alert className="border-border bg-muted p-3 text-xs text-muted-foreground">
+          <Icon icon={CheckCircle2} className="text-green-500" />
+          <AlertDescription className="text-xs text-muted-foreground">
+            {i18n.t("importWizard.upload.foundSnippets", parsedSnippets.length)}
+          </AlertDescription>
+        </Alert>
       )}
     </div>
   );
@@ -629,12 +638,13 @@ export default function ImportWizard({
               </div>
               <div className="flex flex-wrap gap-1">
                 {entry.snippet.unsupportedPlaceholders.map((p) => (
-                  <span
+                  <Badge
                     key={p}
-                    className="text-xs font-mono px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400"
+                    variant="secondary"
+                    className="h-auto gap-0 rounded-sm bg-amber-100 px-1.5 py-0.5 font-normal font-mono text-amber-700 dark:bg-amber-900/40 dark:text-amber-400"
                   >
                     {p}
-                  </span>
+                  </Badge>
                 ))}
               </div>
             </div>
@@ -918,24 +928,30 @@ export default function ImportWizard({
         </div>
 
         {quotaWillExceed && (
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs">
-            <Icon icon={AlertTriangle} className="mt-0.5 shrink-0" />
-            <span>{i18n.t("importWizard.confirm.quotaWarning")}</span>
-          </div>
+          <Alert className="border-amber-200 bg-amber-50 p-3 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+            <Icon icon={AlertTriangle} className="mt-0.5" />
+            <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
+              {i18n.t("importWizard.confirm.quotaWarning")}
+            </AlertDescription>
+          </Alert>
         )}
 
         {zipMissingMediaWarning && (
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs">
-            <Icon icon={AlertTriangle} className="mt-0.5 shrink-0" />
-            <span>{zipMissingMediaWarning}</span>
-          </div>
+          <Alert className="border-amber-200 bg-amber-50 p-3 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+            <Icon icon={AlertTriangle} className="mt-0.5" />
+            <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
+              {zipMissingMediaWarning}
+            </AlertDescription>
+          </Alert>
         )}
 
         {importError && (
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs">
-            <Icon icon={AlertTriangle} className="mt-0.5 shrink-0" />
-            {importError}
-          </div>
+          <Alert className="border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+            <Icon icon={AlertTriangle} className="mt-0.5" />
+            <AlertDescription className="text-xs text-destructive">
+              {importError}
+            </AlertDescription>
+          </Alert>
         )}
       </div>
     );

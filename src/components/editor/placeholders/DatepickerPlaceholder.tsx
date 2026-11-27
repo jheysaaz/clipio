@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { CalendarDays } from "lucide-react";
 import { Icon } from "@/components/ui/icon";
+import { Input } from "@/components/ui/input";
 import { ICON_STROKE } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
@@ -98,7 +99,7 @@ export function DatepickerPlaceholderElement({
             "bg-popover shadow-lg p-2"
           )}
         >
-          <input
+          <Input
             type="date"
             value={date}
             onChange={(e) => handleDateChange(e.target.value)}

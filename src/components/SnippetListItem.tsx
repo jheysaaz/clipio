@@ -3,6 +3,7 @@ import { stripMediaPlaceholders } from "@/lib/media-placeholders";
 import { decodeHtmlEntities, stripHtmlTags } from "@/lib/html-text";
 import { useStore } from "@tanstack/react-store";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import type { Snippet } from "@/types";
 import { cn } from "@/lib/utils";
 import { draftPreviewsStore } from "@/store/write-queue";
@@ -82,12 +83,12 @@ export default function SnippetListItem({
           >
             {snippet.label}
           </h3>
-          <kbd
-            className="kbd-badge"
+          <Kbd
+            className="pointer-events-auto h-auto max-w-20 shrink-0 truncate rounded-sm border border-border bg-secondary px-1.5 py-0.75 font-mono text-ui-xs! leading-none shadow-xs [font-variant-ligatures:none]"
             title={i18n.t("snippetEditor.shortcutLabel", [snippet.shortcut])}
           >
             {snippet.shortcut}
-          </kbd>
+          </Kbd>
         </div>
         {contentPreview && (
           <p className="truncate text-ui-xs! font-normal leading-snug text-muted-foreground">

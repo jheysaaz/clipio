@@ -26,6 +26,7 @@ import {
 } from "@/components/feedback/FeedbackProvider";
 import { Icon } from "@/components/ui/icon";
 import { InlineAction } from "@/components/ui/inline-action";
+import { Kbd } from "@/components/ui/kbd";
 import SnippetListItem from "@/components/SnippetListItem";
 const SnippetEditor = lazy(() => import("~/components/SnippetEditor"));
 import { InlineError } from "@/components/ui/inline-error";
@@ -991,12 +992,12 @@ export default function Dashboard() {
                 className="h-9 rounded-lg pl-8 pr-12 text-ui-sm!"
               />
               {!searchQuery && (
-                <kbd
+                <Kbd
                   id="search-help"
-                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 hidden h-5 select-none items-center rounded border bg-muted px-1 font-mono text-ui-xs! font-medium text-foreground/70 sm:flex"
+                  className="absolute right-2 top-1/2 hidden -translate-y-1/2 items-center rounded border border-border bg-muted px-1 font-mono text-ui-xs! font-medium text-foreground/70 sm:flex"
                 >
                   {/mac/i.test(navigator.platform) ? "⌘K" : "Ctrl+K"}
-                </kbd>
+                </Kbd>
               )}
             </div>
           </div>

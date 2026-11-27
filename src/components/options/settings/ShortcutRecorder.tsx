@@ -15,6 +15,7 @@ import { Command, Keyboard, Option, ArrowUp } from "lucide-react";
 
 import { useFeedback } from "@/components/feedback/FeedbackProvider";
 import { Icon } from "@/components/ui/icon";
+import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import {
   parseShortcut,
@@ -187,13 +188,13 @@ export function ShortcutRecorder({
                       segment.label as keyof typeof MODIFIER_ICONS
                     ];
               return (
-                <kbd
+                <Kbd
                   key={`${segment.kind}-${i}`}
                   data-segment={segment.kind}
                   // `text-foreground/75`, not `text-muted-foreground`: muted on `bg-muted`
                   // at 10px measures 4.39:1, under the 4.5:1 WCAG AA floor.
                   // Caught by the per-section axe scan.
-                  className="flex h-5 min-w-5 items-center justify-center gap-0.5 rounded border border-border bg-muted px-1.5 text-foreground/75"
+                  className="gap-0.5 rounded border border-border px-1.5 text-foreground/75"
                 >
                   {Glyph ? (
                     <Icon icon={Glyph} className="size-3" />
@@ -202,7 +203,7 @@ export function ShortcutRecorder({
                       {segment.label}
                     </span>
                   )}
-                </kbd>
+                </Kbd>
               );
             })}
           </span>

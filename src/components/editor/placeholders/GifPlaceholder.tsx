@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { Film } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icon";
 import { ICON_STROKE } from "@/lib/icons";
 import { cn } from "@/lib/utils";
@@ -93,16 +94,16 @@ export function GifPlaceholderElement({
             onError={() => setError(true)}
           />
           {/* "Powered by GIPHY" badge */}
-          <span
+          <Badge
             className={cn(
-              "absolute bottom-0.5 right-0.5",
+              "absolute bottom-0.5 right-0.5 h-auto border-0",
               "text-ui-micro! font-bold text-white",
               "bg-black/50 px-1 py-0.5 rounded",
               "pointer-events-none select-none"
             )}
           >
             {i18n.t("gifPlaceholder.poweredBy")}
-          </span>
+          </Badge>
         </span>
         <span className="hidden">{children}</span>
       </ResizableMediaWrapper>

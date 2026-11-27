@@ -26,6 +26,13 @@ import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { InlineAction } from "@/components/ui/inline-action";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { RichTextEditor, type RichTextEditorRef } from "@/components/editor";
 import { Badge } from "@/components/ui/badge";
 import type { Snippet, SnippetFormData } from "@/types";
@@ -1118,9 +1125,9 @@ export default function SnippetEditor({
           }}
           className="relative mb-2 flex min-h-9 shrink-0 items-center gap-2"
         >
-          <label className="sr-only" htmlFor="snippet-name">
+          <Label className="sr-only" htmlFor="snippet-name">
             {i18n.t("snippetEditor.name")}
-          </label>
+          </Label>
           <Input
             ref={nameInputRef}
             id="snippet-name"
@@ -1145,42 +1152,54 @@ export default function SnippetEditor({
             onMouseEnter={() => setShortcutHovered(true)}
             onMouseLeave={() => setShortcutHovered(false)}
           >
-            <label className="sr-only" htmlFor="snippet-shortcut">
+            <Label className="sr-only" htmlFor="snippet-shortcut">
               {i18n.t("snippetEditor.shortcut")}
-            </label>
-            <Input
-              id="snippet-shortcut"
-              data-testid="snippet-shortcut-input"
-              value={shortcutInput}
-              onChange={(e) => handleShortcutChange(e.target.value)}
-              placeholder={i18n.t("snippetEditor.shortcutPlaceholder")}
-              aria-label={i18n.t("snippetEditor.shortcut")}
-              aria-invalid={!!shortcutError}
-              aria-describedby={showShortcutHint ? shortcutHintId : undefined}
-              className={cn(
-                "h-7 w-auto min-w-[9ch] max-w-full shrink-0 overflow-hidden rounded-none border-0 border-b border-transparent bg-transparent px-0 text-center font-mono text-ui-xs! text-ellipsis whitespace-nowrap shadow-none transition-colors [field-sizing:content] hover:border-ring/60 focus-visible:border-ring focus-visible:ring-0 placeholder:text-muted-foreground",
-                shortcutError && "border-destructive"
-              )}
-            />
-            {showShortcutHint && (
-              <div
-                id={shortcutHintId}
-                role="tooltip"
-                data-testid={
-                  shortcutError
-                    ? "snippet-shortcut-error"
-                    : "snippet-shortcut-tip"
-                }
-                className={cn(
-                  "pointer-events-none absolute left-0 top-full z-30 mt-1 w-56 rounded-md border px-2 py-1 text-ui-micro! leading-snug shadow-md",
-                  shortcutError
-                    ? "border-destructive/30 bg-destructive/5 text-destructive"
-                    : "border-border bg-popover text-popover-foreground"
+            </Label>
+            <TooltipProvider>
+              <Tooltip open={showShortcutHint}>
+                <TooltipTrigger
+                  render={
+                    <Input
+                      id="snippet-shortcut"
+                      data-testid="snippet-shortcut-input"
+                      value={shortcutInput}
+                      onChange={(e) => handleShortcutChange(e.target.value)}
+                      placeholder={i18n.t("snippetEditor.shortcutPlaceholder")}
+                      aria-label={i18n.t("snippetEditor.shortcut")}
+                      aria-invalid={!!shortcutError}
+                      aria-describedby={
+                        showShortcutHint ? shortcutHintId : undefined
+                      }
+                      className={cn(
+                        "h-7 w-auto min-w-[9ch] max-w-full shrink-0 overflow-hidden rounded-none border-0 border-b border-transparent bg-transparent px-0 text-center font-mono text-ui-xs! text-ellipsis whitespace-nowrap shadow-none transition-colors [field-sizing:content] hover:border-ring/60 focus-visible:border-ring focus-visible:ring-0 placeholder:text-muted-foreground",
+                        shortcutError && "border-destructive"
+                      )}
+                    />
+                  }
+                />
+                {showShortcutHint && (
+                  <TooltipContent
+                    id={shortcutHintId}
+                    role="tooltip"
+                    data-testid={
+                      shortcutError
+                        ? "snippet-shortcut-error"
+                        : "snippet-shortcut-tip"
+                    }
+                    side="bottom"
+                    align="start"
+                    className={cn(
+                      "pointer-events-none w-56 max-w-none rounded-md border px-2 py-1 text-ui-micro! leading-snug shadow-md",
+                      shortcutError
+                        ? "border-destructive/30 bg-destructive/5 text-destructive"
+                        : "border-border bg-popover text-popover-foreground"
+                    )}
+                  >
+                    {shortcutError || i18n.t("snippetEditor.shortcutTip")}
+                  </TooltipContent>
                 )}
-              >
-                {shortcutError || i18n.t("snippetEditor.shortcutTip")}
-              </div>
-            )}
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
 

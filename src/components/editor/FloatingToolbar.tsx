@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { useFloatingToolbar, useFloatingToolbarState } from "@platejs/floating";
 import { useEditorRef, useEditorSelector } from "platejs/react";
@@ -181,7 +183,7 @@ export function FloatingToolbar({
     >
       {showLinkInput ? (
         <div className="flex items-center gap-1 px-1">
-          <input
+          <Input
             ref={linkInputRef}
             type="text"
             value={linkUrl}
@@ -194,7 +196,7 @@ export function FloatingToolbar({
               }, 150);
             }}
             placeholder={i18n.t("editor.toolbar.urlPlaceholder")}
-            className="h-6 w-40 text-xs px-1.5 bg-transparent border border-border rounded outline-none focus:border-indigo-500 dark:focus:border-indigo-400 text-foreground placeholder:text-muted-foreground"
+            className="h-6 w-40 min-w-0 rounded border border-border bg-transparent px-1.5 py-0 text-xs outline-none focus:border-indigo-500 focus-visible:border-indigo-500 focus-visible:ring-0 md:text-xs dark:bg-transparent dark:focus:border-indigo-400 dark:focus-visible:border-indigo-400 text-foreground placeholder:text-muted-foreground"
           />
           <Button
             variant="ghost"
@@ -274,7 +276,7 @@ export function FloatingToolbar({
           >
             <Icon icon={Code} stroke="emphasis" />
           </Button>
-          <div className="w-px h-4 bg-border mx-0.5" />
+          <Separator orientation="vertical" className="mx-0.5 h-4" />
           <Button
             variant="ghost"
             size="icon"
@@ -300,7 +302,7 @@ export function FloatingToolbar({
             )}
           </Button>
           {(onInsertImage || onInsertGif) && (
-            <div className="w-px h-4 bg-border mx-0.5" />
+            <Separator orientation="vertical" className="mx-0.5 h-4" />
           )}
           {onInsertImage && (
             <Button

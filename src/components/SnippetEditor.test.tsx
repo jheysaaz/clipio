@@ -699,7 +699,10 @@ describe("shortcut validation", () => {
     // The duplicate hint outlives focus; only changing the value dismisses it.
     const error = screen.getByTestId("snippet-shortcut-error");
     expect(error).toHaveTextContent("already used");
-    expect(error).toBeVisible();
+    // Base UI's positioner keeps opacity: 0 until layout in a real browser, so
+    // happy-dom cannot report the popup as visible. `data-open` is the
+    // primitive's own open-state contract.
+    expect(error).toHaveAttribute("data-open", "");
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
     expect(onAutoSave).toHaveBeenCalledWith(
       expect.objectContaining({ shortcut: "/valid" })
@@ -725,7 +728,11 @@ describe("shortcut validation", () => {
     fireEvent.change(screen.getByTestId("snippet-shortcut-input"), {
       target: { value: "/addr " },
     });
-    expect(screen.getByTestId("snippet-shortcut-error")).toBeVisible();
+    // The error outlives focus; see the data-open note in the duplicate test.
+    expect(screen.getByTestId("snippet-shortcut-error")).toHaveAttribute(
+      "data-open",
+      ""
+    );
 
     await user.clear(screen.getByTestId("snippet-shortcut-input"));
     await user.type(screen.getByTestId("snippet-shortcut-input"), "/home");

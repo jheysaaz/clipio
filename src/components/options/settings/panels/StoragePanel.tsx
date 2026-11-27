@@ -27,6 +27,7 @@ import { Cloud, CloudOff, HardDrive, TriangleAlert } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { Icon } from "@/components/ui/icon";
+import { Progress } from "@/components/ui/progress";
 import { useStorageStats } from "@/components/options/useStorageStats";
 import { SYNC_QUOTA } from "@/config/constants";
 import { cn } from "@/lib/utils";
@@ -169,21 +170,17 @@ function StorageFigure({
       <dt className="min-w-0 flex-1 text-xs text-muted-foreground">{label}</dt>
 
       {percent !== null && !loading && percent > 0 && (
-        <div
+        <Progress
           // Decorative: the same figure is stated numerically beside it, and a
           // second progressbar for the same value would be noise to a screen
           // reader. Hidden at 0% so an empty library shows no empty track.
           aria-hidden="true"
-          className="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-muted"
-        >
-          <div
-            className={cn(
-              "h-full rounded-full transition-[width]",
-              tone === "warn" ? "bg-amber-500" : "bg-primary"
-            )}
-            style={{ width: `${percent}%` }}
-          />
-        </div>
+          value={percent}
+          className={cn(
+            "w-20 shrink-0 gap-0 [&_[data-slot=progress-track]]:h-1.5 [&_[data-slot=progress-track]]:rounded-full [&_[data-slot=progress-track]]:bg-muted [&_[data-slot=progress-indicator]]:rounded-full",
+            tone === "warn" && "[&_[data-slot=progress-indicator]]:bg-amber-500"
+          )}
+        />
       )}
 
       <dd

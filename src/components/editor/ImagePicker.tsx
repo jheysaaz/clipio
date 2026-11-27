@@ -7,6 +7,9 @@ import {
 } from "react";
 import { Search, X, Upload } from "lucide-react";
 import { Icon } from "@/components/ui/icon";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import {
   useVirtualFloating,
@@ -63,7 +66,7 @@ function MediaThumb({
 
   if (!objectUrl) {
     return (
-      <div className="block w-full aspect-square rounded-sm border border-border bg-muted animate-pulse break-inside-avoid" />
+      <Skeleton className="block w-full aspect-square rounded-sm border border-border break-inside-avoid" />
     );
   }
 
@@ -302,7 +305,7 @@ export function ImagePicker({
       {/* Search header */}
       <div className="flex items-center gap-2 p-2 border-b border-border">
         <Icon icon={Search} className="text-muted-foreground shrink-0" />
-        <input
+        <Input
           ref={searchInputRef}
           type="text"
           value={query}
@@ -332,7 +335,7 @@ export function ImagePicker({
           </div>
         ) : loading ? (
           <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">
-            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            <Spinner />
           </div>
         ) : filtered.length === 0 && allImages.length === 0 ? (
           /* No images at all */
