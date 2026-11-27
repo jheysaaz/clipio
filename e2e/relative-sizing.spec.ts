@@ -160,8 +160,19 @@ test.describe("relative sizing and document editor", () => {
         theme === "dark" ? /dark/ : /^(?!.*\bdark\b).*$/
       );
       await popupPage.getByTestId("snippet-list-item").nth(1).click();
+      const selectedRow = popupPage.getByTestId("snippet-list-item").nth(1);
+      const restingFill = () =>
+        selectedRow.evaluate(
+          (element) => getComputedStyle(element).backgroundColor
+        );
+      const resting = await restingFill();
+      // Hovering the selected row used to swap in the ghost variant's hover
+      // fill, briefly making selection weaker than hover in both themes.
+      await selectedRow.hover();
+      await expect.poll(restingFill).toBe(resting);
       // Hover the other row so "stronger than hover" is measured, not assumed.
       await popupPage.getByTestId("snippet-list-item").nth(0).hover();
+      await expect.poll(restingFill).toBe(resting);
 
       const colours = await sampleColours(popupPage, {
         selected: "[data-testid='snippet-list-item'][aria-selected='true']",
