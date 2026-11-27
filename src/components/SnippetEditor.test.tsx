@@ -261,8 +261,11 @@ function stubTagWidths(available: number, each: number, more: number) {
   return () => rect.mockRestore();
 }
 
+let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
+
 beforeEach(() => {
   vi.clearAllMocks();
+  consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   writeQueueStore.setState(() => ({
     pending: 0,
     failed: 0,
@@ -287,6 +290,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  consoleErrorSpy?.mockRestore();
+  consoleErrorSpy = null;
   vi.useRealTimers();
 });
 
@@ -795,7 +800,7 @@ describe("autosave status", () => {
     expect(status).toBeEmptyDOMElement();
   });
 
-  it("shows a sticky retry status and announces a queued failure", () => {
+  it("shows a sticky retry status without a banner and logs the failure", async () => {
     queueOutcomesStore.setState(() => ({
       s1: {
         opId: "op-1",
@@ -814,8 +819,52 @@ describe("autosave status", () => {
 
     const status = screen.getByTestId("snippet-sync-status");
     expect(status).toHaveTextContent("Couldn't save · Retry");
-    expect(status.querySelector("button")).not.toBeNull();
-    expect(screen.getByRole("alert")).toHaveTextContent("Storage is full");
+    expect(status.querySelector("button")?.getAttribute("title")).toMatch(
+      /Storage is full/
+    );
+    expect(screen.queryByTestId("inline-error")).toBeNull();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Storage is full"
+    );
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[Clipio] snippet save failed",
+      expect.objectContaining({
+        snippetId: "s1",
+        opId: "op-1",
+        status: "refused",
+        error: "Storage is full",
+      })
+    );
+  });
+
+  it("translates a conflict token into hover copy instead of showing it", async () => {
+    queueOutcomesStore.setState(() => ({
+      s1: {
+        opId: "op-2",
+        snippetId: "s1",
+        status: "failed",
+        error: "conflict",
+      },
+    }));
+    writeQueueStore.setState(() => ({
+      pending: 0,
+      failed: 1,
+      refused: 0,
+      saving: false,
+    }));
+    renderView();
+
+    expect(screen.queryByTestId("inline-error")).toBeNull();
+    const retry = await screen.findByRole("button", {
+      name: "Couldn't save · Retry",
+    });
+    expect(retry.getAttribute("title")).toMatch(/A newer version/);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[Clipio] snippet save failed",
+      expect.objectContaining({
+        error: "A newer version of this snippet was saved first",
+      })
+    );
   });
 
   it("dismisses a failure and retries the pending draft", async () => {

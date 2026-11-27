@@ -119,3 +119,20 @@ export function draftFromForm(
     isNew: true,
   };
 }
+
+/**
+ * The draft a new create session may safely resume.
+ *
+ * A draft still marked `isNew` whose id is already in the library is not a
+ * recovery: its `baseRev: 0` predates the record's first commit, so enqueueing
+ * it makes the queue report a conflict with our own write. Ignoring it gives the
+ * next create a fresh id instead of silently editing the previous snippet.
+ */
+export function recoverableCreateDraft(
+  drafts: DraftMap | null | undefined,
+  stored: readonly Snippet[]
+): EditorDraft | null {
+  const recovered = Object.values(drafts ?? {}).find((item) => item.isNew);
+  if (!recovered) return null;
+  return stored.some((item) => item.id === recovered.id) ? null : recovered;
+}

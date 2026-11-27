@@ -5,6 +5,7 @@ import {
   fieldsFromForm,
   fieldsFromSnippet,
   hasMalformedMediaPlaceholder,
+  recoverableCreateDraft,
   validateEditorFields,
 } from "./snippet-draft";
 
@@ -121,5 +122,27 @@ describe("draft construction", () => {
       baseRev: 0,
       updatedAt: "2026-02-01T00:00:00.000Z",
     });
+  });
+});
+
+describe("recoverableCreateDraft", () => {
+  it("resumes a draft whose id has no stored record", () => {
+    const draft = draftFromForm("new-id", fields());
+    expect(recoverableCreateDraft({ "new-id": draft }, [snippet()])?.id).toBe(
+      "new-id"
+    );
+  });
+
+  it("refuses a draft whose id was already committed", () => {
+    const draft = draftFromForm("s1", fields());
+    // A keystroke after the create flush can leave this draft behind. Its
+    // revision zero no longer matches the record, so resuming it reports a
+    // conflict with our own write instead of starting a new snippet.
+    expect(recoverableCreateDraft({ s1: draft }, [snippet()])).toBeNull();
+  });
+
+  it("ignores saved drafts when looking for a new create", () => {
+    const saved = { ...draftFromForm("s1", fields()), isNew: false };
+    expect(recoverableCreateDraft({ s1: saved }, [])).toBeNull();
   });
 });

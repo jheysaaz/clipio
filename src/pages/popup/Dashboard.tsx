@@ -71,10 +71,13 @@ import { selectNewest } from "@/lib/snippet-utils";
 import {
   fieldsFromForm,
   fieldsFromSnippet,
+  recoverableCreateDraft,
   validateEditorFields,
 } from "@/lib/snippet-draft";
 import {
   discardDraft,
+  discardStaleCreateDraft,
+  discardUnflushedDraft,
   enqueueDelete,
   enqueueRestore,
   flushDraft,
@@ -716,6 +719,7 @@ export default function Dashboard() {
         // refreshed the library already, and an append would show the snippet
         // twice with stale metadata.
         await refreshSnippets();
+        await discardStaleCreateDraft(id, snippetsStore.state.snippets);
         snippetsStore.setState((prev) => ({
           ...prev,
           draft: { ...EMPTY_DRAFT },
@@ -749,7 +753,10 @@ export default function Dashboard() {
   ): Promise<{ id: string; draft: SnippetFormData }> => {
     if (content === undefined) {
       const drafts = await editorDraftsItem.getValue();
-      const recovered = Object.values(drafts ?? {}).find((item) => item.isNew);
+      const recovered = recoverableCreateDraft(
+        drafts,
+        snippetsStore.state.snippets
+      );
       if (recovered) {
         return {
           id: recovered.id,
@@ -761,6 +768,15 @@ export default function Dashboard() {
           },
         };
       }
+      // A new draft whose id was committed in an earlier session would make the
+      // next autosave an edit against revision zero — a conflict with our own
+      // write, not with another person. Clear it so it cannot be found again.
+      const stale = Object.values(drafts ?? {}).find(
+        (item) =>
+          item.isNew &&
+          snippetsStore.state.snippets.some((s) => s.id === item.id)
+      );
+      if (stale) await discardUnflushedDraft(stale.id);
     }
     return {
       id: crypto.randomUUID(),

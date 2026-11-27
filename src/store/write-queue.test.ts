@@ -54,6 +54,7 @@ vi.mock("@/storage/writer-id", () => ({
 import {
   clearCommittedFields,
   discardDraft,
+  discardStaleCreateDraft,
   discardUnflushedDraft,
   enqueueDelete,
   flushDraft,
@@ -260,6 +261,41 @@ describe("popup write queue", () => {
 
     expect(draft).toMatchObject({ id: "new-id", baseRev: 0, isNew: true });
     expect(state.drafts["new-id"]).toEqual(draft);
+  });
+
+  it("drops a create draft once its provisional id exists in the library", async () => {
+    await stageProvisionalDraft("s1", fields);
+    expect(writeQueueStore.state.saving).toBe(true);
+
+    await discardStaleCreateDraft("s1", [snippet]);
+    // The module-owned set of staged ids persists across tests; a refresh is
+    // what retires ids this document no longer has a draft for.
+    await refreshSyncStatus();
+
+    // The detail editor already shows the committed fields. Leaving this
+    // revision-zero draft would pin Saving on and conflict with our own commit
+    // the next time it is enqueued.
+    expect(state.drafts.s1).toBeUndefined();
+    expect(draftPreviewsStore.state.s1).toBeUndefined();
+    expect(writeQueueStore.state.saving).toBe(false);
+  });
+
+  it("keeps a create draft whose record has not committed yet", async () => {
+    await stageProvisionalDraft("new-id", fields);
+    const draft = state.drafts["new-id"];
+
+    await discardStaleCreateDraft("new-id", [snippet]);
+
+    expect(state.drafts["new-id"]).toEqual(draft);
+  });
+
+  it("keeps staged edits, which are not create drafts", async () => {
+    await stageEdit(snippet, fields);
+    const draft = state.drafts.s1;
+
+    await discardStaleCreateDraft("s1", [snippet]);
+
+    expect(state.drafts.s1).toEqual(draft);
   });
 
   it("undoes the last staged edit through the restore queue", async () => {

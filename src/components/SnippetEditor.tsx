@@ -236,6 +236,19 @@ export default function SnippetEditor({
   const queuedOutcome = useStore(queueOutcomesStore)[snippet.id];
   const outcome =
     queuedOutcome?.opId === dismissedOutcomeId ? undefined : queuedOutcome;
+  // The retry button replaces the old red banner. Its hover text is the only
+  // place the reason appears, so a raw backend token like "conflict" is mapped
+  // to copy a person can act on.
+  const outcomeMessage = outcome
+    ? outcome.error === "conflict"
+      ? i18n.t("snippetDetail.syncStatus.conflictDetail")
+      : (outcome.error ??
+        i18n.t(
+          outcome.status === "refused"
+            ? "snippetDetail.syncStatus.refused"
+            : "snippetDetail.syncStatus.failed"
+        ))
+    : null;
   const undoState = useStore(undoAvailabilityStore);
   const controlsForThisSnippet = !isDraft && undoState.snippetId === snippet.id;
   const canUndo = controlsForThisSnippet && undoState.canUndo;
@@ -375,6 +388,25 @@ export default function SnippetEditor({
   useEffect(() => {
     if (shortcutError) announceError(shortcutError);
   }, [shortcutError, announceError]);
+
+  useEffect(() => {
+    if (!outcome) return;
+    const detail =
+      outcome.error === "conflict"
+        ? i18n.t("snippetDetail.syncStatus.conflictDetail")
+        : (outcome.error ??
+          outcomeMessage ??
+          i18n.t("snippetDetail.errors.failedToSave"));
+    // The popup has no banner for queue failures now. Without this the only
+    // trace of a refused or conflicted write lived in background storage.
+    console.error("[Clipio] snippet save failed", {
+      snippetId: snippet.id,
+      opId: outcome.opId,
+      status: outcome.status,
+      error: detail,
+    });
+    announceError(detail);
+  }, [outcome, outcomeMessage, announceError, snippet.id]);
 
   useEffect(() => {
     if (isDraft) return;
@@ -957,9 +989,17 @@ export default function SnippetEditor({
                 className="text-destructive"
               />
               <InlineAction
+                data-testid="retry-save"
+                data-error-detail={outcomeMessage ?? undefined}
                 onClick={() => void handleRetry()}
                 aria-label={i18n.t("snippetDetail.syncStatus.failed")}
-                title={i18n.t("snippetEditor.retryTooltip")}
+                title={
+                  outcomeMessage
+                    ? i18n.t("snippetEditor.retryTooltipWithError", [
+                        outcomeMessage,
+                      ])
+                    : i18n.t("snippetEditor.retryTooltip")
+                }
                 className="text-destructive"
               >
                 {i18n.t("snippetDetail.syncStatus.failed")}
@@ -1058,19 +1098,7 @@ export default function SnippetEditor({
       </div>
 
       <InlineError
-        message={
-          isDraft
-            ? createError
-            : (actionError ??
-              (outcome
-                ? (outcome.error ??
-                  i18n.t(
-                    outcome.status === "refused"
-                      ? "snippetDetail.syncStatus.refused"
-                      : "snippetDetail.syncStatus.failed"
-                  ))
-                : null))
-        }
+        message={isDraft ? createError : actionError}
         onDismiss={() => {
           setActionError(null);
           if (outcome) setDismissedOutcomeId(outcome.opId);

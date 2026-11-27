@@ -94,6 +94,7 @@ snippetEditor:
   sidebarHideLabel: Hide sidebar
   sidebarShowLabel: Show sidebar
   retryTooltip: Retry the last save
+  retryTooltipWithError: "Retry the last save — $1"
 
 snippetDetail:
   deleteSnippet: Delete snippet
@@ -117,6 +118,7 @@ snippetDetail:
     saving: "Saving…"
     failed: "Couldn't save · Retry"
     refused: Storage full — changes kept locally
+    conflictDetail: A newer version of this snippet was saved first
   errors:
     failedToCopy: Failed to copy to clipboard
     failedToSave: Failed to save snippet. Please try again.
