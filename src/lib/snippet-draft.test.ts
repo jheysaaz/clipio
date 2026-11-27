@@ -89,9 +89,19 @@ describe("validateEditorFields", () => {
     });
   });
 
+  it("accepts an imported opaque media id", () => {
+    const body = `a {{image:media_1}} b {{gif:media-2:64}}`;
+    expect(validateEditorFields({ ...fields(), content: body }, [])).toEqual({
+      ok: true,
+    });
+  });
+
   it("rejects a malformed media placeholder", () => {
+    // Path separators cannot appear in an id: they would escape the archive
+    // path used by ZIP exports. This stays malformed even though opaque tokens
+    // like `media_1` are now valid.
     const result = validateEditorFields(
-      { ...fields(), content: `a {{image:not_a_uuid}}` },
+      { ...fields(), content: `a {{image:not/a/uuid}}` },
       []
     );
     expect(result.ok).toBe(false);

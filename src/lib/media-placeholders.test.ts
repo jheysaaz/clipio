@@ -25,6 +25,8 @@ import {
   extractImageIds,
   extractGifIds,
   stripMediaPlaceholders,
+  isValidMediaId,
+  remapMediaIds,
 } from "./media-placeholders";
 
 const UUID = "3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b";
@@ -64,9 +66,21 @@ describe("anchored patterns", () => {
     );
   });
 
+  it("accepts an imported opaque id", () => {
+    // ZIP imports accept ids like `media_1`; the grammar used to allow only
+    // hex UUIDs, so the blob restored but every snippet showed literal text.
+    expect(`{{image:media_1}}`.match(IMAGE_PLACEHOLDER_ANCHORED)?.[1]).toBe(
+      "media_1"
+    );
+    expect(`{{gif:media-2:64}}`.match(GIF_PLACEHOLDER_ANCHORED)?.[1]).toBe(
+      "media-2"
+    );
+  });
+
   it("does not match an id outside the charset", () => {
     // A loose charset would render a broken <img> where literal text is better.
-    expect(`{{image:not_a_uuid}}`.match(IMAGE_PLACEHOLDER_ANCHORED)).toBeNull();
+    expect(`{{image:not/a/uuid}}`.match(IMAGE_PLACEHOLDER_ANCHORED)).toBeNull();
+    expect(`{{image:not.a.uuid}}`.match(IMAGE_PLACEHOLDER_ANCHORED)).toBeNull();
   });
 
   it("does not match an empty id", () => {
@@ -273,5 +287,45 @@ describe("stripMediaPlaceholders", () => {
     expect(stripMediaPlaceholders(`{{image:${UUID}:200}}`)).toBe(
       stripMediaPlaceholders(`{{image:${UUID}}}`)
     );
+  });
+});
+
+describe("isValidMediaId", () => {
+  it("accepts the same opaque tokens the importer accepts", () => {
+    expect(isValidMediaId(UUID)).toBe(true);
+    expect(isValidMediaId("media_1")).toBe(true);
+    expect(isValidMediaId("a-b")).toBe(true);
+  });
+
+  it("rejects tokens that could escape a placeholder or archive path", () => {
+    expect(isValidMediaId("../escape")).toBe(false);
+    expect(isValidMediaId("a.b")).toBe(false);
+    expect(isValidMediaId("a:b")).toBe(false);
+    expect(isValidMediaId("a b")).toBe(false);
+    expect(isValidMediaId("a".repeat(65))).toBe(false);
+    expect(isValidMediaId(undefined)).toBe(false);
+  });
+});
+
+describe("remapMediaIds", () => {
+  it("re-points only the ids that were collapsed by dedup", () => {
+    const content = `before {{image:old-id:200}} {{gif:old-gif}} {{image:kept-id}} after`;
+    expect(
+      remapMediaIds(
+        content,
+        new Map([
+          ["old-id", "surviving-id"],
+          ["old-gif", "surviving-gif"],
+        ])
+      )
+    ).toBe(
+      "before {{image:surviving-id:200}} {{gif:surviving-gif}} {{image:kept-id}} after"
+    );
+  });
+
+  it("leaves the body alone when there is no mapping", () => {
+    const content = `{{image:${UUID}}}`;
+    expect(remapMediaIds(content, new Map())).toBe(content);
+    expect(remapMediaIds(content, new Map([["other", "new"]]))).toBe(content);
   });
 });

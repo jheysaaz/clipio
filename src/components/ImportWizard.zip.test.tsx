@@ -133,7 +133,9 @@ describe("ImportWizard — ZIP import", () => {
     vi.clearAllMocks();
     storedSnippets = [];
     bulkSaveSnippets.mockResolvedValue(undefined);
-    restoreMediaEntry.mockResolvedValue(undefined);
+    restoreMediaEntry.mockImplementation(
+      async (entry: { id: string }) => entry.id
+    );
   });
 
   afterEach(() => {
@@ -234,7 +236,7 @@ describe("ImportWizard — ZIP import", () => {
       })
     );
     restoreMediaEntry
-      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce("media-1")
       .mockRejectedValueOnce(new Error("IndexedDB quota"));
     await renderWizard();
     uploadZip();

@@ -217,7 +217,8 @@ describe("restoreMediaEntry", () => {
       createdAt: "2025-01-01T00:00:00.000Z",
       blob,
     };
-    await restoreMediaEntry(entry);
+    const restored = await restoreMediaEntry(entry);
+    expect(restored).toBe("restore-test-id");
     const fetched = await getMedia("restore-test-id");
     expect(fetched).not.toBeNull();
     expect(fetched!.id).toBe("restore-test-id");
@@ -825,9 +826,11 @@ describe("restoreMediaEntry (deduplication)", () => {
       ...original,
       id: "duplicate-id",
     };
-    await restoreMediaEntry(duplicate);
+    const restored = await restoreMediaEntry(duplicate);
 
-    // The duplicate ID must NOT exist
+    // The duplicate ID must NOT exist. The caller is told which id survived so
+    // snippet placeholders can be re-pointed instead of becoming orphaned.
+    expect(restored).toBe("original-id");
     expect(await getMedia("duplicate-id")).toBeNull();
     // The original still exists
     expect(await getMedia("original-id")).not.toBeNull();
