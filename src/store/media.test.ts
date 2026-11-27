@@ -1,20 +1,25 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { afterEach, describe, it, expect, beforeEach, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 
 import {
+  ALT_SAVED_FLASH_MS,
+  ALT_SAVE_DEBOUNCE_MS,
   buildReferenceMap,
   cancelDelete,
+  cancelPendingAltSaves,
   clearAltSaved,
   dismissDeleteError,
   dismissLoadError,
   disposeObjectUrls,
   findImageItem,
+  flushPendingAltSaves,
   loadMediaLibrary,
   mediaStore,
   removeMedia,
   requestDelete,
   resetMediaStoreForTests,
   saveAlt,
+  scheduleAltSave,
   setAltDraft,
   setViewMode,
   totalMediaBytes,
@@ -46,9 +51,9 @@ function makeMeta(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
   } as MediaMetadata;
 }
 
-function makeSnippet(content: string, label = "Snippet"): Snippet {
+function makeSnippet(content: string, label = "Snippet", id = label): Snippet {
   return {
-    id: label,
+    id,
     label,
     content,
     shortcut: "/" + label,
@@ -56,6 +61,10 @@ function makeSnippet(content: string, label = "Snippet"): Snippet {
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
+}
+
+function ref(id: string, label: string) {
+  return { id, label };
 }
 
 function state(): MediaState {
@@ -76,13 +85,20 @@ beforeEach(() => {
   backend.updateMediaAlt.mockResolvedValue(undefined);
 });
 
+afterEach(() => {
+  // The "Saved" flash is a real timer in the store. Leaving it running would
+  // mutate the next test's state after the reset.
+  cancelPendingAltSaves();
+  vi.useRealTimers();
+});
+
 // ---------------------------------------------------------------------------
 
 describe("buildReferenceMap", () => {
   it("maps an image to the snippets using it", () => {
     const content = "see {{image:a1b2c3d4:200}} here";
     expect(buildReferenceMap([makeSnippet(content, "Address")])).toEqual({
-      a1b2c3d4: ["Address"],
+      a1b2c3d4: [ref("Address", "Address")],
     });
   });
 
@@ -92,7 +108,10 @@ describe("buildReferenceMap", () => {
       makeSnippet("{{image:a1b2c3d4:100}}", "Letter"),
     ]);
 
-    expect(map["a1b2c3d4"]).toEqual(["Address", "Letter"]);
+    expect(map["a1b2c3d4"]).toEqual([
+      ref("Address", "Address"),
+      ref("Letter", "Letter"),
+    ]);
   });
 
   it("counts a snippet that uses the image twice only once", () => {
@@ -105,18 +124,21 @@ describe("buildReferenceMap", () => {
       ),
     ]);
 
-    expect(map["a1b2c3d4"]).toEqual(["Doc"]);
+    expect(map["a1b2c3d4"]).toEqual([ref("Doc", "Doc")]);
   });
 
-  it("deduplicates two snippets that share a label", () => {
-    // Real: users name snippets the same thing. Listing the label twice reads as
-    // two things at risk and is not.
+  it("keeps distinct snippets that share a label", () => {
+    // Real: users name snippets the same thing. They are still two different
+    // "Used in" links, so deduplicating on the label would lose a destination.
     const map = buildReferenceMap([
-      makeSnippet("{{image:a1b2c3d4:200}}", "Greeting"),
-      makeSnippet("{{image:a1b2c3d4:200}}", "Greeting"),
+      makeSnippet("{{image:a1b2c3d4:200}}", "Greeting", "g1"),
+      makeSnippet("{{image:a1b2c3d4:200}}", "Greeting", "g2"),
     ]);
 
-    expect(map["a1b2c3d4"]).toEqual(["Greeting"]);
+    expect(map["a1b2c3d4"]).toEqual([
+      ref("g1", "Greeting"),
+      ref("g2", "Greeting"),
+    ]);
   });
 
   it("maps several images independently", () => {
@@ -124,7 +146,10 @@ describe("buildReferenceMap", () => {
       makeSnippet("{{image:a1b2c3d4:200}}{{image:b2c3d4e5:200}}", "Both"),
     ]);
 
-    expect(map).toEqual({ a1b2c3d4: ["Both"], b2c3d4e5: ["Both"] });
+    expect(map).toEqual({
+      a1b2c3d4: [ref("Both", "Both")],
+      b2c3d4e5: [ref("Both", "Both")],
+    });
   });
 
   it("returns nothing for snippets with no images", () => {
@@ -194,7 +219,9 @@ describe("loadMediaLibrary", () => {
 
     await loadMediaLibrary();
 
-    expect(state().items[0].referencingSnippets).toEqual(["Address"]);
+    expect(state().items[0].referencingSnippets).toEqual([
+      ref("Address", "Address"),
+    ]);
   });
 
   it("revokes every object URL it created", async () => {
@@ -274,7 +301,7 @@ describe("alt text", () => {
     // their description was saved when it was not.
     expect(state().items[0].meta.alt).toBe("old");
     // And no "Saved" flash beside the error.
-    expect(state().altSaved.a).toBeUndefined();
+    expect(state().altSaved.a).toBe(false);
   });
 
   it("clears the flash", () => {
@@ -289,6 +316,160 @@ describe("alt text", () => {
     await saveAlt("never-edited");
 
     expect(backend.updateMediaAlt).toHaveBeenCalledWith("never-edited", "");
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("description autosave", () => {
+  beforeEach(() => {
+    seedItems([
+      {
+        meta: makeMeta({ id: "a", alt: "old" }),
+        objectUrl: null,
+        referencingSnippets: [],
+      },
+    ]);
+  });
+
+  it("writes only after the user stops typing", async () => {
+    vi.useFakeTimers();
+    setAltDraft("a", "typed description");
+    scheduleAltSave("a");
+
+    expect(backend.updateMediaAlt).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(ALT_SAVE_DEBOUNCE_MS);
+
+    expect(backend.updateMediaAlt).toHaveBeenCalledTimes(1);
+    expect(backend.updateMediaAlt).toHaveBeenCalledWith(
+      "a",
+      "typed description"
+    );
+    expect(state().items[0].meta.alt).toBe("typed description");
+  });
+
+  it("replaces a queued edit when another keystroke arrives", async () => {
+    vi.useFakeTimers();
+    setAltDraft("a", "first");
+    scheduleAltSave("a");
+    await vi.advanceTimersByTimeAsync(ALT_SAVE_DEBOUNCE_MS - 1);
+
+    setAltDraft("a", "second");
+    scheduleAltSave("a");
+    await vi.advanceTimersByTimeAsync(ALT_SAVE_DEBOUNCE_MS);
+
+    // Two drafts, one write: an intermediate save would flash "Saved" for text
+    // the user had already replaced.
+    expect(backend.updateMediaAlt).toHaveBeenCalledTimes(1);
+    expect(backend.updateMediaAlt).toHaveBeenCalledWith("a", "second");
+  });
+
+  it("commits a queued edit when Images unmounts instead of losing it", async () => {
+    vi.useFakeTimers();
+    setAltDraft("a", "last keystrokes");
+    scheduleAltSave("a");
+
+    await flushPendingAltSaves();
+
+    expect(backend.updateMediaAlt).toHaveBeenCalledTimes(1);
+    expect(backend.updateMediaAlt).toHaveBeenCalledWith("a", "last keystrokes");
+    expect(state().items[0].meta.alt).toBe("last keystrokes");
+    // The section is gone, so there is nobody to show a "Saved" check to.
+    expect(state().altSaved.a).toBe(false);
+
+    // The timer was consumed by the flush; it must not write a second time.
+    await vi.advanceTimersByTimeAsync(ALT_SAVE_DEBOUNCE_MS);
+    expect(backend.updateMediaAlt).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears a visible Saved flash when Images unmounts", async () => {
+    vi.useFakeTimers();
+    await saveAlt("a");
+    expect(state().altSaved.a).toBe(true);
+
+    await flushPendingAltSaves();
+    expect(state().altSaved.a).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(ALT_SAVED_FLASH_MS);
+    expect(state().altSaved.a).toBe(false);
+  });
+
+  it("does not light Saved when an old write lands after a remount", async () => {
+    let finishWrite = () => {};
+    const write = new Promise<void>((resolve) => {
+      finishWrite = resolve;
+    });
+    backend.updateMediaAlt.mockImplementationOnce(() => write);
+
+    setAltDraft("a", "in flight");
+    scheduleAltSave("a", 0);
+    await vi.waitFor(() => expect(backend.updateMediaAlt).toHaveBeenCalled());
+
+    // The section unmounted while the write was running; the next mount must
+    // still see the committed text, but no stale confirmation badge.
+    const flushed = flushPendingAltSaves();
+    finishWrite();
+    await flushed;
+
+    expect(state().items[0].meta.alt).toBe("in flight");
+    expect(state().altSaved.a).toBe(false);
+  });
+
+  it("waits for an in-flight write before a remount reads storage", async () => {
+    let finishWrite = () => {};
+    const write = new Promise<void>((resolve) => {
+      finishWrite = resolve;
+    });
+    backend.updateMediaAlt.mockImplementationOnce(() => write);
+
+    setAltDraft("a", "committed on switch");
+    scheduleAltSave("a", 0);
+    await vi.waitFor(() => expect(backend.updateMediaAlt).toHaveBeenCalled());
+
+    const remountLoad = flushPendingAltSaves().then(() => loadMediaLibrary());
+    backend.listMedia.mockResolvedValue([
+      makeMeta({ id: "a", alt: "committed on switch" }),
+    ]);
+    finishWrite();
+
+    await remountLoad;
+    expect(state().altDraft.a).toBe("committed on switch");
+  });
+
+  it("ignores an in-flight write cancelled by teardown", async () => {
+    let releaseStaleWrite = () => {};
+    backend.updateMediaAlt.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseStaleWrite = resolve;
+        })
+    );
+
+    setAltDraft("a", "stale");
+    scheduleAltSave("a", 0);
+    await vi.waitFor(() => expect(backend.updateMediaAlt).toHaveBeenCalled());
+
+    cancelPendingAltSaves();
+    setAltDraft("a", "fresh");
+    await expect(saveAlt("a")).resolves.toBe(true);
+    expect(state().items[0].meta.alt).toBe("fresh");
+
+    releaseStaleWrite();
+    await Promise.resolve();
+    await Promise.resolve();
+    // The late answer from the cancelled write must not roll the row back.
+    expect(state().items[0].meta.alt).toBe("fresh");
+  });
+
+  it("hides the saved indicator after its own timeout", async () => {
+    vi.useFakeTimers();
+    await saveAlt("a");
+    expect(state().altSaved.a).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(ALT_SAVED_FLASH_MS);
+
+    expect(state().altSaved.a).toBe(false);
   });
 });
 
@@ -364,10 +545,10 @@ describe("deleting", () => {
 // ---------------------------------------------------------------------------
 
 describe("view mode", () => {
-  it("starts as a list and switches", () => {
-    expect(state().viewMode).toBe("list");
-    setViewMode("grid");
+  it("starts as a grid and switches to the list", () => {
     expect(state().viewMode).toBe("grid");
+    setViewMode("list");
+    expect(state().viewMode).toBe("list");
   });
 });
 
@@ -427,12 +608,12 @@ describe("React bindings", () => {
       count: useMedia((s) => s.items.length),
     }));
 
-    expect(result.current.viewMode).toBe("list");
+    expect(result.current.viewMode).toBe("grid");
     expect(result.current.count).toBe(0);
 
-    act(() => setViewMode("grid"));
+    act(() => setViewMode("list"));
 
-    expect(result.current.viewMode).toBe("grid");
+    expect(result.current.viewMode).toBe("list");
 
     act(() =>
       mediaStore.setState((prev) => ({

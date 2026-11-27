@@ -116,14 +116,35 @@ const posix = (p) => p.split(sep).join("/");
  * The all-JavaScript and shared-chunk totals went down over the same change, so
  * those budgets are unchanged. All raised sizes were measured twice from clean
  * builds and did not vary.
+ *
+ * Raised a fourteenth time for the shadcn base-nova realignment. Dialog and
+ * Tooltip now use the registry's Portal, Backdrop and Positioner structure, and
+ * Alert, Spinner and Kbd replace hand-rolled chrome in the options and popup.
+ * That adds code to the shared chunks and therefore to the all-JavaScript total;
+ * the individual entry budgets do not move. Both raised sizes were measured
+ * twice from clean builds and did not vary.
+ *
+ * Raised a fifteenth time for the image-library redesign and snippet deep links.
+ * Debounced description writes live in the shared media store, the background
+ * handles the new popup message and route, and the options page carries the
+ * storage tile and reference links. The aggregate grows 869 bytes, the background
+ * 278, the content script 35 and the shared chunks 556; the popup and options
+ * entries stay below their existing budgets. All raised sizes were measured
+ * twice from clean builds and did not vary.
+ *
+ * Raised a sixteenth time for the image-description unmount fix. Flushing the
+ * debounced write on a section switch (and waiting for it before a remount reads
+ * storage) adds lifecycle bookkeeping to the shared media store. The aggregate
+ * and shared chunks grow 565 bytes each; the individual entries do not move.
+ * Both sizes were measured twice from clean builds and did not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_757_453 },
-  { name: "background entry", pattern: "background.js", maxBytes: 226_150 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_767_271 },
+  { name: "background entry", pattern: "background.js", maxBytes: 226_428 },
   {
     name: "content script entry",
     pattern: "content-scripts/content.js",
-    maxBytes: 918_507,
+    maxBytes: 918_542,
   },
   {
     name: "popup entry chunk",
@@ -140,7 +161,7 @@ const BUDGETS = [
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_613_348,
+    maxBytes: 1_622_301,
   },
 ];
 

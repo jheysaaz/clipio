@@ -56,6 +56,8 @@ export const MESSAGE = {
   SENTRY_TEST: "dev:sentry-test",
   /** Content script → background: forward a Sentry envelope past a page CSP. */
   SENTRY_RELAY: "sentry:relay",
+  /** Options page → background: open the popup on one specific snippet. */
+  POPUP_SNIPPET: "popup:open-snippet",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -77,6 +79,8 @@ export type MediaGetResponse = {
   alt: string | null;
 };
 
+export type PopupSnippetPayload = { snippetId: string };
+
 export type SentryRelayPayload = { envelope: string };
 
 export type SentryRelayResponse = { ok: boolean };
@@ -95,6 +99,7 @@ export type ClipioProtocol = {
   [MESSAGE.CONTENT_PING]: () => PingResponse;
   [MESSAGE.SENTRY_TEST]: () => void;
   [MESSAGE.SENTRY_RELAY]: (data: SentryRelayPayload) => SentryRelayResponse;
+  [MESSAGE.POPUP_SNIPPET]: (data: PopupSnippetPayload) => { ok: true };
 };
 
 export type MessageType = keyof ClipioProtocol;

@@ -43,6 +43,20 @@ describe("viewFromPath", () => {
     });
   });
 
+  it("decodes an encoded id from a Used in link", () => {
+    // Imported ids can contain `/`, `?` and `#`; the options page encodes them
+    // before asking the popup to open one.
+    expect(viewFromPath("/snippet/a%2Fb%3Fc%23d")).toEqual({
+      kind: "snippet",
+      id: "a/b?c#d",
+    });
+  });
+
+  it("falls back to the list when an id has a broken escape", () => {
+    // A malformed path must not become a selection for an invented snippet id.
+    expect(viewFromPath("/snippet/%E0%A4%A")).toEqual({ kind: "list" });
+  });
+
   it("falls back to the list for the root and for unknown paths", () => {
     expect(viewFromPath("/")).toEqual({ kind: "list" });
     expect(viewFromPath("")).toEqual({ kind: "list" });
@@ -93,5 +107,17 @@ describe("the assembled popup tree", () => {
       (m) => m.routeId === (SNIPPET_ROUTE as unknown as string)
     );
     expect(match?.params).toMatchObject({ snippetId: "xyz" });
+  });
+
+  it("decodes an encoded id the same way the router does", async () => {
+    const path = "/snippet/a%2Fb";
+    const router = makeRouter(path);
+    await router.load();
+    const match = router.state.matches.find(
+      (m) => m.routeId === (SNIPPET_ROUTE as unknown as string)
+    );
+
+    expect(match?.params).toMatchObject({ snippetId: "a/b" });
+    expect(viewFromPath(path)).toEqual({ kind: "snippet", id: "a/b" });
   });
 });

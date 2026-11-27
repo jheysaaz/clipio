@@ -8,6 +8,7 @@ import {
   POPUP_NEW_ROUTE,
   popupHashRoute,
   popupRouteForAction,
+  popupRouteForSnippet,
   resolveContextMenuAction,
   type ContextMenuAction,
 } from "./context-menu";
@@ -18,7 +19,12 @@ import { i18n } from "#i18n";
 // would bundle React into the service worker. The test can afford the import, and
 // being able to afford it is the whole point — the route the menu names is checked
 // against the router that has to answer for it.
-import { NEW_ROUTE, popupRouteTree, viewFromPath } from "@/routes/popup";
+import {
+  NEW_ROUTE,
+  SNIPPET_ROUTE,
+  popupRouteTree,
+  viewFromPath,
+} from "@/routes/popup";
 // The same arrangement for the options routes, which pull in the options shell.
 import {
   legacyHashRedirect,
@@ -354,6 +360,43 @@ describe("resolveContextMenuAction", () => {
         expect(action.kind, click.menuItemId).toBe("none");
         expect(popupRouteForAction(action), click.menuItemId).toBe(null);
       }
+    });
+  });
+
+  describe("popupRouteForSnippet", () => {
+    it("names the route the popup resolves to that snippet", async () => {
+      const route = popupRouteForSnippet("snippet-1");
+
+      expect(route).toBe("/snippet/snippet-1");
+      expect(route.startsWith("#")).toBe(false);
+      expect(viewFromPath(route)).toEqual({
+        kind: "snippet",
+        id: "snippet-1",
+      });
+
+      const router = createRouter({
+        routeTree: popupRouteTree,
+        history: createMemoryHistory({ initialEntries: [route] }),
+      });
+      await router.load();
+      expect(router.state.matches.map((m) => m.routeId)).toContain(
+        SNIPPET_ROUTE as unknown as string
+      );
+    });
+
+    it("encodes ids that would otherwise change the route", () => {
+      // Imported snippets keep their ids, and the schema permits reserved path
+      // characters. Concatenating one here would point at a different snippet.
+      const route = popupRouteForSnippet("a/b?c#d");
+
+      expect(route).toBe("/snippet/a%2Fb%3Fc%23d");
+      expect(viewFromPath(route)).toEqual({ kind: "snippet", id: "a/b?c#d" });
+    });
+
+    it("refuses to build a route for an empty id", () => {
+      // A link with no id would open the last-viewed snippet — the bug this
+      // whole deep-link path exists to avoid.
+      expect(() => popupRouteForSnippet("")).toThrow("without a snippet id");
     });
   });
 

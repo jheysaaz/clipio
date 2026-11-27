@@ -1,28 +1,103 @@
-import { useEffect } from "react";
+import { Fragment, useEffect } from "react";
 import { Images, LayoutList, LayoutGrid, Trash2, Check } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { InlineError } from "@/components/ui/inline-error";
 import { MEDIA_LIMITS } from "@/config/constants";
+import { formatBytes } from "@/components/options/settings/panels/StoragePanel";
+import { MESSAGE, sendMessage } from "@/lib/protocol";
+import { captureError } from "@/lib/sentry";
 import {
   cancelDelete,
+  flushPendingAltSaves,
   dismissLoadError,
-  clearAltSaved,
   disposeObjectUrls,
   findImageItem,
   loadMediaLibrary,
   removeMedia,
   requestDelete,
-  saveAlt,
+  scheduleAltSave,
   setAltDraft,
   setViewMode,
   totalMediaBytes,
   useMedia,
+  type SnippetReference,
 } from "@/store/media";
 import { i18n } from "#i18n";
+
+/**
+ * Follow a "Used in" link into the popup.
+ *
+ * The options page cannot open its own popup, so the request goes through the
+ * background: it owns both the route handoff and the tab fallback for browsers
+ * that refuse `openPopup()`. The href is the same destination for a middle-click
+ * or a copy-link, not a second implementation of the navigation.
+ */
+function openSnippetInPopup(snippetId: string): void {
+  void sendMessage(MESSAGE.POPUP_SNIPPET, { snippetId }).catch(
+    (err: unknown) => {
+      captureError(err, { action: "images.openSnippet", snippetId });
+    }
+  );
+}
+
+function ReferencedBy({
+  references,
+}: {
+  references: readonly SnippetReference[];
+}) {
+  if (references.length === 0) {
+    return (
+      <span className="italic">{i18n.t("options.images.noReferences")}</span>
+    );
+  }
+
+  return (
+    <>
+      {i18n.t("options.images.referencedBy")}{" "}
+      {references.map((reference, index) => (
+        <Fragment key={reference.id}>
+          {index > 0 && ", "}
+          <a
+            href={`/popup.html#/snippet/${encodeURIComponent(reference.id)}`}
+            className="underline decoration-muted-foreground/50 underline-offset-2 hover:text-foreground"
+            onClick={(event) => {
+              event.preventDefault();
+              openSnippetInPopup(reference.id);
+            }}
+          >
+            {reference.label}
+          </a>
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+function SavedIndicator({ id }: { id: string }) {
+  return (
+    <span
+      data-testid={`image-saved-${id}`}
+      role="status"
+      aria-label={i18n.t("options.row.saved")}
+      title={i18n.t("options.row.saved")}
+      className="flex size-6 shrink-0 items-center justify-center text-green-600 dark:text-green-400"
+    >
+      <Icon icon={Check} stroke="emphasis" />
+    </span>
+  );
+}
 
 export function ImagesSection() {
   const items = useMedia((s) => s.items);
@@ -35,34 +110,24 @@ export function ImagesSection() {
   const altSaved = useMedia((s) => s.altSaved);
   const altErrors = useMedia((s) => s.altErrors);
 
-  const handleSaveAlt = async (id: string) => {
-    const saved = await saveAlt(id);
-    if (!saved) return;
-    // The "Saved" flash, on a timer. Kept here rather than in the store because it
-    // is a presentation concern with no state of its own beyond the flag, and a
-    // store holding a timer would keep it alive past unmount.
-    setTimeout(() => clearAltSaved(id), 2000);
-  };
-
-  // The load owns its object URLs now, and so does the teardown.
-  //
-  // `disposeObjectUrls` revokes every URL the store created rather than the ones
-  // a `useRef` happened to be holding when the component went away. The ref could
-  // not: a load that resolved after unmount created URLs nobody would ever revoke,
-  // pinning the blobs in memory for the life of the document.
+  // The load owns its object URLs and the description timers now, so teardown
+  // has to release both. A load resolving after unmount would otherwise create
+  // URLs nobody revokes; a queued description write must be committed, not
+  // dropped, because switching sections keeps the store alive.
   useEffect(() => {
     void loadMediaLibrary();
-    return () => disposeObjectUrls();
+    return () => {
+      disposeObjectUrls();
+      void flushPendingAltSaves();
+    };
   }, []);
 
   const totalBytes = totalMediaBytes(items);
-
-  const totalKB = (totalBytes / 1024).toFixed(1);
-  const maxKB = (MEDIA_LIMITS.MAX_TOTAL_SIZE / 1024).toFixed(0);
   const totalPercent = Math.min(
     100,
     Math.round((totalBytes / MEDIA_LIMITS.MAX_TOTAL_SIZE) * 100)
   );
+  const storageTight = totalPercent >= 80;
 
   const confirmItem = findImageItem(items, confirmDeleteId);
 
@@ -110,28 +175,37 @@ export function ImagesSection() {
       </div>
 
       {!loading && items.length > 0 && (
-        <div className="rounded-xl border p-4 space-y-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
-              <Icon icon={Images} className="text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">
-                {i18n.t("options.images.totalStorage")}
-              </span>
-            </div>
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {totalKB} / {maxKB} KB
-            </span>
-          </div>
+        <dl
+          data-testid="image-total-storage"
+          className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/30 p-4"
+        >
+          <Icon
+            icon={Images}
+            className="size-4 shrink-0 text-muted-foreground"
+          />
+          <dt className="min-w-0 flex-1 text-xs text-muted-foreground">
+            {i18n.t("options.images.totalStorage")}
+          </dt>
           <Progress
             value={totalPercent}
             aria-label={i18n.t("options.images.totalStorage")}
             className={cn(
-              totalPercent >= 80
-                ? "[&>div]:bg-amber-500"
-                : "[&>div]:bg-indigo-500 dark:[&>div]:bg-indigo-400"
+              "w-20 shrink-0 gap-0 [&_[data-slot=progress-track]]:h-1.5 [&_[data-slot=progress-track]]:rounded-full [&_[data-slot=progress-track]]:bg-muted [&_[data-slot=progress-indicator]]:rounded-full",
+              storageTight && "[&_[data-slot=progress-indicator]]:bg-amber-500"
             )}
           />
-        </div>
+          <dd className="w-28 shrink-0 text-right text-xs tabular-nums text-foreground">
+            {formatBytes(totalBytes)} /{" "}
+            {formatBytes(MEDIA_LIMITS.MAX_TOTAL_SIZE)}
+          </dd>
+          <dd className="w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+            {i18n.t("options.storage.roomLeft", [
+              formatBytes(
+                Math.max(0, MEDIA_LIMITS.MAX_TOTAL_SIZE - totalBytes)
+              ),
+            ])}
+          </dd>
+        </dl>
       )}
 
       {loadError && (
@@ -143,8 +217,8 @@ export function ImagesSection() {
       )}
 
       {loading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-foreground" />
+        <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+          <Spinner className="size-4" />
           {i18n.t("options.images.loading")}
         </div>
       )}
@@ -209,47 +283,23 @@ export function ImagesSection() {
                     <span>{sizeKB} KB</span>
                   </div>
                   <p className="text-ui-micro! text-muted-foreground">
-                    {item.referencingSnippets.length > 0 ? (
-                      i18n.t("options.images.referencedBy", [
-                        item.referencingSnippets.join(", "),
-                      ])
-                    ) : (
-                      <span className="italic">
-                        {i18n.t("options.images.noReferences")}
-                      </span>
-                    )}
+                    <ReferencedBy references={item.referencingSnippets} />
                   </p>
                   <div className="flex items-center gap-1.5 pt-0.5">
                     <Input
                       type="text"
                       value={altDraft[item.meta.id] ?? ""}
-                      onChange={(e) =>
-                        setAltDraft(item.meta.id, e.target.value)
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleSaveAlt(item.meta.id);
+                      onChange={(e) => {
+                        setAltDraft(item.meta.id, e.target.value);
+                        scheduleAltSave(item.meta.id);
                       }}
                       placeholder={i18n.t("options.images.altText.placeholder")}
-                      aria-label={i18n.t("options.images.altText.label")}
+                      aria-label={`${i18n.t("options.images.altText.label")} ${item.meta.id}`}
                       className="h-7 text-ui-micro! flex-1"
                     />
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="shrink-0 h-7 text-ui-micro! px-2"
-                      onClick={() => handleSaveAlt(item.meta.id)}
-                    >
-                      {altSaved[item.meta.id] ? (
-                        <Icon
-                          icon={Check}
-                          stroke="emphasis"
-                          className="text-green-500"
-                        />
-                      ) : (
-                        i18n.t("common.save")
-                      )}
-                    </Button>
+                    {altSaved[item.meta.id] && (
+                      <SavedIndicator id={item.meta.id} />
+                    )}
                   </div>
                   {altErrors[item.meta.id] && (
                     <p className="text-ui-micro! text-red-600 dark:text-red-400">
@@ -337,47 +387,23 @@ export function ImagesSection() {
                     )}
                   </div>
                   <p className="text-ui-micro! text-muted-foreground truncate">
-                    {item.referencingSnippets.length > 0 ? (
-                      i18n.t("options.images.referencedBy", [
-                        item.referencingSnippets.join(", "),
-                      ])
-                    ) : (
-                      <span className="italic">
-                        {i18n.t("options.images.noReferences")}
-                      </span>
-                    )}
+                    <ReferencedBy references={item.referencingSnippets} />
                   </p>
                   <div className="flex items-center gap-1 pt-0.5">
                     <Input
                       type="text"
                       value={altDraft[item.meta.id] ?? ""}
-                      onChange={(e) =>
-                        setAltDraft(item.meta.id, e.target.value)
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleSaveAlt(item.meta.id);
+                      onChange={(e) => {
+                        setAltDraft(item.meta.id, e.target.value);
+                        scheduleAltSave(item.meta.id);
                       }}
                       placeholder={i18n.t("options.images.altText.placeholder")}
-                      aria-label={i18n.t("options.images.altText.label")}
+                      aria-label={`${i18n.t("options.images.altText.label")} ${item.meta.id}`}
                       className="h-6 text-ui-micro! flex-1 px-1.5"
                     />
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="shrink-0 h-6 text-ui-micro! px-1.5"
-                      onClick={() => handleSaveAlt(item.meta.id)}
-                    >
-                      {altSaved[item.meta.id] ? (
-                        <Icon
-                          icon={Check}
-                          stroke="emphasis"
-                          className="text-green-500"
-                        />
-                      ) : (
-                        i18n.t("common.save")
-                      )}
-                    </Button>
+                    {altSaved[item.meta.id] && (
+                      <SavedIndicator id={item.meta.id} />
+                    )}
                   </div>
                   {altErrors[item.meta.id] && (
                     <p className="text-ui-micro! text-red-600 dark:text-red-400">
@@ -397,20 +423,15 @@ export function ImagesSection() {
       )}
 
       {confirmItem && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 dark:bg-black/60 flex items-center justify-center p-4"
-          onKeyDown={(e) => {
-            if (e.key === "Escape") cancelDelete();
+        <AlertDialog
+          open
+          onOpenChange={(next) => {
+            if (!next) cancelDelete();
           }}
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-confirm-title"
-            className="bg-background rounded-xl border shadow-xl w-full max-w-sm p-6 space-y-4"
-          >
+          <AlertDialogContent className="max-w-sm p-6">
             <div className="flex items-start gap-3">
-              <div className="shrink-0 h-8 w-8 rounded-full bg-red-100 dark:bg-red-950/40 flex items-center justify-center">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/40">
                 <Icon
                   icon={Trash2}
                   size="lg"
@@ -418,25 +439,25 @@ export function ImagesSection() {
                 />
               </div>
               <div className="space-y-1">
-                <h3
+                <AlertDialogTitle
                   id="delete-confirm-title"
                   className="text-sm font-semibold text-foreground"
                 >
                   {i18n.t("options.images.deleteConfirmTitle")}
-                </h3>
-                <p className="text-xs text-muted-foreground">
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-xs">
                   {confirmItem.referencingSnippets.length > 0
                     ? i18n.t("options.images.deleteConfirmMessage", [
                         confirmItem.referencingSnippets.length,
                       ])
                     : i18n.t("options.images.deleteConfirmMessageNoRefs")}
-                </p>
+                </AlertDialogDescription>
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button size="sm" variant="outline" onClick={cancelDelete}>
+              <AlertDialogCancel size="sm">
                 {i18n.t("common.cancel")}
-              </Button>
+              </AlertDialogCancel>
               <Button
                 size="sm"
                 variant="destructive"
@@ -445,8 +466,8 @@ export function ImagesSection() {
                 {i18n.t("options.images.deleteButton")}
               </Button>
             </div>
-          </div>
-        </div>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </div>
   );

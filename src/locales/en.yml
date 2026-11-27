@@ -363,7 +363,7 @@ options:
     deleteConfirmTitle: Delete image?
     deleteConfirmMessage: "Deleting this image will break $1 snippet(s) that reference it. This action cannot be undone."
     deleteConfirmMessageNoRefs: This action cannot be undone.
-    referencedBy: "Used in: $1"
+    referencedBy: "Used in:"
     noReferences: Not used in any snippets
     dimensions: "$1 × $2"
     errors:

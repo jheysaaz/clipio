@@ -357,7 +357,7 @@ options:
     deleteConfirmTitle: "¿Eliminar imagen?"
     deleteConfirmMessage: "Eliminar esta imagen romperá $1 fragmento(s) que la referencian. Esta acción no se puede deshacer."
     deleteConfirmMessageNoRefs: Esta acción no se puede deshacer.
-    referencedBy: "Usada en: $1"
+    referencedBy: "Usada en:"
     noReferences: No se usa en ningún fragmento
     dimensions: "$1 × $2"
     errors:

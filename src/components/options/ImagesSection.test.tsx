@@ -2,15 +2,24 @@
  * Direct tests for the images library surface.
  *
  * The component itself owns no store state, but it owns the presentation
- * branches that matter: which view renders, when the delete dialog opens, how
- * alt-text saves are confirmed, and which errors are visible. Those branches
- * are driven here against a controlled store fixture.
+ * branches that matter: which view renders, what a "Used in" link does, how a
+ * description autosave is requested, and which errors are visible. Those
+ * branches are driven here against a controlled store fixture.
  */
 
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { i18n } from "#i18n";
 import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+type MockReference = { id: string; label: string };
 
 type MockImageItem = {
   meta: {
@@ -24,7 +33,7 @@ type MockImageItem = {
     alt?: string;
   };
   objectUrl: string | null;
-  referencingSnippets: string[];
+  referencingSnippets: MockReference[];
 };
 
 type MockState = {
@@ -45,7 +54,8 @@ const emptyState = (): MockState => ({
   loadError: null,
   deleteErrors: {},
   confirmDeleteId: null,
-  viewMode: "list",
+  // Matches the store default: thumbnails are the first thing the user sees.
+  viewMode: "grid",
   altDraft: {},
   altSaved: {},
   altErrors: {},
@@ -58,41 +68,49 @@ const mocks = vi.hoisted(() => ({
     loadError: null,
     deleteErrors: {},
     confirmDeleteId: null,
-    viewMode: "list",
+    viewMode: "grid" as const,
     altDraft: {},
     altSaved: {},
     altErrors: {},
   } as MockState,
   loadMediaLibrary: vi.fn().mockResolvedValue(undefined),
   disposeObjectUrls: vi.fn(),
+  flushPendingAltSaves: vi.fn().mockResolvedValue(undefined),
   dismissLoadError: vi.fn(),
-  clearAltSaved: vi.fn(),
   removeMedia: vi.fn().mockResolvedValue(undefined),
   requestDelete: vi.fn(),
   cancelDelete: vi.fn(),
-  saveAlt: vi.fn().mockResolvedValue(true),
+  scheduleAltSave: vi.fn(),
   setAltDraft: vi.fn(),
   setViewMode: vi.fn(),
+  sendMessage: vi.fn().mockResolvedValue({ ok: true }),
+  captureError: vi.fn(),
 }));
 
 vi.mock("@/store/media", () => ({
   useMedia: (selector: (state: MockState) => unknown) => selector(mocks.state),
   loadMediaLibrary: mocks.loadMediaLibrary,
   disposeObjectUrls: mocks.disposeObjectUrls,
+  flushPendingAltSaves: mocks.flushPendingAltSaves,
   dismissLoadError: mocks.dismissLoadError,
-  clearAltSaved: mocks.clearAltSaved,
   findImageItem: (items: MockImageItem[], id: string | null) =>
     items.find((item) => item.meta.id === id),
-  loadMedia: mocks.loadMediaLibrary,
   removeMedia: mocks.removeMedia,
   requestDelete: mocks.requestDelete,
   cancelDelete: mocks.cancelDelete,
-  saveAlt: mocks.saveAlt,
+  scheduleAltSave: mocks.scheduleAltSave,
   setAltDraft: mocks.setAltDraft,
   setViewMode: mocks.setViewMode,
   totalMediaBytes: (items: MockImageItem[]) =>
     items.reduce((sum, item) => sum + item.meta.size, 0),
 }));
+
+vi.mock("@/lib/protocol", () => ({
+  MESSAGE: { POPUP_SNIPPET: "popup:open-snippet" },
+  sendMessage: mocks.sendMessage,
+}));
+
+vi.mock("@/lib/sentry", () => ({ captureError: mocks.captureError }));
 
 vi.mock("@/components/ui/icon", () => ({
   Icon: ({
@@ -126,7 +144,7 @@ function item(overrides: Partial<MockImageItem> = {}): MockImageItem {
       createdAt: "2026-01-01T00:00:00.000Z",
     },
     objectUrl: "blob:preview",
-    referencingSnippets: ["Greeting"],
+    referencingSnippets: [{ id: "snippet-1", label: "Greeting" }],
     ...overrides,
   };
 }
@@ -135,61 +153,52 @@ function setState(patch: Partial<MockState>) {
   mocks.state = { ...mocks.state, ...patch };
 }
 
-const nativeSetTimeout = globalThis.setTimeout;
-let timeoutSpy: ReturnType<typeof vi.spyOn> | undefined;
-let savedFlashTimers: Array<() => void> = [];
+function altField(id = "img-1") {
+  return screen.getByRole("textbox", {
+    name: `${i18n.t("options.images.altText.label")} ${id}`,
+  });
+}
 
 beforeEach(() => {
   mocks.state = emptyState();
-  savedFlashTimers = [];
   for (const fn of [
     mocks.loadMediaLibrary,
     mocks.disposeObjectUrls,
+    mocks.flushPendingAltSaves,
     mocks.dismissLoadError,
-    mocks.clearAltSaved,
     mocks.removeMedia,
     mocks.requestDelete,
     mocks.cancelDelete,
-    mocks.saveAlt,
+    mocks.scheduleAltSave,
     mocks.setAltDraft,
     mocks.setViewMode,
+    mocks.sendMessage,
+    mocks.captureError,
   ]) {
     fn.mockReset();
   }
   mocks.loadMediaLibrary.mockResolvedValue(undefined);
   mocks.removeMedia.mockResolvedValue(undefined);
-  mocks.saveAlt.mockResolvedValue(true);
-
-  // Hold the component's 2000ms "Saved" reset so the test can fire it itself;
-  // leave every other timer (including Testing Library's) untouched.
-  timeoutSpy = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
-    handler: (...args: unknown[]) => void,
-    timeout?: number,
-    ...args: unknown[]
-  ) => {
-    if (timeout === 2000) {
-      savedFlashTimers.push(handler);
-      return 0 as unknown as ReturnType<typeof setTimeout>;
-    }
-    return nativeSetTimeout(handler, timeout, ...args);
-  }) as unknown as typeof setTimeout);
+  mocks.sendMessage.mockResolvedValue({ ok: true });
 });
 
 afterEach(() => {
-  timeoutSpy?.mockRestore();
-  timeoutSpy = undefined;
+  // No component timers are left running: the debounce and the saved flash both
+  // belong to the store now.
 });
 
 describe("ImagesSection", () => {
-  it("loads the library on mount and disposes object URLs on unmount", () => {
+  it("loads on mount and releases resources while flushing descriptions on unmount", () => {
     const { unmount } = renderSection();
 
     expect(mocks.loadMediaLibrary).toHaveBeenCalledTimes(1);
     expect(mocks.disposeObjectUrls).not.toHaveBeenCalled();
+    expect(mocks.flushPendingAltSaves).not.toHaveBeenCalled();
 
     unmount();
 
     expect(mocks.disposeObjectUrls).toHaveBeenCalledTimes(1);
+    expect(mocks.flushPendingAltSaves).toHaveBeenCalledTimes(1);
   });
 
   it("shows a loading state and no library actions", () => {
@@ -228,8 +237,9 @@ describe("ImagesSection", () => {
     expect(screen.queryByTestId("image-row-img-1")).not.toBeInTheDocument();
   });
 
-  it("lists images with previews, dimensions, references and errors", () => {
+  it("lists images with previews, dimensions, links and errors", () => {
     setState({
+      viewMode: "list",
       items: [
         item(),
         item({
@@ -247,7 +257,6 @@ describe("ImagesSection", () => {
         }),
       ],
       altDraft: { "img-1": "a cat" },
-      altSaved: { "img-1": true },
       altErrors: { "img-2": "Alt text too long" },
       deleteErrors: { "img-2": "Delete failed" },
     });
@@ -263,19 +272,14 @@ describe("ImagesSection", () => {
     expect(first).toHaveTextContent(
       i18n.t("options.images.dimensions", [640, 480])
     );
-    expect(first).toHaveTextContent(
-      i18n.t("options.images.referencedBy", ["Greeting"])
-    );
+    expect(first).toHaveTextContent(i18n.t("options.images.referencedBy"));
+    expect(within(first).getByRole("link", { name: "Greeting" })).toBeVisible();
     expect(second).toHaveTextContent(i18n.t("options.images.noReferences"));
     expect(second).toHaveTextContent("Alt text too long");
     expect(second).toHaveTextContent("Delete failed");
+    expect(altField("img-1")).toHaveValue("a cat");
     expect(
-      within(first).getByRole("textbox", {
-        name: i18n.t("options.images.altText.label"),
-      })
-    ).toHaveValue("a cat");
-    expect(
-      within(first).queryByRole("button", { name: i18n.t("common.save") })
+      screen.queryByRole("button", { name: i18n.t("common.save") })
     ).not.toBeInTheDocument();
     expect(within(first).getAllByTestId("mock-icon").length).toBeGreaterThan(0);
 
@@ -287,21 +291,72 @@ describe("ImagesSection", () => {
     expect(mocks.requestDelete).toHaveBeenCalledWith("img-1");
   });
 
-  it("switches between list and grid views", () => {
-    setState({ items: [item()] });
+  it("opens the referenced snippet in the popup from a Used in link", async () => {
+    setState({
+      items: [
+        item({
+          referencingSnippets: [
+            { id: "a/b?c", label: "Imported snippet" },
+            { id: "snippet-2", label: "Second" },
+          ],
+        }),
+      ],
+    });
 
-    const list = renderSection();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: i18n.t("options.images.viewGrid") })
-    );
-    expect(mocks.setViewMode).toHaveBeenCalledWith("grid");
-    list.unmount();
-
-    setState({ viewMode: "grid" });
     renderSection();
 
+    const links = screen.getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual([
+      "Imported snippet",
+      "Second",
+    ]);
+    expect(links[0]).toHaveAttribute("href", "/popup.html#/snippet/a%2Fb%3Fc");
+
+    await act(async () => {
+      fireEvent.click(links[0]);
+    });
+
+    expect(mocks.sendMessage).toHaveBeenCalledWith("popup:open-snippet", {
+      snippetId: "a/b?c",
+    });
+  });
+
+  it("reports a failed popup request instead of pretending the link worked", async () => {
+    mocks.sendMessage.mockRejectedValueOnce(new Error("no background"));
+    setState({ items: [item()] });
+
+    renderSection();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("link", { name: "Greeting" }));
+    });
+
+    await waitFor(() =>
+      expect(mocks.captureError).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({
+          action: "images.openSnippet",
+          snippetId: "snippet-1",
+        })
+      )
+    );
+  });
+
+  it("starts in grid view and switches between grid and list", () => {
+    setState({ items: [item()] });
+
+    const grid = renderSection();
     expect(screen.getByTestId("image-row-img-1")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: i18n.t("options.images.viewList") })
+    );
+    expect(mocks.setViewMode).toHaveBeenCalledWith("list");
+    grid.unmount();
+
+    setState({ viewMode: "list" });
+    renderSection();
+
     fireEvent.click(
       screen.getByRole("button", {
         name: `${i18n.t("options.images.deleteButton")} img-1`,
@@ -309,9 +364,9 @@ describe("ImagesSection", () => {
     );
     expect(mocks.requestDelete).toHaveBeenCalledWith("img-1");
     fireEvent.click(
-      screen.getByRole("button", { name: i18n.t("options.images.viewList") })
+      screen.getByRole("button", { name: i18n.t("options.images.viewGrid") })
     );
-    expect(mocks.setViewMode).toHaveBeenCalledWith("list");
+    expect(mocks.setViewMode).toHaveBeenCalledWith("grid");
   });
 
   it("reports storage use against the configured limit in both colour bands", () => {
@@ -323,6 +378,9 @@ describe("ImagesSection", () => {
         name: i18n.t("options.images.totalStorage"),
       })
     ).toHaveAttribute("aria-valuenow", "0");
+    expect(screen.getByTestId("image-total-storage")).toHaveTextContent(
+      "2 KB / 50 MB"
+    );
     unmount();
 
     const big = item();
@@ -335,61 +393,42 @@ describe("ImagesSection", () => {
         name: i18n.t("options.images.totalStorage"),
       })
     ).toHaveAttribute("aria-valuenow", "82");
-    expect(screen.getByText(/41984\.0 \/ 51200 KB/)).toBeInTheDocument();
+    expect(screen.getByTestId("image-total-storage")).toHaveTextContent(
+      "41 MB / 50 MB"
+    );
+    expect(screen.getByTestId("image-total-storage")).toHaveTextContent(
+      "9 MB free"
+    );
   });
 
-  it("saves alt text on click and on Enter, then clears the saved flash", async () => {
+  it("queues an autosave on each description change without a Save button", () => {
     setState({ items: [item()], altDraft: { "img-1": "new alt" } });
     renderSection();
 
-    const input = screen.getByRole("textbox", {
-      name: i18n.t("options.images.altText.label"),
-    });
+    const input = altField();
     fireEvent.change(input, { target: { value: "edited" } });
+
     expect(mocks.setAltDraft).toHaveBeenCalledWith("img-1", "edited");
-
-    const save = screen.getByRole("button", { name: i18n.t("common.save") });
-    await act(async () => {
-      fireEvent.click(save);
-      await Promise.resolve();
-    });
-
-    expect(mocks.saveAlt).toHaveBeenCalledWith("img-1");
-    expect(savedFlashTimers).toHaveLength(1);
-
-    await act(async () => {
-      savedFlashTimers[0]?.();
-    });
-    expect(mocks.clearAltSaved).toHaveBeenCalledWith("img-1");
-
-    await act(async () => {
-      fireEvent.keyDown(input, { key: "Enter" });
-      await Promise.resolve();
-    });
-    expect(mocks.saveAlt).toHaveBeenCalledTimes(2);
+    expect(mocks.scheduleAltSave).toHaveBeenCalledWith("img-1");
+    expect(
+      screen.queryByRole("button", { name: i18n.t("common.save") })
+    ).not.toBeInTheDocument();
   });
 
-  it("does not schedule a saved flash when the alt write fails", async () => {
-    mocks.saveAlt.mockResolvedValue(false);
-    setState({ items: [item()] });
+  it("shows a saved indicator only when the store reports a committed description", () => {
+    setState({ items: [item()], altSaved: { "img-1": true } });
     renderSection();
 
-    await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: i18n.t("common.save") })
-      );
-      await Promise.resolve();
-    });
-
-    expect(savedFlashTimers).toHaveLength(0);
-    expect(mocks.clearAltSaved).not.toHaveBeenCalled();
+    expect(screen.getByTestId("image-saved-img-1")).toHaveAccessibleName(
+      i18n.t("options.row.saved")
+    );
   });
 
   it("confirms deletion with the reference count and supports every exit", () => {
     setState({ items: [item()], confirmDeleteId: "img-1" });
     const { unmount } = renderSection();
 
-    const dialog = screen.getByRole("dialog");
+    const dialog = screen.getByRole("alertdialog");
     expect(dialog).toHaveTextContent(
       i18n.t("options.images.deleteConfirmMessage", [1])
     );
@@ -415,7 +454,7 @@ describe("ImagesSection", () => {
       confirmDeleteId: "img-1",
     });
     renderSection();
-    expect(screen.getByRole("dialog")).toHaveTextContent(
+    expect(screen.getByRole("alertdialog")).toHaveTextContent(
       i18n.t("options.images.deleteConfirmMessageNoRefs")
     );
   });
@@ -425,6 +464,6 @@ describe("ImagesSection", () => {
 
     renderSection();
 
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 });
