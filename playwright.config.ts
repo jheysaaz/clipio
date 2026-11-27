@@ -18,21 +18,23 @@ const extensionPath = path.resolve(".output/chrome-mv3");
 export default defineConfig({
   testDir: "e2e",
   timeout: 30_000,
-  // Tests run serially (workers: 1 — extensions share one browser context).
-  // A full green run measures around 4 minutes, but a run with several
-  // auto-retrying 5s assertions waiting out their timeouts reaches 5+ and the
-  // previous 5-minute budget died around test 102, so the tail never ran and
-  // the exit code was a false failure. 15 minutes leaves headroom for a slow
-  // CI machine while still failing a genuine hang. This is a wall-clock budget
-  // for the whole run, not a per-test allowance.
-  globalTimeout: 15 * 60 * 1_000,
+  // Every test gets its own persistent context and user-data dir (see
+  // e2e/fixtures.ts), so tests do not share extension state. Let Playwright use
+  // several browser processes; forcing workers: 1 made the suite pay the
+  // context-start cost 120 times in a row. E2E_WORKERS can lower this on a slow
+  // or CPU-constrained machine.
+  fullyParallel: true,
+  workers: Number(process.env.E2E_WORKERS ?? 4),
+  // Wall-clock budget for the whole run, not a per-test allowance. The pruned
+  // suite is far shorter than the old 120-test run, but CI machines can be
+  // slower than a laptop and a genuine hang must still fail the gate.
+  globalTimeout: 5 * 60 * 1_000,
   // Retries are disabled in CI as well as locally. A retry hides the flake
   // instead of fixing it, and this suite runs serially against a real browser
   // where a flake is always a real bug (AGENTS.md Testing Standards, rule 12).
   // If a test proves genuinely environment-dependent, fix the wait condition
   // or gate it on an explicit capability check — do not raise this number.
   retries: 0,
-  workers: 1, // Extensions share a single browser context — run serially
   reporter: process.env.CI
     ? [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]]
     : [

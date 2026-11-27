@@ -17,6 +17,8 @@ import {
   type BrowserContext,
   type Page,
 } from "@playwright/test";
+import { randomUUID } from "crypto";
+import fs from "fs/promises";
 import path from "path";
 import type { Snippet } from "../src/types/index.js";
 
@@ -124,15 +126,43 @@ export async function seedOnboardingState(
 export async function readOnboardingState(
   context: BrowserContext
 ): Promise<unknown> {
+  return withExtensionStorage(
+    context,
+    async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      const result = await ext.storage.local.get("guidedOnboarding");
+      return result.guidedOnboarding;
+    },
+    undefined
+  );
+}
+
+/**
+ * Run storage work in the background service worker.
+ *
+ * The old helper opened popup.html for every single seed/read/clear call. That
+ * is a page navigation, React hydration and a teardown per operation — often
+ * several per test — and none of it is needed to reach `chrome.storage`. MV3
+ * service workers have the same extension-origin storage permissions, so doing
+ * the work there removes the pointless page churn without changing what the
+ * test observes.
+ */
+async function withExtensionStorage<T, A>(
+  context: BrowserContext,
+  fn: (arg: A) => Promise<T>,
+  arg: A
+): Promise<T> {
   const worker =
     context.serviceWorkers()[0] ??
     (await context.waitForEvent("serviceworker", { timeout: 10_000 }));
-
-  return worker.evaluate(async () => {
-    const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-    const result = await ext.storage.local.get("guidedOnboarding");
-    return result.guidedOnboarding;
-  });
+  // Playwright's `Unboxed<A>` parameter type cannot express an unconstrained
+  // generic here; all callers pass plain serialisable values or arrays.
+  return (
+    worker.evaluate as unknown as (
+      pageFunction: (value: A) => Promise<T>,
+      value: A
+    ) => Promise<T>
+  )(fn, arg);
 }
 
 // ---------------------------------------------------------------------------
@@ -153,11 +183,13 @@ export const test = base.extend<ClipioFixtures>({
   ],
 
   // Persistent Chromium context with the extension loaded.
-  // We create a fresh context per test to guarantee isolation.
+  // We create a fresh context per test to guarantee isolation. A UUID, not a
+  // timestamp: with parallel workers several tests can start in the same
+  // millisecond, and a shared user-data dir would make them share state.
   // eslint-disable-next-line no-empty-pattern
   context: async ({}, use) => {
     const userDataDir = path.resolve(
-      `test-results/.playwright-user-data/${Date.now()}`
+      `test-results/.playwright-user-data/${randomUUID()}`
     );
     const ctx = await chromium.launchPersistentContext(userDataDir, {
       headless: true,
@@ -171,11 +203,14 @@ export const test = base.extend<ClipioFixtures>({
       ],
     });
 
-    // Grant clipboard permissions for the extension origin
-    await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
-
-    await use(ctx);
-    await ctx.close();
+    try {
+      // Grant clipboard permissions for the extension origin
+      await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
+      await use(ctx);
+    } finally {
+      await ctx.close();
+      await fs.rm(userDataDir, { recursive: true, force: true });
+    }
   },
 
   // Extension ID extracted from the service worker URL.
@@ -225,23 +260,14 @@ export const test = base.extend<ClipioFixtures>({
 
   // Storage helper utilities
   storageHelper: async (
-    { context, extensionId, onboardingState, onboardingFixture },
+    { context, onboardingState, onboardingFixture },
     use
   ) => {
-    // Get a background page or open the popup temporarily to access storage
-    // We execute storage operations via an extension page which has full access
-    const getExtPage = async (): Promise<Page> => {
-      const page = await context.newPage();
-      await page.goto(`chrome-extension://${extensionId}/popup.html`);
-      await page.waitForLoadState("domcontentloaded");
-      return page;
-    };
-
     const helper: StorageHelper = {
       seedSnippets: async (snippets: Snippet[]) => {
-        const page = await getExtPage();
-        try {
-          await page.evaluate(async (snips: Snippet[]) => {
+        await withExtensionStorage(
+          context,
+          async (snips: Snippet[]) => {
             // Write each snippet as snip:{id} in sync storage
             const syncEntries: Record<string, Snippet> = {};
             for (const s of snips) {
@@ -253,16 +279,15 @@ export const test = base.extend<ClipioFixtures>({
             await ext.storage.sync.set(syncEntries);
             // Also update the local cache used by the content script
             await ext.storage.local.set({ cachedSnippets: snips });
-          }, snippets);
-        } finally {
-          await page.close();
-        }
+          },
+          snippets
+        );
       },
 
       seedSyncOnly: async (snippets: Snippet[]) => {
-        const page = await getExtPage();
-        try {
-          await page.evaluate(async (snips: Snippet[]) => {
+        await withExtensionStorage(
+          context,
+          async (snips: Snippet[]) => {
             const syncEntries: Record<string, Snippet> = {};
             for (const s of snips) {
               syncEntries[`snip:${s.id}`] = s;
@@ -272,54 +297,48 @@ export const test = base.extend<ClipioFixtures>({
             // Deliberately NOT touching local:cachedSnippets — that is the
             // whole point: an external sync populates only storage.sync.
             await ext.storage.sync.set(syncEntries);
-          }, snippets);
-        } finally {
-          await page.close();
-        }
+          },
+          snippets
+        );
       },
 
-      readSyncSnippets: async (): Promise<Snippet[]> => {
-        const page = await getExtPage();
-        try {
-          return await page.evaluate(async () => {
+      readSyncSnippets: async (): Promise<Snippet[]> =>
+        withExtensionStorage(
+          context,
+          async () => {
             const ext =
               (globalThis as any).chrome ?? (globalThis as any).browser;
             const all = await ext.storage.sync.get(null);
             return Object.entries(all as Record<string, unknown>)
               .filter(([key]) => key.startsWith("snip:"))
               .map(([, value]) => value as Snippet);
-          });
-        } finally {
-          await page.close();
-        }
-      },
+          },
+          undefined
+        ),
 
-      readCachedSnippets: async (): Promise<Snippet[]> => {
-        const page = await getExtPage();
-        try {
-          return await page.evaluate(async () => {
+      readCachedSnippets: async (): Promise<Snippet[]> =>
+        withExtensionStorage(
+          context,
+          async () => {
             const ext =
               (globalThis as any).chrome ?? (globalThis as any).browser;
             const result = await ext.storage.local.get("cachedSnippets");
             return (result.cachedSnippets as Snippet[]) ?? [];
-          });
-        } finally {
-          await page.close();
-        }
-      },
+          },
+          undefined
+        ),
 
       clearAll: async () => {
-        const page = await getExtPage();
-        try {
-          await page.evaluate(async () => {
+        await withExtensionStorage(
+          context,
+          async () => {
             const ext =
               (globalThis as any).chrome ?? (globalThis as any).browser;
             await ext.storage.sync.clear();
             await ext.storage.local.clear();
-          });
-        } finally {
-          await page.close();
-        }
+          },
+          undefined
+        );
 
         // The tour is not snippet state, so clearing snippet storage must not
         // put a popup that reloads next back into the first-run flow. Restore
@@ -328,34 +347,28 @@ export const test = base.extend<ClipioFixtures>({
       },
 
       setLocal: async (key: string, value: unknown) => {
-        const page = await getExtPage();
-        try {
-          await page.evaluate(
-            async ([k, v]: [string, unknown]) => {
-              const ext =
-                (globalThis as any).chrome ?? (globalThis as any).browser;
-              await ext.storage.local.set({ [k]: v });
-            },
-            [key, value] as [string, unknown]
-          );
-        } finally {
-          await page.close();
-        }
+        await withExtensionStorage(
+          context,
+          async ([k, v]: [string, unknown]) => {
+            const ext =
+              (globalThis as any).chrome ?? (globalThis as any).browser;
+            await ext.storage.local.set({ [k]: v });
+          },
+          [key, value] as [string, unknown]
+        );
       },
 
-      getLocal: async (key: string): Promise<unknown> => {
-        const page = await getExtPage();
-        try {
-          return await page.evaluate(async (k: string) => {
+      getLocal: async (key: string): Promise<unknown> =>
+        withExtensionStorage(
+          context,
+          async (k: string) => {
             const ext =
               (globalThis as any).chrome ?? (globalThis as any).browser;
             const result = await ext.storage.local.get(k);
             return result[k];
-          }, key);
-        } finally {
-          await page.close();
-        }
-      },
+          },
+          key
+        ),
     };
 
     await use(helper);

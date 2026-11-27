@@ -1,9 +1,9 @@
 /**
  * Popup performance regression tests.
  *
- * These run against the real extension in Chromium with a seeded library. The
- * 520-row case covers a large hand-testable library; the 5,000-row case proves
- * the popup scales with the library instead of with a hard-coded fixture size.
+ * This runs against the real extension in Chromium with a 5,000-row library.
+ * It proves the popup scales with the library instead of with a hard-coded
+ * fixture size; unit tests cannot measure real hydration and list rendering.
  *
  * The app writes two marks: `clipio:popup-shell` on the first Dashboard commit
  * and `clipio:library-ready` when the list is populated. Both are measured from
@@ -128,13 +128,6 @@ async function assertFastPopup(
   );
   await page.close();
 }
-
-test("popup opens and loads a 520-snippet library fast", async ({
-  context,
-  extensionId,
-}) => {
-  await assertFastPopup(context, extensionId, library(520));
-});
 
 test("popup stays fast with 5,000 snippets", async ({
   context,

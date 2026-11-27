@@ -1,197 +1,59 @@
 /**
- * Phase 5: Storage Integration Tests (8 tests)
+ * Storage durability under a real extension origin.
  *
- * Tests real browser storage with quota limits, fallback behavior,
- * IndexedDB backup, and per-key layout.
- *
- * Test strategy:
- * - Use page.evaluate() to access browser.storage APIs directly
- * - Fill storage to trigger quota errors with large snippets
- * - Verify fallback behavior by checking storageModeItem
- * - Open IndexedDB directly via page.evaluate()
- * - Test concurrent operations with Promise.all()
+ * The pure storage rules — quota fallback, IndexedDB shadow writes, lock
+ * behaviour — are covered in src/storage/*.test.ts. The one thing that cannot
+ * be proved there is that a snippet created through the popup is still there
+ * when the popup closes and opens again.
  */
 
 import { test, expect } from "./fixtures.js";
-import { makeSnippet, makeSnippets } from "./helpers/snippets.js";
-import {
-  readIndexedDbSnippets,
-  writeBackupSnippets,
-} from "./helpers/storage.js";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-async function getExtPage(
-  context: import("@playwright/test").BrowserContext,
-  extensionId: string
-) {
-  const page = await context.newPage();
-  await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await page.waitForLoadState("domcontentloaded");
-  // Settle after the extension page loads so React has committed its first
-  // paint before a test does a one-shot read. Genuine render settle, not a
-  // stand-in for a condition: tests that wait for data poll for that data.
-  await page.waitForTimeout(300);
-  return page;
+async function waitForPopupReady(
+  page: import("@playwright/test").Page
+): Promise<void> {
+  await page.waitForSelector(
+    '[data-testid="snippet-list"], [data-testid="empty-state"]',
+    { timeout: 10_000 }
+  );
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-test.describe("Storage Integration", () => {
+test.describe("Storage durability", () => {
   test("persists snippets in sync storage across popup reloads", async ({
-    context,
-    extensionId,
+    popupPage,
   }) => {
-    const page = await getExtPage(context, extensionId);
-
-    const snippet = makeSnippet({
-      id: "persist-test",
-      label: "Persistence Test",
-      shortcut: "/persist",
-      content: "Persisted content",
+    // Start from an empty library. Setting the mode explicitly keeps this test
+    // about durability rather than about whichever backend a previous test left
+    // behind.
+    await popupPage.evaluate(async () => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      await ext.storage.sync.clear();
+      await ext.storage.local.set({
+        cachedSnippets: [],
+        storageMode: "sync",
+        lastViewedSnippetId: null,
+      });
     });
+    await popupPage.reload();
+    await waitForPopupReady(popupPage);
 
-    // Write snippet directly into sync storage
-    await page.evaluate(async (snip) => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      await ext.storage.sync.set({ [`snip:${snip.id}`]: snip });
-    }, snippet);
+    // Create through the app, not by writing `snip:` directly: the point is
+    // that the popup's autosave writes a record that survives a fresh mount.
+    await popupPage.getByTestId("add-snippet").click();
+    await popupPage.getByTestId("snippet-label-input").fill("Durability Test");
+    await popupPage.getByTestId("snippet-shortcut-input").fill("/durability");
+    const editor = popupPage.locator('[contenteditable="true"]').first();
+    await editor.click();
+    await popupPage.keyboard.type("Survives a popup reopen");
+    await expect(popupPage).toHaveURL(/#\/snippet\//, { timeout: 10_000 });
+    await expect(popupPage.getByTestId("snippet-list-item")).toHaveCount(1);
 
-    await page.close();
+    // Reopen as the toolbar does: a bare popup URL, with no remembered route.
+    await popupPage.goto(popupPage.url().split("#")[0] ?? popupPage.url());
+    await waitForPopupReady(popupPage);
 
-    // Open a fresh popup page and verify the snippet is still there
-    const page2 = await getExtPage(context, extensionId);
-    const stored = await page2.evaluate(async (id: string) => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const result = await ext.storage.sync.get(`snip:${id}`);
-      return result[`snip:${id}`];
-    }, snippet.id);
-
-    expect(stored).toBeTruthy();
-    expect((stored as typeof snippet).label).toBe("Persistence Test");
-    await page2.close();
-  });
-
-  test("falls back to local storage mode on sync quota overflow", async ({
-    context,
-    extensionId,
-  }) => {
-    const page = await getExtPage(context, extensionId);
-
-    // Fill sync storage beyond the quota by setting many large items
-    const overflowResult = await page.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const filler = "x".repeat(7_500); // near 8KB per-item limit
-      const entries: Record<string, unknown> = {};
-      let quotaHit = false;
-
-      // Try to fill until quota error
-      for (let i = 0; i < 15; i++) {
-        try {
-          entries[`snip:fill-${i}`] = {
-            id: `fill-${i}`,
-            label: `Filler ${i}`,
-            shortcut: `/fill${i}`,
-            content: filler,
-            tags: [],
-            usageCount: 0,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-          await ext.storage.sync.set({
-            [`snip:fill-${i}`]: entries[`snip:fill-${i}`],
-          });
-        } catch (err) {
-          quotaHit = true;
-          // Set the fallback flag manually as the StorageManager would
-          await ext.storage.local.set({ storageMode: "local" });
-          break;
-        }
-      }
-      return { quotaHit };
-    });
-
-    // Whether quota was hit or not, the storage should be functional
-    const storageMode = await page.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const result = await ext.storage.local.get("storageMode");
-      return result.storageMode ?? "sync";
-    });
-
-    // If quota was hit, mode should have switched; otherwise stays sync
-    if (overflowResult.quotaHit) {
-      expect(storageMode).toBe("local");
-    } else {
-      expect(["sync", "local"]).toContain(storageMode);
-    }
-
-    await page.close();
-  });
-
-  test("maintains IndexedDB shadow backup", async ({
-    context,
-    extensionId,
-  }) => {
-    const page = await getExtPage(context, extensionId);
-
-    const snippet = makeSnippet({
-      id: "idb-backup-test",
-      label: "IDB Backup Test",
-      shortcut: "/idbbackup",
-      content: "IndexedDB backup content",
-    });
-
-    // Write directly to the backup store, as the backup system would. This
-    // uses the shared helper rather than a third hand-rolled `indexedDB.open`
-    // block — the previous copy hardcoded version 1, which would throw
-    // `VersionError` once the schema moved past it.
-    await writeBackupSnippets(page, [snippet]);
-
-    // Read back via the helper
-    const idbSnippets = await readIndexedDbSnippets(page);
-    const found = idbSnippets.find((s) => s.id === snippet.id);
-    expect(found).toBeTruthy();
-    expect(found?.label).toBe("IDB Backup Test");
-
-    await page.close();
-  });
-
-  test("handles concurrent writes without data loss", async ({
-    context,
-    extensionId,
-  }) => {
-    const page = await getExtPage(context, extensionId);
-
-    const snippets = makeSnippets(5, (i) => ({
-      id: `concurrent-${i}`,
-      label: `Concurrent ${i}`,
-      shortcut: `/con${i}`,
-      content: `Concurrent content ${i}`,
-    }));
-
-    // Write all snippets concurrently
-    await page.evaluate(async (snips) => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      await Promise.all(
-        snips.map((s) => ext.storage.sync.set({ [`snip:${s.id}`]: s }))
-      );
-    }, snippets);
-
-    // Read back all keys
-    const keys = await page.evaluate(async () => {
-      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
-      const all = await ext.storage.sync.get(null);
-      return Object.keys(all as Record<string, unknown>).filter((k) =>
-        k.startsWith("snip:concurrent-")
-      );
-    });
-
-    // All 5 snippets should have been written
-    expect(keys.length).toBe(5);
-    await page.close();
+    const rows = popupPage.getByTestId("snippet-list-item");
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText("Durability Test");
   });
 });

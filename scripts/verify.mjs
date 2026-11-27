@@ -24,15 +24,15 @@
  *   pnpm verify:full   fast gate + build + bundle size + e2e (~4min)
  *     what CI and a release tag run
  *
- * Ordering is deliberate: cheap and specific failures first, so the first error
- * printed is usually the real one. Each step prints its own elapsed time and the
- * running total, because "the suite is slow" and "step 3 hung" are different
- * problems.
+ * The fast static checks stay serial. They are CPU-bound, and running them all
+ * at once made the gate slower in measurement: 95s wall instead of 35s, long
+ * enough to trip a 30s unit-test timeout. The independent, mostly-I/O stages
+ * are parallel: build with coverage integrity, then bundle size with e2e.
  *
  * EXIT CODES
  *
  *   0  every step passed
- *   1  a step failed — the failing step's own output is already on screen
+ *   1  a step failed — the failing step's own output is printed in the summary
  *
  * `--full` is the only flag; an unknown flag is ignored rather than rejected, so
  * there is no third exit code.
@@ -57,16 +57,11 @@ const DIM = (s) => `\x1b[2m${s}\x1b[0m`;
 const BOLD = (s) => `\x1b[1m${s}\x1b[0m`;
 
 /**
- * The fast gate.
- *
  * `test:coverage` already runs the unit suite and enforces thresholds, so there
  * is no separate `test` step — running both would double the wall clock to
  * re-prove the same thing.
- *
- * `check:coverage-integrity` runs AFTER coverage because it reads
- * `coverage/coverage-final.json`.
  */
-const FAST_STEPS = [
+const FAST_CHECK_STEPS = [
   { name: "format", cmd: ["pnpm", "run", "format:check"] },
   { name: "lint", cmd: ["pnpm", "run", "lint"] },
   {
@@ -79,11 +74,6 @@ const FAST_STEPS = [
     note: "one project; nothing can fall out of it",
   },
   { name: "unit + coverage", cmd: ["pnpm", "run", "test:coverage"] },
-  {
-    name: "coverage integrity",
-    cmd: ["pnpm", "run", "check:coverage-integrity"],
-    note: "fails if a configured file is missing from the report",
-  },
   { name: "locale parity", cmd: ["pnpm", "run", "check:locales"] },
   { name: "hardcoded text", cmd: ["pnpm", "run", "check:hardcoded-text"] },
   {
@@ -93,12 +83,20 @@ const FAST_STEPS = [
   },
 ];
 
-const FULL_STEPS = [
-  {
-    name: "build",
-    cmd: ["pnpm", "run", "build"],
-    env: { SENTRY_AUTH_TOKEN: "" },
-  },
+/** Reads the report written by `unit + coverage`. */
+const COVERAGE_INTEGRITY = {
+  name: "coverage integrity",
+  cmd: ["pnpm", "run", "check:coverage-integrity"],
+  note: "fails if a configured file is missing from the report",
+};
+
+const BUILD_STEP = {
+  name: "build",
+  cmd: ["pnpm", "run", "build"],
+  env: { SENTRY_AUTH_TOKEN: "" },
+};
+
+const POST_BUILD_STEPS = [
   {
     name: "bundle size",
     cmd: ["pnpm", "run", "check:bundle-size"],
@@ -108,10 +106,29 @@ const FULL_STEPS = [
     name: "e2e",
     cmd: ["pnpm", "run", "test:e2e"],
     env: { E2E_SKIP_BUILD: "1" },
+    // The long step streams so a four-minute run does not look like a hang.
+    stream: true,
   },
 ];
 
-const steps = FULL ? [...FAST_STEPS, ...FULL_STEPS] : FAST_STEPS;
+/**
+ * A stage is a dependency boundary. Steps inside `parallel: true` stages do
+ * not read each other's output; steps inside serial stages are CPU-bound and
+ * faster one at a time.
+ */
+const stages = FULL
+  ? [
+      { steps: FAST_CHECK_STEPS },
+      { steps: [BUILD_STEP, COVERAGE_INTEGRITY], parallel: true },
+      { steps: POST_BUILD_STEPS, parallel: true },
+    ]
+  : [
+      { steps: FAST_CHECK_STEPS.slice(0, 4) },
+      { steps: [COVERAGE_INTEGRITY] },
+      { steps: FAST_CHECK_STEPS.slice(4) },
+    ];
+
+const steps = stages.flatMap((stage) => stage.steps);
 
 function run(step) {
   return new Promise((res) => {
@@ -124,13 +141,14 @@ function run(step) {
       env: { ...process.env, ...(step.env ?? {}) },
     });
 
-    // Stream output live so a long step (e2e) shows progress rather than
-    // appearing to hang. Capture it too so a failure can be summarised.
+    // Capture every step so a failure can be summarised. Only the long e2e
+    // step streams live; buffering the short parallel steps keeps their output
+    // from interleaving into unreadable noise.
     let captured = "";
     const tap = (chunk) => {
       const text = chunk.toString();
       captured += text;
-      process.stdout.write(text);
+      if (step.stream) process.stdout.write(text);
     };
     child.stdout.on("data", tap);
     child.stderr.on("data", tap);
@@ -141,7 +159,7 @@ function run(step) {
   });
 }
 
-/** Last few meaningful lines of a failed step, for the summary table. */
+/** Last few meaningful lines of a failed step, for the summary. */
 function tail(captured, n = 12) {
   return strip(captured)
     .split("\n")
@@ -150,44 +168,56 @@ function tail(captured, n = 12) {
     .slice(-n);
 }
 
+function announce(stage) {
+  for (const step of stage.steps) {
+    const label = `${String(steps.indexOf(step) + 1).padStart(2)}/${steps.length}  ${step.name}`;
+    process.stdout.write(CYAN(`  ${label.padEnd(34)}`));
+    if (step.note) process.stdout.write(DIM(`  ${step.note}`));
+    process.stdout.write("\n");
+  }
+}
+
 console.log(
   BOLD(`\n  verify${FULL ? ":full" : ""}`) + DIM(`  (${steps.length} steps)\n`)
 );
 
+const startedAt = Date.now();
 const results = [];
-let failedAt = -1;
-/** Output of the failing step, kept for the summary after the loop breaks. */
-let failureOutput = "";
+const failures = [];
 
-for (const [i, step] of steps.entries()) {
-  const label = `${String(i + 1).padStart(2)}/${steps.length}  ${step.name}`;
-  process.stdout.write(CYAN(`  ${label.padEnd(34)}`));
-  if (step.note) process.stdout.write(DIM(`  ${step.note}`));
+for (const stage of stages) {
+  announce(stage);
+
+  const stageResults = stage.parallel
+    ? await Promise.all(stage.steps.map(run))
+    : await (async () => {
+        const out = [];
+        for (const step of stage.steps) out.push(await run(step));
+        return out;
+      })();
+
+  for (const [i, result] of stageResults.entries()) {
+    const step = stage.steps[i];
+    const secs = (result.ms / 1000).toFixed(1);
+    results.push({ name: step.name, code: result.code, secs });
+    const tick = result.code === 0 ? GREEN(`✓ ${secs}s`) : RED(`✗ ${secs}s`);
+    process.stdout.write(`  ${" ".repeat(34)}${tick}\n`);
+
+    if (result.code !== 0) {
+      failures.push({ step, output: result.captured });
+    }
+  }
   process.stdout.write("\n");
 
-  const { code, ms, captured } = await run(step);
-  const secs = (ms / 1000).toFixed(1);
-  results.push({ name: step.name, code, secs });
-
-  if (code === 0) {
-    process.stdout.write(`  ${" ".repeat(34)}${GREEN(`✓ ${secs}s`)}\n\n`);
-  } else {
-    process.stdout.write(`  ${" ".repeat(34)}${RED(`✗ ${secs}s`)}\n\n`);
-    failedAt = i;
-    // Retained for the summary below: the loop breaks here, so this is the only
-    // place the failing step's output survives. Reading it from the step's
-    // config object instead (as an earlier version did) yielded `undefined`
-    // and printed an empty block under every failure.
-    failureOutput = captured ?? "";
-    // Later steps cannot meaningfully run on top of a failure — a type error
-    // makes unit-test output noise, and coverage would not be regenerated.
-    break;
-  }
+  // A later stage cannot meaningfully run on top of a failed dependency: a
+  // type error makes unit-test output noise, and the build/e2e pair cannot run
+  // without the extension that an earlier build was meant to produce.
+  if (failures.length > 0) break;
 }
 
 const ran = results.length;
 const passed = results.filter((r) => r.code === 0).length;
-const total = results.reduce((a, r) => a + Number(r.secs), 0).toFixed(1);
+const total = ((Date.now() - startedAt) / 1000).toFixed(1);
 
 console.log(DIM("  " + "─".repeat(52)));
 for (const r of results) {
@@ -197,18 +227,16 @@ for (const r of results) {
 if (ran < steps.length) {
   console.log(DIM(`  · ${steps.length - ran} step(s) not run`));
 }
-console.log(DIM(`  ${passed}/${ran} passed · ${total}s total\n`));
+console.log(DIM(`  ${passed}/${ran} passed · ${total}s wall\n`));
 
-if (failedAt !== -1) {
-  const step = steps[failedAt];
-  console.log(RED(BOLD(`  FAILED: ${step.name}`)) + "\n");
-  // `failureOutput`, not `step.captured` — the latter is the step's *config*
-  // object and has no output on it, so the summary was silently reading
-  // `undefined` and printing an empty block under every failure.
-  for (const line of tail(failureOutput)) {
-    console.log(DIM("  │ ") + line);
+if (failures.length > 0) {
+  for (const { step, output } of failures) {
+    console.log(RED(BOLD(`  FAILED: ${step.name}`)) + "\n");
+    for (const line of tail(output)) {
+      console.log(DIM("  │ ") + line);
+    }
+    console.log(DIM(`\n  Re-run this step alone: pnpm run ${step.cmd[2]}\n`));
   }
-  console.log(DIM(`\n  Re-run this step alone: pnpm run ${step.cmd[2]}\n`));
   process.exit(1);
 }
 
