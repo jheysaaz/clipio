@@ -23,7 +23,8 @@ const REGEX_PATTERNS = {
   clipboard: /^\{\{clipboard\}\}/,
   date: /^\{\{date:(iso|us|eu|long|short)\}\}/,
   cursor: /^\{\{cursor\}\}/,
-  datepicker: /^\{\{datepicker:(\d{4}-\d{2}-\d{2})\}\}/,
+  datepicker:
+    /^\{\{datepicker:(\d{4}-\d{2}-\d{2})(?::(iso|us|eu|long|short))?\}\}/,
   // Width suffix (:NNN) is optional — matches both {{image:uuid}} and
   // {{image:uuid:200}}. Owned by .
   image: IMAGE_PLACEHOLDER_ANCHORED,
@@ -45,9 +46,16 @@ export function serializeToMarkdown(nodes: Descendant[]): string {
   // to start a new block in CommonMark, but a paragraph needs a blank line
   // before it — joining with "\n" meant every block boundary was ambiguous and
   // a document lost all its structure on the next parse.
-  return nodes
-    .map((node) => serializeNode(node))
-    .filter((text) => text !== "")
+  const parts = nodes.map((node) => serializeNode(node));
+  return parts
+    .filter(
+      (text, i) =>
+        text !== "" ||
+        // Media insertion deliberately leaves the caret in an empty paragraph
+        // on the next line. Without this blank line the saved snippet would
+        // silently lose the block break the editor just created.
+        (i > 0 && /\{\{(?:image|gif):[^{}]+\}\}$/.test(parts[i - 1] ?? ""))
+    )
     .join("\n\n");
 }
 
@@ -94,8 +102,13 @@ function serializeNode(node: Descendant): string {
   }
 
   if (element.type === DATEPICKER_PLACEHOLDER) {
-    const date = (element as TElement & { date?: string }).date || "";
-    return `{{datepicker:${date}}}`;
+    const node = element as TElement & { date?: string; format?: string };
+    const date = node.date || "";
+    // The original token had no format and still means "long". Keep writing
+    // that token untouched so old snippets do not churn on every save.
+    const format =
+      node.format && node.format !== "long" ? `:${node.format}` : "";
+    return `{{datepicker:${date}${format}}}`;
   }
 
   if (element.type === IMAGE_PLACEHOLDER) {
@@ -388,6 +401,7 @@ function parseMarkdownInline(text: string): Descendant[] {
       nodes.push({
         type: DATEPICKER_PLACEHOLDER,
         date: datepickerMatch[1],
+        ...(datepickerMatch[2] ? { format: datepickerMatch[2] } : {}),
         children: [{ text: "" }],
       } as TElement & { date: string });
       remaining = remaining.slice(datepickerMatch[0].length);

@@ -9,6 +9,23 @@
 
 const STORED_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
+/** Formats a picked date can be rendered in, shared by the editor and storage. */
+export const STORED_DATE_FORMATS = [
+  "iso",
+  "us",
+  "eu",
+  "long",
+  "short",
+] as const;
+
+export type StoredDateFormat = (typeof STORED_DATE_FORMATS)[number];
+
+export function isValidStoredDateFormat(
+  value: string
+): value is StoredDateFormat {
+  return (STORED_DATE_FORMATS as readonly string[]).includes(value);
+}
+
 /** Whether a string is a real calendar date in `YYYY-MM-DD` form. */
 export function isValidStoredDate(value: string): boolean {
   const match = STORED_DATE.exec(value);
@@ -39,13 +56,28 @@ export function todayStoredDate(): string {
   return toStoredDate(new Date()) ?? "";
 }
 
-/** Human-readable date for the picker trigger and its hover text. */
-export function formatStoredDate(value: string): string {
+/**
+ * Human-readable date for the picker trigger and its hover text. An unknown
+ * format falls back to the long form, matching the original token's behavior.
+ */
+export function formatStoredDate(
+  value: string,
+  format: string = "long"
+): string {
   if (!isValidStoredDate(value)) return value;
   const [year, month, day] = value.split("-").map(Number);
+  if (!isValidStoredDateFormat(format)) format = "long";
+
+  if (format === "iso") return value;
+  if (format === "us") return `${month}/${day}/${year}`;
+  if (format === "eu") {
+    return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
+  }
+
+  const date = new Date(year!, month! - 1, day!);
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
-    year: "numeric",
-  }).format(new Date(year!, month! - 1, day!));
+    ...(format === "long" ? { year: "numeric" } : {}),
+  }).format(date);
 }

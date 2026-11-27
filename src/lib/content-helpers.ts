@@ -183,8 +183,8 @@ export function formatDate(format: string, dateStr?: string): string {
         day: "numeric",
       });
     case "short":
+      // Matches the example in DATE_FORMATS: "Feb 21", without a year.
       return date.toLocaleDateString("en-US", {
-        year: "2-digit",
         month: "short",
         day: "numeric",
       });
@@ -262,12 +262,13 @@ export function processSnippetContent(
     dateRegex.lastIndex = 0; // reset after replacement to avoid skipping
   }
 
-  // 3. Datepicker placeholders — {{datepicker:YYYY-MM-DD}}
-  const datepickerRegex = /\{\{datepicker:(\d{4}-\d{2}-\d{2})\}\}/g;
+  // 3. Datepicker placeholders — {{datepicker:YYYY-MM-DD[:format]}}
+  const datepickerRegex =
+    /\{\{datepicker:(\d{4}-\d{2}-\d{2})(?::(iso|us|eu|long|short))?\}\}/g;
   let datepickerMatch: RegExpExecArray | null;
   while ((datepickerMatch = datepickerRegex.exec(processedContent)) !== null) {
     const dateStr = datepickerMatch[1];
-    const formatted = formatDate("long", dateStr);
+    const formatted = formatDate(datepickerMatch[2] || "long", dateStr);
     processedContent = processedContent.replace(datepickerMatch[0], formatted);
     datepickerRegex.lastIndex = 0;
   }

@@ -24,6 +24,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 
+import { CODE_THEME_ATTRIBUTE } from "@/lib/code-theme";
 import { UI_FONT_ATTRIBUTE } from "@/lib/ui-font";
 
 import { resetBrowserMocks } from "../../tests/mocks/browser";
@@ -76,6 +77,8 @@ type Preset = {
   theme?: string;
   legacy?: string;
   font?: string;
+  lightTheme?: string;
+  darkTheme?: string;
   /** Make every read reject, as a torn-down extension context would. */
   breakStorage?: boolean;
 };
@@ -104,6 +107,12 @@ async function setup(preset: Preset = {}) {
   }
   if (preset.font !== undefined) {
     await writeUntyped(items.uiFontItem, preset.font);
+  }
+  if (preset.lightTheme !== undefined) {
+    await writeUntyped(items.lightCodeThemeItem, preset.lightTheme);
+  }
+  if (preset.darkTheme !== undefined) {
+    await writeUntyped(items.darkCodeThemeItem, preset.darkTheme);
   }
 
   if (preset.breakStorage) {
@@ -148,6 +157,7 @@ beforeEach(() => {
   installMatchMedia();
   document.documentElement.classList.remove("dark");
   document.documentElement.removeAttribute(UI_FONT_ATTRIBUTE);
+  document.documentElement.removeAttribute(CODE_THEME_ATTRIBUTE);
   vi.clearAllMocks();
 });
 
@@ -207,6 +217,16 @@ describe("theme actions", () => {
 
     toggleTheme();
     expect(store.state.themeMode).toBe("light");
+  });
+
+  it("sets each code palette without disturbing the other", async () => {
+    const { setLightCodeTheme, setDarkCodeTheme, store } = await setup();
+
+    setLightCodeTheme("solarized-light");
+    setDarkCodeTheme("twilight");
+
+    expect(store.state.lightCodeTheme).toBe("solarized-light");
+    expect(store.state.darkCodeTheme).toBe("twilight");
   });
 });
 
@@ -308,6 +328,46 @@ describe("loading persisted settings", () => {
     );
     expect(store.state.uiFont).toBe("dyslexic");
   });
+
+  it("paints the light or dark preset for the active UI theme", async () => {
+    const light = await setup({
+      theme: "light",
+      lightTheme: "solarized-light",
+      darkTheme: "okaidia",
+    });
+    await loaded(light.store);
+    expect(light.store.state.lightCodeTheme).toBe("solarized-light");
+    expect(document.documentElement.getAttribute(CODE_THEME_ATTRIBUTE)).toBe(
+      "solarized-light"
+    );
+
+    const dark = await setup({
+      theme: "dark",
+      lightTheme: "solarized-light",
+      darkTheme: "okaidia",
+    });
+    await loaded(dark.store);
+    expect(document.documentElement.getAttribute(CODE_THEME_ATTRIBUTE)).toBe(
+      "okaidia"
+    );
+  });
+
+  it("heals a corrupt preset in either mode and writes it back", async () => {
+    const { store, items } = await setup({
+      lightTheme: "one-dark-pro",
+      darkTheme: "github-light",
+    });
+    await loaded(store);
+
+    expect(store.state.lightCodeTheme).toBe("github-light");
+    expect(store.state.darkCodeTheme).toBe("one-dark-pro");
+    await vi.waitFor(async () =>
+      expect(await items.lightCodeThemeItem.getValue()).toBe("github-light")
+    );
+    await vi.waitFor(async () =>
+      expect(await items.darkCodeThemeItem.getValue()).toBe("one-dark-pro")
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -342,6 +402,21 @@ describe("persistence", () => {
     store.setState((p) => ({ ...p, uiFont: "dyslexic" }));
     await vi.waitFor(async () =>
       expect(await items.uiFontItem.getValue()).toBe("dyslexic")
+    );
+  });
+
+  it("persists code theme changes made in either picker", async () => {
+    const { setLightCodeTheme, setDarkCodeTheme, store, items } = await setup();
+    await loaded(store);
+
+    setLightCodeTheme("solarized-light");
+    setDarkCodeTheme("twilight");
+
+    await vi.waitFor(async () =>
+      expect(await items.lightCodeThemeItem.getValue()).toBe("solarized-light")
+    );
+    await vi.waitFor(async () =>
+      expect(await items.darkCodeThemeItem.getValue()).toBe("twilight")
     );
   });
 });
@@ -394,6 +469,23 @@ describe("system theme changes", () => {
     setThemeMode("system");
     expect(mediaListeners.length).toBeGreaterThan(0);
   });
+
+  it("switches the painted code palette when the UI theme changes", async () => {
+    const { setThemeMode, store } = await setup({
+      theme: "light",
+      lightTheme: "github-light",
+      darkTheme: "one-dark-pro",
+    });
+    await loaded(store);
+    expect(document.documentElement.getAttribute(CODE_THEME_ATTRIBUTE)).toBe(
+      "github-light"
+    );
+
+    setThemeMode("dark");
+    expect(document.documentElement.getAttribute(CODE_THEME_ATTRIBUTE)).toBe(
+      "one-dark-pro"
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -417,6 +509,30 @@ describe("font changed in another context", () => {
 
     await writeUntyped(items.uiFontItem, "not-a-font");
     await vi.waitFor(() => expect(store.state.uiFont).toBe("inter"));
+  });
+});
+
+describe("code theme changed in another context", () => {
+  it("adopts either preset written by the options page", async () => {
+    const { store, items } = await setup();
+    await loaded(store);
+
+    await items.lightCodeThemeItem.setValue("solarized-light");
+    await vi.waitFor(() =>
+      expect(store.state.lightCodeTheme).toBe("solarized-light")
+    );
+    await items.darkCodeThemeItem.setValue("twilight");
+    await vi.waitFor(() => expect(store.state.darkCodeTheme).toBe("twilight"));
+  });
+
+  it("normalises a preset from the wrong mode", async () => {
+    const { store, items } = await setup();
+    await loaded(store);
+
+    await writeUntyped(items.darkCodeThemeItem, "github-light");
+    await vi.waitFor(() =>
+      expect(store.state.darkCodeTheme).toBe("one-dark-pro")
+    );
   });
 });
 
@@ -447,6 +563,21 @@ describe("React bindings", () => {
 
     const { result } = renderHook(() => useThemeMode());
     expect(result.current).toBe(store.state.themeMode);
+  });
+
+  it("exposes both code presets through hooks", async () => {
+    const { useLightCodeTheme, useDarkCodeTheme, store } = await setup({
+      lightTheme: "solarized-light",
+      darkTheme: "twilight",
+    });
+    await loaded(store);
+
+    expect(renderHook(() => useLightCodeTheme()).result.current).toBe(
+      "solarized-light"
+    );
+    expect(renderHook(() => useDarkCodeTheme()).result.current).toBe(
+      "twilight"
+    );
   });
 
   it("useSettings returns the selected slice and re-renders on change", async () => {

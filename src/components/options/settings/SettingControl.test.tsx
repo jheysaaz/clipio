@@ -17,10 +17,16 @@ import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
 
 const mocks = vi.hoisted(() => ({
   setThemeMode: vi.fn(),
+  setLightCodeTheme: vi.fn(),
+  setDarkCodeTheme: vi.fn(),
   captureError: vi.fn(),
 }));
 
-vi.mock("@/store/settings", () => ({ setThemeMode: mocks.setThemeMode }));
+vi.mock("@/store/settings", () => ({
+  setThemeMode: mocks.setThemeMode,
+  setLightCodeTheme: mocks.setLightCodeTheme,
+  setDarkCodeTheme: mocks.setDarkCodeTheme,
+}));
 vi.mock("@/lib/sentry", () => ({ captureError: mocks.captureError }));
 
 vi.mock("@/components/ui/icon", () => ({
@@ -217,6 +223,8 @@ afterEach(() => {
   timeoutSpy?.mockRestore();
   timeoutSpy = undefined;
   mocks.setThemeMode.mockReset();
+  mocks.setLightCodeTheme.mockReset();
+  mocks.setDarkCodeTheme.mockReset();
   mocks.captureError.mockReset();
 });
 
@@ -346,6 +354,75 @@ describe("SettingControl", () => {
 
     expect(mocks.setThemeMode).toHaveBeenCalledWith(true);
     expect(entry.setValue).not.toHaveBeenCalled();
+  });
+
+  it("shows a live sample for a code theme and routes changes through the store", async () => {
+    const entry = makeEntry({
+      id: "light-code-theme",
+      control: "code-theme",
+      options: [
+        { value: "github-light", labelKey: "options.codeTheme.githubLight" },
+        {
+          value: "solarized-light",
+          labelKey: "options.codeTheme.solarizedLight",
+        },
+      ],
+      useValue: vi.fn().mockResolvedValue("github-light"),
+    });
+    renderControl(<SettingControl entry={entry} />);
+    await settle();
+
+    const preview = screen.getByTestId("setting-light-code-theme-preview");
+    expect(preview).toHaveAttribute("data-code-theme", "github-light");
+    expect(preview).toHaveTextContent("return 42;");
+
+    fireEvent.click(screen.getByTestId("mock-select-change"));
+    await settle();
+
+    expect(mocks.setLightCodeTheme).toHaveBeenCalledWith("changed");
+    expect(mocks.setDarkCodeTheme).not.toHaveBeenCalled();
+    expect(entry.setValue).not.toHaveBeenCalled();
+  });
+
+  it("shows the declared default when storage has no code theme yet", async () => {
+    // An empty trigger reads as a broken picker even when the sample falls
+    // back to a palette, so the control must render its shipped default.
+    const entry = makeEntry({
+      id: "light-code-theme",
+      control: "code-theme",
+      options: [
+        { value: "github-light", labelKey: "options.codeTheme.githubLight" },
+      ],
+      useValue: vi.fn().mockResolvedValue(undefined),
+      defaultValue: "github-light",
+    });
+    renderControl(<SettingControl entry={entry} />);
+    await settle();
+
+    expect(screen.getByTestId("mock-select")).toHaveAttribute(
+      "data-value",
+      "github-light"
+    );
+    expect(
+      screen.getByTestId("setting-light-code-theme-preview")
+    ).toHaveAttribute("data-code-theme", "github-light");
+  });
+
+  it("normalises a saved code theme from the wrong mode before previewing it", async () => {
+    const entry = makeEntry({
+      id: "dark-code-theme",
+      control: "code-theme",
+      options: [
+        { value: "one-dark-pro", labelKey: "options.codeTheme.oneDarkPro" },
+      ],
+      useValue: vi.fn().mockResolvedValue("github-light"),
+    });
+    renderControl(<SettingControl entry={entry} />);
+    await settle();
+
+    expect(
+      screen.getByTestId("setting-dark-code-theme-preview")
+    ).toHaveAttribute("data-code-theme", "one-dark-pro");
   });
 
   it("renders icon-segment options with and without icons and persists a choice", async () => {

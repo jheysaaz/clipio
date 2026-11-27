@@ -5,6 +5,10 @@
  * slash menu's saved range stops at the moment `/` was pressed. Computing the
  * deletion from that live range keeps the decision in plain data, so both the
  * happy path and the rejected ones are testable without a DOM.
+ *
+ * An empty query is a trigger in its own right: the menu opens on a bare `/`,
+ * so choosing a command must remove that one character just as it removes
+ * `/tod`.
  */
 
 import type { EditorRange } from "@/store/editor-selection";
@@ -14,7 +18,7 @@ export function slashDeletionRange(
   range: EditorRange | null,
   query: string
 ): EditorRange | null {
-  if (!range || query.length === 0) return null;
+  if (!range) return null;
   if (range.anchor.offset !== range.focus.offset) return null;
   if (
     range.anchor.path.length !== range.focus.path.length ||

@@ -9,11 +9,14 @@ import {
   Unlink,
   ImageIcon,
   Film,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { SiteFavicon } from "@/components/options/SiteFavicon";
+import { normalizeEditorLinkUrl } from "@/lib/editor-link";
 import { cn } from "@/lib/utils";
 import { useFloatingToolbar, useFloatingToolbarState } from "@platejs/floating";
 import { useEditorRef, useEditorSelector } from "platejs/react";
@@ -36,6 +39,7 @@ export function FloatingToolbar({
 
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
+  const [linkLabel, setLinkLabel] = useState("");
   const linkInputRef = useRef<HTMLInputElement>(null);
 
   const floatingState = useFloatingToolbarState({
@@ -100,6 +104,13 @@ export function FloatingToolbar({
     }
   }, [showLinkInput]);
 
+  const cancelLinkForm = useCallback(() => {
+    setShowLinkInput(false);
+    setLinkUrl("");
+    setLinkLabel("");
+    editor.tf.focus();
+  }, [editor]);
+
   const handleInsertLink = useCallback(() => {
     if (isLinkActive) {
       // Unwrap existing link
@@ -109,37 +120,43 @@ export function FloatingToolbar({
     }
     setShowLinkInput(true);
     setLinkUrl("");
+    setLinkLabel("");
   }, [editor, isLinkActive]);
 
   const handleConfirmLink = useCallback(() => {
-    const url = linkUrl.trim();
-    if (!url) {
-      setShowLinkInput(false);
-      editor.tf.focus();
+    const sanitizedUrl = normalizeEditorLinkUrl(linkUrl);
+    if (!sanitizedUrl) {
+      cancelLinkForm();
       return;
     }
 
-    // Sanitize URL: only allow http, https, mailto
-    let sanitizedUrl = url;
-    if (!/^(https?:\/\/|mailto:)/i.test(sanitizedUrl)) {
-      sanitizedUrl = `https://${sanitizedUrl}`;
-    }
+    const label = linkLabel.trim();
 
-    // Check if selection is collapsed (no text selected)
     const { selection } = editor;
-    if (
-      selection &&
+    const collapsed =
+      !!selection &&
       selection.anchor.offset === selection.focus.offset &&
-      selection.anchor.path.join(",") === selection.focus.path.join(",")
-    ) {
-      // No selection — insert a new link node with the URL as label
+      selection.anchor.path.join(",") === selection.focus.path.join(",");
+
+    if (label) {
+      // The label input is authoritative: selecting text and typing a label
+      // replaces that text, rather than wrapping it with its original casing.
+      editor.tf.insertNodes(
+        {
+          type: LINK_ELEMENT,
+          url: sanitizedUrl,
+          children: [{ text: label }],
+        } as TElement & { url: string },
+        { at: selection ?? undefined }
+      );
+    } else if (collapsed) {
       editor.tf.insertNodes({
         type: LINK_ELEMENT,
         url: sanitizedUrl,
         children: [{ text: sanitizedUrl }],
       } as TElement & { url: string });
     } else {
-      // Wrap selected text in a link
+      // No label — keep the selected text as the link's visible text.
       editor.tf.wrapNodes(
         {
           type: LINK_ELEMENT,
@@ -152,8 +169,9 @@ export function FloatingToolbar({
 
     setShowLinkInput(false);
     setLinkUrl("");
+    setLinkLabel("");
     editor.tf.focus();
-  }, [editor, linkUrl]);
+  }, [cancelLinkForm, editor, linkLabel, linkUrl]);
 
   const handleLinkKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -162,11 +180,10 @@ export function FloatingToolbar({
         handleConfirmLink();
       } else if (e.key === "Escape") {
         e.preventDefault();
-        setShowLinkInput(false);
-        editor.tf.focus();
+        cancelLinkForm();
       }
     },
-    [handleConfirmLink, editor]
+    [cancelLinkForm, handleConfirmLink]
   );
 
   if (hidden) return null;
@@ -182,28 +199,43 @@ export function FloatingToolbar({
       )}
     >
       {showLinkInput ? (
-        <div className="flex items-center gap-1 px-1">
+        <div className="flex items-center gap-1 px-1" data-testid="link-form">
+          {linkUrl.trim() ? (
+            <span
+              data-testid="link-favicon-preview"
+              className="inline-flex shrink-0 items-center"
+              title={linkUrl.trim()}
+            >
+              <SiteFavicon hostname={linkUrl} className="size-4" />
+            </span>
+          ) : null}
           <Input
             ref={linkInputRef}
             type="text"
+            data-testid="link-url-input"
             value={linkUrl}
             onChange={(e) => setLinkUrl(e.target.value)}
             onKeyDown={handleLinkKeyDown}
-            onBlur={() => {
-              // Delay to allow click on confirm to fire
-              setTimeout(() => {
-                setShowLinkInput(false);
-              }, 150);
-            }}
             placeholder={i18n.t("editor.toolbar.urlPlaceholder")}
-            className="h-6 w-40 min-w-0 rounded border border-border bg-transparent px-1.5 py-0 text-xs outline-none focus:border-indigo-500 focus-visible:border-indigo-500 focus-visible:ring-0 md:text-xs dark:bg-transparent dark:focus:border-indigo-400 dark:focus-visible:border-indigo-400 text-foreground placeholder:text-muted-foreground"
+            className="h-6 w-36 min-w-0 rounded border border-border bg-transparent px-1.5 py-0 text-xs outline-none focus:border-indigo-500 focus-visible:border-indigo-500 focus-visible:ring-0 md:text-xs dark:bg-transparent dark:focus:border-indigo-400 dark:focus-visible:border-indigo-400 text-foreground placeholder:text-muted-foreground"
+          />
+          <Input
+            type="text"
+            data-testid="link-label-input"
+            value={linkLabel}
+            onChange={(e) => setLinkLabel(e.target.value)}
+            onKeyDown={handleLinkKeyDown}
+            placeholder={i18n.t("editor.toolbar.textPlaceholder")}
+            className="h-6 w-24 min-w-0 rounded border border-border bg-transparent px-1.5 py-0 text-xs outline-none focus:border-indigo-500 focus-visible:border-indigo-500 focus-visible:ring-0 md:text-xs dark:bg-transparent dark:focus:border-indigo-400 dark:focus-visible:border-indigo-400 text-foreground placeholder:text-muted-foreground"
           />
           <Button
+            data-testid="link-confirm"
             variant="ghost"
             size="icon"
             className="h-6 w-6"
             onClick={handleConfirmLink}
             title={i18n.t("editor.toolbar.confirmLink")}
+            aria-label={i18n.t("editor.toolbar.confirmLink")}
             type="button"
           >
             <Icon
@@ -212,6 +244,18 @@ export function FloatingToolbar({
               stroke="emphasis"
               className="text-indigo-600 dark:text-indigo-400"
             />
+          </Button>
+          <Button
+            data-testid="link-cancel"
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={cancelLinkForm}
+            title={i18n.t("common.cancel")}
+            aria-label={i18n.t("common.cancel")}
+            type="button"
+          >
+            <Icon icon={X} size="sm" stroke="emphasis" />
           </Button>
         </div>
       ) : (

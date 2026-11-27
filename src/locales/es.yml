@@ -74,7 +74,7 @@ snippetEditor:
   shortcutLabel: "Atajo: $1"
   shortcutTip: Escríbelo para expander el fragmento.
   shortcutError: El atajo no puede contener espacios
-  shortcutErrorCharacters: 'Carácter no admitido: $1. Usa letras, números, puntos, guiones o guiones bajos.'
+  shortcutErrorCharacters: "Carácter no admitido: $1. Usa letras, números, puntos, guiones o guiones bajos."
   duplicateTooltip: Duplicar fragmento
   shortcutErrorDuplicate: 'El atajo "$1" ya está en uso por "$2". Elige un atajo diferente.'
   shortcutErrorPrefix: 'El atajo "$1" entra en conflicto con "$2" — uno puede impedir que el otro se expanda.'
@@ -206,9 +206,18 @@ options:
     fontFamily:
       title: Fuente de la interfaz
       desc: La tipografía que usa Clipio en todas partes. El texto monoespaciado, como el registro de depuración, siempre lo es.
+    lightCodeTheme:
+      title: Tema de código para el modo claro
+      desc: Paleta Prism que se usa en los bloques de código cuando Clipio está en modo claro.
+    darkCodeTheme:
+      title: Tema de código para el modo oscuro
+      desc: Paleta Prism que se usa en los bloques de código cuando Clipio está en modo oscuro.
     confetti:
       title: Confeti al insertar
       desc: Lanza una explosión de confeti cada vez que se inserta un fragmento.
+    localOnlyIndicator:
+      title: Insignia de solo local
+      desc: Muestra la insignia «Solo local» sobre la lista de fragmentos cuando la sincronización está desactivada.
     storageMode:
       title: Dónde se guardan los fragmentos
       desc: La sincronización mantiene los fragmentos en todos tus dispositivos mediante tu cuenta del navegador. Local es solo en este dispositivo, con un límite mucho mayor.
@@ -251,6 +260,20 @@ options:
     inter: Inter
     system: Sistema
     dyslexic: OpenDyslexic
+  codeTheme:
+    githubLight: GitHub Light
+    solarizedLight: Solarized Light
+    prismLight: Prism Light
+    coy: Coy
+    xcode: Xcode
+    oneDarkPro: One Dark Pro
+    okaidia: Okaidia
+    twilight: Twilight
+    tomorrowNight: Tomorrow Night
+    dracula: Dracula
+    nord: Nord
+    vscDarkPlus: VS Code Dark+
+    sample: Ejemplo de código
   overview:
     snippets: Fragmentos
     syncStorage: Almacenamiento de sincronización
@@ -521,10 +544,13 @@ editor:
     removeLink: Eliminar enlace
     confirmLink: Insertar enlace
     urlPlaceholder: "https://..."
+    textPlaceholder: "Etiqueta (opcional)"
     insertImage: Insertar imagen
     insertGif: Insertar GIF
   codeBlock:
-    label: Código
+    language: Lenguaje del código
+    searchLanguage: Buscar lenguajes
+    plainText: Texto plano
     copy: Copiar código
     copied: Código copiado
     copyFailed: No se pudo copiar el código

@@ -15,6 +15,7 @@ import {
   Settings,
   Clipboard,
   ArrowDownUp,
+  CloudOff,
   PanelLeft,
   PanelLeftClose,
   Trash2,
@@ -58,6 +59,7 @@ import {
   latestVersionItem,
   dismissedUpdateVersionItem,
   editorDraftsItem,
+  localOnlyIndicatorEnabledItem,
 } from "@/storage/items";
 import { captureError } from "@/lib/sentry";
 import {
@@ -175,6 +177,7 @@ export default function Dashboard() {
   const searchQuery = useSearch((s) => s.query);
   const loading = useSnippets((s) => !s.isLoaded);
   const quotaWarning = useSnippets((s) => s.quotaWarning);
+  const localOnly = useSnippets((s) => s.localOnly);
   const recoverySnippets = useSnippets((s) => s.recoverySnippets);
   const showRecoveryBanner = useSnippets((s) => s.showRecoveryBanner);
   const loadError = useSnippets((s) => s.loadError);
@@ -206,6 +209,9 @@ export default function Dashboard() {
     publishedAt: string;
   } | null>(null);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
+  // Starts at the default so the island is not briefly hidden on a fresh
+  // install; the stored value is read once the popup mounts.
+  const [showLocalOnlyIndicator, setShowLocalOnlyIndicator] = useState(true);
   const draggingRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   /**
@@ -482,6 +488,27 @@ export default function Dashboard() {
     };
   }, []);
 
+  // The badge is optional. Watching the item means a change made in Appearance
+  // is reflected without needing to close and reopen the popup.
+  useEffect(() => {
+    let mounted = true;
+    void localOnlyIndicatorEnabledItem
+      .getValue()
+      .then((enabled) => {
+        if (mounted) setShowLocalOnlyIndicator(enabled);
+      })
+      .catch((err: unknown) => {
+        captureError(err, { action: "loadLocalOnlyIndicatorSetting" });
+      });
+    const unwatch = localOnlyIndicatorEnabledItem.watch((enabled) => {
+      if (mounted) setShowLocalOnlyIndicator(enabled);
+    });
+    return () => {
+      mounted = false;
+      unwatch();
+    };
+  }, []);
+
   useEffect(() => {
     if (loading) announce(i18n.t("dashboard.loadingSnippets"));
   }, [loading, announce]);
@@ -551,7 +578,6 @@ export default function Dashboard() {
   }, [
     showRecoveryBanner,
     recoverySnippets.length,
-    dismissRecoveryBanner,
     showBanner,
     dismissBanner,
     selectSnippet,
@@ -984,72 +1010,74 @@ export default function Dashboard() {
             onKeyDown={handleResizeKeyDown}
           />
 
-          {/* Search Bar */}
-          <div className="px-2 pb-1 pt-2">
-            <div className="relative">
-              <Icon
-                icon={Search}
-                size="lg"
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                ref={searchInputRef}
-                type="text"
-                data-testid="snippet-search"
-                placeholder={i18n.t("dashboard.searchPlaceholder")}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                aria-label={i18n.t("dashboard.searchPlaceholder")}
-                aria-describedby="search-help"
-                className="h-9 rounded-lg pl-8 pr-12 text-ui-sm!"
-              />
-              {!searchQuery && (
-                <Kbd
-                  id="search-help"
-                  className="absolute right-2 top-1/2 hidden -translate-y-1/2 items-center rounded border border-border bg-muted px-1 font-mono text-ui-xs! font-medium text-foreground/70 sm:flex"
-                >
-                  {/mac/i.test(navigator.platform) ? "⌘K" : "Ctrl+K"}
-                </Kbd>
-              )}
+          {/* Search, list and floating status share one relative surface. */}
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+            {/* Search Bar */}
+            <div className="px-2 pb-1 pt-2">
+              <div className="relative">
+                <Icon
+                  icon={Search}
+                  size="lg"
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                  ref={searchInputRef}
+                  type="text"
+                  data-testid="snippet-search"
+                  placeholder={i18n.t("dashboard.searchPlaceholder")}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label={i18n.t("dashboard.searchPlaceholder")}
+                  aria-describedby="search-help"
+                  className="h-9 rounded-lg pl-8 pr-12 text-ui-sm!"
+                />
+                {!searchQuery && (
+                  <Kbd
+                    id="search-help"
+                    className="absolute right-2 top-1/2 hidden -translate-y-1/2 items-center rounded border border-border bg-muted px-1 font-mono text-ui-xs! font-medium text-foreground/70 sm:flex"
+                  >
+                    {/mac/i.test(navigator.platform) ? "⌘K" : "Ctrl+K"}
+                  </Kbd>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Snippet List */}
-          {loading ? (
-            <div
-              data-testid="snippet-list-skeleton"
-              role="status"
-              aria-label={i18n.t("dashboard.loadingSnippets")}
-              className="min-h-0 flex-1 space-y-1 overflow-hidden p-2"
-            >
-              {Array.from({ length: 8 }, (_, index) => (
-                <div
-                  key={index}
-                  className="h-12 space-y-2 rounded-lg px-2.5 py-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <Skeleton className="h-3 flex-1" />
-                    <Skeleton className="h-3 w-10" />
-                  </div>
-                  <Skeleton className="h-2.5 w-3/4" />
-                </div>
-              ))}
-            </div>
-          ) : loadError ? (
-            <div className="min-h-0 flex-1 overflow-y-auto p-2">
-              <InlineError
-                message={loadError}
-                onDismiss={dismissLoadError}
-                className="border border-red-200 dark:border-red-800 rounded-lg"
-              />
-            </div>
-          ) : filteredSnippets.length === 0 ? (
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            {/* Snippet List */}
+            {loading ? (
               <div
-                data-testid="empty-state"
-                className="flex flex-col items-center justify-center py-6 gap-1 px-3"
+                data-testid="snippet-list-skeleton"
+                role="status"
+                aria-label={i18n.t("dashboard.loadingSnippets")}
+                className="min-h-0 flex-1 space-y-1 overflow-hidden p-2"
               >
-                {/*
+                {Array.from({ length: 8 }, (_, index) => (
+                  <div
+                    key={index}
+                    className="h-12 space-y-2 rounded-lg px-2.5 py-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-3 flex-1" />
+                      <Skeleton className="h-3 w-10" />
+                    </div>
+                    <Skeleton className="h-2.5 w-3/4" />
+                  </div>
+                ))}
+              </div>
+            ) : loadError ? (
+              <div className="min-h-0 flex-1 overflow-y-auto p-2">
+                <InlineError
+                  message={loadError}
+                  onDismiss={dismissLoadError}
+                  className="border border-red-200 dark:border-red-800 rounded-lg"
+                />
+              </div>
+            ) : filteredSnippets.length === 0 ? (
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div
+                  data-testid="empty-state"
+                  className="flex flex-col items-center justify-center py-6 gap-1 px-3"
+                >
+                  {/*
                   Message only, no buttons.
 
                   This pane used to offer "Create snippet" and "Import" while
@@ -1063,36 +1091,54 @@ export default function Dashboard() {
                   sidebar is collapsed. The footer is untouched: it is the
                   persistent control bar, not part of the empty state.
                 */}
-                <p className="text-xs text-muted-foreground text-center">
-                  {searchQuery
-                    ? i18n.t("dashboard.noSnippetsFound")
-                    : i18n.t("dashboard.noSnippetsYet")}
-                </p>
-                {searchQuery ? (
                   <p className="text-xs text-muted-foreground text-center">
-                    {i18n.t("dashboard.tryDifferentSearch")}
+                    {searchQuery
+                      ? i18n.t("dashboard.noSnippetsFound")
+                      : i18n.t("dashboard.noSnippetsYet")}
                   </p>
-                ) : null}
+                  {searchQuery ? (
+                    <p className="text-xs text-muted-foreground text-center">
+                      {i18n.t("dashboard.tryDifferentSearch")}
+                    </p>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          ) : (
-            <SnippetList
-              snippets={filteredSnippets}
-              selectedId={selectedSnippet?.id ?? null}
-              isCreating={isCreating}
-              draft={draftSnippet}
-              resetKey={searchQuery}
-              onSelect={(id) => {
-                // No dirty check here on purpose. Edits are staged in local
-                // storage, so switching snippets cannot lose them.
-                if (isCreating) setDraftSnippet({ ...EMPTY_DRAFT });
-                selectSnippet(id);
-              }}
-            />
-          )}
+            ) : (
+              <SnippetList
+                snippets={filteredSnippets}
+                selectedId={selectedSnippet?.id ?? null}
+                isCreating={isCreating}
+                draft={draftSnippet}
+                resetKey={searchQuery}
+                onSelect={(id) => {
+                  // No dirty check here on purpose. Edits are staged in local
+                  // storage, so switching snippets cannot lose them.
+                  if (isCreating) setDraftSnippet({ ...EMPTY_DRAFT });
+                  selectSnippet(id);
+                }}
+              />
+            )}
 
-          {/* Add Snippet + Settings, with a state line beneath them. */}
-          <div className="px-2 py-2">
+            {/* Storage state floats over the list, just above the fixed bar. */}
+            {localOnly && showLocalOnlyIndicator && (
+              <div
+                data-testid="local-only-indicator"
+                title={i18n.t("dashboard.localOnlyDetail")}
+                aria-label={i18n.t("dashboard.localOnlyDetail")}
+                className="absolute bottom-1 left-1/2 z-10 flex h-8 w-max max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-1 rounded-lg bg-background/90 px-2 text-ui-micro! text-muted-foreground shadow-lg shadow-black/10 ring-1 ring-border/60 backdrop-blur-sm"
+              >
+                <Icon icon={CloudOff} size="sm" className="shrink-0" />
+                <span className="truncate">
+                  {i18n.t("dashboard.localOnly")}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Add Snippet + Settings — the persistent bottom bar. */}
+          <div className="relative px-2 py-2">
+            {/* The bar's divider hairline, softened with a subpixel blur. */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-border/70 blur-[0.5px]" />
             <div className="flex items-center gap-1.5">
               <Button
                 data-testid="add-snippet"

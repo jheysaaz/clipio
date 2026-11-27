@@ -197,13 +197,20 @@ function matchField(
     let candidate: { score: number; start: number; end: number } | null = null;
     if (word.text === token) {
       candidate = {
-        score: SCORE[field.kind],
+        // An exact id is the strongest possible hit. A word *inside* an id
+        // (`theme` in `light-code-theme`) is not: it must lose to the setting
+        // whose whole id is that word, or search stops surfacing the obvious
+        // result first as soon as another setting mentions the same word.
+        score: field.kind === "id" ? SCORE.id - 2 : SCORE[field.kind],
         start: word.start,
         end: word.end,
       };
     } else if (word.text.startsWith(token)) {
       candidate = {
-        score: SCORE[field.kind] - PREFIX_BONUS,
+        score:
+          field.kind === "id"
+            ? SCORE.id - 1 - PREFIX_BONUS
+            : SCORE[field.kind] - PREFIX_BONUS,
         start: word.start,
         end: word.start + token.length,
       };

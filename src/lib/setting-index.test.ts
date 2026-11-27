@@ -226,6 +226,20 @@ describe("searchSettingIndex — ranking", () => {
     expect(ids("segoe", two)).toEqual(["segoe", "unrelated"]);
   });
 
+  it("ranks an exact id above a word inside another id", () => {
+    // Two Appearance settings can both legitimately contain "theme"; the one
+    // whose id *is* the query must still be the first result.
+    const two = buildSettingIndex(
+      [
+        { ...PREVIEW, id: "theme", titleKey: "copy:Appearance theme" },
+        { ...FONT, id: "light-code-theme", titleKey: "copy:Code for light" },
+      ],
+      SECTION_LABELS,
+      t
+    );
+    expect(ids("theme", two)).toEqual(["theme", "light-code-theme"]);
+  });
+
   it("ranks a title match above an option-label match", () => {
     const two = buildSettingIndex(
       [

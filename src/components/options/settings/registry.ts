@@ -14,6 +14,9 @@
 
 import {
   confettiEnabledItem,
+  darkCodeThemeItem,
+  lightCodeThemeItem,
+  localOnlyIndicatorEnabledItem,
   typingTimeoutItem,
   snippetPreviewEnabledItem,
   snippetPreviewPrefixItem,
@@ -27,6 +30,12 @@ import {
   type ThemeMode,
 } from "@/storage/items";
 import { UI_FONT_OPTIONS, UI_FONT_STACKS, type UiFont } from "@/lib/ui-font";
+import {
+  DARK_CODE_THEMES,
+  LIGHT_CODE_THEMES,
+  type DarkCodeTheme,
+  type LightCodeTheme,
+} from "@/lib/code-theme";
 import {
   MonitorIcon,
   MoonIcon,
@@ -50,7 +59,8 @@ export type SettingControl =
   | "shortcut"
   | "slider"
   | "text"
-  | "site-list";
+  | "site-list"
+  | "code-theme";
 
 export type SectionId =
   | "library"
@@ -79,6 +89,9 @@ export type SettingTitleKey =
   | "options.setting.theme.title"
   | "options.setting.fontFamily.title"
   | "options.setting.confetti.title"
+  | "options.setting.lightCodeTheme.title"
+  | "options.setting.darkCodeTheme.title"
+  | "options.setting.localOnlyIndicator.title"
   | "options.setting.storageMode.title"
   | "options.setting.debugMode.title"
   | "options.setting.giphyKey.title";
@@ -92,6 +105,9 @@ export type SettingDescKey =
   | "options.setting.theme.desc"
   | "options.setting.fontFamily.desc"
   | "options.setting.confetti.desc"
+  | "options.setting.lightCodeTheme.desc"
+  | "options.setting.darkCodeTheme.desc"
+  | "options.setting.localOnlyIndicator.desc"
   | "options.setting.storageMode.desc"
   | "options.setting.debugMode.desc"
   | "options.setting.giphyKey.desc";
@@ -118,8 +134,44 @@ export type OptionLabelKey =
   | "options.font.inter"
   | "options.font.system"
   | "options.font.dyslexic"
+  | "options.codeTheme.githubLight"
+  | "options.codeTheme.solarizedLight"
+  | "options.codeTheme.prismLight"
+  | "options.codeTheme.coy"
+  | "options.codeTheme.xcode"
+  | "options.codeTheme.oneDarkPro"
+  | "options.codeTheme.okaidia"
+  | "options.codeTheme.twilight"
+  | "options.codeTheme.tomorrowNight"
+  | "options.codeTheme.dracula"
+  | "options.codeTheme.nord"
+  | "options.codeTheme.vscDarkPlus"
   | "options.storage.backend.sync"
   | "options.storage.backend.local";
+
+/**
+ * Code-theme ids are kebab-case because they are CSS attribute values, while
+ * locale keys are camelCase. Joining the id straight into the key produces
+ * `options.codeTheme.github-light`, which does not exist and renders as an
+ * empty option. This is the single place the two spellings are reconciled.
+ */
+const LIGHT_CODE_THEME_LABEL_KEYS: Record<LightCodeTheme, OptionLabelKey> = {
+  "github-light": "options.codeTheme.githubLight",
+  "solarized-light": "options.codeTheme.solarizedLight",
+  "prism-light": "options.codeTheme.prismLight",
+  coy: "options.codeTheme.coy",
+  xcode: "options.codeTheme.xcode",
+};
+
+const DARK_CODE_THEME_LABEL_KEYS: Record<DarkCodeTheme, OptionLabelKey> = {
+  "one-dark-pro": "options.codeTheme.oneDarkPro",
+  okaidia: "options.codeTheme.okaidia",
+  twilight: "options.codeTheme.twilight",
+  "tomorrow-night": "options.codeTheme.tomorrowNight",
+  dracula: "options.codeTheme.dracula",
+  nord: "options.codeTheme.nord",
+  "vsc-dark-plus": "options.codeTheme.vscDarkPlus",
+};
 
 /** Locale key for a sidebar group heading. */
 export type GroupLabelKey =
@@ -444,6 +496,57 @@ export const SETTINGS: readonly SettingEntry[] = [
     testId: "setting-font-family",
   },
   {
+    id: "light-code-theme",
+    section: "appearance",
+    titleKey: "options.setting.lightCodeTheme.title",
+    descKey: "options.setting.lightCodeTheme.desc",
+    control: "code-theme",
+    keywords: [
+      "syntax",
+      "highlight",
+      "prism",
+      "code",
+      "github",
+      "solarized",
+      "light",
+    ],
+    options: LIGHT_CODE_THEMES.map((theme) => ({
+      value: theme,
+      labelKey: LIGHT_CODE_THEME_LABEL_KEYS[theme],
+    })),
+    useValue: () => lightCodeThemeItem.getValue(),
+    setValue: (v: LightCodeTheme) => lightCodeThemeItem.setValue(v),
+    reset: () => lightCodeThemeItem.setValue("github-light"),
+    defaultValue: "github-light",
+    testId: "setting-light-code-theme",
+  },
+  {
+    id: "dark-code-theme",
+    section: "appearance",
+    titleKey: "options.setting.darkCodeTheme.title",
+    descKey: "options.setting.darkCodeTheme.desc",
+    control: "code-theme",
+    keywords: [
+      "syntax",
+      "highlight",
+      "prism",
+      "code",
+      "one dark",
+      "okaidia",
+      "twilight",
+      "dark",
+    ],
+    options: DARK_CODE_THEMES.map((theme) => ({
+      value: theme,
+      labelKey: DARK_CODE_THEME_LABEL_KEYS[theme],
+    })),
+    useValue: () => darkCodeThemeItem.getValue(),
+    setValue: (v: DarkCodeTheme) => darkCodeThemeItem.setValue(v),
+    reset: () => darkCodeThemeItem.setValue("one-dark-pro"),
+    defaultValue: "one-dark-pro",
+    testId: "setting-dark-code-theme",
+  },
+  {
     id: "confetti",
     section: "appearance",
     titleKey: "options.setting.confetti.title",
@@ -463,6 +566,19 @@ export const SETTINGS: readonly SettingEntry[] = [
       testId: "confetti-preview",
       run: previewConfetti,
     },
+  },
+  {
+    id: "local-only-indicator",
+    section: "appearance",
+    titleKey: "options.setting.localOnlyIndicator.title",
+    descKey: "options.setting.localOnlyIndicator.desc",
+    control: "switch",
+    keywords: ["badge", "island", "sync", "offline", "device", "hide"],
+    useValue: () => localOnlyIndicatorEnabledItem.getValue(),
+    setValue: (v: boolean) => localOnlyIndicatorEnabledItem.setValue(v),
+    reset: () => localOnlyIndicatorEnabledItem.setValue(true),
+    defaultValue: true,
+    testId: "setting-local-only-indicator",
   },
 
   // ── Storage ───────────────────────────────────────────────────────────────

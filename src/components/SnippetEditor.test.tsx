@@ -41,6 +41,12 @@ const q = vi.hoisted(() => ({
     vi.fn<typeof import("@/store/write-queue").requestSyncStatusRefresh>(),
   refreshUndoAvailability:
     vi.fn<typeof import("@/store/write-queue").refreshUndoAvailability>(),
+  waitForSnippetCommit:
+    vi.fn<typeof import("@/store/write-queue").waitForSnippetCommit>(),
+}));
+
+const storage = vi.hoisted(() => ({
+  getSnippets: vi.fn<typeof import("@/storage").getSnippets>(),
 }));
 
 vi.mock("@/store/write-queue", async (importOriginal) => {
@@ -54,7 +60,13 @@ vi.mock("@/store/write-queue", async (importOriginal) => {
     discardUnflushedDraft: q.discardUnflushedDraft,
     requestSyncStatusRefresh: q.requestSyncStatusRefresh,
     refreshUndoAvailability: q.refreshUndoAvailability,
+    waitForSnippetCommit: q.waitForSnippetCommit,
   };
+});
+
+vi.mock("@/storage", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/storage")>();
+  return { ...actual, getSnippets: storage.getSnippets };
 });
 
 vi.mock("@/lib/sentry", () => ({ captureError: vi.fn() }));
@@ -282,6 +294,8 @@ beforeEach(() => {
   queueOutcomesStore.setState(() => ({}));
   resetSnippetsStoreForTests();
   snippetsStore.setState((prev) => ({ ...prev, snippets: [snippet] }));
+  storage.getSnippets.mockResolvedValue([snippet]);
+  q.waitForSnippetCommit.mockResolvedValue(null);
   vi.mocked(getSnippetUsageCount).mockResolvedValue(3);
   vi.mocked(incrementSnippetUsage).mockResolvedValue(4);
   vi.mocked(copyMarkdownAsRichText).mockResolvedValue(undefined);
@@ -544,6 +558,44 @@ describe("saved snippet autosave", () => {
       snippet,
       expect.objectContaining({ tags: ["personal", "work"] })
     );
+  });
+
+  it("bases the write on the revision storage has, not a lagging store", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const committed = {
+      ...snippet,
+      rev: 4,
+      updatedAt: "2026-02-02T00:00:00.000Z",
+      updatedBy: "self",
+    };
+    // The authoritative read is ahead of the snippet the editor mounted with.
+    // Staging from the UI's copy would reuse rev 1 and conflict with our commit.
+    storage.getSnippets.mockResolvedValue([committed]);
+    renderView();
+
+    await user.type(screen.getByTestId("snippet-label-input"), " Home");
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
+
+    expect(q.waitForSnippetCommit).toHaveBeenCalledWith("s1");
+    expect(q.stageEdit).toHaveBeenCalledWith(
+      committed,
+      expect.objectContaining({ label: "Address Home" })
+    );
+    expect(q.flushDraft).toHaveBeenCalledWith("s1", [committed]);
+  });
+
+  it("does not stage a save when the snippet is gone from storage", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    storage.getSnippets.mockResolvedValue([]);
+    renderView();
+
+    await user.type(screen.getByTestId("snippet-label-input"), " Home");
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
+
+    expect(q.stageEdit).not.toHaveBeenCalled();
+    expect(q.flushDraft).not.toHaveBeenCalled();
   });
 
   it("enqueues the autosaved edit while the pane is still open", async () => {

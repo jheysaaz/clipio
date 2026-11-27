@@ -77,7 +77,7 @@ snippetEditor:
   shortcutLabel: "Shortcut: $1"
   shortcutTip: Type this to expand the snippet.
   shortcutError: Shortcut cannot contain spaces
-  shortcutErrorCharacters: 'Unsupported character: $1. Use letters, numbers, dots, dashes or underscores.'
+  shortcutErrorCharacters: "Unsupported character: $1. Use letters, numbers, dots, dashes or underscores."
   duplicateTooltip: Duplicate snippet
   shortcutErrorDuplicate: 'Shortcut "$1" is already used by "$2". Choose a different shortcut.'
   shortcutErrorPrefix: 'Shortcut "$1" conflicts with "$2" — one may prevent the other from expanding.'
@@ -212,9 +212,18 @@ options:
     fontFamily:
       title: Interface font
       desc: The typeface Clipio uses everywhere. Monospace text, like the debug log, always stays monospaced.
+    lightCodeTheme:
+      title: Code theme for light mode
+      desc: Prism palette used for fenced code blocks when Clipio is light.
+    darkCodeTheme:
+      title: Code theme for dark mode
+      desc: Prism palette used for fenced code blocks when Clipio is dark.
     confetti:
       title: Confetti on insert
       desc: Fire a confetti burst each time a snippet is inserted.
+    localOnlyIndicator:
+      title: Local-only badge
+      desc: Show the “Local only” badge above the snippet list when sync is off.
     storageMode:
       title: Where snippets are stored
       desc: Sync keeps snippets on every device through your browser account. Local is this device only, with a much higher limit.
@@ -257,6 +266,20 @@ options:
     inter: Inter
     system: System
     dyslexic: OpenDyslexic
+  codeTheme:
+    githubLight: GitHub Light
+    solarizedLight: Solarized Light
+    prismLight: Prism Light
+    coy: Coy
+    xcode: Xcode
+    oneDarkPro: One Dark Pro
+    okaidia: Okaidia
+    twilight: Twilight
+    tomorrowNight: Tomorrow Night
+    dracula: Dracula
+    nord: Nord
+    vscDarkPlus: VS Code Dark+
+    sample: Code sample
   overview:
     snippets: Snippets
     syncStorage: Sync storage
@@ -527,10 +550,13 @@ editor:
     removeLink: Remove link
     confirmLink: Insert link
     urlPlaceholder: "https://..."
+    textPlaceholder: "Label (optional)"
     insertImage: Insert image
     insertGif: Insert GIF
   codeBlock:
-    label: Code
+    language: Code language
+    searchLanguage: Search languages
+    plainText: Plain text
     copy: Copy code
     copied: Code copied
     copyFailed: Couldn't copy code

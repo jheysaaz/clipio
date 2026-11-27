@@ -11,6 +11,12 @@
 
 import { storage } from "wxt/utils/storage";
 import { DEFAULT_SIDEBAR_WIDTH } from "@/config/constants";
+import {
+  DEFAULT_DARK_CODE_THEME,
+  DEFAULT_LIGHT_CODE_THEME,
+  type DarkCodeTheme,
+  type LightCodeTheme,
+} from "@/lib/code-theme";
 import type { ContextUsage } from "@/lib/context-usage";
 import type { DraftMap } from "@/lib/snippet-draft";
 import type { UndoStacks } from "@/lib/undo-stack";
@@ -119,6 +125,17 @@ export const confettiEnabledItem = storage.defineItem<boolean>(
   { defaultValue: true }
 );
 
+/**
+ * Whether the popup's floating "Local only" island is shown when sync is off.
+ *
+ * Persisted because the popup closes on every blur: as component state a user
+ * who hid the island would see it again the next time they opened the popup.
+ */
+export const localOnlyIndicatorEnabledItem = storage.defineItem<boolean>(
+  "local:localOnlyIndicatorEnabled",
+  { defaultValue: true }
+);
+
 // ---------------------------------------------------------------------------
 // Theme
 // ---------------------------------------------------------------------------
@@ -129,6 +146,23 @@ export type ThemeMode = "light" | "dark" | "system";
 export const themeModeItem = storage.defineItem<ThemeMode>("local:themeMode", {
   defaultValue: "system",
 });
+
+/**
+ * Prism palette used by fenced code blocks in light mode.
+ *
+ * Normalised on read by the settings store: storage can be restored from a
+ * backup containing a preset this build no longer ships.
+ */
+export const lightCodeThemeItem = storage.defineItem<LightCodeTheme>(
+  "local:lightCodeTheme",
+  { defaultValue: DEFAULT_LIGHT_CODE_THEME }
+);
+
+/** Prism palette used by fenced code blocks in dark mode. */
+export const darkCodeThemeItem = storage.defineItem<DarkCodeTheme>(
+  "local:darkCodeTheme",
+  { defaultValue: DEFAULT_DARK_CODE_THEME }
+);
 
 /** Legacy theme key — read-only, used for one-time migration. */
 export const legacyThemeItem = storage.defineItem<string | null>(

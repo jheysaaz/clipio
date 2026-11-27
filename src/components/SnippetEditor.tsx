@@ -69,8 +69,9 @@ import {
   writeQueueStore,
   queueOutcomesStore,
   claimOutcomeReport,
+  waitForSnippetCommit,
 } from "@/store/write-queue";
-import { snippetsStore } from "@/store/snippets";
+import { getSnippets } from "@/storage";
 import {
   getSnippetUsageCount,
   incrementSnippetUsage,
@@ -353,9 +354,13 @@ export default function SnippetEditor({
 
   const persistFields = useCallback(
     async (next: EditorFields) => {
-      const stored = snippetsStore.state.snippets.find(
-        (item) => item.id === snippet.id
-      );
+      // The background owns the commit. Reading the in-memory store here can
+      // still see the revision from before its last write, especially after a
+      // dev reload, and staging against that revision conflicts with ourselves.
+      // Let the previous operation settle, then use the record storage has now.
+      await waitForSnippetCommit(snippet.id);
+      const storedList = await getSnippets();
+      const stored = storedList.find((item) => item.id === snippet.id);
       if (!stored) return;
       await stageEdit(stored, next);
       // Staging alone leaves the edit in local storage with no operation to
@@ -364,7 +369,7 @@ export default function SnippetEditor({
       // Saving… forever. Hand the staged draft to the queue on the same debounce
       // so status follows a real write; pagehide stays as the safety net for the
       // pending timer, not the only path to a commit.
-      const queued = await flushDraft(snippet.id, snippetsStore.state.snippets);
+      const queued = await flushDraft(snippet.id, storedList);
       if (!queued.ok) throw new Error(validationMessage(queued.error));
     },
     [snippet.id]

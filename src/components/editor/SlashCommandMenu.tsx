@@ -10,7 +10,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
-import { useVirtualFloating, offset, flip, shift } from "@platejs/floating";
+import { MenuItem, MenuSurface } from "@/components/ui/menu";
+import {
+  useVirtualFloating,
+  offset,
+  flip,
+  shift,
+  size,
+} from "@platejs/floating";
 import type { SlashCommandMenuProps } from "./types";
 import { i18n } from "#i18n";
 
@@ -186,14 +193,34 @@ export function SlashCommandMenu({
     };
   }, [targetRange, manualTrigger]);
 
+  // The popup opens inside a normal browser tab in tests, where the body is
+  // capped to popup height but the viewport is taller. Floating UI must use
+  // the body as its boundary or the menu is allowed to overflow the popup.
+  const boundary = typeof document === "undefined" ? undefined : document.body;
+
   const floating = useVirtualFloating({
     getBoundingClientRect,
     open: true,
     strategy: "fixed",
     middleware: [
       offset(4),
-      flip({ fallbackPlacements: ["top-start", "bottom-end", "top-end"] }),
-      shift({ padding: 8 }),
+      flip({
+        boundary,
+        fallbackPlacements: ["top-start", "bottom-end", "top-end"],
+      }),
+      shift({ padding: 8, boundary }),
+      // The popup is the viewport. A fixed-height list was clipped when the
+      // caret sat near the bottom, so the last commands could not be reached.
+      size({
+        padding: 8,
+        boundary,
+        apply({ availableHeight, elements }) {
+          // Constrain the whole surface, not only the list: the header and the
+          // menu's own padding also count against the popup viewport.
+          elements.floating.style.maxHeight = `${Math.max(availableHeight, 0)}px`;
+          elements.floating.style.overflowY = "auto";
+        },
+      }),
     ],
     placement: "bottom-start",
   });
@@ -242,7 +269,7 @@ export function SlashCommandMenu({
   }, [onClose]);
 
   return (
-    <div
+    <MenuSurface
       ref={(node) => {
         menuRef.current = node;
         floating.refs.setFloating(node);
@@ -255,7 +282,7 @@ export function SlashCommandMenu({
           ? `slash-cmd-${commands[selectedIndex].id}`
           : undefined
       }
-      className="z-50 min-w-50 rounded-lg border border-border bg-popover shadow-lg p-1"
+      className="min-w-[14rem] max-w-[16rem]"
     >
       <div className="text-ui-micro! font-medium text-muted-foreground px-2 py-1 uppercase tracking-wide">
         {i18n.t("editor.slashMenu.header")}
@@ -266,25 +293,21 @@ export function SlashCommandMenu({
           {i18n.t("editor.slashMenu.noMatches")}
         </div>
       ) : (
-        <div className="overflow-y-auto max-h-[17.5rem]">
+        <div className="overflow-y-auto overscroll-contain">
           {commands.map((command, index) => {
             const CommandIcon = command.icon;
             return (
-              <button
+              <MenuItem
                 key={command.id}
                 id={`slash-cmd-${command.id}`}
-                type="button"
+                active={selectedIndex === index}
                 role="option"
                 aria-selected={selectedIndex === index}
                 aria-disabled={command.disabled}
                 disabled={command.disabled}
                 className={cn(
-                  "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-left transition-colors",
-                  command.disabled
-                    ? "opacity-50 cursor-not-allowed"
-                    : selectedIndex === index
-                      ? "bg-accent"
-                      : "hover:bg-accent"
+                  "min-h-9 py-1.5 text-sm",
+                  command.disabled && "cursor-not-allowed opacity-50"
                 )}
                 onClick={() => !command.disabled && command.action()}
                 onMouseEnter={() => setSelectedIndex(index)}
@@ -314,11 +337,11 @@ export function SlashCommandMenu({
                     {command.description}
                   </div>
                 </div>
-              </button>
+              </MenuItem>
             );
           })}
         </div>
       )}
-    </div>
+    </MenuSurface>
   );
 }

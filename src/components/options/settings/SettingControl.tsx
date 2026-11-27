@@ -23,7 +23,19 @@ import {
 } from "@/components/ui/select";
 import { SettingRow } from "./SettingRow";
 import { ShortcutRecorder } from "./ShortcutRecorder";
-import { setThemeMode } from "@/store/settings";
+import { CodeThemePreview } from "./CodeThemePreview";
+import {
+  setDarkCodeTheme,
+  setLightCodeTheme,
+  setThemeMode,
+} from "@/store/settings";
+import {
+  normalizeDarkCodeTheme,
+  normalizeLightCodeTheme,
+  type CodeTheme,
+  type DarkCodeTheme,
+  type LightCodeTheme,
+} from "@/lib/code-theme";
 import type { SettingEntry } from "./registry";
 import { captureError } from "@/lib/sentry";
 import { shortcutsEqual } from "@/lib/shortcuts";
@@ -36,7 +48,15 @@ const IMMEDIATE_CONTROLS = new Set<SettingEntry["control"]>([
   "switch",
   "select",
   "icon-segment",
+  "code-theme",
 ]);
+
+/** Settings whose effect is painted by the settings store, not by this row. */
+const STORE_ACTIONS: Record<string, (value: unknown) => void> = {
+  theme: (value) => setThemeMode(value as "light" | "dark" | "system"),
+  "light-code-theme": (value) => setLightCodeTheme(value as LightCodeTheme),
+  "dark-code-theme": (value) => setDarkCodeTheme(value as DarkCodeTheme),
+};
 
 /**
  * On failure, roll the control back to what storage actually holds.
@@ -69,38 +89,19 @@ export function SettingControl({
   // changed by toggling the row before storage answered.
   const dirty = useRef(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    entry
-      .useValue()
-      .then((v) => {
-        if (cancelled) return;
-        if (!dirty.current) setValue(v);
-        setLoaded(true);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        captureError(err, { action: "setting.useValue", settingId: entry.id });
-        setLoaded(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [entry]);
-
   const persist = useCallback(
     async (next: unknown) => {
       setValue(next);
       dirty.current = true;
       setStatus("saving");
       try {
-        // ThemeContext persists for us, so writing here too would be a
-        // redundant second write with no reader.
-        if (entry.id !== "theme") {
+        // The settings store persists these for us and paints them in this
+        // document; writing here too would be a redundant second write.
+        const storeAction = STORE_ACTIONS[entry.id];
+        if (!storeAction) {
           await entry.setValue(next);
-        }
-        if (entry.id === "theme") {
-          setThemeMode(next as "light" | "dark" | "system");
+        } else {
+          storeAction(next);
         }
         setStatus("saved");
         setTimeout(() => setStatus((s) => (s === "saved" ? "idle" : s)), 1500);
@@ -120,20 +121,48 @@ export function SettingControl({
     [entry]
   );
 
+  useEffect(() => {
+    let cancelled = false;
+    entry
+      .useValue()
+      .then((v) => {
+        if (cancelled) return;
+        if (!dirty.current) {
+          // A code theme can arrive from an older build or a backup with a
+          // value that is no longer offered. Normalize it once here, before the
+          // first render, and write the named default back so the next load
+          // does not repeat the broken value.
+          const normalized =
+            entry.control === "code-theme" ? normalizeCodeTheme(entry, v) : v;
+          if (normalized !== v) {
+            void persist(normalized);
+          } else {
+            setValue(v);
+          }
+        }
+        setLoaded(true);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        captureError(err, { action: "setting.useValue", settingId: entry.id });
+        setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entry, persist]);
+
   const handleReset = useCallback(() => {
     if (!entry.reset) return;
     const finish = (fresh: unknown) => {
       dirty.current = false;
       setValue(fresh);
-      if (entry.id === "theme") {
-        setThemeMode(fresh as "light" | "dark" | "system");
-      }
+      STORE_ACTIONS[entry.id]?.(fresh);
       setStatus("saved");
       setTimeout(() => setStatus((s) => (s === "saved" ? "idle" : s)), 1500);
     };
-    if (entry.id === "theme") {
-      const fresh = entry.defaultValue;
-      finish(fresh);
+    if (STORE_ACTIONS[entry.id]) {
+      finish(entry.defaultValue);
       return;
     }
     entry
@@ -197,6 +226,13 @@ export function SettingControl({
       )}
     </SettingRow>
   );
+}
+
+/** Resolve a stored code theme to one of the presets that actually exists. */
+function normalizeCodeTheme(entry: SettingEntry, value: unknown): CodeTheme {
+  return entry.id === "dark-code-theme"
+    ? normalizeDarkCodeTheme(value)
+    : normalizeLightCodeTheme(value);
 }
 
 /**
@@ -328,6 +364,43 @@ function Control({
             })}
           </SelectContent>
         </Select>
+      );
+    }
+
+    case "code-theme": {
+      const options = entry.options ?? [];
+      const items = Object.fromEntries(
+        options.map((option) => [option.value, i18n.t(option.labelKey)])
+      );
+      // Base UI resolves the trigger text from `items`. Use the same normalized
+      // value for the select and the sample so an unknown saved value cannot
+      // leave one showing a name and the other a different palette.
+      const theme = normalizeCodeTheme(entry, value);
+      return (
+        <div className="flex w-full flex-col gap-2">
+          <Select
+            items={items}
+            value={theme}
+            onValueChange={(next) => onChange(next)}
+            disabled={!loaded}
+          >
+            <SelectTrigger
+              className="h-8 w-full text-sm"
+              data-testid={`${entry.testId}-select`}
+              aria-label={i18n.t(entry.titleKey)}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {options.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {i18n.t(option.labelKey)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <CodeThemePreview theme={theme} testId={`${entry.testId}-preview`} />
+        </div>
       );
     }
 

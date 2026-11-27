@@ -303,6 +303,276 @@
  * Keyboard-style badge for shortcuts
  * Uses CSS design tokens so light/dark mode is handled automatically.
  */
+/**
+ * Code blocks opt every descendant out of the global UI font. The base reset
+ * sets `font-family` on `*`, so a monospace `<pre>` alone is not enough: Slate's
+ * leaf spans still get Inter from that rule instead of inheriting from `pre`.
+ */
+.code-block-code,
+.code-block-code * {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+
+/**
+ * Prism presets for the code-theme setting.
+ *
+ * The palette is one set of custom properties rather than three copies of the
+ * token rules: both the editor and the Appearance sample render the same
+ * `code-token-*` classes, so the sample cannot drift from what the user gets.
+ * Values follow the shipped Prism presets plus familiar GitHub Light, Xcode,
+ * One Dark Pro, Dracula, Nord and VS Code Dark+ palettes; shadows and borders
+ * from those themes are deliberately omitted — Clipio's own border and radius
+ * own the chrome around the code.
+ */
+:root,
+[data-code-theme="github-light"] {
+  --code-bg: #ffffff;
+  --code-fg: #24292f;
+  --code-comment: #6a737d;
+  --code-string: #032f62;
+  --code-keyword: #d73a49;
+  --code-number: #005cc5;
+  --code-function: #6f42c1;
+  --code-operator: #d73a49;
+  --code-punctuation: #24292f;
+  --code-regex: #032f62;
+  --code-tag: #22863a;
+  --code-property: #e36209;
+  --code-variable: #24292f;
+  --code-class: #6f42c1;
+}
+
+[data-code-theme="one-dark-pro"] {
+  --code-bg: #282c34;
+  --code-fg: #abb2bf;
+  --code-comment: #5c6370;
+  --code-string: #98c379;
+  --code-keyword: #c678dd;
+  --code-number: #d19a66;
+  --code-function: #61afef;
+  --code-operator: #56b6c2;
+  --code-punctuation: #abb2bf;
+  --code-regex: #d19a66;
+  --code-tag: #e06c75;
+  --code-property: #e5c07b;
+  --code-variable: #e06c75;
+  --code-class: #e5c07b;
+}
+
+[data-code-theme="okaidia"] {
+  --code-bg: #272822;
+  --code-fg: #f8f8f2;
+  --code-comment: #8292a2;
+  --code-string: #a6e22e;
+  --code-keyword: #66d9ef;
+  --code-number: #ae81ff;
+  --code-function: #e6db74;
+  --code-operator: #f8f8f2;
+  --code-punctuation: #f8f8f2;
+  --code-regex: #fd971f;
+  --code-tag: #f92672;
+  --code-property: #f92672;
+  --code-variable: #f8f8f2;
+  --code-class: #e6db74;
+}
+
+[data-code-theme="twilight"] {
+  --code-bg: #141414;
+  --code-fg: #ffffff;
+  --code-comment: #777777;
+  --code-string: #8f9d6a;
+  --code-keyword: #f9ee98;
+  --code-number: #cf6a4c;
+  --code-function: #8f9d6a;
+  --code-operator: #8f9d6a;
+  --code-punctuation: #b3b3b3;
+  --code-regex: #8f9d6a;
+  --code-tag: #cf6a4c;
+  --code-property: #f9ee98;
+  --code-variable: #8f9d6a;
+  --code-class: #f9ee98;
+}
+
+[data-code-theme="solarized-light"] {
+  --code-bg: #fdf6e3;
+  --code-fg: #657b83;
+  --code-comment: #93a1a1;
+  --code-string: #2aa198;
+  --code-keyword: #859900;
+  --code-number: #268bd2;
+  --code-function: #b58900;
+  --code-operator: #657b83;
+  --code-punctuation: #586e75;
+  --code-regex: #cb4b16;
+  --code-tag: #268bd2;
+  --code-property: #268bd2;
+  --code-variable: #cb4b16;
+  --code-class: #b58900;
+}
+
+[data-code-theme="prism-light"] {
+  --code-bg: #f5f2f0;
+  --code-fg: #000000;
+  --code-comment: #708090;
+  --code-string: #690000;
+  --code-keyword: #0077aa;
+  --code-number: #986801;
+  --code-function: #a67f59;
+  --code-operator: #9a6e3a;
+  --code-punctuation: #999999;
+  --code-regex: #e50000;
+  --code-tag: #0077aa;
+  --code-property: #a67f59;
+  --code-variable: #0077aa;
+  --code-class: #dd4a68;
+}
+
+[data-code-theme="coy"] {
+  --code-bg: #f7f7f7;
+  --code-fg: #000000;
+  --code-comment: #60a0b0;
+  --code-string: #339900;
+  --code-keyword: #0077aa;
+  --code-number: #986801;
+  --code-function: #a67f59;
+  --code-operator: #9a6e3a;
+  --code-punctuation: #666666;
+  --code-regex: #e50000;
+  --code-tag: #0077aa;
+  --code-property: #a67f59;
+  --code-variable: #0077aa;
+  --code-class: #dd4a68;
+}
+
+[data-code-theme="xcode"] {
+  --code-bg: #ffffff;
+  --code-fg: #000000;
+  --code-comment: #007400;
+  --code-string: #aa1731;
+  --code-keyword: #aa0d91;
+  --code-number: #1c00cf;
+  --code-function: #0069c2;
+  --code-operator: #000000;
+  --code-punctuation: #000000;
+  --code-regex: #9b32cf;
+  --code-tag: #c41a16;
+  --code-property: #a71d5d;
+  --code-variable: #000000;
+  --code-class: #5c2699;
+}
+
+[data-code-theme="tomorrow-night"] {
+  --code-bg: #1d1f21;
+  --code-fg: #c5c8c6;
+  --code-comment: #7f848e;
+  --code-string: #b5bd68;
+  --code-keyword: #b294bb;
+  --code-number: #de935f;
+  --code-function: #81a2be;
+  --code-operator: #8abeb7;
+  --code-punctuation: #c5c8c6;
+  --code-regex: #de935f;
+  --code-tag: #cc6666;
+  --code-property: #f0c674;
+  --code-variable: #cc6666;
+  --code-class: #f0c674;
+}
+
+[data-code-theme="dracula"] {
+  --code-bg: #282a36;
+  --code-fg: #f8f8f2;
+  --code-comment: #6272a4;
+  --code-string: #f1fa8c;
+  --code-keyword: #ff79c6;
+  --code-number: #bd93f9;
+  --code-function: #50fa7b;
+  --code-operator: #f8f8f2;
+  --code-punctuation: #f8f8f2;
+  --code-regex: #ff79c6;
+  --code-tag: #ff5555;
+  --code-property: #50fa7b;
+  --code-variable: #f8f8f2;
+  --code-class: #50fa7b;
+}
+
+[data-code-theme="nord"] {
+  --code-bg: #2e3440;
+  --code-fg: #d8dee9;
+  --code-comment: #616e88;
+  --code-string: #a3be8c;
+  --code-keyword: #81a1c1;
+  --code-number: #b48ead;
+  --code-function: #88c0d0;
+  --code-operator: #81a1c1;
+  --code-punctuation: #d8dee9;
+  --code-regex: #d08770;
+  --code-tag: #bf616a;
+  --code-property: #88c0d0;
+  --code-variable: #d8dee9;
+  --code-class: #b48ead;
+}
+
+[data-code-theme="vsc-dark-plus"] {
+  --code-bg: #1e1e1e;
+  --code-fg: #d4d4d4;
+  --code-comment: #6a9955;
+  --code-string: #ce9178;
+  --code-keyword: #c586c0;
+  --code-number: #b5cea8;
+  --code-function: #dcdcaa;
+  --code-operator: #d4d4d4;
+  --code-punctuation: #d4d4d4;
+  --code-regex: #d16969;
+  --code-tag: #569cd6;
+  --code-property: #9cdcfe;
+  --code-variable: #9cdcfe;
+  --code-class: #4ec9b0;
+}
+
+.code-block-code {
+  background-color: var(--code-bg);
+  color: var(--code-fg);
+}
+
+.code-token-comment {
+  color: var(--code-comment);
+  font-style: italic;
+}
+.code-token-string {
+  color: var(--code-string);
+}
+.code-token-keyword {
+  color: var(--code-keyword);
+}
+.code-token-number {
+  color: var(--code-number);
+}
+.code-token-function {
+  color: var(--code-function);
+}
+.code-token-operator {
+  color: var(--code-operator);
+}
+.code-token-punctuation {
+  color: var(--code-punctuation);
+}
+.code-token-regex {
+  color: var(--code-regex);
+}
+.code-token-tag {
+  color: var(--code-tag);
+}
+.code-token-property {
+  color: var(--code-property);
+}
+.code-token-variable {
+  color: var(--code-variable);
+}
+.code-token-class {
+  color: var(--code-class);
+}
+
 .kbd-badge {
   font-family: JetBrainsMono, ui-monospace, SFMono-Regular, Menlo, monospace;
   /* Programming ligatures would fuse `->` and `!=` in a shortcut badge. */

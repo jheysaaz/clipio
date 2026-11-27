@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   formatStoredDate,
+  isValidStoredDateFormat,
   isValidStoredDate,
   toStoredDate,
   todayStoredDate,
@@ -45,9 +46,26 @@ describe("todayStoredDate", () => {
   });
 });
 
+describe("isValidStoredDateFormat", () => {
+  it("accepts only the formats the picker can write", () => {
+    expect(isValidStoredDateFormat("short")).toBe(true);
+    expect(isValidStoredDateFormat(" tomato ")).toBe(false);
+    expect(isValidStoredDateFormat("")).toBe(false);
+  });
+});
+
 describe("formatStoredDate", () => {
-  it("formats a valid stored date", () => {
+  it("formats a valid stored date in every supported format", () => {
     expect(formatStoredDate("2025-06-15")).toBe("Jun 15, 2025");
+    expect(formatStoredDate("2025-06-15", "iso")).toBe("2025-06-15");
+    expect(formatStoredDate("2025-06-15", "us")).toBe("6/15/2025");
+    expect(formatStoredDate("2025-06-15", "eu")).toBe("15/06/2025");
+    expect(formatStoredDate("2025-06-15", "long")).toBe("Jun 15, 2025");
+    expect(formatStoredDate("2025-06-15", "short")).toBe("Jun 15");
+  });
+
+  it("falls back to the long format for an unknown format", () => {
+    expect(formatStoredDate("2025-06-15", "tomato")).toBe("Jun 15, 2025");
   });
 
   it("leaves an invalid value visible instead of throwing", () => {
