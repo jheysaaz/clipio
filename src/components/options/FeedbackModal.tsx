@@ -1,13 +1,17 @@
 import { useEffect, useState, useRef } from "react";
-import { Check, Heart, ExternalLink, X, MessageSquareText } from "lucide-react";
+import { Check, X, MessageSquareText } from "lucide-react";
 
 import { useFeedback } from "@/components/feedback/FeedbackProvider";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Icon } from "@/components/ui/icon";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { InlineError } from "@/components/ui/inline-error";
-import { setReviewPromptState, getStoreReviewUrl } from "@/lib/review-prompt";
 import { i18n } from "#i18n";
 import { sendUserFeedback, captureError } from "@/lib/sentry";
 import { InfoTooltip } from "./InfoTooltip";
@@ -146,17 +150,14 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/40 dark:bg-black/60 flex items-center justify-center p-4"
-      onKeyDown={(e) => {
-        if (e.key === "Escape") handleClose();
+    <Dialog
+      open={open}
+      disablePointerDismissal
+      onOpenChange={(next) => {
+        if (!next) handleClose();
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="bg-background rounded-xl border shadow-xl w-full max-w-lg max-h-[min(90vh,40rem)] overflow-y-auto p-6"
-      >
+      <DialogContent showCloseButton={false} className="w-full max-w-lg p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
@@ -165,9 +166,9 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
               size="xl"
               className="text-foreground"
             />
-            <h2 className="text-lg font-semibold text-foreground">
+            <DialogTitle className="text-lg font-semibold text-foreground">
               {i18n.t("options.feedback.title")}
-            </h2>
+            </DialogTitle>
           </div>
           <Button
             variant="ghost"
@@ -193,17 +194,14 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
               </Label>
               <InfoTooltip text={i18n.t("options.feedback.nameTooltip")} />
             </div>
-            <input
+            <Input
               id="feedback-name"
               type="text"
               placeholder={i18n.t("options.feedback.namePlaceholder")}
               value={state.name}
               onChange={handleInputChange("name")}
               disabled={state.submitting}
-              className={cn(
-                "flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-                state.submitting && "opacity-60"
-              )}
+              className={state.submitting ? "opacity-60" : undefined}
             />
           </div>
 
@@ -214,17 +212,14 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
               </Label>
               <InfoTooltip text={i18n.t("options.feedback.emailTooltip")} />
             </div>
-            <input
+            <Input
               id="feedback-email"
               type="email"
               placeholder={i18n.t("options.feedback.emailPlaceholder")}
               value={state.email}
               onChange={handleInputChange("email")}
               disabled={state.submitting}
-              className={cn(
-                "flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-                state.submitting && "opacity-60"
-              )}
+              className={state.submitting ? "opacity-60" : undefined}
             />
           </div>
 
@@ -235,7 +230,7 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
               </Label>
               <InfoTooltip text={i18n.t("options.feedback.messageTooltip")} />
             </div>
-            <textarea
+            <Textarea
               id="feedback-message"
               placeholder={i18n.t("options.feedback.messagePlaceholder")}
               value={state.message}
@@ -243,8 +238,7 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
               disabled={state.submitting}
               rows={5}
               className={cn(
-                "flex min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-                "resize-none",
+                "min-h-20 resize-none",
                 state.submitting && "opacity-60"
               )}
             />
@@ -315,19 +309,19 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
           />
 
           {state.submitted && (
-            <div
+            <Alert
               data-testid="feedback-success"
-              className="flex items-start gap-3 rounded-lg bg-emerald-50 px-4 py-3 dark:bg-emerald-950/30"
+              className="border-transparent bg-emerald-50 px-4 py-3 dark:bg-emerald-950/30"
             >
               <Icon
                 icon={Check}
                 size="lg"
                 className="text-green-600 dark:text-green-400 mt-0.5"
               />
-              <p className="text-sm text-green-700 dark:text-green-300">
+              <AlertDescription className="text-green-700 dark:text-green-300">
                 {i18n.t("options.feedback.success")}
-              </p>
-            </div>
+              </AlertDescription>
+            </Alert>
           )}
 
           <div className="flex gap-3 justify-end pt-2">
@@ -338,7 +332,7 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
             >
               {state.submitting ? (
                 <>
-                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  <Spinner className="size-3.5" />
                   {i18n.t("options.feedback.submitting")}
                 </>
               ) : (
@@ -347,47 +341,7 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
             </Button>
           </div>
         </form>
-
-        {/* Divider */}
-        <div className="my-6 h-px bg-border" />
-
-        {/* Donation + Review */}
-        <div className="space-y-3">
-          <Button
-            variant="outline"
-            className="w-full justify-start gap-2"
-            onClick={() =>
-              browser.tabs.create({
-                url: "https://github.com/sponsors/jheysaaz",
-              })
-            }
-            title={i18n.t("options.feedback.donationTitle")}
-          >
-            <Icon icon={Heart} size="lg" />
-            {i18n.t("options.feedback.donationAction")}
-          </Button>
-          <div className="rounded-lg border p-4 space-y-2">
-            <p className="text-sm font-medium text-foreground">
-              {i18n.t("options.feedback.reviewBannerTitle")}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {i18n.t("options.feedback.reviewBannerDescription")}
-            </p>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                browser.tabs.create({ url: getStoreReviewUrl() });
-                setReviewPromptState("rated").catch(console.warn);
-              }}
-              className="gap-1.5"
-            >
-              <Icon icon={ExternalLink} />
-              {i18n.t("options.feedback.reviewBannerAction")}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
