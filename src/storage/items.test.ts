@@ -70,6 +70,9 @@ const EXPECTED: Record<string, unknown> = {
   "local:writerId": "unknown",
   "local:storageMode": "sync",
   "local:storageModeReason": "quota",
+  // Whether the background should show the attention badge. A refused write can
+  // happen while sync is still active, so this is not derivable from the mode.
+  "local:storageAttention": false,
   "local:syncDataLost": false,
   "local:confettiEnabled": true,
   "local:themeMode": "system",

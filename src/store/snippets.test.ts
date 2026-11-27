@@ -9,8 +9,6 @@ import {
   removeSnippet,
   restoreRecoveredSnippets,
   dismissRecoveryBanner,
-  dismissQuotaWarning,
-  dismissSyncPausedWarning,
   dismissLoadError,
   dismissRecoveryError,
   clearDraft,
@@ -64,6 +62,10 @@ vi.mock("@/storage", () => storage);
 
 vi.mock("@/storage/items", () => ({
   syncDataLostItem: { getValue: vi.fn(async () => false) },
+  storageAttentionItem: {
+    getValue: vi.fn(async () => false),
+    setValue: vi.fn(async () => {}),
+  },
   lastViewedSnippetIdItem: {
     getValue: vi.fn(async () => null),
     setValue: vi.fn(async () => {}),
@@ -77,7 +79,11 @@ vi.mock("@/storage/writer-id", () => ({
 vi.mock("@/lib/sentry", () => ({ captureError: vi.fn() }));
 
 import { captureError } from "@/lib/sentry";
-import { lastViewedSnippetIdItem, syncDataLostItem } from "@/storage/items";
+import {
+  lastViewedSnippetIdItem,
+  storageAttentionItem,
+  syncDataLostItem,
+} from "@/storage/items";
 import { draftPreviewsStore } from "@/store/write-queue";
 import {
   emitStorageChange,
@@ -113,6 +119,7 @@ beforeEach(() => {
   resetSnippetsStoreForTests();
   draftPreviewsStore.setState(() => ({}));
   vi.mocked(captureError).mockClear();
+  vi.mocked(storageAttentionItem.setValue).mockClear();
   storage.getSnippets.mockResolvedValue([]);
   storage.getStorageStatus.mockResolvedValue(OK_STATUS);
   storage.saveSnippet.mockResolvedValue(undefined);
@@ -174,25 +181,24 @@ describe("loadSnippets", () => {
     );
   });
 
-  it("keeps existing warnings when the status read fails", async () => {
-    // A banner the user has already dismissed must not reappear because one
-    // status read failed.
+  it("keeps existing storage state when the status read fails", async () => {
+    // A failed read must not clear an error or invent a local-only state.
     storage.getSnippets.mockResolvedValue([makeSnippet()]);
-    storage.getStorageStatus.mockResolvedValue({
-      ...OK_STATUS,
-      quotaExceeded: true,
-    });
-    await loadSnippets();
-    expect(state().quotaWarning).toBe(true);
-
-    dismissQuotaWarning();
+    snippetsStore.setState((prev) => ({
+      ...prev,
+      quotaWarning: false,
+      localOnly: true,
+    }));
     storage.getStorageStatus.mockRejectedValue(new Error("status unavailable"));
+
     await loadSnippets();
 
+    expect(state().snippets).toHaveLength(1);
     expect(state().quotaWarning).toBe(false);
+    expect(state().localOnly).toBe(true);
   });
 
-  it("raises the quota warning when storage reports over-quota", async () => {
+  it("raises the storage error and badge attention when storage reports over-quota", async () => {
     storage.getStorageStatus.mockResolvedValue({
       ...OK_STATUS,
       quotaExceeded: true,
@@ -201,13 +207,10 @@ describe("loadSnippets", () => {
     await loadSnippets();
 
     expect(state().quotaWarning).toBe(true);
-    // Quota is the more urgent of the two, so it wins. Showing both would tell
-    // the user their edits are not syncing *and* that there is no room, which is
-    // one problem described twice.
-    expect(state().syncPausedWarning).toBe(false);
+    expect(storageAttentionItem.setValue).toHaveBeenCalledWith(true);
   });
 
-  it("raises the sync-paused warning when the user chose local mode", async () => {
+  it("reports a chosen local mode as a neutral state, not an error", async () => {
     storage.getStorageStatus.mockResolvedValue({
       ...OK_STATUS,
       mode: "local",
@@ -216,22 +219,24 @@ describe("loadSnippets", () => {
 
     await loadSnippets();
 
-    expect(state().syncPausedWarning).toBe(true);
+    expect(state().localOnly).toBe(true);
+    expect(state().quotaWarning).toBe(false);
+    expect(storageAttentionItem.setValue).toHaveBeenCalledWith(false);
   });
 
-  it("does not raise sync-paused for an automatic local fallback", async () => {
-    // "manual" means the user chose it and should be told their edits stay here.
-    // An automatic fallback is a different message, and this store does not have
-    // one — so it must stay silent rather than misattribute the cause.
+  it("reports an automatic local fallback as both local-only and a storage error", async () => {
     storage.getStorageStatus.mockResolvedValue({
       ...OK_STATUS,
       mode: "local",
+      quotaExceeded: true,
       localReason: "quota",
     });
 
     await loadSnippets();
 
-    expect(state().syncPausedWarning).toBe(false);
+    expect(state().localOnly).toBe(true);
+    expect(state().quotaWarning).toBe(true);
+    expect(storageAttentionItem.setValue).toHaveBeenCalledWith(true);
   });
 
   it("does not let a stale refresh wipe a newer load", async () => {
@@ -381,7 +386,8 @@ describe("initialiseSnippets", () => {
 // ---------------------------------------------------------------------------
 
 describe("addSnippet", () => {
-  it("adds the created snippet to the library", async () => {
+  it("adds the created snippet and clears a resolved quota error", async () => {
+    snippetsStore.setState((prev) => ({ ...prev, quotaWarning: true }));
     const result = await addSnippet({
       label: "New",
       shortcut: "/n",
@@ -391,6 +397,8 @@ describe("addSnippet", () => {
 
     expect(result.ok).toBe(true);
     expect(state().snippets).toHaveLength(1);
+    expect(state().quotaWarning).toBe(false);
+    expect(storageAttentionItem.setValue).toHaveBeenCalledWith(false);
     expect(storage.saveSnippet).toHaveBeenCalledOnce();
   });
 
@@ -410,7 +418,7 @@ describe("addSnippet", () => {
     expect(state().snippets).toHaveLength(0);
   });
 
-  it("raises the banner and names the limit on a quota refusal", async () => {
+  it("raises the storage error and badge attention on a quota refusal", async () => {
     storage.saveSnippet.mockRejectedValue(
       new storage.StorageQuotaError([
         { kind: "per-item", actual: 10_000, limit: 8_192 },
@@ -429,6 +437,7 @@ describe("addSnippet", () => {
     // The limit is named rather than saying "quota exceeded", so the user can act.
     expect(result.error).toContain("8.0 KB");
     expect(state().quotaWarning).toBe(true);
+    expect(storageAttentionItem.setValue).toHaveBeenCalledWith(true);
   });
 
   it('names the limit rather than saying only "quota exceeded"', async () => {
@@ -472,10 +481,11 @@ describe("addSnippet", () => {
 // ---------------------------------------------------------------------------
 
 describe("editSnippet", () => {
-  it("replaces the snippet in place", async () => {
+  it("replaces the snippet in place and clears a resolved quota error", async () => {
     snippetsStore.setState((prev) => ({
       ...prev,
       snippets: [makeSnippet(), makeSnippet({ id: "s2" })],
+      quotaWarning: true,
     }));
 
     await editSnippet(makeSnippet({ label: "Renamed" }));
@@ -484,6 +494,8 @@ describe("editSnippet", () => {
     expect(list[0].label).toBe("Renamed");
     // In place, not appended: a match by id, so order is preserved.
     expect(list).toHaveLength(2);
+    expect(state().quotaWarning).toBe(false);
+    expect(storageAttentionItem.setValue).toHaveBeenCalledWith(false);
   });
 
   it("leaves the library untouched when the update fails", async () => {
@@ -516,8 +528,9 @@ describe("editSnippet", () => {
     if (!isWriteRefusal(error)) throw new Error("expected a refusal");
     expect(error.userMessage).toContain("117.2 KB");
     expect(error.userMessage).toContain("97.7 KB");
-    // The banner is a fact about storage, raised here so it stays up.
+    // The status flag is a fact about storage, raised here so it stays up.
     expect(state().quotaWarning).toBe(true);
+    expect(storageAttentionItem.setValue).toHaveBeenCalledWith(true);
     // And it is not an exception worth reporting.
     expect(captureError).not.toHaveBeenCalledWith(
       expect.anything(),
@@ -817,22 +830,15 @@ describe("findSnippet", () => {
 // ---------------------------------------------------------------------------
 
 describe("dismissals", () => {
-  it("clears each warning independently", () => {
+  it("clears the recoverable errors and leaves storage facts alone", () => {
     snippetsStore.setState((prev) => ({
       ...prev,
       quotaWarning: true,
-      syncPausedWarning: true,
+      localOnly: true,
       loadError: "boom",
       recoveryError: "bang",
       showRecoveryBanner: true,
     }));
-
-    dismissQuotaWarning();
-    expect(state().quotaWarning).toBe(false);
-    expect(state().syncPausedWarning).toBe(true);
-
-    dismissSyncPausedWarning();
-    expect(state().syncPausedWarning).toBe(false);
 
     dismissLoadError();
     expect(state().loadError).toBeNull();
@@ -842,6 +848,11 @@ describe("dismissals", () => {
     dismissRecoveryBanner();
     expect(state().recoveryError).toBeNull();
     expect(state().showRecoveryBanner).toBe(false);
+
+    // Chosen local mode and an unresolved quota error clear when the underlying
+    // fact changes, never because an action dismissed a message about it.
+    expect(state().quotaWarning).toBe(true);
+    expect(state().localOnly).toBe(true);
   });
 });
 

@@ -145,6 +145,13 @@ const posix = (p) => p.split(sep).join("/");
  * 465; the background, popup and options entries do not move. All three sizes
  * were measured twice from clean builds and did not vary.
  *
+ * Raised for popup sync feedback: the neutral local-only footer state, the
+ * inline quota error in the editor's reserved status slot, and the background
+ * badge decision plus storage-change listener. The aggregate grows 1,268
+ * bytes, the background entry 546, the content script 57 and the shared chunks
+ * 665; the popup and options entries stay below their existing budgets. All
+ * raised sizes were measured twice from clean builds and did not vary.
+ *
  * Raised again for the Diagnostics toolkit. The snapshot panel, log filters,
  * report formatter and their English/Spanish copy live in the options entry;
  * generated locale messages also reach the background worker. On its own the
@@ -157,12 +164,12 @@ const posix = (p) => p.split(sep).join("/");
  * and did not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_782_587 },
-  { name: "background entry", pattern: "background.js", maxBytes: 226_487 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_783_855 },
+  { name: "background entry", pattern: "background.js", maxBytes: 227_033 },
   {
     name: "content script entry",
     pattern: "content-scripts/content.js",
-    maxBytes: 919_205,
+    maxBytes: 919_262,
   },
   {
     name: "popup entry chunk",
@@ -179,7 +186,7 @@ const BUDGETS = [
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_636_895,
+    maxBytes: 1_637_560,
   },
 ];
 

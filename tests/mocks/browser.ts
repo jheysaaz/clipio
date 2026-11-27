@@ -225,6 +225,9 @@ export const mockStorageOnChanged = {
 
 export const mockRuntime = {
   id: "test-extension-id",
+  getURL: vi.fn(
+    (path: string) => `chrome-extension://test-extension-id${path}`
+  ),
   sendMessage: vi.fn(async () => undefined),
   getManifest: vi.fn(() => ({
     name: "Clipio",

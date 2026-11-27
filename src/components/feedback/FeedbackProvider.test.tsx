@@ -152,6 +152,10 @@ describe("FeedbackProvider", () => {
 
     const action = screen.getByRole("button", { name: "Retry" });
     expect(action.tagName).toBe("BUTTON");
+    // The action, icon, copy and dismiss control all inherit the banner's one
+    // foreground colour; a primary-blue link inside a red error read as three
+    // unrelated treatments in the same component.
+    expect(action.className).toContain("text-inherit");
 
     const banner = screen.getByTestId("feedback-banner");
     expect(banner.getAttribute("role")).toBeNull();

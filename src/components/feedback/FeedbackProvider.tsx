@@ -232,7 +232,10 @@ export function FeedbackBanner({
       <Icon icon={BannerIcon} size="lg" />
       <p className="min-w-0 flex-1 font-medium">{banner.message}</p>
       {banner.action && (
-        <InlineAction onClick={banner.action.onClick}>
+        <InlineAction
+          onClick={banner.action.onClick}
+          className="text-inherit hover:text-inherit"
+        >
           {banner.action.label}
         </InlineAction>
       )}

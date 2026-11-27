@@ -89,6 +89,73 @@ async function seedAndReload(
   await waitForPopupReady(page);
 }
 
+/**
+ * Switch storage mode while suppressing the unrelated update banner. The badge
+ * belongs to the background, so the change is made through browser storage —
+ * not a React state setter — and the popup is reloaded to read it fresh.
+ */
+async function setStorageMode(
+  page: import("@playwright/test").Page,
+  storageMode: "sync" | "local",
+  storageModeReason: "manual" | "quota"
+) {
+  await page.evaluate(
+    async ({ storageMode, storageModeReason }) => {
+      const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+      const cached = await ext.storage.local.get("cachedSnippets");
+      await ext.storage.local.set({
+        storageMode,
+        storageModeReason,
+        // Switching to local must actually have a library to read; the seed put
+        // the same snippets in the sync backend and the content-script cache.
+        ...(storageMode === "local"
+          ? { snippets: cached.cachedSnippets ?? [] }
+          : {}),
+        latestVersion: null,
+        dismissedUpdateVersion: "9.9.9",
+        latestVersionCheckedAt: new Date().toISOString(),
+      });
+    },
+    { storageMode, storageModeReason }
+  );
+  await page.reload();
+  await waitForPopupReady(page);
+}
+
+async function readBadgeText(
+  page: import("@playwright/test").Page
+): Promise<string> {
+  return page.evaluate(async () => {
+    const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+    const action = ext.action ?? ext.browserAction;
+    // Chrome's promise form resolves to the text itself, not the callback
+    // payload shape `{ text }`. Accept both so the assertion reads the badge,
+    // not a property that is always undefined.
+    const result = await action.getBadgeText({});
+    return typeof result === "string" ? result : (result.text ?? "");
+  });
+}
+
+/**
+ * Use the narrowest sidebar the resize handle permits. The footer has to keep
+ * its controls on screen there; a state indicator that only fits at the default
+ * width has just moved the bug to a different setting.
+ */
+async function useMinimumSidebarWidth(
+  page: import("@playwright/test").Page
+): Promise<void> {
+  const minimum = Number(
+    await page.getByRole("separator").getAttribute("aria-valuemin")
+  );
+  expect(Number.isFinite(minimum)).toBe(true);
+  await page.evaluate(async (width) => {
+    const ext = (globalThis as any).chrome ?? (globalThis as any).browser;
+    await ext.storage.local.set({ sidebarWidth: width, sidebarOpen: true });
+  }, minimum);
+  await page.reload();
+  await waitForPopupReady(page);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -1207,6 +1274,103 @@ test.describe("Popup (Dashboard)", () => {
     await waitForPopupReady(popupPage);
     await expect(banner).toHaveCount(0);
     await expect(popupPage.locator(TOAST_SELECTOR)).toHaveCount(0);
+  });
+
+  test("treats a manual local switch as a neutral state, not a banner", async ({
+    popupPage,
+  }) => {
+    await seedAndReload(popupPage, [helloSnippet()]);
+    await useMinimumSidebarWidth(popupPage);
+    // Measure at the narrowest sidebar before the mode switch. The footer must
+    // keep both controls in exactly the same place once the indicator appears.
+    const settingsBefore = await popupPage
+      .getByTestId("settings-button")
+      .boundingBox();
+    expect(settingsBefore).not.toBeNull();
+
+    await setStorageMode(popupPage, "local", "manual");
+
+    const indicator = popupPage.getByTestId("local-only-indicator");
+    await expect(indicator).toBeVisible();
+    await expect(indicator).toHaveText("Local only");
+    const detail = "Sync is off. Snippets are saved on this device only.";
+    await expect(indicator).toHaveAttribute("title", detail);
+    await expect(indicator).toHaveAttribute("aria-label", detail);
+    await expect(
+      popupPage.locator(
+        '[data-testid="warning-sync-paused"], [data-testid="warning-quota"]'
+      )
+    ).toHaveCount(0);
+    await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText("");
+    await expect.poll(() => readBadgeText(popupPage)).toBe("");
+
+    const library = await popupPage
+      .getByTestId("snippet-library")
+      .boundingBox();
+    const settingsAfter = await popupPage
+      .getByTestId("settings-button")
+      .boundingBox();
+    const addAfter = await popupPage.getByTestId("add-snippet").boundingBox();
+    const indicatorBox = await indicator.boundingBox();
+    expect(library).not.toBeNull();
+    expect(settingsAfter).not.toBeNull();
+    expect(addAfter).not.toBeNull();
+    expect(indicatorBox).not.toBeNull();
+    expect(Math.abs(settingsAfter!.x - settingsBefore!.x)).toBeLessThanOrEqual(
+      1
+    );
+    expect(Math.abs(settingsAfter!.y - settingsBefore!.y)).toBeLessThanOrEqual(
+      1
+    );
+    expect(settingsAfter!.width).toBe(settingsBefore!.width);
+    // Both controls and the indicator stay inside the sidebar at its minimum.
+    expect(settingsAfter!.x + settingsAfter!.width).toBeLessThanOrEqual(
+      library!.x + library!.width + 1
+    );
+    expect(addAfter!.x + addAfter!.width).toBeLessThanOrEqual(
+      settingsAfter!.x + 1
+    );
+    expect(indicatorBox!.x).toBeGreaterThanOrEqual(library!.x);
+    expect(indicatorBox!.x + indicatorBox!.width).toBeLessThanOrEqual(
+      library!.x + library!.width + 1
+    );
+  });
+
+  test("puts a quota fallback inline and badges the icon with one foreground colour", async ({
+    popupPage,
+  }) => {
+    await seedAndReload(popupPage, [helloSnippet()]);
+    await setStorageMode(popupPage, "local", "quota");
+
+    await expect.poll(() => readBadgeText(popupPage)).toBe("!");
+    const status = popupPage.getByTestId("snippet-sync-status");
+    await expect(status).toContainText(
+      "Sync storage full — snippets saved on this device only."
+    );
+    await expect(status.getByTestId("storage-settings-link")).toBeVisible();
+    await expect(
+      popupPage.locator(
+        '[data-testid="warning-sync-paused"], [data-testid="warning-quota"]'
+      )
+    ).toHaveCount(0);
+
+    // The link and icon inherit the status colour; a primary-blue link inside a
+    // red error was one of the three treatments in the old banner.
+    const colours = await status.evaluate((element) => {
+      const link = element.querySelector("button");
+      const icon = element.querySelector("svg");
+      return [
+        getComputedStyle(element).color,
+        link ? getComputedStyle(link).color : null,
+        icon ? getComputedStyle(icon).color : null,
+      ];
+    });
+    expect(colours[0]).not.toBeNull();
+    expect(colours.slice(1)).toEqual([colours[0], colours[0]]);
+
+    await setStorageMode(popupPage, "sync", "manual");
+    await expect.poll(() => readBadgeText(popupPage)).toBe("");
+    await expect(status).not.toContainText("Sync storage full");
   });
 
   // -------------------------------------------------------------------------

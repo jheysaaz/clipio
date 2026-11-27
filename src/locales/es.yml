@@ -37,13 +37,15 @@ dashboard:
     body: Crea tu primer fragmento para guardar y reutilizar texto rápidamente.
     action: Crear tu primer fragmento
   snippetListLabel: Fragmentos
+  # Elegir el modo local es un estado, no una advertencia: un indicador neutro,
+  # con la explicación completa en el título y en Ajustes de almacenamiento.
+  localOnly: Solo local
+  localOnlyDetail: La sincronización está desactivada. Los fragmentos se guardan solo en este dispositivo.
+  # Una conmutación automática por cuota permanece en el espacio reservado del editor.
+  storageError:
+    message: Almacenamiento de sincronización lleno — los fragmentos se guardan solo en este dispositivo.
+    action: Ajustes de almacenamiento →
   warnings:
-    quotaFull:
-      body: Almacenamiento de sincronización lleno — los fragmentos se guardan solo localmente.
-      action: Exportar copia de seguridad →
-    syncPaused:
-      body: Sincronización pausada — los fragmentos se guardan localmente (cambiado manualmente).
-      action: Ajustes de almacenamiento →
     recovery:
       body:
         1: "Tus fragmentos sincronizados se perdieron (cierre de sesión detectado). 1 fragmento en copia de seguridad."

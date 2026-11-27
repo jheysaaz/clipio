@@ -38,7 +38,7 @@ import { Badge } from "@/components/ui/badge";
 import type { Snippet, SnippetFormData } from "@/types";
 import { InlineError } from "@/components/ui/inline-error";
 import { cn } from "@/lib/utils";
-import { isWriteRefusal } from "@/store/snippets";
+import { isWriteRefusal, useSnippets } from "@/store/snippets";
 import {
   createAutosave,
   TAG_AUTOSAVE_DELAY_MS,
@@ -240,6 +240,7 @@ export default function SnippetEditor({
   const sawBusyRef = useRef(false);
 
   const status = useStore(writeQueueStore);
+  const quotaWarning = useSnippets((s) => s.quotaWarning);
   const queuedOutcome = useStore(queueOutcomesStore)[snippet.id];
   const outcome =
     queuedOutcome?.opId === dismissedOutcomeId ? undefined : queuedOutcome;
@@ -984,16 +985,34 @@ export default function SnippetEditor({
         */}
         <span
           data-testid="snippet-sync-status"
-          className="flex h-4 min-w-32 items-center gap-1 px-2 text-ui-xs! font-medium text-muted-foreground"
+          className={cn(
+            "flex h-4 min-w-32 items-center gap-1 overflow-hidden px-2 text-ui-xs! font-medium whitespace-nowrap",
+            quotaWarning || statusIsError
+              ? "text-destructive"
+              : "text-muted-foreground"
+          )}
         >
-          {statusIsError ? (
+          {quotaWarning ? (
             <>
-              <Icon
-                icon={AlertCircle}
-                size="sm"
-                stroke="emphasis"
-                className="text-destructive"
-              />
+              <Icon icon={AlertCircle} size="sm" stroke="emphasis" />
+              <span className="min-w-0 truncate">
+                {i18n.t("dashboard.storageError.message")}
+              </span>
+              <InlineAction
+                data-testid="storage-settings-link"
+                onClick={() => {
+                  void browser.tabs.create({
+                    url: browser.runtime.getURL("/options.html") + "#/storage",
+                  });
+                }}
+                className="shrink-0 text-inherit hover:text-inherit"
+              >
+                {i18n.t("dashboard.storageError.action")}
+              </InlineAction>
+            </>
+          ) : statusIsError ? (
+            <>
+              <Icon icon={AlertCircle} size="sm" stroke="emphasis" />
               <InlineAction
                 data-testid="retry-save"
                 data-error-detail={outcomeMessage ?? undefined}
@@ -1006,7 +1025,7 @@ export default function SnippetEditor({
                       ])
                     : i18n.t("snippetEditor.retryTooltip")
                 }
-                className="text-destructive"
+                className="text-inherit hover:text-inherit"
               >
                 {i18n.t("snippetDetail.syncStatus.failed")}
               </InlineAction>

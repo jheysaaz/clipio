@@ -169,6 +169,20 @@ function schedulePersist(width: number): void {
 }
 
 /**
+ * Cancel this instance's pending write before a test replaces the module.
+ *
+ * Production never tears the store down — the document ending is what ends it —
+ * but the tests re-import it to exercise its module-scope load. Without this, the
+ * previous instance's debounce can fire through the shared item mock while the
+ * next test is settling.
+ */
+export function cancelPendingPersistForTests(): void {
+  if (persistTimer === null) return;
+  clearTimeout(persistTimer);
+  persistTimer = null;
+}
+
+/**
  * The same writer, used for the boolean below.
  *
  * Separate from the width's because a boolean is set once per click: debouncing it

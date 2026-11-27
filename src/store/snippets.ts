@@ -47,7 +47,11 @@ import {
   updateSnippet as updateSnippetInStorage,
   clearSyncDataLostFlag,
 } from "@/storage";
-import { lastViewedSnippetIdItem, syncDataLostItem } from "@/storage/items";
+import {
+  lastViewedSnippetIdItem,
+  storageAttentionItem,
+  syncDataLostItem,
+} from "@/storage/items";
 import { selectNewest } from "@/lib/snippet-utils";
 import {
   isExternalSnippetChange,
@@ -99,18 +103,18 @@ export type SnippetsState = {
   /**
    * Storage is over quota, so writes are being refused.
    *
-   * Set from the status read *and* from a refused write. It is a warning about
-   * the backend, not about one operation, so it stays up once shown — a user who
-   * dismisses it and then creates a snippet gets it again, which is the point.
+   * Set from the status read *and* from a refused write. Unlike a banner this
+   * lives in the editor's reserved status slot until the next successful write
+   * or status read: it is a fact about storage, not a message to consume.
    */
   quotaWarning: boolean;
   /**
-   * Sync is paused and the library is local-only.
+   * The active backend is local-only.
    *
-   * Distinct from `quotaWarning`: nothing is wrong, but edits will not reach
-   * other devices, and the user should know that before they make one.
+   * A chosen state, not an error: the popup shows a small neutral indicator for
+   * it. `quotaWarning` still says when local-only was forced by a quota problem.
    */
-  syncPausedWarning: boolean;
+  localOnly: boolean;
   /** Snippets recovered from the sign-out backup, awaiting the user's decision. */
   recoverySnippets: Snippet[];
   /** Whether the recovery banner is showing. */
@@ -136,7 +140,7 @@ export const snippetsStore = createStore<SnippetsState>({
   isLoaded: false,
   loadError: null,
   quotaWarning: false,
-  syncPausedWarning: false,
+  localOnly: false,
   recoverySnippets: [],
   showRecoveryBanner: false,
   recoveryError: null,
@@ -175,6 +179,19 @@ function takeTicket(): { isStale: () => boolean } {
 }
 
 /**
+ * Mirror the status-slot fact to the one key the background can watch.
+ *
+ * The popup can close on blur; the toolbar badge cannot live here. A refused
+ * write is the one error the status read alone does not see, so the store owns
+ * both the inline error and the persisted attention flag.
+ */
+function setStorageAttention(attention: boolean): void {
+  storageAttentionItem
+    .setValue(attention)
+    .catch((error) => captureError(error, { action: "setStorageAttention" }));
+}
+
+/**
  * Recompute the storage warnings from a status read.
  *
  * Split out because a status read can fail on its own, and lumping it in with
@@ -189,8 +206,8 @@ async function applyStorageStatus(isStale: () => boolean): Promise<void> {
     status = await getStorageStatus();
   } catch (error) {
     // Reported, and nothing else. The warnings stay at whatever they were, which
-    // is the safe direction: a banner the user has already dismissed does not
-    // reappear because one status read failed.
+    // is the safe direction: a failed read must not clear an unresolved error or
+    // revive a problem the user has already resolved.
     captureError(error, { action: "getStorageStatus" });
     return;
   }
@@ -198,14 +215,9 @@ async function applyStorageStatus(isStale: () => boolean): Promise<void> {
   snippetsStore.setState((prev) => ({
     ...prev,
     quotaWarning: status.quotaExceeded,
-    // Quota is the more urgent of the two, so it wins. Showing both would tell the
-    // user their edits are not syncing *and* that there is no room, which is one
-    // problem described twice.
-    syncPausedWarning:
-      !status.quotaExceeded &&
-      status.mode === "local" &&
-      status.localReason === "manual",
+    localOnly: status.mode === "local",
   }));
+  setStorageAttention(status.quotaExceeded);
 }
 
 export async function loadSnippets(): Promise<void> {
@@ -251,11 +263,9 @@ export async function loadSnippets(): Promise<void> {
  * refresh in flight when the user creates a snippet would land afterwards with a
  * list that predates it and erase it.
  *
- * Recomputes the warnings as well as the list. A library that crosses the quota
- * limit in the options page while a popup is open must raise the banner there —
- * the docstring on the dismiss actions calls them "a statement about storage that
- * stays true until it stops being true", and that is not true of a path that only
- * ever re-reads the list.
+ * Recomputes the storage facts as well as the list. A library that crosses the
+ * quota limit in the options page while a popup is open must fill the status slot
+ * there, which a path that only ever re-reads the list would miss.
  */
 export async function refreshSnippets(options?: {
   /** Keep the sidebar's live draft fields across this read. */
@@ -594,9 +604,9 @@ function upsertRow(list: readonly Snippet[], snippet: Snippet): Snippet[] {
  * making the caller re-derive the id from the list would be a race with the
  * storage-change listener.
  *
- * On a quota refusal it raises the banner and hands back the explanation. The
- * create view is deliberately left open by the caller in that case: closing it
- * unmounts `NewSnippetView`, which is the component that *renders* the error, so
+ * On a quota refusal it fills the status slot and hands back the explanation.
+ * The create view is deliberately left open by the caller in that case: closing
+ * it unmounts the editor, which is the component that *renders* the error, so
  * the message was set and then made invisible.
  */
 export async function addSnippet(
@@ -614,17 +624,22 @@ export async function addSnippet(
       ...prev,
       snippets: upsertRow(prev.snippets, snippet),
       isSaving: false,
+      // The write that lands is the resolution: a quota error from an earlier
+      // attempt must not stay in the status slot or on the toolbar badge.
+      quotaWarning: false,
       // Cleared on success only. On failure the draft is deliberately left alone
       // so the user can shorten the snippet and retry without retyping it.
       draft: { ...EMPTY_DRAFT },
     }));
+    setStorageAttention(false);
     return { ok: true, value: snippet };
   } catch (error) {
     let message: string;
     if (error instanceof StorageQuotaError) {
-      // The banner is raised here rather than at the call site so it stays up: the
-      // caller only has to render what it is told.
+      // Raised here rather than at the call site so it stays up until a write
+      // lands: the caller only has to render what it is told.
       snippetsStore.setState((prev) => ({ ...prev, quotaWarning: true }));
+      setStorageAttention(true);
       message = quotaMessage(error);
     } else {
       captureError(error, { action: "saveSnippet" });
@@ -651,8 +666,8 @@ export async function addSnippet(
  * of a generic message while filing the localised string to Sentry.
  *
  * A quota refusal throws `SnippetWriteRefused` and is *not* reported: it is an
- * expected condition with an actionable explanation, and the banner is raised here
- * so it stays up. A genuine failure is reported, once, here.
+ * expected condition with an actionable explanation, and the status flag is set
+ * here so it stays up. A genuine failure is reported, once, here.
  */
 export async function editSnippet(snippet: Snippet): Promise<Snippet> {
   try {
@@ -660,11 +675,14 @@ export async function editSnippet(snippet: Snippet): Promise<Snippet> {
     snippetsStore.setState((prev) => ({
       ...prev,
       snippets: prev.snippets.map((s) => (s.id === snippet.id ? snippet : s)),
+      quotaWarning: false,
     }));
+    setStorageAttention(false);
     return snippet;
   } catch (error) {
     if (error instanceof StorageQuotaError) {
       snippetsStore.setState((prev) => ({ ...prev, quotaWarning: true }));
+      setStorageAttention(true);
       throw new SnippetWriteRefused(quotaMessage(error));
     }
     captureError(error, { action: "updateSnippet" });
@@ -691,13 +709,19 @@ export async function removeSnippet(
     const remaining = snippetsStore.state.snippets.filter(
       (s) => s.id !== snippetId
     );
-    snippetsStore.setState((prev) => ({ ...prev, snippets: remaining }));
+    snippetsStore.setState((prev) => ({
+      ...prev,
+      snippets: remaining,
+      quotaWarning: false,
+    }));
+    setStorageAttention(false);
     return { remaining };
   } catch (error) {
     if (error instanceof StorageQuotaError) {
       // A refusal to delete is nearly always a refusal to write the tombstone, so
-      // the quota banner is the right thing to raise.
+      // the status slot and badge are the right places to raise it.
       snippetsStore.setState((prev) => ({ ...prev, quotaWarning: true }));
+      setStorageAttention(true);
       throw new SnippetWriteRefused(quotaMessage(error));
     }
     console.error("[Clipio] Failed to delete snippet:", error);
@@ -784,28 +808,19 @@ export function dismissCreateError(): void {
 // ---------------------------------------------------------------------------
 
 /**
- * The three banners and the two errors the user can clear.
+ * The recovery surface and the two errors the user can clear.
  *
  * Plain actions rather than exposed setters. `setState` takes the whole state
- * here, so a component cannot clear a banner without having the entire store in
+ * here, so a component cannot clear a surface without having the entire store in
  * hand — which is the shape that made `useState`'s setter the only option before.
  *
- * Dismissal does not change the underlying fact. A dismissed quota banner comes
- * back on the next `loadSnippets`, because the next refused write re-raises it
- * too. That is deliberate: the banner is not a notification to be consumed, it is
- * a statement about storage that stays true until it stops being true.
+ * Storage quota is deliberately not in this list. A chosen local-only mode is a
+ * state, not a message, and an automatic local fallback is a storage fact; both
+ * clear when the fact changes, not when a user gets tired of seeing them.
  */
 
 export function dismissRecoveryBanner(): void {
   snippetsStore.setState((prev) => ({ ...prev, showRecoveryBanner: false }));
-}
-
-export function dismissQuotaWarning(): void {
-  snippetsStore.setState((prev) => ({ ...prev, quotaWarning: false }));
-}
-
-export function dismissSyncPausedWarning(): void {
-  snippetsStore.setState((prev) => ({ ...prev, syncPausedWarning: false }));
 }
 
 export function dismissLoadError(): void {
@@ -907,7 +922,7 @@ export function resetSnippetsStoreForTests(): void {
     isLoaded: false,
     loadError: null,
     quotaWarning: false,
-    syncPausedWarning: false,
+    localOnly: false,
     recoverySnippets: [],
     showRecoveryBanner: false,
     recoveryError: null,

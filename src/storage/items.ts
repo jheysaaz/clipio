@@ -90,6 +90,19 @@ export const storageModeReasonItem = storage.defineItem<"quota" | "manual">(
   { defaultValue: "quota" }
 );
 
+/**
+ * Whether storage needs attention while the popup is closed.
+ *
+ * Set by a quota refusal, which can happen while the active mode is still
+ * `sync`, and cleared by the next successful write or status read. The
+ * background watches this to own the toolbar badge: a popup that dies on blur
+ * cannot be trusted to keep an indicator up to date.
+ */
+export const storageAttentionItem = storage.defineItem<boolean>(
+  "local:storageAttention",
+  { defaultValue: false }
+);
+
 // ---------------------------------------------------------------------------
 // UI flags
 // ---------------------------------------------------------------------------
