@@ -75,8 +75,10 @@ snippetEditor:
   shortcut: Shortcut
   shortcutPlaceholder: "Add shortcut"
   shortcutLabel: "Shortcut: $1"
-  shortcutTip: Type this on any page to expand the snippet.
+  shortcutTip: Type this to expand the snippet.
   shortcutError: Shortcut cannot contain spaces
+  shortcutErrorCharacters: "Unsupported character: $1. Use letters, numbers, dots, dashes or underscores."
+  duplicateTooltip: Duplicate snippet
   shortcutErrorDuplicate: 'Shortcut "$1" is already used by "$2". Choose a different shortcut.'
   shortcutErrorPrefix: 'Shortcut "$1" conflicts with "$2" — one may prevent the other from expanding.'
   content: Snippet content
@@ -109,6 +111,7 @@ snippetDetail:
   uses: uses
   updated: Updated
   draft: Draft
+  duplicateLabel: "Copy of $1"
   hiddenTags: Hidden tags
   moreTags: "+$1"
   deleted:
@@ -125,6 +128,7 @@ snippetDetail:
     failedToCopy: Failed to copy to clipboard
     failedToSave: Failed to save snippet. Please try again.
     failedToDelete: Failed to delete snippet. Please try again.
+    failedToDuplicate: Failed to duplicate snippet. Please try again.
     failedToStage: The edit is saved locally but could not be queued.
     emptyLabel: A snippet needs a name before it can be saved.
     emptyShortcut: A snippet needs a shortcut before it can be saved.
@@ -208,9 +212,18 @@ options:
     fontFamily:
       title: Interface font
       desc: The typeface Clipio uses everywhere. Monospace text, like the debug log, always stays monospaced.
+    lightCodeTheme:
+      title: Code theme for light mode
+      desc: Prism palette used for fenced code blocks when Clipio is light.
+    darkCodeTheme:
+      title: Code theme for dark mode
+      desc: Prism palette used for fenced code blocks when Clipio is dark.
     confetti:
       title: Confetti on insert
       desc: Fire a confetti burst each time a snippet is inserted.
+    localOnlyIndicator:
+      title: Local-only badge
+      desc: Show the “Local only” badge above the snippet list when sync is off.
     storageMode:
       title: Where snippets are stored
       desc: Sync keeps snippets on every device through your browser account. Local is this device only, with a much higher limit.
@@ -253,6 +266,20 @@ options:
     inter: Inter
     system: System
     dyslexic: OpenDyslexic
+  codeTheme:
+    githubLight: GitHub Light
+    solarizedLight: Solarized Light
+    prismLight: Prism Light
+    coy: Coy
+    xcode: Xcode
+    oneDarkPro: One Dark Pro
+    okaidia: Okaidia
+    twilight: Twilight
+    tomorrowNight: Tomorrow Night
+    dracula: Dracula
+    nord: Nord
+    vscDarkPlus: VS Code Dark+
+    sample: Code sample
   overview:
     snippets: Snippets
     syncStorage: Sync storage
@@ -440,6 +467,7 @@ options:
       privacyNote: Reports redact typed text, page URLs, API keys and long opaque values.
 
 importWizard:
+  progress: Import progress
   steps:
     upload: Upload
     placeholders: Placeholders
@@ -488,7 +516,12 @@ importWizard:
     importedWithRename: Imported with renamed shortcut
     skippedConflicts: "Skipped (conflicts)"
     estimatedStorage: Estimated storage usage
-    quotaWarning: "This import may exceed browser sync storage limits. Clipio will automatically switch to local storage if needed, but snippets won't sync to other devices."
+    quotaWarning: "This library is larger than browser sync storage allows. Choose where to save it before importing."
+    storageTarget: "Store this library in"
+    storageTargetSync: Sync storage
+    storageTargetSyncDesc: "Available on every signed-in device, within the browser's limit."
+    storageTargetLocal: Local only
+    storageTargetLocalDesc: "Stays on this device and can hold larger libraries."
     failedToImport: Failed to save imported snippets. Please try again.
     done:
       heading: Import complete
@@ -517,8 +550,19 @@ editor:
     removeLink: Remove link
     confirmLink: Insert link
     urlPlaceholder: "https://..."
+    textPlaceholder: "Label (optional)"
     insertImage: Insert image
     insertGif: Insert GIF
+  codeBlock:
+    language: Code language
+    searchLanguage: Search languages
+    plainText: Plain text
+    copy: Copy code
+    copied: Code copied
+    copyFailed: Couldn't copy code
+  datePicker:
+    label: Pick a date
+    change: "Click to change date. Current: $1"
   slashMenu:
     header: Commands
     noMatches: No matching commands
@@ -535,6 +579,9 @@ editor:
     datepicker:
       label: Pick Date
       description: Choose any date from calendar
+    codeBlock:
+      label: Code block
+      description: Insert a fenced block for multi-line code
     image:
       label: Image
       description: Insert an image from your device

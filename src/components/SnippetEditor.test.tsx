@@ -26,6 +26,7 @@ import {
   queueOutcomesStore,
   undoAvailabilityStore,
   writeQueueStore,
+  resetReportedOutcomeReportsForTests,
 } from "@/store/write-queue";
 import { resetSnippetsStoreForTests, snippetsStore } from "@/store/snippets";
 
@@ -40,6 +41,12 @@ const q = vi.hoisted(() => ({
     vi.fn<typeof import("@/store/write-queue").requestSyncStatusRefresh>(),
   refreshUndoAvailability:
     vi.fn<typeof import("@/store/write-queue").refreshUndoAvailability>(),
+  waitForSnippetCommit:
+    vi.fn<typeof import("@/store/write-queue").waitForSnippetCommit>(),
+}));
+
+const storage = vi.hoisted(() => ({
+  getSnippets: vi.fn<typeof import("@/storage").getSnippets>(),
 }));
 
 vi.mock("@/store/write-queue", async (importOriginal) => {
@@ -53,7 +60,13 @@ vi.mock("@/store/write-queue", async (importOriginal) => {
     discardUnflushedDraft: q.discardUnflushedDraft,
     requestSyncStatusRefresh: q.requestSyncStatusRefresh,
     refreshUndoAvailability: q.refreshUndoAvailability,
+    waitForSnippetCommit: q.waitForSnippetCommit,
   };
+});
+
+vi.mock("@/storage", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/storage")>();
+  return { ...actual, getSnippets: storage.getSnippets };
 });
 
 vi.mock("@/lib/sentry", () => ({ captureError: vi.fn() }));
@@ -265,6 +278,7 @@ let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetReportedOutcomeReportsForTests();
   consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   writeQueueStore.setState(() => ({
     pending: 0,
@@ -280,6 +294,8 @@ beforeEach(() => {
   queueOutcomesStore.setState(() => ({}));
   resetSnippetsStoreForTests();
   snippetsStore.setState((prev) => ({ ...prev, snippets: [snippet] }));
+  storage.getSnippets.mockResolvedValue([snippet]);
+  q.waitForSnippetCommit.mockResolvedValue(null);
   vi.mocked(getSnippetUsageCount).mockResolvedValue(3);
   vi.mocked(incrementSnippetUsage).mockResolvedValue(4);
   vi.mocked(copyMarkdownAsRichText).mockResolvedValue(undefined);
@@ -292,6 +308,7 @@ beforeEach(() => {
 afterEach(() => {
   consoleErrorSpy?.mockRestore();
   consoleErrorSpy = null;
+  resetReportedOutcomeReportsForTests();
   vi.useRealTimers();
 });
 
@@ -346,14 +363,28 @@ describe("one editor, two data states", () => {
     const name = screen.getByTestId("snippet-label-input");
     const shortcut = screen.getByTestId("snippet-shortcut-input");
 
-    expect(header.className).not.toContain("bg-muted");
-    expect(name.className).toContain("text-ui-lg!");
+    expect(header.className).toContain("editor-title-island");
+    expect(header.className).toContain("mb-1");
+    expect(header.className).toContain("min-h-9");
+    expect(header.className).toContain("px-1.5 py-0.5");
+    expect(name.className).toContain("text-base!");
+    expect(name.className).toContain("font-medium!");
     expect(name.className).toContain("bg-transparent");
     expect(name).toHaveAttribute("placeholder", "Untitled snippet");
-    // The shortcut has no pill: only a bottom border appears on hover/focus.
-    expect(shortcut.className).toContain("border-b");
-    expect(shortcut.className).toContain("border-transparent");
-    expect(shortcut.className).toContain("hover:border-ring/60");
+    // The shortcut has no pill, underline or error border; its hint is a
+    // native title, so validation never repaints the field.
+    expect(shortcut.className).toContain("border-0");
+    expect(shortcut.className).not.toContain("border-b");
+    // The shared Input base ships aria-invalid variants; none may be applied
+    // here, so only a bare destructive border class would be a regression.
+    expect(shortcut.className).not.toMatch(
+      /(?:^|\s)border-destructive(?:\s|$)/
+    );
+    expect(shortcut).not.toHaveAttribute("aria-invalid");
+    expect(shortcut).toHaveAttribute(
+      "title",
+      "Type this to expand the snippet."
+    );
     expect(shortcut.className).not.toContain("bg-background");
     expect(shortcut.className).not.toContain("rounded-md");
   });
@@ -398,36 +429,22 @@ describe("one editor, two data states", () => {
     }
   });
 
-  it("shows the shortcut hint only while focused, linked as a tooltip", async () => {
-    const user = userEvent.setup();
+  it("uses the browser's native title tooltip for the shortcut hint", () => {
     renderView();
     const input = screen.getByTestId("snippet-shortcut-input");
 
     expect(screen.queryByRole("tooltip")).toBeNull();
-    await user.click(input);
-
-    const tip = screen.getByRole("tooltip");
-    expect(tip).toHaveTextContent(
-      "Type this on any page to expand the snippet"
-    );
-    expect(input).toHaveAttribute("aria-describedby", "shortcut-tip");
-    expect(document.getElementById("shortcut-tip")).toBe(tip);
-
-    await user.tab();
-    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(input).toHaveAttribute("title", "Type this to expand the snippet.");
     expect(input).not.toHaveAttribute("aria-describedby");
   });
 
-  it("shows the hint for an empty shortcut on hover", () => {
+  it("uses the same native tooltip for an empty shortcut", () => {
     renderDraft({ initial: { ...blank, shortcut: "" } });
-    const input = screen.getByTestId("snippet-shortcut-input");
 
-    fireEvent.mouseEnter(input.parentElement!);
-
-    expect(screen.getByRole("tooltip")).toHaveTextContent(
-      "Type this on any page"
+    expect(screen.getByTestId("snippet-shortcut-input")).toHaveAttribute(
+      "title",
+      "Type this to expand the snippet."
     );
-    expect(input).toHaveAttribute("aria-describedby", "shortcut-tip");
   });
 
   it("keeps the Add tag control icon-only once the snippet has tags", () => {
@@ -541,6 +558,44 @@ describe("saved snippet autosave", () => {
       snippet,
       expect.objectContaining({ tags: ["personal", "work"] })
     );
+  });
+
+  it("bases the write on the revision storage has, not a lagging store", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const committed = {
+      ...snippet,
+      rev: 4,
+      updatedAt: "2026-02-02T00:00:00.000Z",
+      updatedBy: "self",
+    };
+    // The authoritative read is ahead of the snippet the editor mounted with.
+    // Staging from the UI's copy would reuse rev 1 and conflict with our commit.
+    storage.getSnippets.mockResolvedValue([committed]);
+    renderView();
+
+    await user.type(screen.getByTestId("snippet-label-input"), " Home");
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
+
+    expect(q.waitForSnippetCommit).toHaveBeenCalledWith("s1");
+    expect(q.stageEdit).toHaveBeenCalledWith(
+      committed,
+      expect.objectContaining({ label: "Address Home" })
+    );
+    expect(q.flushDraft).toHaveBeenCalledWith("s1", [committed]);
+  });
+
+  it("does not stage a save when the snippet is gone from storage", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    storage.getSnippets.mockResolvedValue([]);
+    renderView();
+
+    await user.type(screen.getByTestId("snippet-label-input"), " Home");
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
+
+    expect(q.stageEdit).not.toHaveBeenCalled();
+    expect(q.flushDraft).not.toHaveBeenCalled();
   });
 
   it("enqueues the autosaved edit while the pane is still open", async () => {
@@ -659,9 +714,8 @@ describe("saved snippet autosave", () => {
 });
 
 describe("shortcut validation", () => {
-  it("keeps an invalid shortcut visible without persisting it", async () => {
+  it("turns typed spaces into dashes and saves the valid shortcut", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderDraft({ initial: { ...valid, shortcut: "/valid" } });
 
     fireEvent.change(screen.getByTestId("snippet-shortcut-input"), {
@@ -669,23 +723,41 @@ describe("shortcut validation", () => {
     });
 
     const input = screen.getByTestId("snippet-shortcut-input");
-    expect(input).toHaveValue("/a b");
-    const error = screen.getByTestId("snippet-shortcut-error");
-    expect(error).toHaveTextContent("cannot contain spaces");
-    expect(error).toHaveAttribute("role", "tooltip");
-    expect(input).toHaveAttribute("aria-describedby", "shortcut-error");
+    expect(input).toHaveValue("/a-b");
+    expect(input).toHaveAttribute("title", "Type this to expand the snippet.");
+    expect(input).not.toHaveAttribute("aria-invalid");
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
 
-    // The rest keeps autosaving while the invalid field is withheld.
     expect(onAutoSave).toHaveBeenCalledWith(
-      expect.objectContaining({ shortcut: "/valid", label: "Address" })
+      expect.objectContaining({ shortcut: "/a-b", label: "Address" })
     );
-    expect(onDraftChange).not.toHaveBeenCalledWith(
-      expect.objectContaining({ shortcut: "/a b" })
+    expect(onDraftChange).toHaveBeenCalledWith(
+      expect.objectContaining({ shortcut: "/a-b" })
     );
   });
 
-  it("shows a duplicate inline and does not persist that shortcut", async () => {
+  it("keeps an unsupported shortcut visible but never persists it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderDraft({ initial: { ...valid, shortcut: "/valid" } });
+
+    const input = screen.getByTestId("snippet-shortcut-input");
+    fireEvent.change(input, { target: { value: "/a$b" } });
+
+    expect(input).toHaveValue("/a$b");
+    expect(input).toHaveAttribute(
+      "title",
+      expect.stringContaining("Unsupported character")
+    );
+    expect(input).not.toHaveAttribute("aria-invalid");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
+
+    expect(onAutoSave).toHaveBeenCalledWith(
+      expect.objectContaining({ shortcut: "/valid", label: "Address" })
+    );
+  });
+
+  it("reports a duplicate in the native title and does not persist it", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderDraft({
       initial: { ...valid, shortcut: "/valid" },
@@ -696,48 +768,44 @@ describe("shortcut validation", () => {
     fireEvent.change(input, { target: { value: "/addr" } });
     fireEvent.blur(input);
 
-    // The duplicate hint outlives focus; only changing the value dismisses it.
-    const error = screen.getByTestId("snippet-shortcut-error");
-    expect(error).toHaveTextContent("already used");
-    // Base UI's positioner keeps opacity: 0 until layout in a real browser, so
-    // happy-dom cannot report the popup as visible. `data-open` is the
-    // primitive's own open-state contract.
-    expect(error).toHaveAttribute("data-open", "");
+    expect(input).toHaveAttribute(
+      "title",
+      expect.stringContaining("already used")
+    );
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
     expect(onAutoSave).toHaveBeenCalledWith(
       expect.objectContaining({ shortcut: "/valid" })
     );
   });
 
-  it("shows a prefix conflict for an existing shortcut", () => {
+  it("reports a prefix conflict in the native title", () => {
     renderDraft({ existingSnippets: [snippet] });
+    const input = screen.getByTestId("snippet-shortcut-input");
 
-    fireEvent.change(screen.getByTestId("snippet-shortcut-input"), {
-      target: { value: "/add" },
-    });
+    fireEvent.change(input, { target: { value: "/add" } });
 
-    expect(screen.getByTestId("snippet-shortcut-error")).toHaveTextContent(
-      "conflicts with"
+    expect(input).toHaveAttribute(
+      "title",
+      expect.stringContaining("conflicts with")
     );
   });
 
-  it("accepts a valid replacement and clears the error", async () => {
+  it("accepts a valid replacement and restores the native hint", async () => {
     const user = userEvent.setup();
-    renderView({ existingSnippets: [snippet] });
+    const other = { ...snippet, id: "s2", shortcut: "/taken" };
+    renderView({ existingSnippets: [snippet, other] });
+    const input = screen.getByTestId("snippet-shortcut-input");
 
-    fireEvent.change(screen.getByTestId("snippet-shortcut-input"), {
-      target: { value: "/addr " },
-    });
-    // The error outlives focus; see the data-open note in the duplicate test.
-    expect(screen.getByTestId("snippet-shortcut-error")).toHaveAttribute(
-      "data-open",
-      ""
+    fireEvent.change(input, { target: { value: "/taken" } });
+    expect(input).toHaveAttribute(
+      "title",
+      expect.stringContaining("already used")
     );
 
-    await user.clear(screen.getByTestId("snippet-shortcut-input"));
-    await user.type(screen.getByTestId("snippet-shortcut-input"), "/home");
+    await user.clear(input);
+    await user.type(input, "/home");
 
-    expect(screen.queryByTestId("snippet-shortcut-error")).toBeNull();
+    expect(input).toHaveAttribute("title", "Type this to expand the snippet.");
   });
 });
 
@@ -872,6 +940,67 @@ describe("autosave status", () => {
         error: "A newer version of this snippet was saved first",
       })
     );
+  });
+
+  it("reports the same failure once when storage republishes it", async () => {
+    const failed = {
+      opId: "op-2",
+      snippetId: "s1",
+      status: "failed" as const,
+      error: "conflict",
+    };
+    queueOutcomesStore.setState(() => ({ s1: failed }));
+    writeQueueStore.setState(() => ({
+      pending: 0,
+      failed: 1,
+      refused: 0,
+      saving: false,
+    }));
+    renderView();
+
+    await waitFor(() => expect(consoleErrorSpy).toHaveBeenCalledTimes(1));
+
+    // A refresh rebuilds the outcome as a fresh object with identical values.
+    // The earlier implementation replayed the error on every such publish.
+    act(() => {
+      queueOutcomesStore.setState(() => ({ s1: { ...failed } }));
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+
+    // A new operation is a new failure, not a republish of the old one.
+    act(() => {
+      queueOutcomesStore.setState(() => ({
+        s1: { ...failed, opId: "op-3" },
+      }));
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports a failure once even when the editor remounts with the same outcome", async () => {
+    const failed = {
+      opId: "op-remount",
+      snippetId: "s1",
+      status: "failed" as const,
+      error: "conflict",
+    };
+    queueOutcomesStore.setState(() => ({ s1: failed }));
+    writeQueueStore.setState(() => ({
+      pending: 0,
+      failed: 1,
+      refused: 0,
+      saving: false,
+    }));
+
+    const first = renderView();
+    await waitFor(() => expect(consoleErrorSpy).toHaveBeenCalledTimes(1));
+    first.unmount();
+
+    // A selection change, Suspense boundary or dev reload builds a new editor
+    // with new refs while the stored outcome is unchanged. It must not claim
+    // the failure again.
+    const second = renderView();
+    expect(second.container).toBeTruthy();
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
   });
 
   it("shows a one-line storage error in the reserved slot and opens Storage settings", async () => {

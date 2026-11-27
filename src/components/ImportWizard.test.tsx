@@ -19,11 +19,13 @@ import ImportWizard from "./ImportWizard";
 const getSnippets = vi.fn();
 const getStorageStatus = vi.fn();
 const bulkSaveSnippets = vi.fn();
+const forceSetStorageMode = vi.fn();
 
 vi.mock("@/storage", () => ({
   getSnippets: (...a: unknown[]) => getSnippets(...a),
   getStorageStatus: (...a: unknown[]) => getStorageStatus(...a),
   bulkSaveSnippets: (...a: unknown[]) => bulkSaveSnippets(...a),
+  forceSetStorageMode: (...a: unknown[]) => forceSetStorageMode(...a),
 }));
 
 vi.mock("@/storage/backends/media", () => ({
@@ -129,6 +131,7 @@ describe("ImportWizard", () => {
     getSnippets.mockResolvedValue([]);
     getStorageStatus.mockResolvedValue({ mode: "sync" });
     bulkSaveSnippets.mockResolvedValue(undefined);
+    forceSetStorageMode.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -143,6 +146,7 @@ describe("ImportWizard", () => {
     expect(
       screen.getByText("Drop a JSON or ZIP file here")
     ).toBeInTheDocument();
+    expect(screen.getByTestId("import-progress")).toBeInTheDocument();
     // Advancing with nothing parsed would import nothing while telling the
     // user an import is about to happen.
     expect(nextButton()).toBeDisabled();
@@ -257,6 +261,45 @@ describe("ImportWizard", () => {
       ])
     );
     expect(onImportComplete).toHaveBeenCalledWith(2);
+  });
+
+  it("offers a storage choice and refuses to import until one is made", async () => {
+    const user = userEvent.setup();
+
+    await renderWizard();
+    // Five valid snippets of 25 KB each clear the 90 KB sync warning line
+    // without tripping the importer's 32 KB per-snippet content ceiling.
+    upload(
+      exportFile(
+        Array.from({ length: 5 }, (_, index) =>
+          validSnippet({
+            id: `huge-${index}`,
+            label: `Large ${index}`,
+            shortcut: `/large-${index}`,
+            content: "x".repeat(25_000),
+          })
+        )
+      )
+    );
+    await waitFor(() => expect(nextButton()).toBeEnabled());
+
+    await user.click(nextButton());
+
+    // A sync library over the browser quota must not silently switch modes.
+    expect(
+      await screen.findByText("Store this library in")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /import 5/i })).toBeDisabled();
+
+    await user.click(screen.getByRole("radio", { name: /local only/i }));
+
+    expect(screen.getByRole("button", { name: /import 5/i })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: /import 5/i }));
+
+    await waitFor(() =>
+      expect(forceSetStorageMode).toHaveBeenCalledWith("local")
+    );
+    expect(bulkSaveSnippets).toHaveBeenCalled();
   });
 
   it("shows a completion state once the import finishes", async () => {

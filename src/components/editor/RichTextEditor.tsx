@@ -44,6 +44,7 @@ import {
 } from "./types";
 import { serializeToMarkdown, deserializeContent } from "./serialization";
 import { copyMarkdownAsRichText } from "@/lib/copy-markdown-as-rich-text";
+import { todayStoredDate } from "@/lib/editor-date";
 import {
   ClipboardPlaceholderPlugin,
   DatePlaceholderPlugin,
@@ -69,7 +70,11 @@ import {
   CodeLeaf,
 } from "./leaves";
 import { LinkElementComponent } from "./LinkElement";
-import { BLOCK_PLUGINS, ParagraphElement } from "./BlockElements";
+import {
+  BLOCK_PLUGINS,
+  CodeHighlightPlugin,
+  ParagraphElement,
+} from "./BlockElements";
 import { FloatingToolbar } from "./FloatingToolbar";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import { GifPicker } from "./GifPicker";
@@ -182,6 +187,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
           // Without a plugin per type Plate renders the node with no component
           // and the content is invisible in the editor.
           ...BLOCK_PLUGINS,
+          CodeHighlightPlugin,
         ],
         value: initialValue,
         override: {
@@ -349,6 +355,42 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
       [editor]
     );
 
+    /**
+     * Media is a block-like moment in a snippet: after an image or GIF the caret
+     * belongs on the next line, with a real block break so Markdown round-trips
+     * it. Other inline voids keep the plain insertion path.
+     */
+    const insertMediaVoid = useCallback(
+      (node: TElement, savedRange: EditorRange | null) => {
+        insertInlineVoid(node, savedRange);
+
+        // A real block break is what serialization turns into the blank line
+        // after the media token. `insertBreak()` from a file-picker callback can
+        // run before Plate has re-applied the DOM selection, so write the next
+        // paragraph explicitly at the path after the media's containing block.
+        const path = findNodePath(editor.children, node);
+        if (path && path.length > 1) {
+          const parentPath = path.slice(0, -1);
+          const insertPath = [
+            ...parentPath.slice(0, -1),
+            (parentPath[parentPath.length - 1] ?? 0) + 1,
+          ];
+          const paragraph = {
+            type: "p",
+            children: [{ text: "" }],
+          } as TElement;
+          editor.tf.insertNodes(paragraph, { at: insertPath });
+          const caret = [...insertPath, 0];
+          editor.tf.select({
+            anchor: { path: caret, offset: 0 },
+            focus: { path: caret, offset: 0 },
+          });
+        }
+        editor.tf.focus();
+      },
+      [editor, insertInlineVoid]
+    );
+
     // Insert clipboard placeholder
     const handleInsertClipboard = useCallback(() => {
       if (!slashMenuRange && !manualTrigger) return;
@@ -468,7 +510,9 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
 
       deleteSlashTrigger(manualTrigger, slashMenuRange, slashSearchQuery);
 
-      const today = new Date().toISOString().split("T")[0];
+      // The picker stores local calendar dates; UTC today shifts by one for
+      // users west of Greenwich in the evening.
+      const today = todayStoredDate();
       insertInlineVoid(
         {
           type: DATEPICKER_PLACEHOLDER,
@@ -488,6 +532,61 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
       manualTrigger,
       deleteSlashTrigger,
       insertInlineVoid,
+    ]);
+
+    // Insert a fenced code block after the current block. A slash command is
+    // typed inside a paragraph, so removing that paragraph would also remove any
+    // text before the slash; inserting after it is safe in both cases.
+    const handleInsertCodeBlock = useCallback(() => {
+      if (!slashMenuRange && !manualTrigger) return;
+
+      deleteSlashTrigger(manualTrigger, slashMenuRange, slashSearchQuery);
+
+      const current = editor.api.above();
+      const insertAt = [current ? current[1][0] + 1 : editor.children.length];
+      const codeBlock = {
+        type: "code_block",
+        language: "",
+        children: [{ text: "" }],
+      } as TElement;
+      // Plate does not add a type to nodes created by `insertNodes`. Give the
+      // trailing paragraph one explicitly: serialisation reads `element.type`
+      // and an untyped node throws before the edit can be saved.
+      const followingParagraph = {
+        type: "p",
+        children: [{ text: "" }],
+      } as TElement;
+
+      editor.tf.insertNodes([codeBlock, followingParagraph], { at: insertAt });
+      // Plate's focus command can leave DOM focus on the command button after
+      // a click outside the editable surface. Focus the host first, then let
+      // Plate apply the Slate selection; focusing the host afterwards would put
+      // the DOM caret somewhere other than the code block we just inserted.
+      contentHostRef.current
+        ?.querySelector<HTMLElement>(
+          '[data-slate-editor], [contenteditable="true"], textarea'
+        )
+        ?.focus();
+      editor.tf.select({
+        anchor: { path: [...insertAt, 0], offset: 0 },
+        focus: { path: [...insertAt, 0], offset: 0 },
+      });
+      editor.tf.focus();
+
+      setShowSlashMenu(false);
+      setSlashMenuRange(null);
+      setSlashSearchQuery("");
+      setManualTrigger(false);
+    }, [
+      slashMenuRange,
+      slashSearchQuery,
+      manualTrigger,
+      deleteSlashTrigger,
+      editor,
+      setShowSlashMenu,
+      setSlashMenuRange,
+      setSlashSearchQuery,
+      setManualTrigger,
     ]);
 
     // Handle file selected from file input
@@ -531,7 +630,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
             deleteSlashTrigger(ctx.manual, ctx.range, ctx.query);
           }
 
-          insertInlineVoid(
+          insertMediaVoid(
             {
               type: IMAGE_PLACEHOLDER,
               mediaId: entry.id,
@@ -564,7 +663,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
           }
         }
       },
-      [insertInlineVoid, deleteSlashTrigger]
+      [insertMediaVoid, deleteSlashTrigger]
     );
 
     // Open file picker for image upload
@@ -611,7 +710,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
           deleteSlashTrigger(ctx.manual, ctx.range, ctx.query);
         }
 
-        insertInlineVoid(
+        insertMediaVoid(
           {
             type: GIF_PLACEHOLDER,
             giphyId,
@@ -623,7 +722,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
         setShowGifPicker(false);
         setGifPickerRange(null);
       },
-      [insertInlineVoid, deleteSlashTrigger]
+      [insertMediaVoid, deleteSlashTrigger]
     );
 
     const handleCloseGifPicker = useCallback(() => {
@@ -658,7 +757,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
           deleteSlashTrigger(ctx.manual, ctx.range, ctx.query);
         }
 
-        insertInlineVoid(
+        insertMediaVoid(
           {
             type: IMAGE_PLACEHOLDER,
             mediaId,
@@ -670,7 +769,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
         setShowImagePicker(false);
         setImagePickerRange(null);
       },
-      [insertInlineVoid, deleteSlashTrigger]
+      [insertMediaVoid, deleteSlashTrigger]
     );
 
     // Handle "Upload new" button inside the picker — delegates to the file-based flow
@@ -739,6 +838,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
         {/* Hidden file input for image upload */}
         <input
           ref={fileInputRef}
+          data-testid="image-file-input"
           type="file"
           accept={MEDIA_LIMITS.SUPPORTED_TYPES.join(",")}
           className="hidden"
@@ -788,6 +888,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
                 onInsertDate={handleInsertDate}
                 onInsertCursor={handleInsertCursor}
                 onInsertDatepicker={handleInsertDatepicker}
+                onInsertCodeBlock={handleInsertCodeBlock}
                 onOpenImagePicker={handleOpenImagePicker}
                 onInsertImage={handleInsertImage}
                 onInsertGif={handleInsertGif}

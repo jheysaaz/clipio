@@ -16,8 +16,13 @@ describe("slashDeletionRange", () => {
     });
   });
 
-  it("rejects a missing query, because there is no slash text to remove", () => {
-    expect(slashDeletionRange(range(6), "")).toBeNull();
+  it("covers a bare slash when the menu is chosen without typing a query", () => {
+    // The menu opens on `/` alone; leaving the slash behind inserted the
+    // command text after a stray character.
+    expect(slashDeletionRange(range(1), "")).toEqual({
+      anchor: { path: [0, 0], offset: 0 },
+      focus: { path: [0, 0], offset: 1 },
+    });
   });
 
   it("rejects a range that does not start after a whole trigger", () => {

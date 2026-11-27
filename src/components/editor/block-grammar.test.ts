@@ -89,7 +89,7 @@ describe("markdown block grammar — fenced code", () => {
     const nodes = deserializeContent(md);
     expect(nodes).toHaveLength(1);
     const code = nodes[0] as { type?: string; language?: string };
-    expect(code.type).toBe("code");
+    expect(code.type).toBe("code_block");
     expect(code.language).toBe("js");
     expect(roundTrip(md)).toBe(md);
   });
@@ -102,7 +102,7 @@ describe("markdown block grammar — fenced code", () => {
 
   it("treats an unterminated fence as running to end of input", () => {
     const nodes = deserializeContent("```\nstill code\n");
-    expect((nodes[0] as { type?: string }).type).toBe("code");
+    expect((nodes[0] as { type?: string }).type).toBe("code_block");
   });
 
   it("does not close a fence with a shorter run than opened it", () => {

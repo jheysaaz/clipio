@@ -308,3 +308,16 @@ export function clearRefused(state: QueueState, snippetId: string): QueueState {
     ),
   };
 }
+
+/**
+ * Whether two snapshots published to the popup stores mean the same thing.
+ *
+ * Every refresh re-reads the queue from storage, so its operations and derived
+ * outcomes arrive as fresh objects even when no write happened. Comparing by
+ * reference made the editor re-render and replay a failure on every refresh.
+ * These snapshots are plain JSON, so stringifying is a faithful comparison;
+ * a different key order only costs one redundant publish, never a stale UI.
+ */
+export function sameSnapshot<T>(a: T, b: T): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}

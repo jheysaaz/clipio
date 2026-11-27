@@ -53,6 +53,7 @@ export interface SlashCommandMenuProps {
   onInsertDate: (format: string) => void;
   onInsertCursor: () => void;
   onInsertDatepicker: () => void;
+  onInsertCodeBlock: () => void;
   /** Opens the image picker panel (slash command path). */
   onOpenImagePicker: () => void;
   /** Opens the OS file dialog directly (floating toolbar path). */

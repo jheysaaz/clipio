@@ -72,8 +72,10 @@ snippetEditor:
   shortcut: Atajo
   shortcutPlaceholder: "Agregar atajo"
   shortcutLabel: "Atajo: $1"
-  shortcutTip: Escribe esto en cualquier página para expandir el fragmento.
+  shortcutTip: Escríbelo para expander el fragmento.
   shortcutError: El atajo no puede contener espacios
+  shortcutErrorCharacters: "Carácter no admitido: $1. Usa letras, números, puntos, guiones o guiones bajos."
+  duplicateTooltip: Duplicar fragmento
   shortcutErrorDuplicate: 'El atajo "$1" ya está en uso por "$2". Elige un atajo diferente.'
   shortcutErrorPrefix: 'El atajo "$1" entra en conflicto con "$2" — uno puede impedir que el otro se expanda.'
   content: Contenido del fragmento
@@ -106,6 +108,7 @@ snippetDetail:
   uses: usos
   updated: Actualizado
   draft: Borrador
+  duplicateLabel: "Copia de $1"
   hiddenTags: Etiquetas ocultas
   moreTags: "+$1"
   deleted:
@@ -122,6 +125,7 @@ snippetDetail:
     failedToCopy: Error al copiar al portapapeles
     failedToSave: Error al guardar el fragmento. Por favor, inténtalo de nuevo.
     failedToDelete: Error al eliminar el fragmento. Por favor, inténtalo de nuevo.
+    failedToDuplicate: Error al duplicar el fragmento. Por favor, inténtalo de nuevo.
     failedToStage: El cambio se guardó localmente pero no se pudo poner en cola.
     emptyLabel: El fragmento necesita un nombre antes de guardarse.
     emptyShortcut: El fragmento necesita un atajo antes de guardarse.
@@ -202,9 +206,18 @@ options:
     fontFamily:
       title: Fuente de la interfaz
       desc: La tipografía que usa Clipio en todas partes. El texto monoespaciado, como el registro de depuración, siempre lo es.
+    lightCodeTheme:
+      title: Tema de código para el modo claro
+      desc: Paleta Prism que se usa en los bloques de código cuando Clipio está en modo claro.
+    darkCodeTheme:
+      title: Tema de código para el modo oscuro
+      desc: Paleta Prism que se usa en los bloques de código cuando Clipio está en modo oscuro.
     confetti:
       title: Confeti al insertar
       desc: Lanza una explosión de confeti cada vez que se inserta un fragmento.
+    localOnlyIndicator:
+      title: Insignia de solo local
+      desc: Muestra la insignia «Solo local» sobre la lista de fragmentos cuando la sincronización está desactivada.
     storageMode:
       title: Dónde se guardan los fragmentos
       desc: La sincronización mantiene los fragmentos en todos tus dispositivos mediante tu cuenta del navegador. Local es solo en este dispositivo, con un límite mucho mayor.
@@ -247,6 +260,20 @@ options:
     inter: Inter
     system: Sistema
     dyslexic: OpenDyslexic
+  codeTheme:
+    githubLight: GitHub Light
+    solarizedLight: Solarized Light
+    prismLight: Prism Light
+    coy: Coy
+    xcode: Xcode
+    oneDarkPro: One Dark Pro
+    okaidia: Okaidia
+    twilight: Twilight
+    tomorrowNight: Tomorrow Night
+    dracula: Dracula
+    nord: Nord
+    vscDarkPlus: VS Code Dark+
+    sample: Ejemplo de código
   overview:
     snippets: Fragmentos
     syncStorage: Almacenamiento de sincronización
@@ -434,6 +461,7 @@ options:
       privacyNote: Los informes redactan texto escrito, URL de páginas, claves de API y valores opacos largos.
 
 importWizard:
+  progress: Progreso de importación
   steps:
     upload: Subir
     placeholders: Marcadores
@@ -482,7 +510,12 @@ importWizard:
     importedWithRename: Importado con atajo renombrado
     skippedConflicts: "Omitidos (conflictos)"
     estimatedStorage: Uso de almacenamiento estimado
-    quotaWarning: "Esta importación puede exceder los límites de almacenamiento de sincronización del navegador. Clipio cambiará automáticamente al almacenamiento local si es necesario, pero los fragmentos no se sincronizarán con otros dispositivos."
+    quotaWarning: "Esta biblioteca es mayor de lo que permite el almacenamiento de sincronización. Elige dónde guardarla antes de importar."
+    storageTarget: "Guardar esta biblioteca en"
+    storageTargetSync: Almacenamiento sincronizado
+    storageTargetSyncDesc: "Disponible en todos los dispositivos con sesión iniciada, dentro del límite del navegador."
+    storageTargetLocal: Solo local
+    storageTargetLocalDesc: "Permanece en este dispositivo y admite bibliotecas más grandes."
     failedToImport: Error al guardar los fragmentos importados. Por favor, inténtalo de nuevo.
     done:
       heading: Importación completa
@@ -511,8 +544,19 @@ editor:
     removeLink: Eliminar enlace
     confirmLink: Insertar enlace
     urlPlaceholder: "https://..."
+    textPlaceholder: "Etiqueta (opcional)"
     insertImage: Insertar imagen
     insertGif: Insertar GIF
+  codeBlock:
+    language: Lenguaje del código
+    searchLanguage: Buscar lenguajes
+    plainText: Texto plano
+    copy: Copiar código
+    copied: Código copiado
+    copyFailed: No se pudo copiar el código
+  datePicker:
+    label: Elige una fecha
+    change: "Haz clic para cambiar la fecha. Actual: $1"
   slashMenu:
     header: Comandos
     noMatches: Sin comandos coincidentes
@@ -529,6 +573,9 @@ editor:
     datepicker:
       label: Elegir fecha
       description: Elegir cualquier fecha del calendario
+    codeBlock:
+      label: Bloque de código
+      description: Inserta un bloque con delimitadores para código de varias líneas
     image:
       label: Imagen
       description: Insertar una imagen desde tu dispositivo

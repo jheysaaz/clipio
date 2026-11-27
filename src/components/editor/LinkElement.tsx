@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { SiteFavicon } from "@/components/options/SiteFavicon";
 
 interface LinkElementProps {
   children: ReactNode;
@@ -28,6 +29,14 @@ export function LinkElementComponent({
         }
       }}
     >
+      <span
+        contentEditable={false}
+        data-testid="link-favicon"
+        className="mr-1 inline-flex align-middle"
+        title={url}
+      >
+        <SiteFavicon hostname={url} className="size-3.5" />
+      </span>
       {children}
     </a>
   );

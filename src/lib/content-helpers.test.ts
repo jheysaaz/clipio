@@ -298,13 +298,27 @@ describe("processSnippetContent", () => {
   });
 
   // MUST replace {{datepicker:YYYY-MM-DD}} with formatDate("long", date)
-  it("replaces {{datepicker:YYYY-MM-DD}} with long date", () => {
-    const result = processSnippetContent(
+  it("replaces datepicker placeholders in the requested format", () => {
+    const legacy = processSnippetContent(
       "{{datepicker:2025-01-15}}",
       false,
       noClipboard
     );
-    expect(result.content).toBe("January 15, 2025");
+    expect(legacy.content).toBe("January 15, 2025");
+
+    const short = processSnippetContent(
+      "{{datepicker:2025-01-15:short}}",
+      false,
+      noClipboard
+    );
+    expect(short.content).toBe("Jan 15");
+
+    const eu = processSnippetContent(
+      "{{datepicker:2025-01-15:eu}}",
+      false,
+      noClipboard
+    );
+    expect(eu.content).toBe("15/01/2025");
   });
 
   // MUST detect {{cursor}} and compute cursorOffset

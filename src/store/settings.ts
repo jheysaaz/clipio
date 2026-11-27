@@ -27,11 +27,21 @@ import { createStore } from "@tanstack/store";
 import { useStore } from "@tanstack/react-store";
 
 import {
+  darkCodeThemeItem,
   legacyThemeItem,
+  lightCodeThemeItem,
   themeModeItem,
   uiFontItem,
   type ThemeMode,
 } from "@/storage/items";
+import {
+  CODE_THEME_ATTRIBUTE,
+  activeCodeTheme,
+  normalizeDarkCodeTheme,
+  normalizeLightCodeTheme,
+  type DarkCodeTheme,
+  type LightCodeTheme,
+} from "@/lib/code-theme";
 import { UI_FONT_ATTRIBUTE, normalizeUiFont, type UiFont } from "@/lib/ui-font";
 import { captureError } from "@/lib/sentry";
 import { effectOn } from "./effect";
@@ -59,6 +69,10 @@ export type SettingsState = {
    * to prevent.
    */
   isLoaded: boolean;
+  /** Prism palette chosen for light mode, normalised to a supported value. */
+  lightCodeTheme: LightCodeTheme;
+  /** Prism palette chosen for dark mode, normalised to a supported value. */
+  darkCodeTheme: DarkCodeTheme;
   /** The interface font, normalised to a supported value. */
   uiFont: UiFont;
 };
@@ -78,6 +92,8 @@ export const settingsStore = createStore<SettingsState>({
   themeMode: "system",
   resolvedTheme: "light",
   isLoaded: false,
+  lightCodeTheme: normalizeLightCodeTheme(undefined),
+  darkCodeTheme: normalizeDarkCodeTheme(undefined),
   uiFont: normalizeUiFont(undefined),
 });
 
@@ -156,16 +172,22 @@ async function isStored(key: string): Promise<boolean> {
 
 async function loadSettings(): Promise<void> {
   try {
-    const [mode, font] = await Promise.all([
+    const [mode, font, lightTheme, darkTheme] = await Promise.all([
       readThemeMode(),
       uiFontItem.getValue(),
+      lightCodeThemeItem.getValue(),
+      darkCodeThemeItem.getValue(),
     ]);
     const normalized = normalizeUiFont(font);
+    const normalizedLightTheme = normalizeLightCodeTheme(lightTheme);
+    const normalizedDarkTheme = normalizeDarkCodeTheme(darkTheme);
     settingsStore.setState((prev) => ({
       ...prev,
       themeMode: mode,
       resolvedTheme: resolveTheme(mode),
       isLoaded: true,
+      lightCodeTheme: normalizedLightTheme,
+      darkCodeTheme: normalizedDarkTheme,
       uiFont: normalized,
     }));
 
@@ -178,6 +200,20 @@ async function loadSettings(): Promise<void> {
         .setValue(normalized)
         .catch((error: unknown) =>
           captureError(error, { action: "settings.healFont" })
+        );
+    }
+    if (normalizedLightTheme !== lightTheme) {
+      lightCodeThemeItem
+        .setValue(normalizedLightTheme)
+        .catch((error: unknown) =>
+          captureError(error, { action: "settings.healLightCodeTheme" })
+        );
+    }
+    if (normalizedDarkTheme !== darkTheme) {
+      darkCodeThemeItem
+        .setValue(normalizedDarkTheme)
+        .catch((error: unknown) =>
+          captureError(error, { action: "settings.healDarkCodeTheme" })
         );
     }
   } catch (error) {
@@ -211,6 +247,24 @@ effectOn(settingsStore, ["uiFont", "isLoaded"], ({ uiFont, isLoaded }) => {
   uiFontItem.setValue(uiFont).catch(console.warn);
 });
 
+effectOn(
+  settingsStore,
+  ["lightCodeTheme", "isLoaded"],
+  ({ lightCodeTheme, isLoaded }) => {
+    if (!isLoaded) return;
+    lightCodeThemeItem.setValue(lightCodeTheme).catch(console.warn);
+  }
+);
+
+effectOn(
+  settingsStore,
+  ["darkCodeTheme", "isLoaded"],
+  ({ darkCodeTheme, isLoaded }) => {
+    if (!isLoaded) return;
+    darkCodeThemeItem.setValue(darkCodeTheme).catch(console.warn);
+  }
+);
+
 // ---------------------------------------------------------------------------
 // Paint
 // ---------------------------------------------------------------------------
@@ -235,6 +289,23 @@ effectOn(settingsStore, ["uiFont", "isLoaded"], ({ uiFont, isLoaded }) => {
   if (!isLoaded) return;
   document.documentElement.setAttribute(UI_FONT_ATTRIBUTE, uiFont);
 });
+
+/**
+ * Paint the code palette for the UI theme in effect. Both presets are stored,
+ * but only one is meaningful at a time; a theme switch repaints it without a
+ * settings write and without re-reading storage.
+ */
+effectOn(
+  settingsStore,
+  ["resolvedTheme", "lightCodeTheme", "darkCodeTheme", "isLoaded"],
+  ({ resolvedTheme, lightCodeTheme, darkCodeTheme, isLoaded }) => {
+    if (!isLoaded) return;
+    document.documentElement.setAttribute(
+      CODE_THEME_ATTRIBUTE,
+      activeCodeTheme(resolvedTheme, lightCodeTheme, darkCodeTheme)
+    );
+  }
+);
 
 /**
  * Follow the OS preference while in system mode.
@@ -278,6 +349,18 @@ uiFontItem.watch((stored) => {
   settingsStore.setState((prev) => ({ ...prev, uiFont: font }));
 });
 
+lightCodeThemeItem.watch((stored) => {
+  const theme = normalizeLightCodeTheme(stored);
+  if (theme === settingsStore.state.lightCodeTheme) return;
+  settingsStore.setState((prev) => ({ ...prev, lightCodeTheme: theme }));
+});
+
+darkCodeThemeItem.watch((stored) => {
+  const theme = normalizeDarkCodeTheme(stored);
+  if (theme === settingsStore.state.darkCodeTheme) return;
+  settingsStore.setState((prev) => ({ ...prev, darkCodeTheme: theme }));
+});
+
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
@@ -288,6 +371,14 @@ export function setThemeMode(mode: ThemeMode): void {
     themeMode: mode,
     resolvedTheme: resolveTheme(mode),
   }));
+}
+
+export function setLightCodeTheme(theme: LightCodeTheme): void {
+  settingsStore.setState((prev) => ({ ...prev, lightCodeTheme: theme }));
+}
+
+export function setDarkCodeTheme(theme: DarkCodeTheme): void {
+  settingsStore.setState((prev) => ({ ...prev, darkCodeTheme: theme }));
 }
 
 /**
@@ -319,4 +410,14 @@ export function useTheme(): ResolvedTheme {
 /** The user's selection, which may be `"system"`. */
 export function useThemeMode(): ThemeMode {
   return useSettings((s) => s.themeMode);
+}
+
+/** The Prism palette selected for light mode. */
+export function useLightCodeTheme(): LightCodeTheme {
+  return useSettings((s) => s.lightCodeTheme);
+}
+
+/** The Prism palette selected for dark mode. */
+export function useDarkCodeTheme(): DarkCodeTheme {
+  return useSettings((s) => s.darkCodeTheme);
 }

@@ -23,6 +23,7 @@ import {
   emptyQueue,
   enqueue,
   queueSummary,
+  sameSnapshot,
   type QueuedChange,
   type QueueState,
 } from "@/lib/write-queue";
@@ -64,6 +65,34 @@ export type QueueOutcome = {
   status: "failed" | "refused";
   error?: string;
 };
+
+const REPORTED_OUTCOMES_KEY = "__clipioReportedQueueOutcomes" as const;
+type ReportedOutcomeHost = typeof globalThis & {
+  [REPORTED_OUTCOMES_KEY]?: Set<string>;
+};
+
+/**
+ * Claim the right to announce a terminal outcome once per page.
+ *
+ * An editor can remount for reasons unrelated to the write — selection changes,
+ * Suspense, StrictMode, dev reload — and each mount rebuilds its own refs. The
+ * claim lives on `globalThis` so a remount (or a re-evaluated module) cannot
+ * replay an operation that has already been reported. A new operation id is a
+ * new failure and is still reported.
+ */
+export function claimOutcomeReport(outcome: QueueOutcome): boolean {
+  const host = globalThis as ReportedOutcomeHost;
+  const reported = host[REPORTED_OUTCOMES_KEY] ?? new Set<string>();
+  host[REPORTED_OUTCOMES_KEY] = reported;
+  const key = `${outcome.opId}|${outcome.status}|${outcome.error ?? ""}`;
+  if (reported.has(key)) return false;
+  reported.add(key);
+  return true;
+}
+
+export function resetReportedOutcomeReportsForTests(): void {
+  delete (globalThis as ReportedOutcomeHost)[REPORTED_OUTCOMES_KEY];
+}
 
 /**
  * Terminal outcomes keyed by snippet id, for per-snippet UI recovery.
@@ -181,11 +210,10 @@ async function updateQueue(
 }
 
 function publish(): void {
-  const summary = queueSummary(cachedQueue);
-  writeQueueStore.setState(() => ({
-    ...summary,
+  const nextStatus: SyncStatus = {
+    ...queueSummary(cachedQueue),
     saving: stagedDraftIds.size > 0,
-  }));
+  };
 
   const operations: Record<string, QueuedChange> = {};
   const outcomes: Record<string, QueueOutcome> = {};
@@ -200,8 +228,19 @@ function publish(): void {
       };
     }
   }
-  queueOperationsStore.setState(() => operations);
-  queueOutcomesStore.setState(() => outcomes);
+  // A refresh can re-read an unchanged queue. Publish each snapshot only when
+  // it actually differs, so a stored failure is not announced again on every
+  // storage event. Returning the previous value makes the store a no-op: its
+  // updater compares by reference before notifying subscribers.
+  writeQueueStore.setState((prev) =>
+    sameSnapshot(prev, nextStatus) ? prev : nextStatus
+  );
+  queueOperationsStore.setState((prev) =>
+    sameSnapshot(prev, operations) ? prev : operations
+  );
+  queueOutcomesStore.setState((prev) =>
+    sameSnapshot(prev, outcomes) ? prev : outcomes
+  );
 }
 
 type CommitSettlement = { outcome: QueueOutcome | null };
@@ -430,9 +469,17 @@ export async function stageEdit(
     drafts[snippet.id]?.fields ??
     committedFieldsStore.state[snippet.id] ??
     fieldsFromSnippet(snippet);
+  // A draft surviving our own commit still carries the revision it was first
+  // staged from. The authoritative store has already advanced, so reusing that
+  // stale baseRev makes the next keystroke conflict with the write we just made.
+  // Keep a draft that is newer than the store, but never move backwards.
+  const baseRev = Math.max(
+    snippetRev(snippet),
+    drafts[snippet.id]?.baseRev ?? 0
+  );
   await stageDraft({
     id: snippet.id,
-    baseRev: drafts[snippet.id]?.baseRev ?? snippetRev(snippet),
+    baseRev,
     fields,
     updatedAt: new Date().toISOString(),
     isNew: false,

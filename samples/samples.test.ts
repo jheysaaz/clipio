@@ -15,6 +15,7 @@ import { createSnippet } from "@/types";
 
 const FILES = [
   { file: "clipio-export.json", format: "clipio" },
+  { file: "clipio-520-export.json", format: "clipio" },
   { file: "textblaze-export.json", format: "textblaze" },
   { file: "powertext-export.json", format: "powertext" },
 ] as const;
@@ -65,6 +66,12 @@ describe("samples/", () => {
       }
     });
   }
+
+  it("clipio-520-export.json provides a 520-snippet library", () => {
+    const parser = getParser("clipio");
+    if (!parser) throw new Error("no clipio parser");
+    expect(parser.parse(load("clipio-520-export.json"))).toHaveLength(520);
+  });
 
   it("maps Power Text placeholders to Clipio's", () => {
     const parser = getParser("powertext");

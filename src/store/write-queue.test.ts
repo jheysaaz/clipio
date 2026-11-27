@@ -52,6 +52,7 @@ vi.mock("@/storage/writer-id", () => ({
 }));
 
 import {
+  claimOutcomeReport,
   clearCommittedFields,
   discardDraft,
   discardStaleCreateDraft,
@@ -62,6 +63,7 @@ import {
   queueOutcomesStore,
   refreshSyncStatus,
   refreshUndoAvailability,
+  resetReportedOutcomeReportsForTests,
   redoLastEdit,
   rememberCommittedFields,
   stageEdit,
@@ -99,6 +101,7 @@ const fields = {
 };
 
 function reset() {
+  resetReportedOutcomeReportsForTests();
   state.drafts = {};
   state.queue = emptyQueue();
   state.undo = {};
@@ -130,6 +133,51 @@ describe("popup write queue", () => {
     });
     // The queue is the background's authority: staging must not enqueue yet.
     expect(state.queue?.operations).toHaveLength(0);
+  });
+
+  it("advances a surviving draft past our own commit before the next write", async () => {
+    // The background deletes the exact draft a commit came from. If the next
+    // keystroke lands before that deletion reaches storage, the draft still
+    // carries the old baseRev even though the popup has already applied the new
+    // revision from its own write. Reusing it makes the next edit conflict with
+    // us — the failure seen when editing a shortcut right after another save.
+    state.drafts = {
+      s1: {
+        id: "s1",
+        baseRev: 3,
+        isNew: false,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        fields,
+      },
+    };
+    const committed = {
+      ...snippet,
+      rev: 4,
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      updatedBy: "writer-1",
+    };
+
+    await stageEdit(committed, { ...fields, shortcut: "/addr-more" });
+    await flushDraft("s1", [committed]);
+
+    expect(state.drafts.s1?.baseRev).toBe(4);
+    expect(state.queue?.operations[0].baseRev).toBe(4);
+  });
+
+  it("keeps a draft's newer baseRev when the authoritative store lags", async () => {
+    state.drafts = {
+      s1: {
+        id: "s1",
+        baseRev: 5,
+        isNew: false,
+        updatedAt: "2026-01-02T00:00:00.000Z",
+        fields,
+      },
+    };
+
+    await stageEdit(snippet, fields);
+
+    expect(state.drafts.s1?.baseRev).toBe(5);
   });
 
   it("publishes the staged fields as a live preview and a saving status", async () => {
@@ -250,6 +298,42 @@ describe("popup write queue", () => {
 
     expect(writeQueueStore.state.pending).toBe(1);
     expect(writeQueueStore.state.failed).toBe(0);
+  });
+
+  it("does not republish a failure when a refresh re-reads the same queue", async () => {
+    state.queue = {
+      operations: [
+        {
+          id: "op-old",
+          snippetId: "s1",
+          kind: "upsert",
+          fields,
+          baseRev: 3,
+          updatedAt: "2026-01-02T00:00:00.000Z",
+          updatedBy: "writer-1",
+          reason: "edit",
+          attempts: 6,
+          nextAttemptAt: 1,
+          status: "failed",
+          error: "conflict",
+          createdAt: 1,
+        },
+      ],
+      sentAt: [],
+    };
+    await refreshSyncStatus();
+    const outcome = queueOutcomesStore.state.s1;
+    const onOutcome = vi.fn();
+    const subscription = queueOutcomesStore.subscribe(onOutcome);
+
+    // Storage reads always hand back fresh objects, even for an unchanged
+    // queue. The editor keys its failure announcement on this object.
+    state.queue = structuredClone(state.queue);
+    await refreshSyncStatus();
+
+    expect(queueOutcomesStore.state.s1).toBe(outcome);
+    expect(onOutcome).not.toHaveBeenCalled();
+    subscription.unsubscribe();
   });
 
   it("stages a new snippet with a caller-chosen provisional id", async () => {
@@ -620,5 +704,28 @@ describe("popup write queue", () => {
     draftsGet.mockImplementation(original);
 
     expect(writeQueueStore.state.saving).toBe(false);
+  });
+});
+
+describe("terminal outcome reports", () => {
+  const outcome = {
+    opId: "op-1",
+    snippetId: "s1",
+    status: "failed" as const,
+    error: "conflict",
+  };
+
+  beforeEach(reset);
+
+  it("claims a stored failure only once", () => {
+    expect(claimOutcomeReport(outcome)).toBe(true);
+    // A remount reads the same persisted operation back as a fresh object. The
+    // identity changed, but the report has already been made.
+    expect(claimOutcomeReport({ ...outcome })).toBe(false);
+  });
+
+  it("does not let one reported failure suppress another operation", () => {
+    expect(claimOutcomeReport(outcome)).toBe(true);
+    expect(claimOutcomeReport({ ...outcome, opId: "op-2" })).toBe(true);
   });
 });

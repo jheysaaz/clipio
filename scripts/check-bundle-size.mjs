@@ -169,14 +169,52 @@ const posix = (p) => p.split(sep).join("/");
  * aggregate and shared chunks each grow 508 bytes; the background, content,
  * popup and options entries stay below their existing budgets. Both sizes were
  * measured twice from clean builds and did not vary.
+ *
+ * Raised for the shadcn date picker: `react-day-picker` and `date-fns` add the
+ * calendar and its date helpers to the shared editor chunk. The popup entry,
+ * background, content script and options entry stay below their budgets; only
+ * the aggregate and shared-chunk totals move. Both sizes were measured from a
+ * clean build after the final editor changes.
+ *
+ * Raised again for the release editor fixes: the distinct `code_block` node key,
+ * the typed trailing paragraph that keeps serialisation from throwing, and the
+ * title's important utilities add 110 bytes to both the aggregate and the shared
+ * chunks. The individual entries stay below their budgets. Both sizes were
+ * measured twice from clean builds and did not vary.
+ *
+ * Raised for Prism-backed syntax highlighting in the snippet editor. Importing
+ * Prism's core plus the 19 grammars offered by the language picker adds about
+ * 64 KiB to the shared snippet-editor chunk and therefore to the aggregate.
+ * The background and content entries gain 66 and 85 bytes from the shared
+ * chunk graph; the popup and options entries stay below their budgets. All
+ * raised sizes were measured twice from clean builds and did not vary.
+ *
+ * Raised again for the per-UI-theme code presets. The two Appearance pickers,
+ * live highlighted sample, palette variables and cross-context settings wiring
+ * add 4,562 bytes to the aggregate, 158 to the background, 146 to the content
+ * script and 4,258 to the shared chunks. The popup and options entries stay
+ * below their existing budgets. Sizes were measured from a clean build.
+ *
+ * Raised once more for the Appearance picker repair: the explicit kebab-id to
+ * camelCase-locale-key map, its regression assertion, and the lint-safe
+ * normalization of a missing or invalid stored theme add 2,055 bytes to the
+ * aggregate and shared chunks. The individual entries do not grow. Sizes were
+ * measured twice from clean builds and did not vary.
+ *
+ * Raised for the popup editor repairs that shipped with it: explicit paragraph
+ * creation after media insertion, label-authoritative link insertion, the
+ * popup-bound slash-menu surface and the stable datepicker node lookup add 369
+ * bytes to the aggregate and shared chunks. The individual entries stay below
+ * their existing budgets. Sizes were measured twice from clean builds and did
+ * not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_784_363 },
-  { name: "background entry", pattern: "background.js", maxBytes: 227_033 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_941_163 },
+  { name: "background entry", pattern: "background.js", maxBytes: 227_257 },
   {
     name: "content script entry",
     pattern: "content-scripts/content.js",
-    maxBytes: 919_262,
+    maxBytes: 919_493,
   },
   {
     name: "popup entry chunk",
@@ -193,7 +231,7 @@ const BUDGETS = [
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_638_068,
+    maxBytes: 1_794_413,
   },
 ];
 

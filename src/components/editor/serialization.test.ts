@@ -43,10 +43,11 @@ const dateNode = (format: string): TElement =>
 const cursorNode = (): TElement =>
   ({ type: CURSOR_PLACEHOLDER, children: [{ text: "" }] }) as TElement;
 
-const datepickerNode = (date: string): TElement =>
+const datepickerNode = (date: string, format?: string): TElement =>
   ({
     type: DATEPICKER_PLACEHOLDER,
     date,
+    ...(format ? { format } : {}),
     children: [{ text: "" }],
   }) as TElement;
 
@@ -154,11 +155,17 @@ describe("serializeToMarkdown", () => {
     expect(serializeToMarkdown([p([cursorNode()])])).toBe("{{cursor}}");
   });
 
-  // DATEPICKER_PLACEHOLDER → {{datepicker:date}}
-  it("serializes datepicker placeholder", () => {
+  // DATEPICKER_PLACEHOLDER → {{datepicker:date[:format]}}
+  it("serializes datepicker placeholder, keeping the legacy token unchurned", () => {
     expect(serializeToMarkdown([p([datepickerNode("2025-06-15")])])).toBe(
       "{{datepicker:2025-06-15}}"
     );
+    expect(
+      serializeToMarkdown([p([datepickerNode("2025-06-15", "short")])])
+    ).toBe("{{datepicker:2025-06-15:short}}");
+    expect(
+      serializeToMarkdown([p([datepickerNode("2025-06-15", "long")])])
+    ).toBe("{{datepicker:2025-06-15}}");
   });
 
   // LINK_ELEMENT → [label](url)
@@ -192,6 +199,26 @@ describe("serializeToMarkdown", () => {
       p([text("Second line")]),
     ]);
     expect(result).toBe("First line\n\nSecond line");
+  });
+
+  it("keeps the blank line after a media block", () => {
+    // Inserting an image/GIF leaves the caret in an empty next paragraph. That
+    // block used to be filtered out on save, erasing the line break.
+    const id = "550e8400-e29b-41d4-a716-446655440000";
+    expect(serializeToMarkdown([p([imageNode(id)]), p([text("")])])).toBe(
+      `{{image:${id}}}\n\n`
+    );
+    expect(
+      serializeToMarkdown([p([gifNode("abc123XYZ")]), p([text("")])])
+    ).toBe("{{gif:abc123XYZ}}\n\n");
+  });
+
+  it("still drops an empty paragraph after ordinary text", () => {
+    // The exception is media-only: a trailing empty paragraph after text must
+    // not leak a stray blank line into every saved snippet.
+    expect(serializeToMarkdown([p([text("Hello")]), p([text("")])])).toBe(
+      "Hello"
+    );
   });
 
   // mixed content in same paragraph
@@ -410,14 +437,31 @@ describe("deserializeContent (markdown path)", () => {
     expect(firstChild.type).toBe(CURSOR_PLACEHOLDER);
   });
 
-  // MUST create DATEPICKER_PLACEHOLDER with date prop
-  it("deserializes {{datepicker:YYYY-MM-DD}} placeholder", () => {
-    const result = deserializeContent("{{datepicker:2025-06-15}}");
-    const firstChild = firstElementChild(result[0]) as TElement & {
+  // MUST create DATEPICKER_PLACEHOLDER with date and optional format props
+  it("deserializes datepicker placeholders with and without a format", () => {
+    const legacy = deserializeContent("{{datepicker:2025-06-15}}");
+    const legacyChild = firstElementChild(legacy[0]) as TElement & {
       date: string;
     };
-    expect(firstChild.type).toBe(DATEPICKER_PLACEHOLDER);
-    expect(firstChild.date).toBe("2025-06-15");
+    expect(legacyChild.type).toBe(DATEPICKER_PLACEHOLDER);
+    expect(legacyChild.date).toBe("2025-06-15");
+    expect(legacyChild.format).toBeUndefined();
+
+    const formatted = deserializeContent("{{datepicker:2025-06-15:eu}}");
+    const formattedChild = firstElementChild(formatted[0]) as TElement & {
+      date: string;
+      format?: string;
+    };
+    expect(formattedChild.type).toBe(DATEPICKER_PLACEHOLDER);
+    expect(formattedChild.format).toBe("eu");
+  });
+
+  it("does not treat an unknown datepicker format as a placeholder", () => {
+    const result = deserializeContent("{{datepicker:2025-06-15:tomato}}");
+    const serialized = JSON.stringify(result);
+    // Negative case: only the five known formats may become a picker node.
+    expect(serialized).not.toContain(`"type":"${DATEPICKER_PLACEHOLDER}"`);
+    expect(serialized).toContain("tomato");
   });
 
   // MUST create IMAGE_PLACEHOLDER with mediaId prop

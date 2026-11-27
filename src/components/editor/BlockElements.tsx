@@ -21,9 +21,30 @@
  * the markup is semantic and the content stays editable as text.
  */
 
-import { createPlatePlugin } from "platejs/react";
-import type { PlateElementProps } from "platejs/react";
-import type { ReactNode } from "react";
+import { createPlatePlugin, useEditorRef } from "platejs/react";
+import type { PlateElementProps, PlateLeafProps } from "platejs/react";
+import { NodeApi, type DecoratedRange, type TElement } from "platejs";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { Check, Copy } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { Input } from "@/components/ui/input";
+import { MenuItem, MenuSurface } from "@/components/ui/menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { useControlConfirmation } from "@/components/feedback/use-control-confirmation";
+import { codeBlockText } from "@/lib/editor-code-block";
+import { CODE_TOKEN_CLASS_NAMES } from "@/lib/code-theme";
+import {
+  CODE_LANGUAGES,
+  codeLanguageId,
+  highlightCodeRanges,
+  type CodeTokenClass,
+} from "@/lib/editor-code-highlight";
+import { i18n } from "#i18n";
 
 type El = { type?: string; children?: unknown[]; language?: string };
 
@@ -117,13 +138,190 @@ export function HrElement(props: PlateElementProps) {
   );
 }
 
-export function CodeBlockElement(props: PlateElementProps) {
-  const language = (props.element as El).language;
+/** Renders a Prism decoration without replacing Slate's editable text. */
+export function PrismTokenLeaf({ attributes, children, leaf }: PlateLeafProps) {
+  const token = (leaf as { prismToken?: CodeTokenClass }).prismToken;
   return (
-    <div {...props.attributes} className="my-2">
-      <pre className="overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs">
+    <span
+      {...attributes}
+      data-prism-token={token}
+      className={token ? CODE_TOKEN_CLASS_NAMES[token] : undefined}
+    >
+      {children}
+    </span>
+  );
+}
+
+/**
+ * A fenced code block, rendered with Plate's own editable children.
+ *
+ * Prism supplies decoration ranges, not HTML, so the text stays editable and
+ * serializes back to the same fence. The header is presentational chrome with
+ * `contentEditable={false}`; its language picker writes the fence info string.
+ */
+export function CodeBlockElement(props: PlateElementProps) {
+  const editor = useEditorRef();
+  const language = (props.element as El).language;
+  const [copyFailed, setCopyFailed] = useState(false);
+  const [languageOpen, setLanguageOpen] = useState(false);
+  const [languageQuery, setLanguageQuery] = useState("");
+  const { confirmed, show, reset } = useControlConfirmation();
+
+  const languages = useMemo(() => {
+    const query = languageQuery.trim().toLowerCase();
+    if (!query) return CODE_LANGUAGES;
+    return CODE_LANGUAGES.filter((item) =>
+      item.label.toLowerCase().includes(query)
+    );
+  }, [languageQuery]);
+
+  const selectedLanguage = codeLanguageId(language);
+  const selectedLabel = selectedLanguage
+    ? (CODE_LANGUAGES.find((item) => item.id === selectedLanguage)?.label ??
+      selectedLanguage)
+    : i18n.t("editor.codeBlock.plainText");
+
+  const handleLanguageSelect = useCallback(
+    (next: string) => {
+      editor.tf.setNodes({ language: next } as Partial<TElement>, {
+        at: props.path,
+      });
+      setLanguageOpen(false);
+      setLanguageQuery("");
+      editor.tf.focus();
+    },
+    [editor, props.path]
+  );
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(codeBlockText(props.element));
+      setCopyFailed(false);
+      show();
+    } catch {
+      // Keep the original label so a failure is visible as "Copy code" rather
+      // than a false "Copied" tick.
+      reset();
+      setCopyFailed(true);
+    }
+  };
+
+  const copyLabel = i18n.t(
+    confirmed ? "editor.codeBlock.copied" : "editor.codeBlock.copy"
+  );
+
+  return (
+    <div
+      {...props.attributes}
+      data-testid="code-block"
+      className="my-3 overflow-hidden rounded-lg border border-border bg-muted/40"
+    >
+      <div
+        contentEditable={false}
+        className="flex items-center justify-between gap-2 border-b border-border px-2 py-1"
+      >
+        <Popover
+          open={languageOpen}
+          onOpenChange={(open) => {
+            setLanguageOpen(open);
+            if (!open) setLanguageQuery("");
+          }}
+        >
+          <PopoverTrigger
+            nativeButton
+            render={
+              <button
+                type="button"
+                contentEditable={false}
+                data-testid="code-block-language"
+                aria-label={i18n.t("editor.codeBlock.language")}
+                aria-expanded={languageOpen}
+                // The header is inside the editable surface; keep the caret in
+                // the code body when the language menu is opened.
+                onMouseDown={(event) => event.preventDefault()}
+                className="max-w-[10rem] truncate text-ui-micro! uppercase tracking-wide text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                {selectedLabel}
+              </button>
+            }
+          />
+          <PopoverContent
+            data-testid="code-block-language-menu"
+            align="start"
+            side="bottom"
+            className="min-w-[10rem] max-w-[13rem] w-auto border-0! bg-transparent! p-0 shadow-none! ring-0!"
+          >
+            <MenuSurface className="w-full max-w-none">
+              <Input
+                autoFocus
+                value={languageQuery}
+                onChange={(event) => setLanguageQuery(event.target.value)}
+                onKeyDown={(event) => event.stopPropagation()}
+                aria-label={i18n.t("editor.codeBlock.searchLanguage")}
+                data-testid="code-block-language-search"
+                className="mb-1 h-7 text-ui-xs!"
+              />
+              <div className="max-h-[min(17.5rem,60vh)] overflow-y-auto overscroll-contain">
+                {languages.length === 0 ? (
+                  <div className="px-2.5 py-2 text-ui-xs! text-muted-foreground">
+                    {i18n.t("editor.slashMenu.noMatches")}
+                  </div>
+                ) : (
+                  languages.map((option) => (
+                    <MenuItem
+                      key={option.id}
+                      active={selectedLanguage === option.id}
+                      data-testid={`code-block-language-${option.id}`}
+                      aria-pressed={selectedLanguage === option.id}
+                      onClick={() => handleLanguageSelect(option.id)}
+                      className="uppercase tracking-wide"
+                    >
+                      <span className="min-w-0 flex-1 truncate">
+                        {option.id
+                          ? option.label
+                          : i18n.t("editor.codeBlock.plainText")}
+                      </span>
+                      {selectedLanguage === option.id ? (
+                        <Icon icon={Check} size="sm" />
+                      ) : null}
+                    </MenuItem>
+                  ))
+                )}
+              </div>
+            </MenuSurface>
+          </PopoverContent>
+        </Popover>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          data-testid="code-block-copy"
+          title={copyLabel}
+          aria-label={copyLabel}
+          // The button is inside the editable surface. Preventing mousedown
+          // from moving the caret keeps the block's selection intact while Base
+          // UI-style buttons still receive the click.
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => void copy()}
+          className="h-6 gap-1 px-1.5 text-ui-micro!"
+        >
+          <Icon icon={confirmed ? Check : Copy} size="xs" />
+          {copyLabel}
+        </Button>
+      </div>
+      <pre className="code-block-code overflow-x-auto px-3 py-2 font-mono text-ui-xs!">
         <code data-language={language || undefined}>{props.children}</code>
       </pre>
+      {copyFailed && (
+        <span
+          contentEditable={false}
+          role="status"
+          className="sr-only"
+          data-testid="code-block-copy-error"
+        >
+          {i18n.t("editor.codeBlock.copyFailed")}
+        </span>
+      )}
     </div>
   );
 }
@@ -218,7 +416,7 @@ const BLOCK_COMPONENTS: Record<
   h6: HeadingElement,
   blockquote: BlockquoteElement,
   hr: HrElement,
-  code: CodeBlockElement,
+  code_block: CodeBlockElement,
   ul: ListElement,
   ol: ListElement,
   li: ListItemElement,
@@ -253,7 +451,7 @@ export const BLOCK_PLUGINS = [
   "h6",
   "blockquote",
   "hr",
-  "code",
+  "code_block",
   "ul",
   "ol",
   "li",
@@ -268,6 +466,87 @@ export const BLOCK_PLUGINS = [
   const plugin = createPlatePlugin({
     key,
     node: { isElement: true, isInline: false, isVoid: key === "hr" },
+    ...(key === "code_block"
+      ? {
+          handlers: {
+            onKeyDown: ({ editor, event }) => {
+              const [codeBlock] =
+                editor.api.above<TElement>({
+                  match: { type: "code_block" },
+                }) ?? [];
+              if (!codeBlock) return;
+
+              if (event.key === "Tab" && !event.shiftKey) {
+                // Plate's default tab transform is a no-op, so without this the
+                // browser moves focus out of the popup instead of indenting code.
+                event.preventDefault();
+                event.stopPropagation();
+                editor.tf.insertText("\t");
+                return true;
+              }
+
+              if (event.key === "Enter" && !event.shiftKey) {
+                // Splitting a code block produces a second fenced block. Exit
+                // to a normal paragraph instead: Enter means "I'm done coding".
+                event.preventDefault();
+                event.stopPropagation();
+                return editor.tf.insertExitBreak({
+                  match: { type: "code_block" },
+                });
+              }
+            },
+          },
+        }
+      : {}),
   });
   return plugin.withComponent(BLOCK_COMPONENTS[key] as never);
 });
+
+/**
+ * Prism decorations for editable code blocks. The plugin key matches the leaf
+ * property Slate copies onto each decorated range, so `PrismTokenLeaf` renders
+ * the token without turning the code into a non-editable highlighted blob.
+ */
+export const CodeHighlightPlugin = createPlatePlugin({
+  key: "prismToken",
+  node: { isLeaf: true },
+  decorate: ({ entry }) => {
+    const [node, path] = entry;
+    if (!("type" in node) || node.type !== "code_block") return;
+
+    const element = node as TElement & { language?: string };
+    const ranges = highlightCodeRanges(
+      NodeApi.string(element),
+      element.language
+    );
+    if (!ranges.length) return;
+
+    const leaves = Array.from(NodeApi.texts(element)).map(
+      ([leaf, leafPath]) => ({
+        path: [...path, ...leafPath],
+        start: 0,
+        text: leaf.text,
+      })
+    );
+    let offset = 0;
+    for (const leaf of leaves) {
+      leaf.start = offset;
+      offset += leaf.text.length;
+    }
+
+    const decorated: DecoratedRange[] = [];
+    for (const range of ranges) {
+      for (const leaf of leaves) {
+        const from = Math.max(range.start, leaf.start);
+        const to = Math.min(range.end, leaf.start + leaf.text.length);
+        if (from >= to) continue;
+        decorated.push({
+          anchor: { path: leaf.path, offset: from - leaf.start },
+          focus: { path: leaf.path, offset: to - leaf.start },
+          prismToken: range.token,
+        } as DecoratedRange);
+      }
+    }
+    return decorated;
+  },
+}).withComponent(PrismTokenLeaf);

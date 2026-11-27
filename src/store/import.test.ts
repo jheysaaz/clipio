@@ -6,13 +6,16 @@ import {
   advanceFromUpload,
   applyUnsupportedChoices,
   canAdvanceFromUpload,
+  canRunImport,
   countImported,
   detectedParserLabel,
+  effectiveStorageTarget,
   initialiseImport,
   importStore,
   needsPlaceholderStep,
   prefillConflictResolutions,
   previewFinalSnippets,
+  quotaRequiresTargetChoice,
   resetImport,
   routeAfterPlaceholders,
   routeAfterUpload,
@@ -34,6 +37,7 @@ const storage = vi.hoisted(() => ({
   getSnippets: vi.fn(),
   getStorageStatus: vi.fn(),
   bulkSaveSnippets: vi.fn(),
+  forceSetStorageMode: vi.fn(),
 }));
 
 vi.mock("@/storage", () => storage);
@@ -103,6 +107,7 @@ beforeEach(() => {
   storage.getSnippets.mockResolvedValue([]);
   storage.getStorageStatus.mockResolvedValue({ mode: "sync" });
   storage.bulkSaveSnippets.mockResolvedValue(undefined);
+  storage.forceSetStorageMode.mockResolvedValue(undefined);
   vi.mocked(restoreMediaEntry)
     .mockReset()
     .mockImplementation(async (entry) => entry.id);
@@ -463,6 +468,85 @@ describe("willExceedQuota", () => {
   });
 });
 
+describe("storage target choice", () => {
+  const huge = () => parsed({ content: "x".repeat(200_000) });
+
+  it("uses the current mode until the user chooses", () => {
+    expect(
+      effectiveStorageTarget({ storageMode: "local", storageTarget: "" })
+    ).toBe("local");
+    expect(
+      effectiveStorageTarget({ storageMode: "sync", storageTarget: "" })
+    ).toBe("sync");
+    expect(
+      effectiveStorageTarget({ storageMode: "sync", storageTarget: "local" })
+    ).toBe("local");
+  });
+
+  it("requires an explicit choice only for an oversized sync library", () => {
+    const base = state();
+    expect(
+      quotaRequiresTargetChoice({
+        ...base,
+        parsedSnippets: [huge()],
+      })
+    ).toBe(true);
+    expect(
+      quotaRequiresTargetChoice({
+        ...base,
+        parsedSnippets: [huge()],
+        storageMode: "local",
+      })
+    ).toBe(false);
+    expect(
+      quotaRequiresTargetChoice({
+        ...base,
+        parsedSnippets: [parsed()],
+      })
+    ).toBe(false);
+  });
+
+  it("blocks import while an oversized sync library has no target", () => {
+    const base = {
+      ...state(),
+      parsedSnippets: [huge()],
+    };
+    expect(canRunImport(base)).toBe(false);
+    expect(canRunImport({ ...base, storageTarget: "local" })).toBe(true);
+    expect(canRunImport({ ...base, parsedSnippets: [] })).toBe(false);
+  });
+
+  it("migrates the library before writing an import chosen as local", async () => {
+    importStore.setState((prev) => ({
+      ...prev,
+      parsedSnippets: [huge()],
+      storageMode: "sync",
+      storageTarget: "local",
+    }));
+
+    const count = await runImport();
+
+    expect(storage.forceSetStorageMode).toHaveBeenCalledWith("local");
+    expect(storage.bulkSaveSnippets).toHaveBeenCalled();
+    expect(count).toBe(1);
+    expect(state().storageMode).toBe("local");
+  });
+
+  it("does not migrate when the import stays in sync", async () => {
+    importStore.setState((prev) => ({
+      ...prev,
+      parsedSnippets: [parsed()],
+      storageMode: "sync",
+      storageTarget: "sync",
+    }));
+
+    await runImport();
+
+    expect(storage.forceSetStorageMode).not.toHaveBeenCalled();
+    expect(storage.bulkSaveSnippets).toHaveBeenCalled();
+  });
+});
+
 describe("canAdvanceFromUpload", () => {
   it("needs a parse, no error and a chosen format", () => {
     const base = {
@@ -557,6 +641,7 @@ describe("the wizard", () => {
 
     expect(state().existingSnippets).toHaveLength(1);
     expect(state().storageMode).toBe("local");
+    expect(state().storageTarget).toBe("local");
   });
 
   it("still loads what it can when one read fails", async () => {

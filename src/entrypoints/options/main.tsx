@@ -11,6 +11,7 @@ import {
 } from "@/routes/options";
 import "@/store/settings";
 import { initSentry, captureError } from "@/lib/sentry";
+import { getOrCreateRoot } from "@/lib/react-root";
 import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
 import { OnboardingLoader } from "@/components/onboarding/OnboardingLoader";
 import { i18n } from "#i18n";
@@ -85,7 +86,10 @@ function App() {
 const root = document.getElementById("root");
 
 if (root) {
-  ReactDOM.createRoot(root).render(
+  // A dev reload can re-run this module against the same #root. Rendering into
+  // the existing root is the update path React asks for; a second createRoot()
+  // on the container leaves two trees fighting over it.
+  getOrCreateRoot(root, () => ReactDOM.createRoot(root)).render(
     <React.StrictMode>
       <App />
     </React.StrictMode>

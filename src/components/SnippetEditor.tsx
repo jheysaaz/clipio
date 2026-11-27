@@ -9,6 +9,7 @@ import {
 import { useStore } from "@tanstack/react-store";
 import {
   Copy,
+  CopyPlus,
   Check,
   Trash2,
   PanelLeftClose,
@@ -27,12 +28,6 @@ import { Button } from "@/components/ui/button";
 import { InlineAction } from "@/components/ui/inline-action";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { RichTextEditor, type RichTextEditorRef } from "@/components/editor";
 import { Badge } from "@/components/ui/badge";
 import type { Snippet, SnippetFormData } from "@/types";
@@ -51,6 +46,16 @@ import {
 } from "@/lib/snippet-draft";
 import { detectShortcutConflict } from "@/lib/snippet-utils";
 import { getRelativeTime, shortenRelativeTime } from "@/lib/date-utils";
+import {
+  shortcutInputProblem,
+  shortcutSpacesToDashes,
+  unsupportedShortcutCharacters,
+  withProtectedPrefix,
+} from "@/lib/shortcut-input";
+import {
+  DEFAULT_TRIGGER_PREFIX,
+  readTriggerPrefix,
+} from "@/lib/trigger-prefix";
 import { visibleTagCount } from "@/lib/tag-overflow";
 import {
   discardUnflushedDraft,
@@ -63,8 +68,10 @@ import {
   undoLastEdit,
   writeQueueStore,
   queueOutcomesStore,
+  claimOutcomeReport,
+  waitForSnippetCommit,
 } from "@/store/write-queue";
-import { snippetsStore } from "@/store/snippets";
+import { getSnippets } from "@/storage";
 import {
   getSnippetUsageCount,
   incrementSnippetUsage,
@@ -97,6 +104,8 @@ interface SnippetEditorProps {
   /** Called once the debounced draft has content; Dashboard creates the record. */
   onAutoSave?: (draft: SnippetFormData) => void;
   onDelete: (snippetId: string) => void | Promise<void>;
+  /** Start a fresh draft seeded with the fields currently on screen. */
+  onDuplicate?: (fields: EditorFields) => void | Promise<void>;
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
   createError?: string | null;
@@ -130,10 +139,17 @@ function sameFields(a: EditorFields, b: EditorFields): boolean {
 function shortcutErrorFor(
   value: string,
   existingSnippets: Snippet[],
-  snippetId: string
+  snippetId: string,
+  prefix: string
 ): string {
-  if (value.includes(" ")) {
+  const problem = shortcutInputProblem(value, prefix);
+  if (problem === "spaces") {
     return i18n.t("snippetEditor.shortcutError");
+  }
+  if (problem === "characters") {
+    return i18n.t("snippetEditor.shortcutErrorCharacters", [
+      unsupportedShortcutCharacters(value, prefix).join(" "),
+    ]);
   }
   const conflict = detectShortcutConflict(value, existingSnippets, snippetId);
   if (!conflict) return "";
@@ -158,6 +174,7 @@ export default function SnippetEditor({
   onDraftChange,
   onAutoSave,
   onDelete,
+  onDuplicate,
   sidebarOpen = true,
   onToggleSidebar,
   createError = null,
@@ -185,8 +202,9 @@ export default function SnippetEditor({
   // value so the rest of the snippet can keep autosaving.
   const [shortcutInput, setShortcutInput] = useState(initialFields.shortcut);
   const [shortcutError, setShortcutError] = useState("");
-  const [shortcutFocused, setShortcutFocused] = useState(false);
-  const [shortcutHovered, setShortcutHovered] = useState(false);
+  // Start from the shipped prefix so validation never treats the leading symbol
+  // of a freshly rendered field as an unsupported character while storage reads.
+  const [triggerPrefix, setTriggerPrefix] = useState(DEFAULT_TRIGGER_PREFIX);
   const [dismissedOutcomeId, setDismissedOutcomeId] = useState<string | null>(
     null
   );
@@ -238,6 +256,19 @@ export default function SnippetEditor({
   }>({ fade: null, hide: null });
   const showSavedRef = useRef(false);
   const sawBusyRef = useRef(false);
+
+  // The prefix is configuration, so read it once rather than hardcoding "/".
+  // The input handler re-applies it after every keystroke; a saved snippet
+  // authored under a different prefix keeps that prefix until it is edited.
+  useEffect(() => {
+    let active = true;
+    void readTriggerPrefix().then((prefix) => {
+      if (active) setTriggerPrefix(prefix);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const status = useStore(writeQueueStore);
   const quotaWarning = useSnippets((s) => s.quotaWarning);
@@ -323,9 +354,13 @@ export default function SnippetEditor({
 
   const persistFields = useCallback(
     async (next: EditorFields) => {
-      const stored = snippetsStore.state.snippets.find(
-        (item) => item.id === snippet.id
-      );
+      // The background owns the commit. Reading the in-memory store here can
+      // still see the revision from before its last write, especially after a
+      // dev reload, and staging against that revision conflicts with ourselves.
+      // Let the previous operation settle, then use the record storage has now.
+      await waitForSnippetCommit(snippet.id);
+      const storedList = await getSnippets();
+      const stored = storedList.find((item) => item.id === snippet.id);
       if (!stored) return;
       await stageEdit(stored, next);
       // Staging alone leaves the edit in local storage with no operation to
@@ -334,7 +369,7 @@ export default function SnippetEditor({
       // Saving… forever. Hand the staged draft to the queue on the same debounce
       // so status follows a real write; pagehide stays as the safety net for the
       // pending timer, not the only path to a commit.
-      const queued = await flushDraft(snippet.id, snippetsStore.state.snippets);
+      const queued = await flushDraft(snippet.id, storedList);
       if (!queued.ok) throw new Error(validationMessage(queued.error));
     },
     [snippet.id]
@@ -371,8 +406,6 @@ export default function SnippetEditor({
     setFields(initialFields);
     setShortcutInput(initialFields.shortcut);
     setShortcutError("");
-    setShortcutFocused(false);
-    setShortcutHovered(false);
     setNewTagInput("");
     setDismissedOutcomeId(null);
     setIsAddingTag(false);
@@ -398,7 +431,7 @@ export default function SnippetEditor({
   }, [shortcutError, announceError]);
 
   useEffect(() => {
-    if (!outcome) return;
+    if (!outcome || !claimOutcomeReport(outcome)) return;
     const detail =
       outcome.error === "conflict"
         ? i18n.t("snippetDetail.syncStatus.conflictDetail")
@@ -652,11 +685,22 @@ export default function SnippetEditor({
   };
 
   const handleShortcutChange = (value: string) => {
-    setShortcutInput(value);
-    const error = shortcutErrorFor(value, existingSnippets, snippet.id);
+    // The configured prefix is not a field the user is editing. Re-apply it
+    // after every change so Backspace or selecting all cannot silently change
+    // which trigger opens the snippet.
+    const protectedValue = shortcutSpacesToDashes(
+      withProtectedPrefix(value, triggerPrefix)
+    );
+    setShortcutInput(protectedValue);
+    const error = shortcutErrorFor(
+      protectedValue,
+      existingSnippets,
+      snippet.id,
+      triggerPrefix
+    );
     setShortcutError(error);
     // Invalid input stays visible, but never reaches the persisted fields.
-    if (!error) commitFields({ ...fields, shortcut: value });
+    if (!error) commitFields({ ...fields, shortcut: protectedValue });
   };
 
   const step = async (direction: "undo" | "redo") => {
@@ -731,6 +775,19 @@ export default function SnippetEditor({
       }
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleDuplicate = async () => {
+    setMenuOpen(false);
+    try {
+      await onDuplicate?.(fieldsRef.current);
+    } catch (error) {
+      captureError(error, {
+        action: "duplicateSnippet",
+        snippetId: snippet.id,
+      });
+      setActionError(i18n.t("snippetDetail.errors.failedToDuplicate"));
     }
   };
 
@@ -922,9 +979,6 @@ export default function SnippetEditor({
   );
 
   const relativeTime = getRelativeTime(lastSavedAt);
-  const showShortcutHint =
-    !!shortcutError || shortcutFocused || (shortcutHovered && !shortcutInput);
-  const shortcutHintId = shortcutError ? "shortcut-error" : "shortcut-tip";
 
   return (
     <div className="flex flex-col h-full min-h-0" onKeyDown={handleKeyDown}>
@@ -1101,8 +1155,22 @@ export default function SnippetEditor({
             <div
               role="menu"
               data-testid="snippet-more-menu"
-              className="absolute right-0 top-full z-20 mt-1 w-40 rounded-md border border-border bg-popover p-1 shadow-md"
+              className="absolute right-0 top-full z-20 mt-1 w-44 rounded-md border border-border bg-popover p-1 shadow-md"
             >
+              <Button
+                variant="ghost"
+                role="menuitem"
+                size="sm"
+                data-testid="snippet-duplicate"
+                onClick={() => void handleDuplicate()}
+                disabled={isDraft || !onDuplicate}
+                className="w-full justify-start"
+                title={i18n.t("snippetEditor.duplicateTooltip")}
+                aria-label={i18n.t("snippetEditor.duplicateTooltip")}
+              >
+                <Icon icon={CopyPlus} stroke="emphasis" />
+                {i18n.t("snippetEditor.duplicateTooltip")}
+              </Button>
               <Button
                 variant="ghost"
                 role="menuitem"
@@ -1131,9 +1199,9 @@ export default function SnippetEditor({
         }}
       />
 
-      {/* Document header: the name and shortcut are part of the document, not
-          a tinted chrome band with bordered pill fields. */}
-      <div className="flex min-h-0 flex-1 flex-col bg-background px-4 pb-3 pt-3">
+      {/* Document header: the fields share one translucent island instead of
+          a tinted band or two separate pills. */}
+      <div className="flex min-h-0 flex-1 flex-col bg-background p-3">
         <div
           data-testid="snippet-header"
           onClick={(event) => {
@@ -1141,7 +1209,7 @@ export default function SnippetEditor({
               nameInputRef.current?.focus();
             }
           }}
-          className="relative mb-2 flex min-h-9 shrink-0 items-center gap-2"
+          className="editor-title-island relative mb-1 flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-1.5 py-0.5 ring-1 ring-border/60"
         >
           <Label className="sr-only" htmlFor="snippet-name">
             {i18n.t("snippetEditor.name")}
@@ -1161,63 +1229,22 @@ export default function SnippetEditor({
             placeholder={i18n.t("snippetEditor.namePlaceholder")}
             aria-label={i18n.t("snippetEditor.name")}
             autoFocus={isDraft}
-            className="h-9 min-w-0 flex-1 overflow-hidden border-0 bg-transparent px-0 text-ui-lg! font-semibold leading-[1.3] text-ellipsis whitespace-nowrap shadow-none outline-none transition-colors focus-visible:border-0 focus-visible:text-clip focus-visible:ring-2 focus-visible:ring-ring/50 placeholder:text-muted-foreground"
+            className="h-8 min-w-0 flex-1 overflow-hidden border-0 bg-transparent px-0 text-base! font-medium! leading-[1.3] text-ellipsis whitespace-nowrap outline-none transition-colors focus-visible:border-0 focus-visible:text-clip focus-visible:ring-0 placeholder:text-muted-foreground"
           />
-          <div
-            className="relative max-w-[45%] shrink-0"
-            onFocus={() => setShortcutFocused(true)}
-            onBlur={() => setShortcutFocused(false)}
-            onMouseEnter={() => setShortcutHovered(true)}
-            onMouseLeave={() => setShortcutHovered(false)}
-          >
+          <div className="relative max-w-[45%] shrink-0">
             <Label className="sr-only" htmlFor="snippet-shortcut">
               {i18n.t("snippetEditor.shortcut")}
             </Label>
-            <TooltipProvider>
-              <Tooltip open={showShortcutHint}>
-                <TooltipTrigger
-                  render={
-                    <Input
-                      id="snippet-shortcut"
-                      data-testid="snippet-shortcut-input"
-                      value={shortcutInput}
-                      onChange={(e) => handleShortcutChange(e.target.value)}
-                      placeholder={i18n.t("snippetEditor.shortcutPlaceholder")}
-                      aria-label={i18n.t("snippetEditor.shortcut")}
-                      aria-invalid={!!shortcutError}
-                      aria-describedby={
-                        showShortcutHint ? shortcutHintId : undefined
-                      }
-                      className={cn(
-                        "h-7 w-auto min-w-[9ch] max-w-full shrink-0 overflow-hidden rounded-none border-0 border-b border-transparent bg-transparent px-0 text-center font-mono text-ui-xs! text-ellipsis whitespace-nowrap shadow-none transition-colors [field-sizing:content] hover:border-ring/60 focus-visible:border-ring focus-visible:ring-0 placeholder:text-muted-foreground",
-                        shortcutError && "border-destructive"
-                      )}
-                    />
-                  }
-                />
-                {showShortcutHint && (
-                  <TooltipContent
-                    id={shortcutHintId}
-                    role="tooltip"
-                    data-testid={
-                      shortcutError
-                        ? "snippet-shortcut-error"
-                        : "snippet-shortcut-tip"
-                    }
-                    side="bottom"
-                    align="start"
-                    className={cn(
-                      "pointer-events-none w-56 max-w-none rounded-md border px-2 py-1 text-ui-micro! leading-snug shadow-md",
-                      shortcutError
-                        ? "border-destructive/30 bg-destructive/5 text-destructive"
-                        : "border-border bg-popover text-popover-foreground"
-                    )}
-                  >
-                    {shortcutError || i18n.t("snippetEditor.shortcutTip")}
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
+            <Input
+              id="snippet-shortcut"
+              data-testid="snippet-shortcut-input"
+              value={shortcutInput}
+              onChange={(e) => handleShortcutChange(e.target.value)}
+              placeholder={i18n.t("snippetEditor.shortcutPlaceholder")}
+              aria-label={i18n.t("snippetEditor.shortcut")}
+              title={shortcutError || i18n.t("snippetEditor.shortcutTip")}
+              className="h-8 w-auto min-w-[9ch] max-w-full shrink-0 overflow-hidden rounded-none border-0 bg-transparent px-0 text-left font-mono text-xs! text-ellipsis whitespace-nowrap shadow-none outline-none transition-colors [field-sizing:content] focus-visible:ring-0 placeholder:text-muted-foreground"
+            />
           </div>
         </div>
 
@@ -1235,48 +1262,50 @@ export default function SnippetEditor({
         </div>
       </div>
 
-      {/* One tinted footer row: add tag, chips, and never-truncated metadata. */}
+      {/* One small transparent footer: add tag, chips, and right-aligned status. */}
       <div
         data-testid="snippet-footer"
-        className="editor-footer flex h-8 shrink-0 flex-nowrap items-center gap-2 overflow-hidden bg-muted/30 px-4"
+        className="editor-footer flex h-8 shrink-0 flex-nowrap items-center gap-2 overflow-hidden border-t border-border/50 bg-transparent px-4"
       >
         {tagAddControl}
         {tagEditor}
-        {isDraft ? (
-          <span
-            data-testid="snippet-draft"
-            className="ml-auto shrink-0 text-ui-micro! font-medium text-muted-foreground"
-          >
-            {i18n.t("snippetDetail.draft")}
-          </span>
-        ) : (
-          <div
-            data-testid="snippet-metadata"
-            className="ml-auto flex shrink-0 items-center gap-1 whitespace-nowrap text-ui-micro! text-muted-foreground"
-          >
-            <span>
-              <span className="font-semibold text-foreground">
-                {usageCount}
-              </span>{" "}
-              {i18n.t("snippetDetail.uses")}
-            </span>
-            <span aria-hidden="true">·</span>
-            <span className="editor-updated-label">
-              {i18n.t("snippetDetail.updated")}
-            </span>
-            <time
-              dateTime={lastSavedAt}
-              title={new Date(lastSavedAt).toLocaleString()}
-              data-testid="snippet-updated-time"
-              className="font-semibold text-foreground"
+        <div className="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap text-ui-micro! text-muted-foreground">
+          {isDraft ? (
+            <span
+              data-testid="snippet-draft"
+              className="font-medium text-muted-foreground"
             >
-              <span className="editor-time-long">{relativeTime}</span>
-              <span className="editor-time-short">
-                {shortenRelativeTime(relativeTime)}
+              {i18n.t("snippetDetail.draft")}
+            </span>
+          ) : (
+            <div
+              data-testid="snippet-metadata"
+              className="flex items-center gap-1"
+            >
+              <span>
+                <span className="font-semibold text-foreground">
+                  {usageCount}
+                </span>{" "}
+                {i18n.t("snippetDetail.uses")}
               </span>
-            </time>
-          </div>
-        )}
+              <span aria-hidden="true">·</span>
+              <span className="editor-updated-label">
+                {i18n.t("snippetDetail.updated")}
+              </span>
+              <time
+                dateTime={lastSavedAt}
+                title={new Date(lastSavedAt).toLocaleString()}
+                data-testid="snippet-updated-time"
+                className="font-semibold text-foreground"
+              >
+                <span className="editor-time-long">{relativeTime}</span>
+                <span className="editor-time-short">
+                  {shortenRelativeTime(relativeTime)}
+                </span>
+              </time>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

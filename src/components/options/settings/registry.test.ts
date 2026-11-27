@@ -68,6 +68,47 @@ describe("registry shape", () => {
     expect(missing.map((s) => s.id)).toEqual([]);
   });
 
+  it("gives each code-theme picker only presets for its own mode", () => {
+    const light = SETTINGS.find((s) => s.id === "light-code-theme");
+    const dark = SETTINGS.find((s) => s.id === "dark-code-theme");
+    expect(light?.control).toBe("code-theme");
+    expect(dark?.control).toBe("code-theme");
+    expect(light?.options?.map((o) => o.value)).toEqual([
+      "github-light",
+      "solarized-light",
+      "prism-light",
+      "coy",
+      "xcode",
+    ]);
+    expect(dark?.options?.map((o) => o.value)).toEqual([
+      "one-dark-pro",
+      "okaidia",
+      "twilight",
+      "tomorrow-night",
+      "dracula",
+      "nord",
+      "vsc-dark-plus",
+    ]);
+    // Theme ids are kebab-case CSS values; locale keys are camelCase. A direct
+    // interpolation produced missing messages and blank first options.
+    expect(light?.options?.map((o) => o.labelKey)).toEqual([
+      "options.codeTheme.githubLight",
+      "options.codeTheme.solarizedLight",
+      "options.codeTheme.prismLight",
+      "options.codeTheme.coy",
+      "options.codeTheme.xcode",
+    ]);
+    expect(dark?.options?.map((o) => o.labelKey)).toEqual([
+      "options.codeTheme.oneDarkPro",
+      "options.codeTheme.okaidia",
+      "options.codeTheme.twilight",
+      "options.codeTheme.tomorrowNight",
+      "options.codeTheme.dracula",
+      "options.codeTheme.nord",
+      "options.codeTheme.vscDarkPlus",
+    ]);
+  });
+
   // empty radiogroup, and one without icons renders three unlabelled buttons
   // that only their text can distinguish.
   it("gives every icon-segment both options and an icon per option", () => {
@@ -155,7 +196,10 @@ describe("lookups", () => {
     const appearance = settingsForSection("appearance");
     expect(appearance.map((s) => s.id).sort()).toEqual([
       "confetti",
+      "dark-code-theme",
       "font-family",
+      "light-code-theme",
+      "local-only-indicator",
       "theme",
     ]);
   });

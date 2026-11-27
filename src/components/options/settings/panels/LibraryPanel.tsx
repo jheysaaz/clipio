@@ -279,7 +279,7 @@ export function LibraryPanel() {
         {showWizard && (
           <DialogContent
             showCloseButton={false}
-            className="w-full max-w-lg p-6"
+            className="w-full max-w-2xl p-6 sm:max-w-2xl"
           >
             <DialogTitle
               id="import-wizard-title"

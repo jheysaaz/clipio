@@ -11,6 +11,7 @@ import {
   recordResult,
   recordSend,
   releaseInFlight,
+  sameSnapshot,
   type QueuePolicy,
   type QueueState,
 } from "./write-queue";
@@ -33,6 +34,29 @@ function change(overrides: Partial<Parameters<typeof enqueue>[1]> = {}) {
 const policy = (overrides: Partial<QueuePolicy> = {}): QueuePolicy => ({
   ...QUEUE_POLICY,
   ...overrides,
+});
+
+describe("published snapshots", () => {
+  it("treats a freshly read but unchanged queue as the same snapshot", () => {
+    const first = enqueue(emptyQueue(), change(), 1000);
+
+    // A storage read rebuilds every operation as a new object. Equality must be
+    // by value: the popup republishes on each read, and a stale failure would
+    // otherwise be announced again.
+    expect(sameSnapshot(first, structuredClone(first))).toBe(true);
+  });
+
+  it("detects a changed operation status", () => {
+    const queued = enqueue(emptyQueue(), change(), 1000);
+    const failed = recordResult(
+      queued,
+      "op1",
+      { ok: false, quota: false, error: "conflict" },
+      2000
+    );
+
+    expect(sameSnapshot(queued, failed)).toBe(false);
+  });
 });
 
 describe("rate limiting", () => {

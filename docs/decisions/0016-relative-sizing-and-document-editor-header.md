@@ -1,6 +1,6 @@
 # 0016 — Relative sizing, one type scale, and a document-style editor header
 
-**Status:** accepted · **Date:** 2026-11-26
+**Status:** accepted · **Date:** 2026-11-26 · **Revised:** 2026-11-27
 
 ## Context
 
@@ -31,8 +31,9 @@ to stay on `:root`. Neither is changed here.
 `--text-ui-micro`, `--text-ui-xs`, `--text-ui-sm`, `--text-ui-base` and
 `--text-ui-lg`, plus unitless `--leading-ui` / `--leading-editor`. UI names are
 13px/500, muted secondary text 12px, metadata 11px, shortcuts 12px mono, editor
-body 14px/1.6, and the editor name 18px/600/1.3. Components consume the tokens;
-they do not restate the px values. Utilities are written with Tailwind's
+body 14px/1.6, and the editor name 16px/500 via Tailwind's own `text-base` and
+`font-medium` utilities — no parallel title token.
+Components consume the tokens; they do not restate the px values. Utilities are written with Tailwind's
 important suffix (`text-ui-lg!`): the shared Input primitive carries
 `md:text-sm`, which is emitted later in the cascade and otherwise wins at the
 800px cap, silently shrinking the document title back to 14px.
@@ -64,16 +65,28 @@ bar, ring or extra marker, and the existing focus ring is untouched.
 `aria-selected` remains the accessible state; no second ARIA attribute is
 added where one already tells the truth.
 
-### The editor header is part of the document
+### The editor header is a glass island within the document
 
-The tinted `snippet-header` band and the bordered shortcut pill are gone. The
-name is a plain heading-sized input in the same `bg-background` surface as the
-body, with a placeholder but no box. The shortcut is a 12px mono field beside
-it: borderless until hover or focus, where a single underline appears. Both are
-real inputs with the same i18n accessible names, the same stored shortcut
-string and the same inline duplicate-shortcut status. Tab order is name →
-shortcut → content; Enter in the name focuses the editor. The change applies to
-both the new and saved views.
+The tinted full-width band and the bordered shortcut pill are gone. The name and
+shortcut sit together on a translucent, rounded island that floats over the
+same `bg-background` surface as the body. `backdrop-blur` and a hairline ring
+make it read as a single control island rather than chrome; a short scale/fade
+transition on hover and focus says it is interactive without moving the fields;
+there is no hover shadow. The island is deliberately tight: a 0.25rem bottom
+margin, 0.375rem horizontal padding and 0.125rem vertical padding keep it a
+surface around the fields rather than a padded card. The title stays a real
+input at 16px/500 with Tailwind's `text-base`/`font-medium`; the Newsreader trial
+and the custom title tokens were both removed after visual review. The shortcut keeps
+its monospace treatment but shares the island's padding and baseline with the
+name instead of being a centred pill with an underline. Typed spaces become
+dashes immediately; other unsupported characters stay visible so validation can
+name them. The browser's native `title` carries the hint or the error — there is
+no custom tooltip and no error border to repaint the field. Its configured
+trigger prefix is protected by input handling: deleting or replacing it restores
+it. Both inputs keep their i18n accessible names, the stored shortcut string and
+the duplicate-shortcut status in the title. Tab order is name → shortcut → content; Enter
+in the name focuses the editor. The change applies to both the new and saved
+views.
 
 ### A gate keeps px out of the chrome
 
@@ -97,6 +110,9 @@ script with positive and negative fixtures.
   a row that already has `aria-selected`, and competes with the focus ring.
 - **Keep the tinted header but remove its border.** The tint still reads as
   chrome rather than as the document heading.
+- **Remove the fixed name/shortcut row entirely.** Moving the fields into the
+  footer would put them behind the tag bar and make renaming a long snippet a
+  two-scroll operation in a 460px popup.
 - **Convert the injected preview CSS too.** Its px values are deliberately
   host-page CSS pixels; changing them would change what users see in pages
   Clipio does not own.
@@ -110,8 +126,9 @@ script with positive and negative fixtures.
   code-style rules.
 - A new px in shipped UI source fails `pnpm verify` with file and line. Adding
   a genuinely px-correct value means changing the allowlist in the same change.
-- The popup keeps the same stored data, autosave path, validation and i18n keys.
-  This is a visual refactor; no storage key or route changes.
+- The popup keeps the same stored data, autosave path and i18n keys. Shortcut
+  validation gains two copy keys for whitespace/unsupported characters. No
+  storage key or route changes.
 - The 11px minimum is a floor for metadata, not a licence to shrink body copy:
   secondary text is 12px and the editor body is 14px.
 
