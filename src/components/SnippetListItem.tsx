@@ -67,8 +67,10 @@ export default function SnippetListItem({
         "h-auto min-h-12 max-w-full w-full items-start justify-start overflow-hidden relative rounded-lg px-2.5 py-2 text-left transition-colors",
         "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         // One fill, stronger than hover; no accent bar, ring or second marker.
+        // The ghost variant's hover fill would otherwise repaint a selected
+        // row, making it weaker than both its resting state and its neighbours.
         isSelected
-          ? "bg-selected text-foreground"
+          ? "bg-selected text-foreground hover:bg-selected dark:hover:bg-selected"
           : "text-foreground hover:bg-muted/50"
       )}
       onClick={onClick}
