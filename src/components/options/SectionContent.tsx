@@ -15,6 +15,7 @@
 import { BlockedSitesPanel } from "./settings/panels/BlockedSitesPanel";
 import { StoragePanel } from "./settings/panels/StoragePanel";
 import { DiagnosticsPanel } from "./settings/panels/DiagnosticsPanel";
+import { DiagnosticsToolkitPanel } from "./settings/panels/DiagnosticsToolkitPanel";
 import { DebugLogPanel } from "./settings/panels/DebugLogPanel";
 import { LibraryPanel } from "./settings/panels/LibraryPanel";
 import { ImagesPanel } from "./settings/panels/ImagesPanel";
@@ -28,7 +29,12 @@ export function SectionContent({ section }: { section: SectionId }) {
     case "storage":
       return <StoragePanel />;
     case "diagnostics":
-      return <DiagnosticsPanel />;
+      return (
+        <>
+          <DiagnosticsToolkitPanel />
+          <DiagnosticsPanel />
+        </>
+      );
     case "library":
       return <LibraryPanel />;
     case "images":

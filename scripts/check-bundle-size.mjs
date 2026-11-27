@@ -137,10 +137,17 @@ const posix = (p) => p.split(sep).join("/");
  * storage) adds lifecycle bookkeeping to the shared media store. The aggregate
  * and shared chunks grow 565 bytes each; the individual entries do not move.
  * Both sizes were measured twice from clean builds and did not vary.
+ *
+ * Raised again for the Diagnostics toolkit. The snapshot panel, log filters,
+ * report formatter and their English/Spanish copy live in the options entry;
+ * generated locale messages also reach the background worker. The aggregate
+ * grows 13,317 bytes, shared chunks 13,258 and the background entry 59; the
+ * options entry is still below its existing budget. All three sizes were
+ * measured twice from clean builds and did not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_767_271 },
-  { name: "background entry", pattern: "background.js", maxBytes: 226_428 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_780_588 },
+  { name: "background entry", pattern: "background.js", maxBytes: 226_487 },
   {
     name: "content script entry",
     pattern: "content-scripts/content.js",
@@ -161,7 +168,7 @@ const BUDGETS = [
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_622_301,
+    maxBytes: 1_635_559,
   },
 ];
 

@@ -37,6 +37,7 @@ const {
     upsertSnippets: vi.fn(),
     removeSnippetsById: vi.fn(),
     clear: vi.fn(),
+    listCorruptKeys: vi.fn(),
   },
   mockLocalBackend: {
     getSnippets: vi.fn(),
@@ -577,6 +578,17 @@ describe("StorageManager", () => {
         quotaExceeded: false,
         localReason: "manual",
       });
+    });
+  });
+
+  describe("listCorruptKeys", () => {
+    it("delegates to the sync backend for Diagnostics", async () => {
+      mockSyncBackend.listCorruptKeys.mockResolvedValue(["corrupt:snip:1"]);
+
+      await expect(manager.listCorruptKeys()).resolves.toEqual([
+        "corrupt:snip:1",
+      ]);
+      expect(mockSyncBackend.listCorruptKeys).toHaveBeenCalledOnce();
     });
   });
 

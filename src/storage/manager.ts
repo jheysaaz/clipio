@@ -180,6 +180,11 @@ export class StorageManager {
     return this.idb.getSnippets();
   }
 
+  /** Quarantined sync keys, exposed for Diagnostics only. */
+  async listCorruptKeys(): Promise<string[]> {
+    return this.sync.listCorruptKeys();
+  }
+
   /**
    * Returns the number of snippets stored in the IndexedDB backup.
    * 0 means either no backup exists or the backup is empty.

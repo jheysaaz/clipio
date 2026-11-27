@@ -13,6 +13,7 @@ import { useControlConfirmation } from "@/components/feedback/use-control-confir
 import { Button } from "@/components/ui/button";
 import { ControlConfirmation } from "@/components/ui/control-confirmation";
 import { Spinner } from "@/components/ui/spinner";
+import { isDiagnosableTab } from "@/lib/diagnostics";
 import { MESSAGE, sendMessage } from "@/lib/protocol";
 import { i18n } from "#i18n";
 
@@ -40,17 +41,8 @@ export function DiagnosticsPanel() {
     setPinging(true);
     try {
       const tabs = await browser.tabs.query({});
-      const tab = tabs.find(
-        (t) =>
-          t.id !== undefined &&
-          t.url &&
-          !t.url.startsWith("chrome://") &&
-          !t.url.startsWith("chrome-extension://") &&
-          !t.url.startsWith("about:") &&
-          !t.url.startsWith("edge://") &&
-          !t.url.startsWith("moz-extension://")
-      );
-      if (!tab?.id) {
+      const tab = tabs.find(isDiagnosableTab);
+      if (!tab) {
         setPinging(false);
         fail(i18n.t("options.developers.contentScriptHealth.errorNoTab"));
         return;

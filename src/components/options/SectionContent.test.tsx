@@ -17,6 +17,11 @@ vi.mock("./settings/panels/StoragePanel", () => ({
 vi.mock("./settings/panels/DiagnosticsPanel", () => ({
   DiagnosticsPanel: () => <div data-testid="child-diagnostics" />,
 }));
+vi.mock("./settings/panels/DiagnosticsToolkitPanel", () => ({
+  DiagnosticsToolkitPanel: () => (
+    <div data-testid="child-diagnostics-toolkit" />
+  ),
+}));
 vi.mock("./settings/panels/LibraryPanel", () => ({
   LibraryPanel: () => <div data-testid="child-library" />,
 }));
@@ -51,6 +56,24 @@ describe("SectionContent", () => {
       expect(screen.getByTestId(testId as string)).toBeInTheDocument();
       unmount();
     }
+  });
+
+  it("renders the snapshot toolkit before the health check in Diagnostics", () => {
+    const { container, unmount } = render(
+      <SectionContent section="diagnostics" />
+    );
+
+    expect(screen.getByTestId("child-diagnostics-toolkit")).toBeInTheDocument();
+    expect(screen.getByTestId("child-diagnostics")).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveAttribute(
+      "data-testid",
+      "child-diagnostics-toolkit"
+    );
+    expect(container.lastElementChild).toHaveAttribute(
+      "data-testid",
+      "child-diagnostics"
+    );
+    unmount();
   });
 
   it("renders nothing for sections made only of registry rows", () => {
