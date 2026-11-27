@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   fuzzyMatchSnippets,
   calculatePreviewPosition,
+  resolvePreviewPlacement,
   detectPreviewTrigger,
   createPreviewTooltip,
   type ContentSnippet,
@@ -428,13 +429,16 @@ describe("calculatePreviewPosition", () => {
     });
     disposeStyle = stubControlStyle();
 
-    const result = calculatePreviewPosition(textarea, 4);
+    const result = calculatePreviewPosition(textarea, 4, 140);
 
     const caretY = 620 + 40 + 14; // 674
-    // Flipped: sits above the caret, sized to the space above it.
-    expect(result.maxHeight).toBe(caretY - 25);
-    expect(result.y).toBe(caretY - (caretY - 25) - 5);
-    expect(result.y).toBeLessThan(caretY);
+    // Flipped: the panel's *bottom edge* sits just above the caret. Using the
+    // available space above as its height put it at the top of the viewport,
+    // hundreds of pixels away — the regression this assertion pins.
+    expect(result.maxHeight).toBe(140);
+    expect(result.y + result.maxHeight).toBe(caretY - 5);
+    expect(result.y).toBeGreaterThan(caretY - 160);
+    expect(result.anchor).toEqual({ x: 118, y: caretY });
   });
 
   // clamps horizontal position to viewport bounds (with 10px margin)
@@ -493,6 +497,74 @@ describe("calculatePreviewPosition", () => {
     const result = calculatePreviewPosition(editableElement);
     expect(result.x).toBe(150);
     expect(result.y).toBeGreaterThan(250);
+  });
+
+  // a single-line input scrolls horizontally instead of wrapping; measuring
+  // its caret with `pre-wrap` moved the marker to a later line once the text
+  // before the caret was wider than the field.
+  it("measures an input's caret on one unwrapped line", () => {
+    const input = document.createElement("input");
+    input.value = "a long value before the shortcut /hel";
+    document.body.appendChild(input);
+    disposeRects = stubRects(rect(100, 200, 300, 24), {
+      x: 240,
+      y: 4,
+      height: 14,
+    });
+    disposeStyle = stubControlStyle();
+
+    calculatePreviewPosition(input, 38);
+
+    expect(captured.mirror?.style.whiteSpace).toBe("pre");
+    expect(captured.mirror?.style.wordWrap).toBe("normal");
+    // The caret is at the field's visible right edge, not clamped to the left
+    // margin the wrapped marker used to collapse to.
+    expect(calculatePreviewPosition(input, 38).x).toBe(100 + 240);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolvePreviewPlacement tests — pure placement, no DOM measurement
+// ---------------------------------------------------------------------------
+
+describe("resolvePreviewPlacement", () => {
+  const viewport = { width: 1280, height: 720 };
+
+  it("keeps a short panel just below the caret near the bottom of the page", () => {
+    const result = resolvePreviewPlacement({ x: 200, y: 600 }, viewport, 60);
+
+    expect(result.y).toBe(605);
+    expect(result.maxHeight).toBe(60);
+    expect(result.y - 600).toBeLessThan(20);
+  });
+
+  it("flips above with the panel's bottom edge near the caret", () => {
+    const result = resolvePreviewPlacement({ x: 200, y: 600 }, viewport, 200);
+
+    // The old algorithm used the available 575px above as both the height and
+    // the offset, putting a 60px panel at y=20 with its caret at y=600.
+    expect(result.maxHeight).toBe(200);
+    expect(result.y + result.maxHeight).toBe(595);
+    expect(result.y).toBeGreaterThan(390);
+  });
+
+  it("keeps the panel inside the viewport when neither side has room", () => {
+    const result = resolvePreviewPlacement(
+      { x: 200, y: 50 },
+      { width: 1280, height: 100 },
+      220
+    );
+
+    expect(result.maxHeight).toBeGreaterThan(0);
+    expect(result.y).toBeGreaterThanOrEqual(10);
+    expect(result.y + result.maxHeight).toBeLessThanOrEqual(100);
+  });
+
+  it("returns the caret as the anchor for a second-pass re-anchor", () => {
+    const anchor = { x: 42, y: 500 };
+    expect(resolvePreviewPlacement(anchor, viewport, 90).anchor).toEqual(
+      anchor
+    );
   });
 });
 

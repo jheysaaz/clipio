@@ -17,18 +17,20 @@
  * class of bug impossible to reintroduce by copy-paste.
  */
 
-// Image ids are produced by `crypto.randomUUID()` (src/storage/backends/media.ts),
-// so lowercase hex and dashes. Uppercase is accepted as well: an id that has been
-// round-tripped through a case-insensitive system should not be orphaned over
-// case alone.
+// Media ids are `crypto.randomUUID()` values for blobs created here, but ZIP
+// imports and backups deliberately accept other opaque tokens too (see
+// `isValidMediaId` in the importer). Those two charsets used to disagree: an
+// imported `{{image:media_1}}` was stored and listed as valid by the importer,
+// then rendered as literal text by every placeholder consumer because the
+// grammar only allowed hex and dashes. One charset now serves both boundaries.
 //
 // Deliberately NOT widened to `[^:}]+`. A loose charset would turn a literal
 // `{{image:whatever}}` in someone's snippet into an <img> with a broken source,
 // which is worse than leaving it as visible text.
-const IMAGE_ID = "[a-fA-F0-9-]+";
+export const MEDIA_ID_PATTERN_SOURCE = "[A-Za-z0-9_-]{1,64}";
 
-// GIF ids come from the Giphy API and are alphanumeric.
-const GIF_ID = "[a-zA-Z0-9]+";
+const IMAGE_ID = MEDIA_ID_PATTERN_SOURCE;
+const GIF_ID = MEDIA_ID_PATTERN_SOURCE;
 
 /** `:width`, optional, digits only. */
 const WIDTH = "(?::(\\d+))?";
@@ -68,6 +70,25 @@ export type MediaRef = {
   id: string;
   width: number | null;
 };
+
+/** Plain-text labels used wherever an image/GIF cannot be shown. */
+export const MEDIA_TEXT_LABELS = {
+  image: "[image]",
+  gif: "[GIF]",
+} as const;
+
+/**
+ * The same opaque-token check the ZIP importer applies to media metadata.
+ *
+ * Keeping it here means a blob accepted by an import can always be referenced
+ * by a placeholder in the snippets imported alongside it.
+ */
+export function isValidMediaId(id: unknown): boolean {
+  return (
+    typeof id === "string" &&
+    new RegExp(`^${MEDIA_ID_PATTERN_SOURCE}$`).test(id)
+  );
+}
 
 /** Build the canonical reference string. Omit `width` for an unsized one. */
 export function formatImagePlaceholder(id: string, width?: number): string {
@@ -170,9 +191,32 @@ export function stripMediaPlaceholders(
   content: string,
   labels: { image?: string; gif?: string } = {}
 ): string {
-  const imageLabel = labels.image ?? "[image]";
-  const gifLabel = labels.gif ?? "[GIF]";
+  const imageLabel = labels.image ?? MEDIA_TEXT_LABELS.image;
+  const gifLabel = labels.gif ?? MEDIA_TEXT_LABELS.gif;
   return content
     .replace(imagePlaceholderGlobal(), imageLabel)
     .replace(gifPlaceholderGlobal(), gifLabel);
+}
+
+/**
+ * Rewrite placeholder ids after restore dedup collapsed two blobs into one.
+ *
+ * A restore that finds the same hash under another id must not leave snippets
+ * pointing at an id that was never stored. Only ids present in the map change;
+ * width and kind are preserved, and surrounding text is untouched.
+ */
+export function remapMediaIds(
+  content: string,
+  ids: Map<string, string>
+): string {
+  if (ids.size === 0) return content;
+
+  return content.replace(
+    anyMediaPlaceholderGlobal(),
+    (match, kind: string, id: string, width: string | undefined) => {
+      const next = ids.get(id);
+      if (!next || next === id) return match;
+      return `{{${kind}:${next}${width === undefined ? "" : `:${width}`}}}`;
+    }
+  );
 }

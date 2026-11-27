@@ -7,7 +7,10 @@
  */
 
 import type { PreviewPosition, FilteredSnippet } from "./preview-helpers";
-import { createPreviewTooltip } from "./preview-helpers";
+import {
+  createPreviewTooltip,
+  resolvePreviewPlacement,
+} from "./preview-helpers";
 import {
   UI_FONT_STACKS,
   DEFAULT_UI_FONT,
@@ -430,13 +433,34 @@ export class SnippetPreviewUI {
       );
     }
 
-    // Force the shadowHost to match container dimensions after content is populated
+    // The caller cannot know how tall the list will render. Re-anchor with the
+    // measured height *before* the browser paints, so a flipped panel's bottom
+    // edge sits just above the caret instead of at the top of the viewport.
+    // `position.anchor` is absent only for callers that pass a precomputed
+    // position (unit tests); those keep the position exactly as given.
+    const containerRect = this.container.getBoundingClientRect();
+    if (
+      position.anchor &&
+      containerRect.height > 0 &&
+      typeof window !== "undefined"
+    ) {
+      const placed = resolvePreviewPlacement(
+        position.anchor,
+        { width: window.innerWidth, height: window.innerHeight },
+        containerRect.height
+      );
+      this.shadowHost.style.left = `${placed.x}px`;
+      this.shadowHost.style.top = `${placed.y}px`;
+      this.container.style.maxHeight = `${placed.maxHeight}px`;
+    }
+
+    // Match the host to the container's final size after content is populated.
     setTimeout(() => {
       if (this.container) {
-        const containerRect = this.container.getBoundingClientRect();
-        if (containerRect.width > 0 && containerRect.height > 0) {
-          this.shadowHost!.style.width = `${containerRect.width}px`;
-          this.shadowHost!.style.height = `${containerRect.height}px`;
+        const rect = this.container.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          this.shadowHost!.style.width = `${rect.width}px`;
+          this.shadowHost!.style.height = `${rect.height}px`;
         }
       }
     }, 0);

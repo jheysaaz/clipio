@@ -36,6 +36,7 @@ import {
   suggestShortcut,
 } from "@/lib/importers/merge";
 import { getParser } from "@/lib/importers/registry";
+import { remapMediaIds } from "@/lib/media-placeholders";
 import { getSnippets, getStorageStatus, bulkSaveSnippets } from "@/storage";
 import { SYNC_QUOTA } from "@/config/constants";
 import { captureError, captureMessage } from "@/lib/sentry";
@@ -425,13 +426,16 @@ export async function runImport(): Promise<number | null> {
     importing: true,
     importError: null,
   }));
+  // Dedup can collapse two ids onto one stored blob. Remember the surviving id
+  // so the snippets saved below never point at an id that was not kept.
+  const restoredIds = new Map<string, string>();
   try {
     if (isZipImport && zipMediaBlobs.size > 0) {
       const { restoreMediaEntry } = await import("@/storage/backends/media");
       let savedCount = 0;
       for (const [id, { blob, meta }] of zipMediaBlobs) {
         try {
-          await restoreMediaEntry({ ...meta, id, blob });
+          restoredIds.set(id, await restoreMediaEntry({ ...meta, id, blob }));
           savedCount++;
         } catch (error) {
           captureError(error, { action: "importZipMedia", mediaId: id });
@@ -457,7 +461,10 @@ export async function runImport(): Promise<number | null> {
       existingSnippets,
       parsedSnippets,
       conflictEntries
-    );
+    ).map((snippet) => ({
+      ...snippet,
+      content: remapMediaIds(snippet.content, restoredIds),
+    }));
     await bulkSaveSnippets(finalSnippets);
     const count = countImported(parsedSnippets, conflictEntries);
     importStore.setState((prev) => ({

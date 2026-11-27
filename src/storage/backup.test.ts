@@ -92,7 +92,7 @@ beforeEach(() => {
     ...makeMeta(),
     blob: new Blob(["image"]),
   });
-  mocks.restoreMediaEntry.mockReset().mockResolvedValue(undefined);
+  mocks.restoreMediaEntry.mockReset().mockResolvedValue("image-1");
 });
 
 afterEach(() => {
@@ -229,6 +229,32 @@ describe("restoreBackup", () => {
     expect(mocks.restoreMediaEntry).toHaveBeenCalledWith(
       expect.objectContaining({ id: "image-1" })
     );
+  });
+
+  it("re-points snippet placeholders at the surviving blob after dedup", async () => {
+    // A same-hash blob survives under an older id. Restoring must not leave the
+    // restored snippet referencing an id that was never stored.
+    mocks.restoreMediaEntry.mockResolvedValueOnce("existing-id");
+    const normalized = parsedBackup({
+      snippets: [
+        makeSnippet({ content: "before {{image:image-1:120}} after" }),
+      ],
+    });
+    const backup = {
+      ...normalized,
+      mediaBlobs: new Map([
+        ["image-1", { blob: new Blob(["image"]), meta: makeMeta() }],
+      ]),
+      missingMediaIds: [],
+    };
+
+    await restoreBackup(backup, [], []);
+
+    expect(mocks.bulkSaveSnippets).toHaveBeenCalledWith([
+      expect.objectContaining({
+        content: "before {{image:existing-id:120}} after",
+      }),
+    ]);
   });
 
   it("applies conflict resolutions to the final snippet list", async () => {

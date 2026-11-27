@@ -238,6 +238,16 @@ describe("markdownInlineToHtml", () => {
     expect(result).not.toMatch(/style="[^"]*\bwidth:\d+px/);
   });
 
+  it("keeps a usable link when the host blocks the remote GIF image", () => {
+    // Host CSP rules can stop Giphy images from loading. A bare <img> leaves a
+    // dead broken-image icon; the link still gets the user to the GIF.
+    const result = markdownInlineToHtml("{{gif:xT9IgG50Lgn6WDJyBW}}");
+    expect(result).toContain(
+      '<a href="https://media.giphy.com/media/xT9IgG50Lgn6WDJyBW/giphy.gif"'
+    );
+    expect(result).toContain('data-clipio-gif="xT9IgG50Lgn6WDJyBW"');
+  });
+
   it("converts gif placeholder with width to img with width style", () => {
     const result = markdownInlineToHtml("{{gif:xT9IgG50Lgn6WDJyBW:350}}");
     expect(result).toContain(

@@ -30,7 +30,7 @@ import {
   StrikethroughPlugin,
   CodePlugin,
 } from "@platejs/basic-nodes/react";
-import type { TText, TElement, Descendant } from "platejs";
+import type { TText, TElement, Descendant, TRange } from "platejs";
 
 import {
   CLIPBOARD_PLACEHOLDER,
@@ -74,6 +74,8 @@ import { FloatingToolbar } from "./FloatingToolbar";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import { GifPicker } from "./GifPicker";
 import { ImagePicker } from "./ImagePicker";
+import { findNodePath } from "./node-path";
+import { slashDeletionRange } from "./slash-trigger";
 import { saveMedia, compressMedia } from "@/storage/backends/media";
 import { MEDIA_LIMITS } from "@/config/constants";
 import { captureError, captureMessage } from "@/lib/sentry";
@@ -293,27 +295,56 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
       [onChange, editor, showSlashMenu]
     );
 
-    /** Delete the slash trigger text before inserting a node */
+    /**
+     * Delete `/query` at the live caret. The saved slash-menu range is where `/`
+     * was first typed, so it cannot cover the query typed afterwards; a menu
+     * click can also leave the saved range stale. A manual open has no text to
+     * delete.
+     */
     const deleteSlashTrigger = useCallback(
-      (
-        manual: boolean,
-        _range: import("platejs").TRange | null,
-        query: string
-      ) => {
-        if (!manual) {
-          const { selection } = editor;
-          if (selection) {
-            const deleteLength = 1 + query.length;
-            editor.tf.select({
-              anchor: {
-                path: selection.anchor.path,
-                offset: selection.anchor.offset - deleteLength,
-              },
-              focus: selection.focus,
-            });
-            editor.tf.delete();
+      (manual: boolean, _range: TRange | null, query: string) => {
+        if (manual) return;
+        const deletion = slashDeletionRange(
+          editor.selection as EditorRange | null,
+          query
+        );
+        if (!deletion) return;
+        editor.tf.select(deletion);
+        editor.tf.delete();
+      },
+      [editor]
+    );
+
+    /**
+     * Insert at the saved range when there is one — a picker takes DOM focus,
+     * so the menu's own range is the reliable one. Then put the caret after the
+     * void synchronously: a deferred `focus()` used to reapply an older selection
+     * and leave the user unable to type beside the placeholder.
+     */
+    const insertInlineVoid = useCallback(
+      (node: TElement, savedRange: EditorRange | null) => {
+        const range = savedRange ?? editor.selection;
+        editor.tf.insertNodes(node, range ? { at: range } : undefined);
+
+        // `findPath` can return the pre-insertion path after Slate splits the
+        // text leaf, which would select the void itself and break typing.
+        // Locate the node by its Plate id in the current tree instead.
+        const path = findNodePath(editor.children, node);
+        if (path) {
+          const nextPath = [
+            ...path.slice(0, -1),
+            (path[path.length - 1] ?? 0) + 1,
+          ];
+          const [sibling] = editor.api.node(nextPath) ?? [];
+          if (!sibling || !("text" in sibling)) {
+            editor.tf.insertNodes({ text: "" } as TText, { at: nextPath });
           }
+          editor.tf.select({
+            anchor: { path: nextPath, offset: 0 },
+            focus: { path: nextPath, offset: 0 },
+          });
         }
+        editor.tf.focus();
       },
       [editor]
     );
@@ -324,27 +355,24 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
 
       deleteSlashTrigger(manualTrigger, slashMenuRange, slashSearchQuery);
 
-      editor.tf.insertNodes({
-        type: CLIPBOARD_PLACEHOLDER,
-        children: [{ text: "" }],
-      } as TElement);
-
-      editor.tf.move({ unit: "offset" });
+      insertInlineVoid(
+        {
+          type: CLIPBOARD_PLACEHOLDER,
+          children: [{ text: "" }],
+        } as TElement,
+        manualTrigger ? (slashMenuRange as EditorRange | null) : null
+      );
 
       setShowSlashMenu(false);
       setSlashMenuRange(null);
       setSlashSearchQuery("");
       setManualTrigger(false);
-
-      setTimeout(() => {
-        editor.tf.focus();
-      }, 0);
     }, [
-      editor,
       slashMenuRange,
       slashSearchQuery,
       manualTrigger,
       deleteSlashTrigger,
+      insertInlineVoid,
     ]);
 
     // Insert date placeholder
@@ -354,29 +382,26 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
 
         deleteSlashTrigger(manualTrigger, slashMenuRange, slashSearchQuery);
 
-        editor.tf.insertNodes({
-          type: DATE_PLACEHOLDER,
-          format,
-          children: [{ text: "" }],
-        } as TElement);
-
-        editor.tf.move({ unit: "offset" });
+        insertInlineVoid(
+          {
+            type: DATE_PLACEHOLDER,
+            format,
+            children: [{ text: "" }],
+          } as TElement,
+          manualTrigger ? (slashMenuRange as EditorRange | null) : null
+        );
 
         setShowSlashMenu(false);
         setSlashMenuRange(null);
         setSlashSearchQuery("");
         setManualTrigger(false);
-
-        setTimeout(() => {
-          editor.tf.focus();
-        }, 0);
       },
       [
-        editor,
         slashMenuRange,
         slashSearchQuery,
         manualTrigger,
         deleteSlashTrigger,
+        insertInlineVoid,
       ]
     );
 
@@ -416,28 +441,25 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
 
       deleteSlashTrigger(manualTrigger, slashMenuRange, slashSearchQuery);
 
-      editor.tf.insertNodes({
-        type: CURSOR_PLACEHOLDER,
-        children: [{ text: "" }],
-      } as TElement);
-
-      editor.tf.move({ unit: "offset" });
+      insertInlineVoid(
+        {
+          type: CURSOR_PLACEHOLDER,
+          children: [{ text: "" }],
+        } as TElement,
+        manualTrigger ? (slashMenuRange as EditorRange | null) : null
+      );
 
       setShowSlashMenu(false);
       setSlashMenuRange(null);
       setSlashSearchQuery("");
       setManualTrigger(false);
-
-      setTimeout(() => {
-        editor.tf.focus();
-      }, 0);
     }, [
-      editor,
       slashMenuRange,
       slashSearchQuery,
       hasCursorPlaceholder,
       manualTrigger,
       deleteSlashTrigger,
+      insertInlineVoid,
     ]);
 
     // Insert datepicker placeholder
@@ -447,28 +469,25 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
       deleteSlashTrigger(manualTrigger, slashMenuRange, slashSearchQuery);
 
       const today = new Date().toISOString().split("T")[0];
-      editor.tf.insertNodes({
-        type: DATEPICKER_PLACEHOLDER,
-        date: today,
-        children: [{ text: "" }],
-      } as TElement);
-
-      editor.tf.move({ unit: "offset" });
+      insertInlineVoid(
+        {
+          type: DATEPICKER_PLACEHOLDER,
+          date: today,
+          children: [{ text: "" }],
+        } as TElement,
+        manualTrigger ? (slashMenuRange as EditorRange | null) : null
+      );
 
       setShowSlashMenu(false);
       setSlashMenuRange(null);
       setSlashSearchQuery("");
       setManualTrigger(false);
-
-      setTimeout(() => {
-        editor.tf.focus();
-      }, 0);
     }, [
-      editor,
       slashMenuRange,
       slashSearchQuery,
       manualTrigger,
       deleteSlashTrigger,
+      insertInlineVoid,
     ]);
 
     // Handle file selected from file input
@@ -512,17 +531,14 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
             deleteSlashTrigger(ctx.manual, ctx.range, ctx.query);
           }
 
-          editor.tf.insertNodes({
-            type: IMAGE_PLACEHOLDER,
-            mediaId: entry.id,
-            children: [{ text: "" }],
-          } as TElement);
-
-          editor.tf.move({ unit: "offset" });
-
-          setTimeout(() => {
-            editor.tf.focus();
-          }, 0);
+          insertInlineVoid(
+            {
+              type: IMAGE_PLACEHOLDER,
+              mediaId: entry.id,
+              children: [{ text: "" }],
+            } as TElement,
+            ctx?.manual ? (ctx.range as EditorRange | null) : null
+          );
 
           // Background WebP compression (fire-and-forget)
           compressMedia(entry.id).catch((err) => {
@@ -548,7 +564,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
           }
         }
       },
-      [editor, deleteSlashTrigger]
+      [insertInlineVoid, deleteSlashTrigger]
     );
 
     // Open file picker for image upload
@@ -595,22 +611,19 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
           deleteSlashTrigger(ctx.manual, ctx.range, ctx.query);
         }
 
-        editor.tf.insertNodes({
-          type: GIF_PLACEHOLDER,
-          giphyId,
-          children: [{ text: "" }],
-        } as TElement);
-
-        editor.tf.move({ unit: "offset" });
+        insertInlineVoid(
+          {
+            type: GIF_PLACEHOLDER,
+            giphyId,
+            children: [{ text: "" }],
+          } as TElement,
+          ctx?.manual ? (ctx.range as EditorRange | null) : null
+        );
 
         setShowGifPicker(false);
         setGifPickerRange(null);
-
-        setTimeout(() => {
-          editor.tf.focus();
-        }, 0);
       },
-      [editor, deleteSlashTrigger]
+      [insertInlineVoid, deleteSlashTrigger]
     );
 
     const handleCloseGifPicker = useCallback(() => {
@@ -645,22 +658,19 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
           deleteSlashTrigger(ctx.manual, ctx.range, ctx.query);
         }
 
-        editor.tf.insertNodes({
-          type: IMAGE_PLACEHOLDER,
-          mediaId,
-          children: [{ text: "" }],
-        } as TElement);
-
-        editor.tf.move({ unit: "offset" });
+        insertInlineVoid(
+          {
+            type: IMAGE_PLACEHOLDER,
+            mediaId,
+            children: [{ text: "" }],
+          } as TElement,
+          ctx?.manual ? (ctx.range as EditorRange | null) : null
+        );
 
         setShowImagePicker(false);
         setImagePickerRange(null);
-
-        setTimeout(() => {
-          editor.tf.focus();
-        }, 0);
       },
-      [editor, deleteSlashTrigger]
+      [insertInlineVoid, deleteSlashTrigger]
     );
 
     // Handle "Upload new" button inside the picker — delegates to the file-based flow

@@ -88,7 +88,11 @@ export function markdownInlineToHtml(text: string): string {
       const style = width
         ? `width:${width}px;max-width:100%;height:auto;`
         : `max-width:100%;height:auto;`;
-      result += `<img src="https://media.giphy.com/media/${giphyId}/giphy.gif" alt="GIF" style="${style}" />`;
+      // Wrap the remote image in a link. Host CSP rules can block Giphy images;
+      // the link keeps the visible `alt="GIF"` usable instead of leaving a dead
+      // broken-image icon in the inserted content.
+      const gifUrl = `https://media.giphy.com/media/${giphyId}/giphy.gif`;
+      result += `<a href="${gifUrl}" data-clipio-gif="${giphyId}"><img src="${gifUrl}" alt="GIF" style="${style}" /></a>`;
       remaining = remaining.slice(gifMatch[0].length);
       continue;
     }

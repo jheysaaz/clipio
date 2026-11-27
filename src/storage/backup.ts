@@ -8,6 +8,7 @@
  */
 
 import { buildFinalSnippets } from "@/lib/importers/merge";
+import { remapMediaIds } from "@/lib/media-placeholders";
 import type { ConflictEntry } from "@/lib/importers/types";
 import { captureError } from "@/lib/sentry";
 import {
@@ -129,18 +130,18 @@ export async function restoreBackup(
   existingSnippets: Parameters<typeof bulkSaveSnippets>[0]
 ): Promise<RestoreResult> {
   const settings = await applyBackupSettings(backup.settings.values);
-  const finalSnippets = buildFinalSnippets(
-    existingSnippets,
-    backupSnippetsToParsed(backup.document.snippets),
-    conflicts
-  );
-  await bulkSaveSnippets(finalSnippets);
 
+  // Restore media before snippets: a same-hash blob may survive under a
+  // different id, and the snippets must be written with the surviving ids.
   const mediaFailed: RestoreResult["mediaFailed"] = [];
+  const restoredIds = new Map<string, string>();
   let mediaRestored = 0;
   for (const [id, entry] of backup.mediaBlobs) {
     try {
-      await restoreMediaEntry({ ...entry.meta, blob: entry.blob });
+      restoredIds.set(
+        id,
+        await restoreMediaEntry({ ...entry.meta, blob: entry.blob })
+      );
       mediaRestored += 1;
     } catch (error) {
       captureError(error, { action: "backup.restoreMedia", id });
@@ -150,6 +151,16 @@ export async function restoreBackup(
       });
     }
   }
+
+  const finalSnippets = buildFinalSnippets(
+    existingSnippets,
+    backupSnippetsToParsed(backup.document.snippets),
+    conflicts
+  ).map((snippet) => ({
+    ...snippet,
+    content: remapMediaIds(snippet.content, restoredIds),
+  }));
+  await bulkSaveSnippets(finalSnippets);
 
   return {
     snippetCount: finalSnippets.length,
