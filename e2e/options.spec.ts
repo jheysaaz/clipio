@@ -179,6 +179,59 @@ test.describe("Options Page", () => {
     await expect(optionsPage.getByTestId("feedback-banner")).toHaveCount(0);
   });
 
+  test("asks for a storage target before importing an oversized sync library", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+    await optionsPage.getByTestId("import-open").click();
+
+    // The top progress bar is present from the first step, not only after a
+    // file has been chosen.
+    await expect(
+      optionsPage
+        .getByTestId("import-progress")
+        .locator('[data-slot="progress-track"]')
+    ).toBeVisible();
+
+    await optionsPage.getByTestId("import-file-input").setInputFiles({
+      name: "clipio-oversized.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(
+        JSON.stringify({
+          version: 1,
+          format: "clipio",
+          exportedAt: "2026-11-27T09:00:00.000Z",
+          // One 120 KB body would be rejected by the per-snippet import cap.
+          // A library of valid snippets is what actually exceeds sync quota.
+          snippets: Array.from({ length: 30 }, (_, index) => ({
+            id: `e2e-oversized-import-${index}`,
+            label: `Too big for sync ${index}`,
+            shortcut: `/big${index}`,
+            content: "x".repeat(4_000),
+            tags: [],
+            usageCount: 0,
+            createdAt: "2026-11-27T09:00:00.000Z",
+            updatedAt: "2026-11-27T09:00:00.000Z",
+          })),
+        })
+      ),
+    });
+    for (let step = 0; step < 3; step++) {
+      const next = optionsPage.getByTestId("import-next");
+      if ((await next.count()) === 0) break;
+      await expect(next).toBeEnabled();
+      await next.click();
+    }
+
+    // The wizard refuses to silently switch modes on the user's behalf.
+    await expect(
+      optionsPage.getByTestId("import-storage-target")
+    ).toBeVisible();
+    await expect(optionsPage.getByTestId("import-submit")).toBeDisabled();
+    await optionsPage.getByTestId("import-storage-target-local").click();
+    await expect(optionsPage.getByTestId("import-submit")).toBeEnabled();
+  });
+
   test("keeps long feedback and import dialogs inside a short viewport", async ({
     context,
     extensionId,

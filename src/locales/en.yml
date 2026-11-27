@@ -76,7 +76,11 @@ snippetEditor:
   shortcutPlaceholder: "Add shortcut"
   shortcutLabel: "Shortcut: $1"
   shortcutTip: Type this on any page to expand the snippet.
+  shortcutTipRules: Letters, numbers, dots, dashes and underscores only. The trigger prefix is kept for you.
   shortcutError: Shortcut cannot contain spaces
+  shortcutErrorCharacters: 'Unsupported character: $1. Use letters, numbers, dots, dashes or underscores.'
+  shortcutPrefixTooltip: The trigger prefix is kept automatically
+  duplicateTooltip: Duplicate snippet
   shortcutErrorDuplicate: 'Shortcut "$1" is already used by "$2". Choose a different shortcut.'
   shortcutErrorPrefix: 'Shortcut "$1" conflicts with "$2" — one may prevent the other from expanding.'
   content: Snippet content
@@ -109,6 +113,7 @@ snippetDetail:
   uses: uses
   updated: Updated
   draft: Draft
+  duplicateLabel: "Copy of $1"
   hiddenTags: Hidden tags
   moreTags: "+$1"
   deleted:
@@ -125,6 +130,7 @@ snippetDetail:
     failedToCopy: Failed to copy to clipboard
     failedToSave: Failed to save snippet. Please try again.
     failedToDelete: Failed to delete snippet. Please try again.
+    failedToDuplicate: Failed to duplicate snippet. Please try again.
     failedToStage: The edit is saved locally but could not be queued.
     emptyLabel: A snippet needs a name before it can be saved.
     emptyShortcut: A snippet needs a shortcut before it can be saved.
@@ -440,6 +446,7 @@ options:
       privacyNote: Reports redact typed text, page URLs, API keys and long opaque values.
 
 importWizard:
+  progress: Import progress
   steps:
     upload: Upload
     placeholders: Placeholders
@@ -488,7 +495,12 @@ importWizard:
     importedWithRename: Imported with renamed shortcut
     skippedConflicts: "Skipped (conflicts)"
     estimatedStorage: Estimated storage usage
-    quotaWarning: "This import may exceed browser sync storage limits. Clipio will automatically switch to local storage if needed, but snippets won't sync to other devices."
+    quotaWarning: "This library is larger than browser sync storage allows. Choose where to save it before importing."
+    storageTarget: "Store this library in"
+    storageTargetSync: Sync storage
+    storageTargetSyncDesc: "Available on every signed-in device, within the browser's limit."
+    storageTargetLocal: Local only
+    storageTargetLocalDesc: "Stays on this device and can hold larger libraries."
     failedToImport: Failed to save imported snippets. Please try again.
     done:
       heading: Import complete
@@ -519,6 +531,14 @@ editor:
     urlPlaceholder: "https://..."
     insertImage: Insert image
     insertGif: Insert GIF
+  codeBlock:
+    label: Code
+    copy: Copy code
+    copied: Code copied
+    copyFailed: Couldn't copy code
+  datePicker:
+    label: Pick a date
+    change: "Click to change date. Current: $1"
   slashMenu:
     header: Commands
     noMatches: No matching commands
@@ -535,6 +555,9 @@ editor:
     datepicker:
       label: Pick Date
       description: Choose any date from calendar
+    codeBlock:
+      label: Code block
+      description: Insert a fenced block for multi-line code
     image:
       label: Image
       description: Insert an image from your device

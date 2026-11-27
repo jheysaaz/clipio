@@ -346,14 +346,18 @@ describe("one editor, two data states", () => {
     const name = screen.getByTestId("snippet-label-input");
     const shortcut = screen.getByTestId("snippet-shortcut-input");
 
-    expect(header.className).not.toContain("bg-muted");
-    expect(name.className).toContain("text-ui-lg!");
+    expect(header.className).toContain("editor-title-island");
+    expect(header.className).toContain("mb-1");
+    expect(header.className).toContain("min-h-9");
+    expect(header.className).toContain("px-1.5 py-0.5");
+    expect(name.className).toContain("text-base!");
+    expect(name.className).toContain("font-medium!");
     expect(name.className).toContain("bg-transparent");
     expect(name).toHaveAttribute("placeholder", "Untitled snippet");
     // The shortcut has no pill: only a bottom border appears on hover/focus.
     expect(shortcut.className).toContain("border-b");
     expect(shortcut.className).toContain("border-transparent");
-    expect(shortcut.className).toContain("hover:border-ring/60");
+    expect(shortcut.className).toContain("hover:border-ring/40");
     expect(shortcut.className).not.toContain("bg-background");
     expect(shortcut.className).not.toContain("rounded-md");
   });
@@ -398,7 +402,7 @@ describe("one editor, two data states", () => {
     }
   });
 
-  it("shows the shortcut hint only while focused, linked as a tooltip", async () => {
+  it("shows the shortcut hint on focus and hover, linked as a tooltip", async () => {
     const user = userEvent.setup();
     renderView();
     const input = screen.getByTestId("snippet-shortcut-input");
@@ -410,10 +414,19 @@ describe("one editor, two data states", () => {
     expect(tip).toHaveTextContent(
       "Type this on any page to expand the snippet"
     );
+    expect(tip).toHaveTextContent(
+      "Letters, numbers, dots, dashes and underscores only"
+    );
     expect(input).toHaveAttribute("aria-describedby", "shortcut-tip");
     expect(document.getElementById("shortcut-tip")).toBe(tip);
 
+    // The hint stays while the pointer is over the field even after focus
+    // moves on. Leaving the field is what dismisses it.
     await user.tab();
+    expect(screen.getByRole("tooltip")).toBe(tip);
+    expect(input).toHaveAttribute("aria-describedby", "shortcut-tip");
+
+    await user.unhover(input);
     expect(screen.queryByRole("tooltip")).toBeNull();
     expect(input).not.toHaveAttribute("aria-describedby");
   });

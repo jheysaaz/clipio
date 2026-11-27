@@ -840,7 +840,7 @@ test.describe("Popup (Dashboard)", () => {
     const beforeFocus = await content.boundingBox();
     await shortcut.focus();
     await expect(popupPage.getByRole("tooltip")).toHaveText(
-      "Type this on any page to expand the snippet."
+      /Type this on any page to expand the snippet\.\s*Letters, numbers, dots, dashes and underscores only\. The trigger prefix is kept for you\./
     );
     await expect(shortcut).toHaveAttribute("aria-describedby", "shortcut-tip");
     const afterFocus = await content.boundingBox();
@@ -1055,6 +1055,106 @@ test.describe("Popup (Dashboard)", () => {
     await expect
       .poll(() => syncedContent(popupPage, snippet.id), { timeout: 10_000 })
       .toBe("{{clipboard}} after");
+  });
+
+  test("duplicates a snippet into a fresh draft without its shortcut", async ({
+    popupPage,
+  }) => {
+    const original = makeSnippet({
+      label: "Address",
+      shortcut: "/addr",
+      content: "123 Fake Street",
+      tags: ["personal"],
+    });
+    await seedAndReload(popupPage, [original]);
+    await popupPage.getByTestId("snippet-list-item").click();
+    await popupPage.getByTestId("snippet-more").click();
+    await popupPage.getByTestId("snippet-duplicate").click();
+
+    await expect(popupPage).toHaveURL(/#\/new$/);
+    await expect(popupPage.getByTestId("snippet-label-input")).toHaveValue(
+      "Copy of Address"
+    );
+    // Prefixing the source shortcut with "copy" would be rejected as a prefix
+    // conflict. The duplicate must get a new body, not `/addr-copy`.
+    const shortcut = await popupPage
+      .getByTestId("snippet-shortcut-input")
+      .inputValue();
+    expect(shortcut).not.toBe(original.shortcut);
+    expect(shortcut.startsWith(original.shortcut)).toBe(false);
+    await expect(popupPage.getByTestId("snippet-tag-chip")).toHaveText(
+      "personal"
+    );
+    await expect(
+      popupPage.locator('[contenteditable="true"]').first()
+    ).toHaveText("123 Fake Street");
+  });
+
+  test("opens the shadcn calendar from the datepicker command and stores the chosen day", async ({
+    popupPage,
+  }) => {
+    const snippet = makeSnippet({
+      label: "Picker",
+      shortcut: ";dp",
+      content: "",
+    });
+    await seedAndReload(popupPage, [snippet]);
+    await popupPage.getByTestId("snippet-list-item").click();
+
+    const editor = popupPage.locator('[contenteditable="true"]');
+    await editor.click();
+    await popupPage.keyboard.type("/datepicker");
+    await expect(
+      popupPage.getByRole("listbox", { name: "Commands" })
+    ).toBeVisible();
+    await popupPage.locator("#slash-cmd-datepicker").click();
+
+    const trigger = popupPage.getByTestId("datepicker-trigger");
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+    await expect(popupPage.getByTestId("datepicker-popover")).toBeVisible();
+    await popupPage
+      .getByTestId("datepicker-popover")
+      .locator("button.rdp-day_button:not([disabled])")
+      .first()
+      .click();
+
+    await expect
+      .poll(() => syncedContent(popupPage, snippet.id), { timeout: 10_000 })
+      .toMatch(/^\{\{datepicker:\d{4}-\d{2}-\d{2}\}\}$/);
+    await expect(popupPage.getByTestId("datepicker-popover")).toHaveCount(0);
+  });
+
+  test("inserts an editable, copyable code block from the slash menu", async ({
+    popupPage,
+  }) => {
+    const snippet = makeSnippet({
+      label: "Code",
+      shortcut: ";cb",
+      content: "",
+    });
+    await seedAndReload(popupPage, [snippet]);
+    await popupPage.getByTestId("snippet-list-item").click();
+
+    const editor = popupPage.locator('[contenteditable="true"]');
+    await editor.click();
+    await popupPage.keyboard.type("/code");
+    await expect(
+      popupPage.getByRole("listbox", { name: "Commands" })
+    ).toBeVisible();
+    await popupPage.locator("#slash-cmd-codeBlock").click();
+
+    const block = popupPage.getByTestId("code-block");
+    await expect(block).toBeVisible();
+    // The block stays editable: click into the code surface and type as a user
+    // would, rather than assuming the command menu leaves DOM focus there.
+    await block.locator("pre").click();
+    await popupPage.keyboard.type("const answer = 42;");
+    await expect(block).toContainText("const answer = 42;");
+    await expect(popupPage.getByTestId("code-block-copy")).toBeVisible();
+    await expect
+      .poll(() => syncedContent(popupPage, snippet.id), { timeout: 10_000 })
+      .toBe("```\nconst answer = 42;\n```");
   });
 
   test("copies snippet to clipboard", async ({ popupPage }) => {
@@ -1276,26 +1376,33 @@ test.describe("Popup (Dashboard)", () => {
     await expect(popupPage.locator(TOAST_SELECTOR)).toHaveCount(0);
   });
 
-  test("treats a manual local switch as a neutral state, not a banner", async ({
+  test("treats a manual local switch as a neutral footer state, not a banner", async ({
     popupPage,
   }) => {
     await seedAndReload(popupPage, [helloSnippet()]);
     await useMinimumSidebarWidth(popupPage);
-    // Measure at the narrowest sidebar before the mode switch. The footer must
-    // keep both controls in exactly the same place once the indicator appears.
+    // The sidebar controls must not move when the footer gains the indicator.
     const settingsBefore = await popupPage
       .getByTestId("settings-button")
       .boundingBox();
     expect(settingsBefore).not.toBeNull();
 
     await setStorageMode(popupPage, "local", "manual");
+    await popupPage.getByTestId("snippet-list-item").click();
 
-    const indicator = popupPage.getByTestId("local-only-indicator");
+    const footer = popupPage.getByTestId("snippet-footer");
+    const indicator = footer.getByTestId("local-only-indicator");
     await expect(indicator).toBeVisible();
     await expect(indicator).toHaveText("Local only");
     const detail = "Sync is off. Snippets are saved on this device only.";
     await expect(indicator).toHaveAttribute("title", detail);
     await expect(indicator).toHaveAttribute("aria-label", detail);
+    await expect(footer).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(
+      popupPage
+        .getByTestId("snippet-library")
+        .getByTestId("local-only-indicator")
+    ).toHaveCount(0);
     await expect(
       popupPage.locator(
         '[data-testid="warning-sync-paused"], [data-testid="warning-quota"]'
@@ -1304,18 +1411,25 @@ test.describe("Popup (Dashboard)", () => {
     await expect(popupPage.getByTestId("snippet-sync-status")).toHaveText("");
     await expect.poll(() => readBadgeText(popupPage)).toBe("");
 
-    const library = await popupPage
-      .getByTestId("snippet-library")
+    const footerBox = await footer.boundingBox();
+    const addTagBox = await popupPage
+      .getByTestId("snippet-add-tag")
       .boundingBox();
+    const indicatorBox = await indicator.boundingBox();
     const settingsAfter = await popupPage
       .getByTestId("settings-button")
       .boundingBox();
     const addAfter = await popupPage.getByTestId("add-snippet").boundingBox();
-    const indicatorBox = await indicator.boundingBox();
-    expect(library).not.toBeNull();
+    expect(footerBox).not.toBeNull();
+    expect(addTagBox).not.toBeNull();
+    expect(indicatorBox).not.toBeNull();
     expect(settingsAfter).not.toBeNull();
     expect(addAfter).not.toBeNull();
-    expect(indicatorBox).not.toBeNull();
+    // "Local only" is right-aligned in the transparent footer, after the tags.
+    expect(indicatorBox!.x).toBeGreaterThan(addTagBox!.x + addTagBox!.width);
+    expect(indicatorBox!.x + indicatorBox!.width).toBeLessThanOrEqual(
+      footerBox!.x + footerBox!.width + 1
+    );
     expect(Math.abs(settingsAfter!.x - settingsBefore!.x)).toBeLessThanOrEqual(
       1
     );
@@ -1323,16 +1437,8 @@ test.describe("Popup (Dashboard)", () => {
       1
     );
     expect(settingsAfter!.width).toBe(settingsBefore!.width);
-    // Both controls and the indicator stay inside the sidebar at its minimum.
-    expect(settingsAfter!.x + settingsAfter!.width).toBeLessThanOrEqual(
-      library!.x + library!.width + 1
-    );
     expect(addAfter!.x + addAfter!.width).toBeLessThanOrEqual(
       settingsAfter!.x + 1
-    );
-    expect(indicatorBox!.x).toBeGreaterThanOrEqual(library!.x);
-    expect(indicatorBox!.x + indicatorBox!.width).toBeLessThanOrEqual(
-      library!.x + library!.width + 1
     );
   });
 

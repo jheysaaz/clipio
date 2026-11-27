@@ -23,7 +23,13 @@
 
 import { createPlatePlugin } from "platejs/react";
 import type { PlateElementProps } from "platejs/react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { Check, Copy } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { useControlConfirmation } from "@/components/feedback/use-control-confirmation";
+import { codeBlockText } from "@/lib/editor-code-block";
+import { i18n } from "#i18n";
 
 type El = { type?: string; children?: unknown[]; language?: string };
 
@@ -117,13 +123,80 @@ export function HrElement(props: PlateElementProps) {
   );
 }
 
+/**
+ * A fenced code block, rendered with Plate's own editable children.
+ *
+ * shadcn has no code-block primitive, and adding a highlighter plugin would put a
+ * large dependency in the popup for a feature that only needs a readable,
+ * copyable block. The Slate node stays editable; the header is presentational
+ * chrome with `contentEditable={false}`.
+ */
 export function CodeBlockElement(props: PlateElementProps) {
   const language = (props.element as El).language;
+  const [copyFailed, setCopyFailed] = useState(false);
+  const { confirmed, show, reset } = useControlConfirmation();
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(codeBlockText(props.element));
+      setCopyFailed(false);
+      show();
+    } catch {
+      // Keep the original label so a failure is visible as "Copy code" rather
+      // than a false "Copied" tick.
+      reset();
+      setCopyFailed(true);
+    }
+  };
+
+  const copyLabel = i18n.t(
+    confirmed ? "editor.codeBlock.copied" : "editor.codeBlock.copy"
+  );
+
   return (
-    <div {...props.attributes} className="my-2">
-      <pre className="overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs">
+    <div
+      {...props.attributes}
+      data-testid="code-block"
+      className="my-3 overflow-hidden rounded-lg border border-border bg-muted/40"
+    >
+      <div
+        contentEditable={false}
+        className="flex items-center justify-between gap-2 border-b border-border px-2 py-1"
+      >
+        <span className="font-mono text-ui-micro! uppercase tracking-wide text-muted-foreground">
+          {language || i18n.t("editor.codeBlock.label")}
+        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          data-testid="code-block-copy"
+          title={copyLabel}
+          aria-label={copyLabel}
+          // The button is inside the editable surface. Preventing mousedown
+          // from moving the caret keeps the block's selection intact while Base
+          // UI-style buttons still receive the click.
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => void copy()}
+          className="h-6 gap-1 px-1.5 text-ui-micro!"
+        >
+          <Icon icon={confirmed ? Check : Copy} size="xs" />
+          {copyLabel}
+        </Button>
+      </div>
+      <pre className="overflow-x-auto px-3 py-2 font-mono text-ui-xs!">
         <code data-language={language || undefined}>{props.children}</code>
       </pre>
+      {copyFailed && (
+        <span
+          contentEditable={false}
+          role="status"
+          className="sr-only"
+          data-testid="code-block-copy-error"
+        >
+          {i18n.t("editor.codeBlock.copyFailed")}
+        </span>
+      )}
     </div>
   );
 }
@@ -218,7 +291,7 @@ const BLOCK_COMPONENTS: Record<
   h6: HeadingElement,
   blockquote: BlockquoteElement,
   hr: HrElement,
-  code: CodeBlockElement,
+  code_block: CodeBlockElement,
   ul: ListElement,
   ol: ListElement,
   li: ListItemElement,
@@ -253,7 +326,7 @@ export const BLOCK_PLUGINS = [
   "h6",
   "blockquote",
   "hr",
-  "code",
+  "code_block",
   "ul",
   "ol",
   "li",

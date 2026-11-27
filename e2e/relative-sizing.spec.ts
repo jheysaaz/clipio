@@ -226,9 +226,22 @@ test.describe("relative sizing and document editor", () => {
     const header = popupPage.getByTestId("snippet-header");
     const name = popupPage.getByTestId("snippet-label-input");
     const shortcut = popupPage.getByTestId("snippet-shortcut-input");
-    await expect(header).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-    await expect(name).toHaveCSS("font-size", "18px");
-    await expect(name).toHaveCSS("font-weight", "600");
+    const island = await header.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        background: style.backgroundColor,
+        blur: style.backdropFilter,
+        shadow: style.boxShadow,
+      };
+    });
+    // The island is translucent, painted glass. The ring is a box-shadow in
+    // Tailwind, so the regression is a *change* on hover, not its presence.
+    expect(island.background).not.toBe("rgba(0, 0, 0, 0)");
+    expect(island.blur).toContain("blur");
+    await header.hover();
+    await expect(header).toHaveCSS("box-shadow", island.shadow);
+    await expect(name).toHaveCSS("font-size", "16px");
+    await expect(name).toHaveCSS("font-weight", "500");
     await expect(shortcut).toHaveCSS("font-size", "12px");
     await expect(shortcut).toHaveCSS("border-bottom-width", "1px");
     await expect(shortcut).toHaveCSS("border-bottom-color", "rgba(0, 0, 0, 0)");

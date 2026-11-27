@@ -17,8 +17,8 @@ import SnippetListItem from "@/components/SnippetListItem";
 import type { Snippet, SnippetFormData } from "@/types";
 import { scrollTopForRow, virtualRange } from "@/lib/virtual-list";
 
-/** Row (3rem) + the gap between rows (0.25rem), both relative units. */
-const ROW_STRIDE_REM = 3.25;
+/** Row (3rem) + the gap below it (0.5rem), both relative units. */
+const ROW_STRIDE_REM = 3.5;
 const OVERSCAN = 4;
 const FALLBACK_VIEWPORT_HEIGHT = 480;
 
@@ -132,20 +132,22 @@ export function SnippetList({
         className="p-2 pb-14"
       >
         {showDraft && (
-          <div className="mb-1 h-12 w-full rounded-lg border border-dashed bg-muted px-2.5 py-2 text-left">
-            <div className="flex w-full min-w-0 items-center gap-2 overflow-hidden">
-              <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
-                {draft.label || i18n.t("dashboard.draftLabel")}
-              </span>
-              <span className="max-w-18 shrink-0 truncate rounded-sm border px-1.5 py-0 font-mono text-xs text-muted-foreground">
-                {draft.shortcut || i18n.t("dashboard.draftShortcut")}
-              </span>
+          <div className="h-14 w-full pb-2">
+            <div className="flex h-12 w-full items-center rounded-lg border border-dashed bg-muted px-2.5 text-left">
+              <div className="flex w-full min-w-0 items-center gap-2 overflow-hidden">
+                <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
+                  {draft.label || i18n.t("dashboard.draftLabel")}
+                </span>
+                <span className="max-w-18 shrink-0 truncate rounded-sm border px-1.5 py-0 font-mono text-xs text-muted-foreground">
+                  {draft.shortcut || i18n.t("dashboard.draftShortcut")}
+                </span>
+              </div>
             </div>
           </div>
         )}
         <div style={{ height: headerHeight + range.paddingTop }} />
         {rows.map((snippet) => (
-          <div key={snippet.id} className="mb-1 h-12">
+          <div key={snippet.id} className="h-14">
             <SnippetListItem
               snippet={snippet}
               snippetId={`snippet-${snippet.id}`}

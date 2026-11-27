@@ -138,7 +138,7 @@ function serializeNode(node: Descendant): string {
     return "---";
   }
 
-  if (element.type === "code") {
+  if (element.type === "code_block") {
     const language =
       (element as TElement & { language?: string }).language ?? "";
     // ```` when the body itself contains a triple fence, so the fence cannot be
@@ -654,7 +654,7 @@ function deserializeNodes(element: Node): Descendant[] {
         const language =
           code?.className.match(/(?:language|lang)-([\w+-]+)/)?.[1] ?? "";
         nodes.push({
-          type: "code",
+          type: "code_block",
           language: language || undefined,
           children: [{ text: (code ?? el).textContent ?? "" }],
         } as unknown as TElement);

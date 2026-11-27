@@ -46,11 +46,14 @@ import {
   advanceFromPlaceholders,
   advanceFromUpload,
   canAdvanceFromUpload,
+  canRunImport,
   countImported,
   detectedParserLabel,
+  effectiveStorageTarget,
   initialiseImport,
   importStore,
   previewFinalSnippets,
+  quotaRequiresTargetChoice,
   resetImport,
   runImport,
   useImport,
@@ -82,7 +85,7 @@ function StepIndicator({
   labels: string[];
 }) {
   return (
-    <div className="flex items-center gap-1 mb-6">
+    <div className="mb-6 flex flex-wrap items-center gap-x-1 gap-y-2">
       {labels.map((label, i) => {
         const stepNum = (i + 1) as WizardStep;
         const isActive = stepNum === current;
@@ -103,7 +106,7 @@ function StepIndicator({
             </div>
             <span
               className={cn(
-                "text-xs",
+                "text-xs whitespace-nowrap",
                 isActive
                   ? "text-foreground font-medium"
                   : "text-muted-foreground"
@@ -149,6 +152,7 @@ export default function ImportWizard({
   const importedCount = useImport((s) => s.importedCount);
   const importError = useImport((s) => s.importError);
   const storageMode = useImport((s) => s.storageMode);
+  const storageTarget = useImport((s) => s.storageTarget);
   const isZipImport = useImport((s) => s.isZipImport);
   const zipMediaCount = useImport((s) => s.zipMediaCount);
   const zipMissingMediaWarning = useImport((s) => s.zipMissingMediaWarning);
@@ -325,6 +329,7 @@ export default function ImportWizard({
   // ---------------------------------------------------------------------------
 
   const detectedParser = detectedParserLabel(detectedFormat);
+  const targetMode = effectiveStorageTarget({ storageMode, storageTarget });
 
   const finalSnippetPreview = previewFinalSnippets(
     existingSnippets,
@@ -354,8 +359,10 @@ export default function ImportWizard({
     existingSnippets,
     parsedSnippets,
     conflictEntries,
-    storageMode
+    targetMode
   );
+  const needsTargetChoice = quotaRequiresTargetChoice(importStore.state);
+  const canImport = canRunImport(importStore.state);
 
   const snippetsToAdd = countImported(parsedSnippets, conflictEntries);
 
@@ -928,6 +935,71 @@ export default function ImportWizard({
           />
         </div>
 
+        {needsTargetChoice && (
+          <div className="space-y-2 rounded-lg border p-3">
+            <span className="text-sm font-medium">
+              {i18n.t("importWizard.confirm.storageTarget")}
+            </span>
+            <RadioGroup
+              value={storageTarget}
+              onValueChange={(value) =>
+                importStore.setState((prev) => ({
+                  ...prev,
+                  storageTarget: value as "sync" | "local",
+                }))
+              }
+              aria-label={i18n.t("importWizard.confirm.storageTarget")}
+              data-testid="import-storage-target"
+              className="grid gap-2"
+            >
+              <label
+                htmlFor="storage-target-sync"
+                className={cn(
+                  "flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 text-xs",
+                  storageTarget === "sync" && "border-primary bg-primary/5"
+                )}
+              >
+                <RadioGroupItem
+                  value="sync"
+                  id="storage-target-sync"
+                  data-testid="import-storage-target-sync"
+                  className="mt-0.5"
+                />
+                <span className="space-y-0.5">
+                  <span className="block font-medium text-foreground">
+                    {i18n.t("importWizard.confirm.storageTargetSync")}
+                  </span>
+                  <span className="block text-muted-foreground">
+                    {i18n.t("importWizard.confirm.storageTargetSyncDesc")}
+                  </span>
+                </span>
+              </label>
+              <label
+                htmlFor="storage-target-local"
+                className={cn(
+                  "flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 text-xs",
+                  storageTarget === "local" && "border-primary bg-primary/5"
+                )}
+              >
+                <RadioGroupItem
+                  value="local"
+                  id="storage-target-local"
+                  data-testid="import-storage-target-local"
+                  className="mt-0.5"
+                />
+                <span className="space-y-0.5">
+                  <span className="block font-medium text-foreground">
+                    {i18n.t("importWizard.confirm.storageTargetLocal")}
+                  </span>
+                  <span className="block text-muted-foreground">
+                    {i18n.t("importWizard.confirm.storageTargetLocalDesc")}
+                  </span>
+                </span>
+              </label>
+            </RadioGroup>
+          </div>
+        )}
+
         {quotaWillExceed && (
           <Alert className="border-amber-200 bg-amber-50 p-3 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
             <Icon icon={AlertTriangle} className="mt-0.5" />
@@ -1003,7 +1075,7 @@ export default function ImportWizard({
             size="sm"
             data-testid="import-submit"
             onClick={() => void runWizardImport()}
-            disabled={importing || snippetsToAdd === 0}
+            disabled={!canImport}
           >
             {importing
               ? i18n.t("importWizard.footer.importing")
@@ -1022,6 +1094,12 @@ export default function ImportWizard({
 
   return (
     <div className="flex flex-col gap-4">
+      <Progress
+        value={(step / 4) * 100}
+        aria-label={i18n.t("importWizard.progress")}
+        data-testid="import-progress"
+        className="h-1"
+      />
       <StepIndicator current={step} labels={STEP_LABELS} />
       <div className="min-h-75">{stepContent[step - 1]()}</div>
       {renderFooter()}

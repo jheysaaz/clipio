@@ -67,7 +67,7 @@ export default function SnippetListItem({
       role="option"
       aria-selected={isSelected}
       className={cn(
-        "h-auto min-h-12 max-w-full w-full items-start justify-start overflow-hidden relative rounded-lg px-2.5 py-2 text-left transition-colors",
+        "h-auto min-h-12 max-w-full w-full items-start justify-start overflow-hidden relative rounded-lg px-2.5 py-1.5 text-left transition-colors",
         className,
         "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         // One fill, stronger than hover; no accent bar, ring or second marker.

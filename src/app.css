@@ -115,7 +115,7 @@
   --color-ring: var(--ring);
   --color-selected: var(--selected);
   /* The one type scale. Every popup size is a token, not a per-component px
-     literal: 11/12/13/14/18px at a 16px root, with unitless line heights. */
+     literal: 11/12/13/14/16/18px at a 16px root, with unitless line heights. */
   --text-ui-micro: 0.6875rem;
   --text-ui-xs: 0.75rem;
   --text-ui-sm: 0.8125rem;
@@ -432,6 +432,37 @@
 .clipio-onboarding-popover .driver-popover-next-btn {
   background-color: var(--primary);
   color: var(--primary-foreground);
+}
+
+/* The document's name and shortcut share one translucent island. It is paint,
+   not layout: the inputs keep their hit targets and the island never moves the
+   editor body, so a focus transition cannot reflow the popup. */
+@keyframes glassIslandIn {
+  from {
+    opacity: 0;
+    transform: translateY(-0.125rem) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.editor-title-island {
+  background: color-mix(in oklab, var(--background) 72%, transparent);
+  backdrop-filter: blur(0.75rem);
+  animation: glassIslandIn 180ms ease-out both;
+  transition: background-color 160ms ease-out;
+}
+
+.editor-title-island:hover,
+.editor-title-island:focus-within {
+  background: color-mix(in oklab, var(--card) 88%, transparent);
+}
+
+.dark .editor-title-island:hover,
+.dark .editor-title-island:focus-within {
+  background: color-mix(in oklab, var(--card) 82%, transparent);
 }
 
 /* The editor footer degrades in order: short time, no "Updated", fewer chips

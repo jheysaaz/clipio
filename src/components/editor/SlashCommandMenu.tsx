@@ -4,6 +4,7 @@ import {
   Calendar,
   MousePointer2,
   CalendarDays,
+  Code2,
   ImageIcon,
   Film,
 } from "lucide-react";
@@ -18,6 +19,7 @@ export function SlashCommandMenu({
   onInsertDate,
   onInsertCursor,
   onInsertDatepicker,
+  onInsertCodeBlock,
   onOpenImagePicker,
   onInsertImage: _onInsertImage,
   onInsertGif,
@@ -68,6 +70,14 @@ export function SlashCommandMenu({
         disabled: false,
       },
       {
+        id: "codeBlock",
+        label: i18n.t("editor.slashMenu.codeBlock.label"),
+        description: i18n.t("editor.slashMenu.codeBlock.description"),
+        icon: Code2,
+        action: onInsertCodeBlock,
+        disabled: false,
+      },
+      {
         id: "image",
         label: i18n.t("editor.slashMenu.image.label"),
         description: i18n.t("editor.slashMenu.image.description"),
@@ -100,6 +110,7 @@ export function SlashCommandMenu({
     onInsertDate,
     onInsertCursor,
     onInsertDatepicker,
+    onInsertCodeBlock,
     onOpenImagePicker,
     onInsertGif,
   ]);

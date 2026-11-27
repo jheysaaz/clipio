@@ -18,7 +18,6 @@ import {
   PanelLeft,
   PanelLeftClose,
   Trash2,
-  CloudOff,
 } from "lucide-react";
 import {
   FeedbackBanner,
@@ -72,7 +71,9 @@ import {
   fieldsFromSnippet,
   recoverableCreateDraft,
   validateEditorFields,
+  type EditorFields,
 } from "@/lib/snippet-draft";
+import { duplicateSnippetFields } from "@/lib/snippet-duplicate";
 import {
   discardDraft,
   discardStaleCreateDraft,
@@ -174,7 +175,6 @@ export default function Dashboard() {
   const searchQuery = useSearch((s) => s.query);
   const loading = useSnippets((s) => !s.isLoaded);
   const quotaWarning = useSnippets((s) => s.quotaWarning);
-  const localOnly = useSnippets((s) => s.localOnly);
   const recoverySnippets = useSnippets((s) => s.recoverySnippets);
   const showRecoveryBanner = useSnippets((s) => s.showRecoveryBanner);
   const loadError = useSnippets((s) => s.loadError);
@@ -791,6 +791,22 @@ export default function Dashboard() {
     startCreating();
   };
 
+  const handleDuplicateSnippet = async (fields: EditorFields) => {
+    // Pass content explicitly so createSessionDraft skips recovery: a duplicate
+    // must never resume someone else's unfinished new-snippet draft.
+    const session = await createSessionDraft(fields.content);
+    setProvisionalCreateId(session.id);
+    setDraftSnippet(
+      duplicateSnippetFields(
+        fields,
+        snippetsStore.state.snippets,
+        i18n.t("snippetDetail.duplicateLabel", [fields.label])
+      )
+    );
+    createStartedRef.current = false;
+    startCreating();
+  };
+
   const handleDeleteSnippet = async (snippetId: string) => {
     const snippetsInStore = snippetsStore.state.snippets;
     const snippet = findSnippet(snippetsInStore, snippetId);
@@ -1101,30 +1117,6 @@ export default function Dashboard() {
                 <Icon icon={Settings} size="lg" />
               </Button>
             </div>
-            {/*
-              The indicator has its own reserved line. Putting it in the button
-              row took width from Add Snippet and, at a narrow sidebar, pushed
-              Settings past the edge. This line keeps both buttons untouched in
-              every storage mode.
-            */}
-            <div
-              data-testid="storage-indicator-slot"
-              className="flex h-4 items-center overflow-hidden"
-            >
-              {localOnly && (
-                <span
-                  data-testid="local-only-indicator"
-                  title={i18n.t("dashboard.localOnlyDetail")}
-                  aria-label={i18n.t("dashboard.localOnlyDetail")}
-                  className="flex min-w-0 items-center gap-1 whitespace-nowrap text-ui-micro! text-muted-foreground"
-                >
-                  <Icon icon={CloudOff} size="sm" />
-                  <span className="truncate">
-                    {i18n.t("dashboard.localOnly")}
-                  </span>
-                </span>
-              )}
-            </div>
           </div>
         </div>
 
@@ -1235,6 +1227,7 @@ export default function Dashboard() {
                 onClearCreateError={dismissCreateError}
                 existingSnippets={snippets}
                 onDelete={handleDeleteSnippet}
+                onDuplicate={handleDuplicateSnippet}
                 sidebarOpen={sidebarOpen}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
               />

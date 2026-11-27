@@ -169,9 +169,21 @@ const posix = (p) => p.split(sep).join("/");
  * aggregate and shared chunks each grow 508 bytes; the background, content,
  * popup and options entries stay below their existing budgets. Both sizes were
  * measured twice from clean builds and did not vary.
+ *
+ * Raised for the shadcn date picker: `react-day-picker` and `date-fns` add the
+ * calendar and its date helpers to the shared editor chunk. The popup entry,
+ * background, content script and options entry stay below their budgets; only
+ * the aggregate and shared-chunk totals move. Both sizes were measured from a
+ * clean build after the final editor changes.
+ *
+ * Raised again for the release editor fixes: the distinct `code_block` node key,
+ * the typed trailing paragraph that keeps serialisation from throwing, and the
+ * title's important utilities add 110 bytes to both the aggregate and the shared
+ * chunks. The individual entries stay below their budgets. Both sizes were
+ * measured twice from clean builds and did not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_784_363 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_868_990 },
   { name: "background entry", pattern: "background.js", maxBytes: 227_033 },
   {
     name: "content script entry",
@@ -193,7 +205,7 @@ const BUDGETS = [
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_638_068,
+    maxBytes: 1_722_695,
   },
 ];
 

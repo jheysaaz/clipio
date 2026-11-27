@@ -37,7 +37,12 @@ import {
 } from "@/lib/importers/merge";
 import { getParser } from "@/lib/importers/registry";
 import { remapMediaIds } from "@/lib/media-placeholders";
-import { getSnippets, getStorageStatus, bulkSaveSnippets } from "@/storage";
+import {
+  getSnippets,
+  getStorageStatus,
+  bulkSaveSnippets,
+  forceSetStorageMode,
+} from "@/storage";
 import { SYNC_QUOTA } from "@/config/constants";
 import { captureError, captureMessage } from "@/lib/sentry";
 import { i18n } from "#i18n";
@@ -65,7 +70,16 @@ export type ImportState = {
   importDone: boolean;
   importedCount: number;
   importError: string | null;
+  /** The backend the library currently lives on. */
   storageMode: "sync" | "local";
+  /**
+   * Where the user wants this import to land.
+   *
+   * Empty means "no explicit choice yet". A sync library that would overflow
+   * the browser quota requires one: the write is refused rather than silently
+   * switching the user to local storage.
+   */
+  storageTarget: "sync" | "local" | "";
   /** ZIP exports. */
   isZipImport: boolean;
   zipMediaCount: number;
@@ -102,6 +116,7 @@ export const importStore = createStore<ImportState>({
   importedCount: 0,
   importError: null,
   storageMode: "sync",
+  storageTarget: "",
   isZipImport: false,
   zipMediaCount: 0,
   zipMissingMediaWarning: null,
@@ -311,6 +326,48 @@ export function willExceedQuota(
   return estimated > SYNC_QUOTA.WARN_AT;
 }
 
+/**
+ * The backend an import will actually write to.
+ *
+ * An empty target means the user has not been asked to choose, so the current
+ * mode is the answer — the wizard only asks when the current mode cannot hold
+ * the library.
+ */
+export function effectiveStorageTarget(
+  state: Pick<ImportState, "storageMode" | "storageTarget">
+): "sync" | "local" {
+  return state.storageTarget || state.storageMode;
+}
+
+/**
+ * Whether a sync library is too large and therefore needs an explicit choice.
+ *
+ * The default answer stays sync: switching someone's storage backend is a data
+ * migration, not something a confirmation dialog should do on their behalf.
+ */
+export function quotaRequiresTargetChoice(state: ImportState): boolean {
+  return (
+    state.storageMode === "sync" &&
+    willExceedQuota(
+      state.existingSnippets,
+      state.parsedSnippets,
+      state.conflictEntries,
+      "sync"
+    )
+  );
+}
+
+/** Whether the confirmation button may perform the write. */
+export function canRunImport(state: ImportState): boolean {
+  if (
+    state.importing ||
+    countImported(state.parsedSnippets, state.conflictEntries) === 0
+  ) {
+    return false;
+  }
+  return !quotaRequiresTargetChoice(state) || state.storageTarget !== "";
+}
+
 function estimate(snippets: Snippet[]): number {
   return estimateJsonSize(snippets);
 }
@@ -325,13 +382,17 @@ export async function initialiseImport(): Promise<void> {
     getSnippets(),
     getStorageStatus(),
   ]);
+  const mode =
+    status.status === "fulfilled" && status.value.mode === "local"
+      ? "local"
+      : "sync";
   importStore.setState((prev) => ({
     ...prev,
     existingSnippets: snippets.status === "fulfilled" ? snippets.value : [],
-    storageMode:
-      status.status === "fulfilled" && status.value.mode === "local"
-        ? "local"
-        : "sync",
+    storageMode: mode,
+    // An already-local library needs no choice; a sync library starts with an
+    // empty target so an oversized import cannot proceed on the old default.
+    storageTarget: mode === "local" ? "local" : "",
   }));
 }
 
@@ -457,6 +518,14 @@ export async function runImport(): Promise<number | null> {
       }
     }
 
+    // An oversized sync import is written to local only because the user chose
+    // it. `forceSetStorageMode` migrates the existing library first, so no
+    // snippet is left behind on the old backend.
+    if (effectiveStorageTarget(importStore.state) === "local") {
+      await forceSetStorageMode("local");
+      importStore.setState((prev) => ({ ...prev, storageMode: "local" }));
+    }
+
     const finalSnippets = previewFinalSnippets(
       existingSnippets,
       parsedSnippets,
@@ -506,6 +575,7 @@ export function resetImport(): void {
     step: 1,
     existingSnippets: importStore.state.existingSnippets,
     storageMode: importStore.state.storageMode,
+    storageTarget: importStore.state.storageMode === "local" ? "local" : "",
     isDragging: false,
     fileName: null,
     rawJson: null,

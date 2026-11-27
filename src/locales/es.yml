@@ -73,7 +73,11 @@ snippetEditor:
   shortcutPlaceholder: "Agregar atajo"
   shortcutLabel: "Atajo: $1"
   shortcutTip: Escribe esto en cualquier página para expandir el fragmento.
+  shortcutTipRules: Solo letras, números, puntos, guiones y guiones bajos. El prefijo se conserva automáticamente.
   shortcutError: El atajo no puede contener espacios
+  shortcutErrorCharacters: 'Carácter no admitido: $1. Usa letras, números, puntos, guiones o guiones bajos.'
+  shortcutPrefixTooltip: El prefijo se conserva automáticamente
+  duplicateTooltip: Duplicar fragmento
   shortcutErrorDuplicate: 'El atajo "$1" ya está en uso por "$2". Elige un atajo diferente.'
   shortcutErrorPrefix: 'El atajo "$1" entra en conflicto con "$2" — uno puede impedir que el otro se expanda.'
   content: Contenido del fragmento
@@ -106,6 +110,7 @@ snippetDetail:
   uses: usos
   updated: Actualizado
   draft: Borrador
+  duplicateLabel: "Copia de $1"
   hiddenTags: Etiquetas ocultas
   moreTags: "+$1"
   deleted:
@@ -122,6 +127,7 @@ snippetDetail:
     failedToCopy: Error al copiar al portapapeles
     failedToSave: Error al guardar el fragmento. Por favor, inténtalo de nuevo.
     failedToDelete: Error al eliminar el fragmento. Por favor, inténtalo de nuevo.
+    failedToDuplicate: Error al duplicar el fragmento. Por favor, inténtalo de nuevo.
     failedToStage: El cambio se guardó localmente pero no se pudo poner en cola.
     emptyLabel: El fragmento necesita un nombre antes de guardarse.
     emptyShortcut: El fragmento necesita un atajo antes de guardarse.
@@ -434,6 +440,7 @@ options:
       privacyNote: Los informes redactan texto escrito, URL de páginas, claves de API y valores opacos largos.
 
 importWizard:
+  progress: Progreso de importación
   steps:
     upload: Subir
     placeholders: Marcadores
@@ -482,7 +489,12 @@ importWizard:
     importedWithRename: Importado con atajo renombrado
     skippedConflicts: "Omitidos (conflictos)"
     estimatedStorage: Uso de almacenamiento estimado
-    quotaWarning: "Esta importación puede exceder los límites de almacenamiento de sincronización del navegador. Clipio cambiará automáticamente al almacenamiento local si es necesario, pero los fragmentos no se sincronizarán con otros dispositivos."
+    quotaWarning: "Esta biblioteca es mayor de lo que permite el almacenamiento de sincronización. Elige dónde guardarla antes de importar."
+    storageTarget: "Guardar esta biblioteca en"
+    storageTargetSync: Almacenamiento sincronizado
+    storageTargetSyncDesc: "Disponible en todos los dispositivos con sesión iniciada, dentro del límite del navegador."
+    storageTargetLocal: Solo local
+    storageTargetLocalDesc: "Permanece en este dispositivo y admite bibliotecas más grandes."
     failedToImport: Error al guardar los fragmentos importados. Por favor, inténtalo de nuevo.
     done:
       heading: Importación completa
@@ -513,6 +525,14 @@ editor:
     urlPlaceholder: "https://..."
     insertImage: Insertar imagen
     insertGif: Insertar GIF
+  codeBlock:
+    label: Código
+    copy: Copiar código
+    copied: Código copiado
+    copyFailed: No se pudo copiar el código
+  datePicker:
+    label: Elige una fecha
+    change: "Haz clic para cambiar la fecha. Actual: $1"
   slashMenu:
     header: Comandos
     noMatches: Sin comandos coincidentes
@@ -529,6 +549,9 @@ editor:
     datepicker:
       label: Elegir fecha
       description: Elegir cualquier fecha del calendario
+    codeBlock:
+      label: Bloque de código
+      description: Inserta un bloque con delimitadores para código de varias líneas
     image:
       label: Imagen
       description: Insertar una imagen desde tu dispositivo

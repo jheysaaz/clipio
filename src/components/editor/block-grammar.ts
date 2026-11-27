@@ -267,7 +267,10 @@ function readFence(
   const end = fenceEnd(lines, start, marker);
   const body = lines.slice(start + 1, end).join("\n");
   return {
-    type: "code",
+    // A distinct node type: Plate's inline `code` mark already owns that key.
+    // Reusing it made `override.components.code` render a fenced block as an
+    // inline leaf, so the block's own component never mounted.
+    type: "code_block",
     language: language || undefined,
     // The interior is stored as a single text node and is NEVER passed to
     // `parseInline`. That is the whole point: a code block containing

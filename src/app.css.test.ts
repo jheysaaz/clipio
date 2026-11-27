@@ -60,6 +60,17 @@ describe("Chrome force-dark opt-out", () => {
   });
 });
 
+describe("editor title face", () => {
+  const fonts = readFileSync("src/assets/styles/fonts.css", "utf8");
+
+  it("keeps the title on the bundled Inter face", () => {
+    // Visual review rejected the Newsreader trial. A leftover @font-face would
+    // still download the asset even though nothing selected the family.
+    expect(fonts).toMatch(/font-family:\s*InterVariable\s*;/);
+    expect(fonts).not.toContain("Newsreader");
+  });
+});
+
 describe("relative-size tokens", () => {
   const theme = declarationsIn("@theme inline");
 
@@ -71,6 +82,10 @@ describe("relative-size tokens", () => {
     expect(theme).toMatch(/--text-ui-sm:\s*0\.8125rem\s*;/);
     expect(theme).toMatch(/--text-ui-base:\s*0\.875rem\s*;/);
     expect(theme).toMatch(/--text-ui-lg:\s*1\.125rem\s*;/);
+    // The editor title uses Tailwind's own `text-base`/`font-medium`, so no
+    // parallel title token is allowed to drift from the design scale.
+    expect(theme).not.toMatch(/--text-editor-title:/);
+    expect(theme).not.toMatch(/--font-editor-title:/);
     expect(theme).toMatch(/--leading-ui:\s*1\.5\s*;/);
     expect(theme).toMatch(/--leading-editor:\s*1\.6\s*;/);
   });

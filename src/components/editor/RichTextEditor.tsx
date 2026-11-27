@@ -44,6 +44,7 @@ import {
 } from "./types";
 import { serializeToMarkdown, deserializeContent } from "./serialization";
 import { copyMarkdownAsRichText } from "@/lib/copy-markdown-as-rich-text";
+import { todayStoredDate } from "@/lib/editor-date";
 import {
   ClipboardPlaceholderPlugin,
   DatePlaceholderPlugin,
@@ -468,7 +469,9 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
 
       deleteSlashTrigger(manualTrigger, slashMenuRange, slashSearchQuery);
 
-      const today = new Date().toISOString().split("T")[0];
+      // The picker stores local calendar dates; UTC today shifts by one for
+      // users west of Greenwich in the evening.
+      const today = todayStoredDate();
       insertInlineVoid(
         {
           type: DATEPICKER_PLACEHOLDER,
@@ -488,6 +491,61 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
       manualTrigger,
       deleteSlashTrigger,
       insertInlineVoid,
+    ]);
+
+    // Insert a fenced code block after the current block. A slash command is
+    // typed inside a paragraph, so removing that paragraph would also remove any
+    // text before the slash; inserting after it is safe in both cases.
+    const handleInsertCodeBlock = useCallback(() => {
+      if (!slashMenuRange && !manualTrigger) return;
+
+      deleteSlashTrigger(manualTrigger, slashMenuRange, slashSearchQuery);
+
+      const current = editor.api.above();
+      const insertAt = [current ? current[1][0] + 1 : editor.children.length];
+      const codeBlock = {
+        type: "code_block",
+        language: "",
+        children: [{ text: "" }],
+      } as TElement;
+      // Plate does not add a type to nodes created by `insertNodes`. Give the
+      // trailing paragraph one explicitly: serialisation reads `element.type`
+      // and an untyped node throws before the edit can be saved.
+      const followingParagraph = {
+        type: "p",
+        children: [{ text: "" }],
+      } as TElement;
+
+      editor.tf.insertNodes([codeBlock, followingParagraph], { at: insertAt });
+      // Plate's focus command can leave DOM focus on the command button after
+      // a click outside the editable surface. Focus the host first, then let
+      // Plate apply the Slate selection; focusing the host afterwards would put
+      // the DOM caret somewhere other than the code block we just inserted.
+      contentHostRef.current
+        ?.querySelector<HTMLElement>(
+          '[data-slate-editor], [contenteditable="true"], textarea'
+        )
+        ?.focus();
+      editor.tf.select({
+        anchor: { path: [...insertAt, 0], offset: 0 },
+        focus: { path: [...insertAt, 0], offset: 0 },
+      });
+      editor.tf.focus();
+
+      setShowSlashMenu(false);
+      setSlashMenuRange(null);
+      setSlashSearchQuery("");
+      setManualTrigger(false);
+    }, [
+      slashMenuRange,
+      slashSearchQuery,
+      manualTrigger,
+      deleteSlashTrigger,
+      editor,
+      setShowSlashMenu,
+      setSlashMenuRange,
+      setSlashSearchQuery,
+      setManualTrigger,
     ]);
 
     // Handle file selected from file input
@@ -788,6 +846,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
                 onInsertDate={handleInsertDate}
                 onInsertCursor={handleInsertCursor}
                 onInsertDatepicker={handleInsertDatepicker}
+                onInsertCodeBlock={handleInsertCodeBlock}
                 onOpenImagePicker={handleOpenImagePicker}
                 onInsertImage={handleInsertImage}
                 onInsertGif={handleInsertGif}
