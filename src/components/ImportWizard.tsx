@@ -455,6 +455,7 @@ export default function ImportWizard({
         <input
           ref={fileInputRef}
           type="file"
+          data-testid="import-file-input"
           accept=".json,.zip,.clipio.zip"
           className="hidden"
           onChange={(e) => {
@@ -984,6 +985,7 @@ export default function ImportWizard({
         {step < 4 && (
           <Button
             size="sm"
+            data-testid="import-next"
             onClick={() => {
               if (step === 1) advanceFromUpload();
               else if (step === 2) advanceFromPlaceholders();
@@ -999,6 +1001,7 @@ export default function ImportWizard({
         {step === 4 && !importDone && (
           <Button
             size="sm"
+            data-testid="import-submit"
             onClick={() => void runWizardImport()}
             disabled={importing || snippetsToAdd === 0}
           >

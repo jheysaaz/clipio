@@ -302,8 +302,8 @@ options:
       description: Import from a Clipio or other tools export file. Conflicts and unsupported placeholders are resolved step-by-step.
       button: Import
       successMessage:
-        1: "✓ 1 snippet imported successfully."
-        n: "✓ $1 snippets imported successfully."
+        1: "1 snippet imported successfully."
+        n: "$1 snippets imported successfully."
       supported: "Supported:"
     modal:
       title: Import Snippets

@@ -297,8 +297,8 @@ options:
       button: Importar
       supported: "Lee"
       successMessage:
-        1: "✓ 1 fragmento importado correctamente."
-        n: "✓ $1 fragmentos importados correctamente."
+        1: "1 fragmento importado correctamente."
+        n: "$1 fragmentos importados correctamente."
     modal:
       title: Importar Fragmentos
   backup:

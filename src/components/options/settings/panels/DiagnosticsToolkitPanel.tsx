@@ -38,6 +38,7 @@ export function DiagnosticsToolkitPanel() {
     reset();
     showBanner({
       source,
+      scope: "diagnostics",
       severity: "error",
       // The keys are literals at every call site; the generated `i18n.t` type
       // only accepts its key union, which is not expressible through a helper

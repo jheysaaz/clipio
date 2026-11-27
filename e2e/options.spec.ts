@@ -133,6 +133,52 @@ test.describe("Options Page", () => {
     await page.close();
   });
 
+  test("keeps import confirmation in Library instead of following the user", async ({
+    optionsPage,
+  }) => {
+    await waitForOptionsReady(optionsPage);
+    await optionsPage.getByTestId("import-open").click();
+
+    const payload = {
+      version: 1,
+      format: "clipio",
+      exportedAt: "2026-11-27T09:00:00.000Z",
+      snippets: [
+        {
+          id: "e2e-import-feedback",
+          label: "Imported feedback",
+          shortcut: "/fb",
+          content: "Imported body",
+          tags: [],
+          usageCount: 0,
+          createdAt: "2026-11-27T09:00:00.000Z",
+          updatedAt: "2026-11-27T09:00:00.000Z",
+        },
+      ],
+    };
+    await optionsPage.getByTestId("import-file-input").setInputFiles({
+      name: "clipio-import.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(payload)),
+    });
+
+    // The middle steps are skipped automatically when there is nothing to fix.
+    // Walk only the Next buttons that actually render.
+    for (let step = 0; step < 3; step++) {
+      const next = optionsPage.getByTestId("import-next");
+      if ((await next.count()) === 0) break;
+      await next.click();
+    }
+    await optionsPage.getByTestId("import-submit").click();
+
+    await expect(optionsPage.getByTestId("import-confirmation")).toBeVisible();
+    await expect(optionsPage.getByTestId("feedback-banner")).toHaveCount(0);
+
+    await optionsPage.getByTestId("options-nav-appearance").click();
+    await expect(optionsPage.getByTestId("import-confirmation")).toHaveCount(0);
+    await expect(optionsPage.getByTestId("feedback-banner")).toHaveCount(0);
+  });
+
   test("keeps long feedback and import dialogs inside a short viewport", async ({
     context,
     extensionId,

@@ -247,8 +247,9 @@ describe("LibraryPanel", () => {
     expect(openButton).toHaveFocus();
   });
 
-  it("announces a completed import and closes the wizard", async () => {
+  it("confirms a completed import beside the import control, not in the shell banner", async () => {
     renderPanel();
+    expect(screen.queryByTestId("import-confirmation")).toBeNull();
 
     fireEvent.click(screen.getByTestId("import-open"));
     fireEvent.click(
@@ -256,8 +257,16 @@ describe("LibraryPanel", () => {
     );
 
     const message = i18n.t("options.importExport.importCard.successMessage", 3);
-    expect(screen.getByTestId("feedback-banner")).toHaveTextContent(message);
+    const confirmation = screen.getByTestId("import-confirmation");
+    expect(confirmation).toHaveTextContent(message);
+    expect(confirmation.className).toContain("font-normal");
+    expect(
+      screen.getByTestId("import-open").parentElement?.parentElement
+    ).toHaveTextContent(message);
     expect(screen.getByRole("status")).toHaveTextContent(message);
+    // Success is local to the control: no shell-wide banner to carry into the
+    // next settings section.
+    expect(screen.queryByTestId("feedback-banner")).toBeNull();
     expect(screen.queryByTestId("mock-import-wizard")).not.toBeInTheDocument();
   });
 });

@@ -26,6 +26,7 @@ export function DiagnosticsPanel() {
     reset();
     showBanner({
       source: "diagnostics",
+      scope: "diagnostics",
       severity: "error",
       message,
     });

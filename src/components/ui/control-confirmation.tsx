@@ -20,7 +20,7 @@ export function ControlConfirmation({
     <span
       data-testid={testId}
       className={cn(
-        "inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-300",
+        "inline-flex items-center gap-1 text-ui-xs! font-normal text-emerald-700 dark:text-emerald-300",
         className
       )}
     >

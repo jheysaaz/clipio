@@ -39,7 +39,7 @@ const sectionHref = (id: SectionId) => `/${id}` as const;
 
 export function OptionsShell() {
   const navigate = useNavigate();
-  const { showBanner, dismissBanner } = useFeedback();
+  const { banner, showBanner, dismissBanner } = useFeedback();
 
   // The active section is derived from the URL, never stored. A second piece of
   // state would be a source of truth that a back-button press could desynchronise
@@ -50,6 +50,15 @@ export function OptionsShell() {
   // `SectionView.tsx` both need it, and re-deriving it here is the "two sources
   // of truth for what sections exist" that decision 0011 exists to remove.
   const activeSection: SectionId = sectionIdFromPath(pathname) ?? "library";
+
+  // A section-scoped message belongs to the work that produced it. Leaving that
+  // section clears it, so an import result cannot follow the user into Appearance
+  // or come back when they return. Unscoped, page-wide messages are unaffected.
+  useEffect(() => {
+    if (banner?.scope && banner.scope !== activeSection) {
+      dismissBanner(banner.source, { runOnDismiss: false });
+    }
+  }, [activeSection, banner, dismissBanner]);
 
   const [query, setQuery] = useState("");
   const [showReviewBanner, setShowReviewBanner] = useState(false);
@@ -154,7 +163,7 @@ export function OptionsShell() {
 
       <main className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-2xl px-8 py-8">
-          <FeedbackBanner />
+          <FeedbackBanner scope={activeSection} />
 
           {searching ? <SearchResults query={query} /> : <Outlet />}
         </div>

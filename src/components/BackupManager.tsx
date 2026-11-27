@@ -344,6 +344,7 @@ export function BackupManager() {
       reset();
       showBanner({
         source: "backup-create",
+        scope: "library",
         severity: "error",
         message: i18n.t("options.backup.failedCreate"),
       });
