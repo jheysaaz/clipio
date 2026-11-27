@@ -1,8 +1,8 @@
 extName: "Clipio: Gestor de Fragmentos"
-extDescription: "Una potente extensión de navegador para gestionar e insertar fragmentos de texto con velocidad y aumentar tu productividad."
+extDescription: "Una potente extensión de navegador para gestionar e insertar fragmentos a toda velocidad y aumentar tu productividad."
 
 common:
-  resizeSidebar: Cambiar tamaño de la barra lateral
+  resizeSidebar: Cambiar el tamaño de la barra lateral
   cancel: Cancelar
   closeModal: Cerrar
   save: Guardar
@@ -12,13 +12,15 @@ common:
   close: Cerrar
   reload: Recargar
   loading: Cargando…
-  errorOptions: Algo ha salido mal. Recarga la página de opciones.
-  errorPopup: Algo ha salido mal. Cierra y vuelve a abrir la extensión.
+  # Error-boundary copy. The two fallbacks differ only in what the user should
+  # do next, so they need two strings rather than one generic apology.
+  errorOptions: Algo salió mal. Recarga la página de opciones.
+  errorPopup: Algo salió mal. Cierra y vuelve a abrir la extensión.
 
-  # Chrome del editor
+  # Editor placeholder chrome
   editor:
     dateFormat: Formato de fecha
-    cursorTitle: Posición del cursor - el cursor se colocará aquí tras insertar
+    cursorTitle: Posición del cursor - el cursor quedará aquí después de insertar
     gifPickerLabel: Selector de GIF
 
 dashboard:
@@ -31,39 +33,40 @@ dashboard:
   draftLabel: Sin título
   draftShortcut: /...
   addSnippet: Agregar fragmento
-  settingsAndExport: Ajustes e Importar/Exportar
+  settingsAndExport: Configuración e Importar/Exportar
   emptyState:
     heading: Aún no hay fragmentos
     body: Crea tu primer fragmento para guardar y reutilizar texto rápidamente.
     action: Crear tu primer fragmento
   snippetListLabel: Fragmentos
-  # Elegir el modo local es un estado, no una advertencia: un indicador neutro,
-  # con la explicación completa en el título y en Ajustes de almacenamiento.
+  # A chosen local-only mode is a state, not a warning: one neutral indicator,
+  # with the full explanation available as its title and in Storage settings.
   localOnly: Solo local
   localOnlyDetail: La sincronización está desactivada. Los fragmentos se guardan solo en este dispositivo.
-  # Una conmutación automática por cuota permanece en el espacio reservado del editor.
+  # An automatic quota fallback stays in the editor's reserved status slot.
   storageError:
-    message: Almacenamiento de sincronización lleno — los fragmentos se guardan solo en este dispositivo.
-    action: Ajustes de almacenamiento →
+    message: Almacenamiento de sincronización lleno — fragmentos guardados solo en este dispositivo.
+    action: Configuración de almacenamiento →
   warnings:
     recovery:
       body:
-        1: "Tus fragmentos sincronizados se perdieron (cierre de sesión detectado). 1 fragmento en copia de seguridad."
-        n: "Tus fragmentos sincronizados se perdieron (cierre de sesión detectado). $1 fragmentos en copia de seguridad."
+        1: "Se perdieron tus fragmentos sincronizados (se detectó un cierre de sesión). Hay 1 fragmento en la copia de seguridad."
+        n: "Se perdieron tus fragmentos sincronizados (se detectó un cierre de sesión). Hay $1 fragmentos en la copia de seguridad."
       action:
         1: Restaurar 1 fragmento
         n: Restaurar $1 fragmentos
     updateAvailable:
       body: "Hay una nueva versión de Clipio disponible: $1"
-      action: Ver lanzamiento
+      action: Ver novedades
   errors:
-    failedToLoad: Error al cargar los fragmentos.
-    failedToCreate: Error al crear el fragmento. Por favor, inténtalo de nuevo.
-    failedToRestore: Error al restaurar los fragmentos.
-    failedToUpdate: Error al actualizar el fragmento. Inténtalo de nuevo.
-    quotaExceeded: El almacenamiento de sincronización está lleno, así que este fragmento no se guardó.
+    failedToLoad: No se pudieron cargar los fragmentos.
+    failedToCreate: No se pudo crear el fragmento. Inténtalo de nuevo.
+    failedToRestore: No se pudieron restaurar los fragmentos.
+    failedToUpdate: No se pudo actualizar el fragmento. Inténtalo de nuevo.
+    # Quota explanations. $1 is the projected/actual size, $2 the limit.
+    quotaExceeded: El almacenamiento de sincronización está lleno, por eso no se guardó este fragmento.
     quotaPerItem: Este fragmento ocupa $1 y la sincronización permite $2 por fragmento.
-    quotaTotal: Tus fragmentos ocupan $1 y la sincronización permite $2.
+    quotaTotal: Tus fragmentos suman $1 y la sincronización permite $2.
     quotaCount: Tienes $1 fragmentos y la sincronización permite $2.
 
 snippetEditor:
@@ -72,14 +75,14 @@ snippetEditor:
   shortcut: Atajo
   shortcutPlaceholder: "Agregar atajo"
   shortcutLabel: "Atajo: $1"
-  shortcutTip: Escríbelo para expander el fragmento.
+  shortcutTip: Escríbelo para expandir el fragmento.
   shortcutError: El atajo no puede contener espacios
   shortcutErrorCharacters: "Carácter no admitido: $1. Usa letras, números, puntos, guiones o guiones bajos."
   duplicateTooltip: Duplicar fragmento
-  shortcutErrorDuplicate: 'El atajo "$1" ya está en uso por "$2". Elige un atajo diferente.'
+  shortcutErrorDuplicate: 'El atajo "$1" ya está en uso en "$2". Elige otro atajo.'
   shortcutErrorPrefix: 'El atajo "$1" entra en conflicto con "$2" — uno puede impedir que el otro se expanda.'
   content: Contenido del fragmento
-  contentPlaceholder: "Escribe / para ver comandos…"
+  contentPlaceholder: "Escribe / para ver los comandos…"
   removeTag: "Quitar etiqueta $1"
   more: Más acciones
   moreTooltip: "Más acciones (Alt+O)"
@@ -102,7 +105,7 @@ snippetDetail:
   copyToClipboard: Copiar al portapapeles
   copiedLabel: Copiado
   tags: Etiquetas
-  tagPlaceholder: Nombre de etiqueta...
+  tagPlaceholder: Nombre de la etiqueta...
   addTag: Agregar etiqueta
   newTag: Nueva etiqueta
   uses: usos
@@ -114,43 +117,46 @@ snippetDetail:
   deleted:
     title: Fragmento eliminado
     undo: Deshacer
-    live: "Fragmento eliminado. Deshacer disponible."
+    live: "Fragmento eliminado. Se puede deshacer."
   syncStatus:
     saved: "Guardado"
     saving: "Guardando…"
     failed: "No se pudo guardar · Reintentar"
-    refused: "Almacenamiento lleno: los cambios se conservan localmente"
-    conflictDetail: "Se guardó primero una versión más reciente de este fragmento"
+    refused: Almacenamiento lleno — cambios guardados localmente
+    conflictDetail: Antes se guardó una versión más reciente de este fragmento
   errors:
-    failedToCopy: Error al copiar al portapapeles
-    failedToSave: Error al guardar el fragmento. Por favor, inténtalo de nuevo.
-    failedToDelete: Error al eliminar el fragmento. Por favor, inténtalo de nuevo.
-    failedToDuplicate: Error al duplicar el fragmento. Por favor, inténtalo de nuevo.
-    failedToStage: El cambio se guardó localmente pero no se pudo poner en cola.
-    emptyLabel: El fragmento necesita un nombre antes de guardarse.
-    emptyShortcut: El fragmento necesita un atajo antes de guardarse.
+    failedToCopy: No se pudo copiar al portapapeles
+    failedToSave: No se pudo guardar el fragmento. Inténtalo de nuevo.
+    failedToDelete: No se pudo eliminar el fragmento. Inténtalo de nuevo.
+    failedToDuplicate: No se pudo duplicar el fragmento. Inténtalo de nuevo.
+    failedToStage: El cambio se guardó localmente, pero no se pudo poner en cola.
+    emptyLabel: El fragmento necesita un nombre para poder guardarse.
+    emptyShortcut: El fragmento necesita un atajo para poder guardarse.
     shortcutSpaces: El atajo no puede contener espacios.
     shortcutConflict: Ese atajo pertenece a otro fragmento.
-    emptyContent: El fragmento necesita contenido antes de guardarse.
+    emptyContent: El fragmento necesita contenido para poder guardarse.
     malformedMedia: Uno de los marcadores de contenido multimedia está incompleto.
 
 options:
-  # Página de opciones — texto que antes estaba en inglés fijo.
+  # Options page — component copy that was previously hardcoded English.
   copy:
     extensionVersion: Versión de la extensión
     extensionVersionHint: Versión instalada actualmente y actualizaciones disponibles.
-    viewRelease: Ver la publicación
-    upToDate: Actualizado
+    viewRelease: Ver novedades
+    upToDate: Al día
+  # Accessible names for controls that carry no visible text. Read by screen
+  # readers, so a Spanish user should hear Spanish.
+  # Development-only controls. They render only when MODE !== "production", but
+  # they are still user-visible to a developer running a Spanish build, so they
+  # are translated like everything else.
   notFound:
     title: Esa página no existe
-    body: Este enlace apunta a una sección de preferencias que Clipio ya no tiene. Puede que sea de una versión anterior.
-    action: Ir a Biblioteca
-  # Nombres accesibles de controles sin texto visible. Los lee un lector de
-  # pantalla, así que un usuario en español debe oír español.
+    body: Este enlace apunta a una página de configuración que Clipio ya no tiene. Puede ser de una versión anterior.
+    action: Ir a la Biblioteca
   a11y:
     optionsNav: Navegación de opciones
     optionsSidebar: Barra lateral de opciones
-    sidebarResizer: Redimensionar la barra lateral
+    sidebarResizer: Cambiar el tamaño de la barra lateral
     feedbackButton: Comentarios
   nav:
     appearance: Apariencia
@@ -167,45 +173,45 @@ options:
     appearance: Apariencia
     system: Sistema
   search:
-    placeholder: Buscar ajustes…
-    label: Buscar ajustes
-    noResults: Ningún ajuste coincide con esa búsqueda.
-    resultsTitle: "$1 ajustes coincidentes"
+    placeholder: Buscar en la configuración…
+    label: Buscar en la configuración
+    noResults: Ninguna opción coincide con la búsqueda.
+    resultsTitle: "$1 opciones coincidentes"
   slider:
     milliseconds: "$1 ms"
   row:
-    resetToDefault: Restablecer al valor predeterminado
+    resetToDefault: Restablecer valor predeterminado
     saveFailed: No se pudo guardar
     saved: Guardado
-    managedInSection: Se gestiona en su sección
+    managedInSection: Se administra en su sección
     preview: Vista previa
   shortcut:
     recorder: Grabar un atajo de teclado
-    pressKeys: Pulsa las teclas…
+    pressKeys: Oprime las teclas…
     unset: Sin asignar
-    needsModifier: "Necesita un modificador: prueba con Ctrl o ⌘."
+    needsModifier: "Falta una tecla modificadora: prueba con Ctrl o ⌘."
   setting:
     previewEnabled:
       title: Vista previa de fragmentos
-      desc: Muestra un menú con los fragmentos coincidentes mientras escribes.
+      desc: Muestra un menú filtrable con los fragmentos que coinciden mientras escribes.
     previewPrefix:
       title: Prefijo de activación
       desc: El carácter que abre el menú de vista previa. Déjalo vacío para mostrarlo siempre.
     previewShortcut:
       title: Atajo de vista previa
-      desc: Abre la lista completa de fragmentos con el teclado, sin el prefijo.
+      desc: Abre la lista completa de fragmentos desde el teclado, sin el prefijo.
     typingTimeout:
-      title: Tiempo de espera
+      title: Tiempo de espera al escribir
       desc: Cuánto espera Clipio tras dejar de escribir antes de expandir. Un valor menor es más rápido, pero puede activarse a mitad de palabra.
     blockedSites:
       title: Sitios bloqueados
-      desc: La expansión de fragmentos está desactivada en estos sitios. Añade dominios, comodines o regex /pattern/i aquí, o desde el menú contextual de la página.
+      desc: La expansión de fragmentos está desactivada en estos sitios. Agrega dominios, comodines o expresiones regulares /pattern/i aquí, o desde el menú contextual de la página.
     theme:
       title: Tema
-      desc: Sigue el ajuste del sistema, o fija Clipio en claro u oscuro.
+      desc: Sigue la configuración del sistema o fija Clipio en claro u oscuro.
     fontFamily:
       title: Fuente de la interfaz
-      desc: La tipografía que usa Clipio en todas partes. El texto monoespaciado, como el registro de depuración, siempre lo es.
+      desc: La tipografía que Clipio usa en todas partes. El texto monoespaciado, como el registro de depuración, siempre lo seguirá siendo.
     lightCodeTheme:
       title: Tema de código para el modo claro
       desc: Paleta Prism que se usa en los bloques de código cuando Clipio está en modo claro.
@@ -220,13 +226,13 @@ options:
       desc: Muestra la insignia «Solo local» sobre la lista de fragmentos cuando la sincronización está desactivada.
     storageMode:
       title: Dónde se guardan los fragmentos
-      desc: La sincronización mantiene los fragmentos en todos tus dispositivos mediante tu cuenta del navegador. Local es solo en este dispositivo, con un límite mucho mayor.
+      desc: La sincronización mantiene los fragmentos en todos tus dispositivos mediante la cuenta de tu navegador. El modo local es solo para este dispositivo, con un límite mucho mayor.
     debugMode:
       title: Registro de depuración
-      desc: Registra la actividad de la extensión en un registro inspeccionable.
+      desc: Guarda la actividad de la extensión en un registro que se puede revisar.
     giphyKey:
       title: Clave de API de Giphy
-      desc: Tu propia clave, si alcanzas el límite de la clave incluida.
+      desc: Tu propia clave, por si se alcanza el límite de la clave incluida.
   storage:
     backend:
       sync: Sincronización
@@ -237,10 +243,10 @@ options:
     onlyHere:
       1: "1 fragmento, solo en este dispositivo"
       n: "$1 fragmentos, solo en este dispositivo"
-    syncingHint: Tus fragmentos te acompañan a todos los dispositivos que inicien sesión en este navegador.
-    reasonQuota: La sincronización se detuvo porque tus fragmentos superaron el límite de sincronización.
-    reasonManual: Desactivaste la sincronización.
-    nearQuota: "Solo quedan $1 en el almacenamiento de sincronización: recorta tus fragmentos o cambia al almacenamiento local."
+    syncingHint: Tus fragmentos te acompañan en todos los dispositivos con sesión iniciada en este navegador.
+    reasonQuota: La sincronización se detuvo porque los fragmentos superaron el límite permitido.
+    reasonManual: La sincronización se desactivó manualmente.
+    nearQuota: "Solo queda $1 en el almacenamiento de sincronización: reduce tus fragmentos o cambia al almacenamiento local."
     roomLeft: "$1 libres"
   about:
     version: "Versión $1"
@@ -277,61 +283,61 @@ options:
   overview:
     snippets: Fragmentos
     syncStorage: Almacenamiento de sincronización
-    localStorage: Estimación de almacenamiento local
+    localStorage: Estimación del almacenamiento local
   generalSection:
     blockedSites:
-      addPlaceholder: "Ej: ejemplo.com, *.slack.com o /pattern/i"
-      addButton: Añadir sitio
+      addPlaceholder: "Ej.: ejemplo.com, *.slack.com o /pattern/i"
+      addButton: Agregar sitio
       empty: Aún no hay sitios bloqueados.
-      remove: Eliminar
+      remove: Quitar
       removed: Sitio eliminado
-      added: Sitio añadido
+      added: Sitio agregado
       errorDuplicate: Este sitio ya está bloqueado.
-      errorInvalid: Introduce un dominio, comodín o regex (ej. ejemplo.com, *.slack.com, /pattern/i).
+      errorInvalid: Ingresa un dominio, un comodín o una expresión regular (p. ej., ejemplo.com, *.slack.com, /pattern/i).
   feedback:
     title: Comentarios
-    description: ¡Ayúdanos a mejorar Clipio compartiendo tus opiniones, sugerencias o reportes de errores! ¡Tus comentarios son valiosos!
+    description: Ayúdanos a mejorar Clipio compartiendo tus opiniones, sugerencias o reportes de errores. ¡Tus comentarios son muy valiosos!
     nameLabel: Nombre
-    nameTooltip: "Tu nombre nos ayuda a hacer un seguimiento de tus comentarios y proporciona contexto al equipo de Clipio. Es opcional."
+    nameTooltip: "Tu nombre nos ayuda a dar seguimiento a tus comentarios y le da contexto al equipo de Clipio. Es opcional."
     namePlaceholder: Tu nombre (opcional)
     emailLabel: Correo electrónico
-    emailTooltip: "Tu correo nos permite ponernos en contacto si necesitamos aclaraciones sobre tus comentarios. No lo usaremos para nada más. Es opcional."
-    emailPlaceholder: tu@email.com (opcional)
+    emailTooltip: "Tu correo nos permite contactarte si necesitamos aclarar algo de tus comentarios. No lo usaremos para nada más. Es opcional."
+    emailPlaceholder: tu@correo.com (opcional)
     messageLabel: Mensaje
-    messageTooltip: "Los comentarios detallados nos ayudan a entender problemas y priorizar mejoras. Cuanto más específ ico seas, mejor podremos ayudarte."
-    messagePlaceholder: "Por favor, proporciona tantos detalles como sea posible. ¿Qué estabas intentando hacer? ¿Qué pasó? ¿Qué esperabas?"
+    messageTooltip: "Los comentarios detallados nos ayudan a entender los problemas y a priorizar mejoras. Entre más específico seas, mejor podremos ayudarte."
+    messagePlaceholder: "Cuéntanos con el mayor detalle posible. ¿Qué intentabas hacer? ¿Qué pasó? ¿Qué esperabas que pasara?"
     screenshotLabel: Captura de pantalla
     screenshotPlaceholder: Adjuntar una captura de pantalla (opcional)
     screenshotSelected: "Captura de pantalla seleccionada: $1"
-    removeScreenshot: Eliminar captura de pantalla
+    removeScreenshot: Quitar captura de pantalla
     submit: Enviar comentarios
     submitting: Enviando...
-    success: ¡Gracias! Tus comentarios han sido enviados.
-    error: Error al enviar comentarios. Por favor, inténtalo de nuevo.
-    donationAction: Apoyar Clipio
+    success: ¡Gracias! Tus comentarios se enviaron.
+    error: No se pudieron enviar los comentarios. Inténtalo de nuevo.
+    donationAction: Apoyar a Clipio
     donationTitle: Si Clipio te ahorra tiempo, considera apoyar su desarrollo.
-    reviewBannerTitle: "¿Disfrutas Clipio?"
-    reviewBannerDescription: Una reseña rápida ayuda a otros a descubrir Clipio y motiva el desarrollo continuo.
-    reviewBannerAction: Valorar en la tienda
+    reviewBannerTitle: "¿Te gusta Clipio?"
+    reviewBannerDescription: Una reseña rápida ayuda a que otras personas descubran Clipio y motiva a seguir mejorándolo.
+    reviewBannerAction: Calificar en la tienda
   importExport:
     exportCard:
       title: Exportar fragmentos
-      description: Descarga tu biblioteca de fragmentos como un archivo JSON. Compatible con Clipio en cualquier dispositivo.
+      description: Descarga tu biblioteca de fragmentos como un archivo JSON. Es compatible con Clipio en cualquier dispositivo.
       button: Exportar
     importCard:
       title: Importar fragmentos
-      description: Importa desde un archivo de exportación de Clipio u otras herramientas. Los conflictos y marcadores no compatibles se resuelven paso a paso.
+      description: Importa desde un archivo de exportación de Clipio o de otras herramientas. Los conflictos y los marcadores no compatibles se resuelven paso a paso.
       button: Importar
-      supported: "Lee"
       successMessage:
         1: "1 fragmento importado correctamente."
         n: "$1 fragmentos importados correctamente."
+      supported: "Compatibles:"
     modal:
-      title: Importar Fragmentos
+      title: Importar fragmentos
   backup:
     title: Copia de seguridad completa
-    description: "Descarga o restaura una instantánea completa: fragmentos, imágenes y ajustes. Los secretos, registros y datos de uso locales nunca se incluyen."
-    create: Copiar
+    description: Descarga o restaura una copia completa: fragmentos, imágenes y configuración. Nunca se incluyen secretos, registros ni datos de uso locales.
+    create: Crear copia
     restore: Restaurar
     fileLabel: Elige un archivo de copia de seguridad
     created: Copia de seguridad descargada
@@ -339,13 +345,13 @@ options:
     dialogTitle: Revisar copia de seguridad
     doneTitle: Restauración completada
     cancel: Cancelar
-    confirm: Restaurar los fragmentos seleccionados
+    confirm: Restaurar fragmentos seleccionados
     close: Cerrar
     loading: Leyendo la copia de seguridad…
     restoring: Restaurando…
-    previewIntro: Revisa los cambios. No se escribirá nada hasta que confirmes.
+    previewIntro: Revisa lo que cambiará. No se escribirá nada hasta que confirmes.
     summary:
-      source: Formato de copia
+      source: Formato de la copia
       sourceValue: "v$1"
       exported: Exportada
       snippets: Fragmentos
@@ -353,65 +359,65 @@ options:
       conflicts: Conflictos
       media: Imágenes
       mediaValue: "$1"
-      rejected: "Se omitieron $1 registro(s) no válidos; no se restaurarán."
-    missingMedia: "Faltan $1 imagen(es) referenciadas en esta copia."
-    settingsTitle: Cambios en los ajustes
-    noChanges: No cambiarán los ajustes.
+      rejected: "Se omitieron $1 registro(s) no válidos y no se restaurarán."
+    missingMedia: "Faltan en el archivo $1 imagen(es) a las que hace referencia esta copia."
+    settingsTitle: Cambios en la configuración
+    noChanges: No cambiará ninguna configuración.
     skippedSetting: "$1 omitido: $2"
     conflictsTitle: Fragmentos en conflicto
     conflictRow: "$1 (atajo existente $2)"
     resolutionLabel: Resolución de conflictos
     resolutionSkip: "Omitir (no restaurar)"
     resolutionOverwrite: Sobrescribir el existente
-    resolutionRename: Restaurar con un nuevo atajo
-    doneSummary: "Se restauraron $1 fragmento(s), $2 ajuste(s) y $3 imagen(es)."
-    doneSkipped: "No se pudieron restaurar $1 ajuste(s)."
+    resolutionRename: Restaurar con un atajo nuevo
+    doneSummary: "Se restauraron $1 fragmento(s), $2 configuración(es) y $3 imagen(es)."
+    doneSkipped: "No se pudieron restaurar $1 configuración(es)."
     errors:
       fileTooLarge: Este archivo de copia es demasiado grande.
-      unsupportedVersion: Esta copia se creó con una versión no compatible de Clipio.
+      unsupportedVersion: Esta copia se creó con una versión de Clipio no compatible.
       invalidJson: El manifiesto de la copia no es un JSON válido.
       missingManifest: "Este ZIP no es una copia de Clipio: no se encontró el manifiesto."
-      parseFailed: Este archivo no se pudo leer como una copia de Clipio.
+      parseFailed: No se pudo leer este archivo como una copia de Clipio.
       restoreFailed: No se pudo restaurar la copia de seguridad.
   errors:
-    failedExport: Error al exportar los fragmentos.
+    failedExport: No se pudieron exportar los fragmentos.
   images:
-    description: Administra todas las imágenes almacenadas en tus fragmentos.
-    empty: Aún no hay imágenes almacenadas. Las imágenes se añaden cuando las insertas en un fragmento.
+    description: Administra todas las imágenes guardadas en tus fragmentos.
+    empty: Aún no hay imágenes guardadas. Se agregan cuando las insertas en un fragmento.
     loading: Cargando imágenes...
     totalStorage: Almacenamiento total de imágenes
     viewList: Vista de lista
     viewGrid: Vista de cuadrícula
     deleteButton: Eliminar
     deleteConfirmTitle: "¿Eliminar imagen?"
-    deleteConfirmMessage: "Eliminar esta imagen romperá $1 fragmento(s) que la referencian. Esta acción no se puede deshacer."
+    deleteConfirmMessage: "Al eliminar esta imagen se afectarán $1 fragmento(s) que la usan. Esta acción no se puede deshacer."
     deleteConfirmMessageNoRefs: Esta acción no se puede deshacer.
     referencedBy: "Usada en:"
     noReferences: No se usa en ningún fragmento
     dimensions: "$1 × $2"
     errors:
-      failedToLoad: Error al cargar las imágenes.
-      failedToDelete: Error al eliminar la imagen. Por favor, inténtalo de nuevo.
-      failedToSaveDescription: Error al guardar la descripción. Por favor, inténtalo de nuevo.
+      failedToLoad: No se pudieron cargar las imágenes.
+      failedToDelete: No se pudo eliminar la imagen. Inténtalo de nuevo.
+      failedToSaveDescription: No se pudo guardar la descripción. Inténtalo de nuevo.
     altText:
       label: Descripción
-      placeholder: Añade una descripción (se usa como texto alternativo)
+      placeholder: Agrega una descripción (se usa como texto alternativo)
   developers:
     contentScriptHealth:
       title: Estado del script de contenido
-      description: Hacer ping al script de contenido de la pestaña activa para verificar que está en ejecución.
-      pingButton: Hacer ping al script
+      description: Envía un ping al script de contenido de la pestaña activa para verificar que se esté ejecutando.
+      pingButton: Enviar ping al script
       pinging: Enviando ping...
       pong: Pong — el script de contenido está activo
-      errorNoTab: No se encontró pestaña activa
-      errorNoContentScript: No se encontró script de contenido en esta pestaña
-      errorGeneric: Ping fallido
+      errorNoTab: No se encontró una pestaña activa
+      errorNoContentScript: No se encontró el script de contenido en esta pestaña
+      errorGeneric: El ping falló
     debugMode:
       logHeading: Actividad registrada
       clearLog: Borrar registro
       copyLog: Copiar registro
       copiedLog: "¡Copiado!"
-      copyFailed: Error al copiar el registro de depuración
+      copyFailed: No se pudo copiar el registro de depuración
       emptyLog: Aún no hay entradas en el registro.
       filterLabel: Contexto
       allContexts: Todos los contextos
@@ -426,7 +432,7 @@ options:
       noMatches: Ninguna entrada coincide con el filtro actual.
     toolkit:
       title: Instantánea de diagnóstico
-      description: Recopila el estado actual y copia o descarga un informe redactado para soporte.
+      description: Recopila el estado actual y luego copia o descarga un informe de soporte con los datos sensibles ocultos.
       collect: Recopilar instantánea
       collecting: Recopilando instantánea...
       refresh: Actualizar instantánea
@@ -444,9 +450,9 @@ options:
       cachedSnippets: Caché del script de contenido
       backupSnippets: Respaldo en IndexedDB
       corruptKeys: Claves en cuarentena
-      syncDataLost: Bandera de pérdida de sincronización
+      syncDataLost: Indicador de pérdida de datos de sincronización
       customGiphyKey: Clave de Giphy personalizada configurada
-      lastSentryError: Último error informado
+      lastSentryError: Último error reportado
       never: Nunca
       yes: Sí
       no: No
@@ -456,72 +462,72 @@ options:
       tabHealth: Estado de las pestañas
       tabsActive: $1 activas
       tabsMissing: $1 ausentes
-      tabQueryError: "Error al consultar las pestañas: $1"
+      tabQueryError: "Falló la consulta de pestañas: $1"
       warningsHeading: No se pudieron leer algunas fuentes
-      privacyNote: Los informes redactan texto escrito, URL de páginas, claves de API y valores opacos largos.
+      privacyNote: Los informes ocultan el texto escrito, las URL de las páginas, las claves de API y los valores opacos largos.
 
 importWizard:
-  progress: Progreso de importación
+  progress: Progreso de la importación
   steps:
     upload: Subir
     placeholders: Marcadores
     conflicts: Conflictos
     confirm: Confirmar
   upload:
-    dropHere: Suelta un archivo JSON o ZIP aquí
-    clickToBrowse: o haz clic para buscar
+    dropHere: Suelta aquí un archivo JSON o ZIP
+    clickToBrowse: o haz clic para buscarlo
     clickToChange: Haz clic para cambiar el archivo
     detectedFormat: "Formato detectado:"
-    unknownFormat: Desconocido — por favor selecciona abajo
+    unknownFormat: Desconocido — selecciónalo abajo
     formatLabel: Formato
-    invalidJson: Archivo JSON inválido. Por favor verifica el archivo e inténtalo de nuevo.
+    invalidJson: Archivo JSON no válido. Revisa el archivo e inténtalo de nuevo.
     couldNotRead: No se pudo leer el archivo.
     failedToParse: No se pudo analizar el archivo con el formato seleccionado.
     foundSnippets:
       1: Se encontró 1 fragmento
       n: Se encontraron $1 fragmentos
   placeholders:
-    description: "Los siguientes fragmentos contienen marcadores que Clipio no admite. Elige qué hacer con ellos."
+    description: "Los siguientes fragmentos tienen marcadores que Clipio no admite. Elige qué hacer con ellos."
     applyToAll: "Aplicar a todos:"
     chooseAction: Elegir acción…
     keepAsLiteral: Mantener como texto literal
-    removeFromContent: Eliminar del contenido
+    removeFromContent: Quitar del contenido
     skipSnippet: Omitir este fragmento
     actionLabel: "Acción:"
   conflicts:
     description:
-      1: "1 fragmento en conflicto con tu biblioteca existente. Elige cómo resolverlo."
-      n: "$1 fragmentos en conflicto con tu biblioteca existente. Elige cómo resolver cada uno."
+      1: "1 fragmento entra en conflicto con tu biblioteca actual. Elige cómo resolverlo."
+      n: "$1 fragmentos entran en conflicto con tu biblioteca actual. Elige cómo resolver cada uno."
     resolveAll: "Resolver todos:"
     chooseResolution: Elegir resolución…
     skipDontImport: "Omitir (no importar)"
-    overwriteExisting: Sobrescribir existente
-    importWithNewShortcut: Importar con nuevo atajo
+    overwriteExisting: Sobrescribir el existente
+    importWithNewShortcut: Importar con atajo nuevo
     incomingColumn: Entrante
     existingColumn: "Existente (conflicto de $1)"
     resolution: "Resolución:"
-    newShortcut: "Nuevo atajo:"
+    newShortcut: "Atajo nuevo:"
     newShortcutPlaceholder: nuevo/atajo
   confirm:
-    snippetsToImport: Fragmentos a importar
+    snippetsToImport: Fragmentos por importar
     imagesIncluded: Imágenes incluidas
-    missingImagesWarning: "Algunas imágenes del ZIP no se pudieron encontrar y faltarán después de la importación."
-    overwritingExisting: Sobreescribiendo existentes
+    missingImagesWarning: "No se encontraron algunas imágenes del ZIP y faltarán después de la importación."
+    overwritingExisting: Sobrescribiendo existentes
     importedWithRename: Importado con atajo renombrado
     skippedConflicts: "Omitidos (conflictos)"
-    estimatedStorage: Uso de almacenamiento estimado
-    quotaWarning: "Esta biblioteca es mayor de lo que permite el almacenamiento de sincronización. Elige dónde guardarla antes de importar."
+    estimatedStorage: Uso estimado de almacenamiento
+    quotaWarning: "Esta biblioteca supera lo que permite el almacenamiento de sincronización del navegador. Elige dónde guardarla antes de importar."
     storageTarget: "Guardar esta biblioteca en"
-    storageTargetSync: Almacenamiento sincronizado
+    storageTargetSync: Almacenamiento de sincronización
     storageTargetSyncDesc: "Disponible en todos los dispositivos con sesión iniciada, dentro del límite del navegador."
     storageTargetLocal: Solo local
-    storageTargetLocalDesc: "Permanece en este dispositivo y admite bibliotecas más grandes."
-    failedToImport: Error al guardar los fragmentos importados. Por favor, inténtalo de nuevo.
+    storageTargetLocalDesc: "Se queda en este dispositivo y admite bibliotecas más grandes."
+    failedToImport: No se pudieron guardar los fragmentos importados. Inténtalo de nuevo.
     done:
-      heading: Importación completa
+      heading: Importación completada
       body:
-        1: 1 fragmento añadido a tu biblioteca.
-        n: $1 fragmentos añadidos a tu biblioteca.
+        1: Se agregó 1 fragmento a tu biblioteca.
+        n: Se agregaron $1 fragmentos a tu biblioteca.
       action: Listo
   footer:
     cancel: Cancelar
@@ -541,7 +547,7 @@ editor:
     strikethrough: "Tachado (⌘⇧S)"
     code: "Código (⌘E)"
     insertLink: "Insertar enlace (⌘K)"
-    removeLink: Eliminar enlace
+    removeLink: Quitar enlace
     confirmLink: Insertar enlace
     urlPlaceholder: "https://..."
     textPlaceholder: "Etiqueta (opcional)"
@@ -559,29 +565,29 @@ editor:
     change: "Haz clic para cambiar la fecha. Actual: $1"
   slashMenu:
     header: Comandos
-    noMatches: Sin comandos coincidentes
+    noMatches: No hay comandos que coincidan
     clipboard:
       label: Portapapeles
-      description: Insertar marcador de contenido del portapapeles
+      description: Insertar marcador del contenido del portapapeles
     date:
       label: Hoy
-      description: Insertar la fecha de hoy (clic para cambiar formato)
+      description: Insertar la fecha de hoy (clic para cambiar el formato)
     cursor:
       label: Colocar cursor
-      description: Establecer posición del cursor al insertar
-      alreadyAdded: Ya añadido (solo se permite uno)
+      description: Definir la posición del cursor tras insertar
+      alreadyAdded: Ya se agregó (solo se permite uno)
     datepicker:
       label: Elegir fecha
-      description: Elegir cualquier fecha del calendario
+      description: Elige cualquier fecha del calendario
     codeBlock:
       label: Bloque de código
-      description: Inserta un bloque con delimitadores para código de varias líneas
+      description: Inserta un bloque delimitado para código de varias líneas
     image:
       label: Imagen
-      description: Insertar una imagen desde tu dispositivo
+      description: Inserta una imagen desde tu dispositivo
     gif:
       label: GIF
-      description: Buscar e insertar un GIF de Giphy
+      description: Busca e inserta un GIF de Giphy
 
 contextMenu:
   saveSelection: Guardar selección como fragmento
@@ -597,9 +603,9 @@ gifPicker:
   loading: Cargando GIFs...
   loadMore: Cargar más
   retry: Reintentar
-  error: Error al cargar GIFs. Por favor, inténtalo de nuevo.
+  error: No se pudieron cargar los GIFs. Inténtalo de nuevo.
   poweredBy: Desarrollado por GIPHY
-  apiKeyMissing: Clave API de Giphy no configurada. Agrégala en Opciones > Desarrolladores.
+  apiKeyMissing: Falta configurar la clave de API de Giphy. Agrégala en Opciones > Desarrolladores.
 
 imagePlaceholder:
   loading: Cargando imagen...
@@ -612,29 +618,29 @@ gifPlaceholder:
   poweredBy: Desarrollado por GIPHY
 
 mediaControls:
-  delete: Eliminar
+  delete: Quitar
   resize: Arrastra para cambiar el tamaño
 
 imageUpload:
-  tooLarge: "La imagen es demasiado grande. El tamaño máximo es $1 MB."
+  tooLarge: "La imagen es demasiado grande. El tamaño máximo es de $1 MB."
   unsupportedType: "Tipo de archivo no compatible. Usa JPEG, PNG, WebP o GIF."
   storageFull: "El almacenamiento de imágenes está lleno. Elimina algunas imágenes para liberar espacio."
-  failed: Error al guardar la imagen. Por favor, inténtalo de nuevo.
+  failed: No se pudo guardar la imagen. Inténtalo de nuevo.
 
 imagePicker:
   searchPlaceholder: Buscar imágenes...
-  uploadNew: Subir nueva imagen
-  empty: Aún no hay imágenes. Sube una para comenzar.
-  noResults: No se encontraron imágenes para "$1"
+  uploadNew: Subir imagen nueva
+  empty: Aún no hay imágenes. Sube una para empezar.
+  noResults: Ninguna imagen coincide con "$1"
   dragging: Suelta para subir
   ariaLabel: Selector de imágenes
 
 background:
   updateAvailable:
-    title: Actualización de Clipio disponible
-    message: "La versión $1 ya está disponible. Haz clic para ver el lanzamiento."
+    title: Hay una actualización de Clipio
+    message: "Ya está disponible la versión $1. Haz clic para ver las novedades."
   reviewPrompt:
-    title: "¿Disfrutas Clipio?"
+    title: "¿Te gusta Clipio?"
     message: "Llevas un tiempo usando Clipio. ¡Una reseña rápida ayuda a que otros lo descubran!"
 
 onboarding:
@@ -642,45 +648,45 @@ onboarding:
   back: Atrás
   next: Siguiente
   done: Listo
-  continue: Continuar en ajustes
+  continue: Continuar en la configuración
   progress: "Paso $1 de $2"
   popup:
     search:
-      title: Encuentra fragmentos al instante
-      description: Busca aquí en tu biblioteca y pulsa Enter para insertar el primer resultado.
+      title: Encuentra fragmentos rápido
+      description: Busca aquí en tu biblioteca y oprime Enter para insertar el primer resultado.
     add:
       title: Guarda lo que repites
-      description: Crea fragmentos con texto, atajos e imágenes que usas constantemente. El siguiente paso abre el editor por ti.
+      description: Crea fragmentos con el texto, los atajos y las imágenes que usas todo el tiempo. El siguiente paso abre el editor por ti.
     name:
-      title: Nombra el fragmento
-      description: Usa un nombre claro para encontrarlo fácilmente cuando busques más tarde.
+      title: Ponle nombre al fragmento
+      description: Usa un nombre claro para encontrar el fragmento fácilmente cuando lo busques más adelante.
     shortcut:
       title: Elige un atajo
-      description: Añade un sufijo corto sin espacios, como `firma`, para expandir el fragmento desde cualquier campo de texto.
+      description: Agrega un sufijo corto sin espacios, como `firma`, para expandir el fragmento desde cualquier campo de texto.
     content:
       title: Escribe el contenido
-      description: Escribe o pega cualquier texto que repitas a menudo. El editor conserva el formato, los enlaces y las imágenes.
+      description: Escribe o pega cualquier texto que reutilices con frecuencia. El editor conserva el formato, los enlaces y las imágenes.
     library:
       title: Encuéntralo de nuevo
       description: Selecciona un fragmento aquí para copiarlo, editarlo o insertarlo en una página.
     settings:
-      title: Continuar en ajustes
-      description: El recorrido termina en Opciones, donde puedes gestionar tu biblioteca y tus ajustes.
+      title: Continúa en la configuración
+      description: El recorrido termina en Opciones, donde puedes administrar tu biblioteca y tu configuración.
   options:
     search:
-      title: Busca cualquier ajuste
-      description: Escribe aquí para encontrar un ajuste y cambiarlo sin salir de los resultados.
+      title: Busca cualquier opción
+      description: Escribe aquí para encontrar una opción y cambiarla sin salir de los resultados.
     nav:
       title: Explora por propósito
-      description: Aquí se agrupan biblioteca, comportamiento, apariencia y ajustes del sistema.
+      description: Aquí se agrupan la biblioteca, el comportamiento, la apariencia y la configuración del sistema.
     library:
-      title: Gestiona tu biblioteca
-      description: La importación, la exportación y el almacenamiento están en esta sección.
+      title: Administra tu biblioteca
+      description: Los controles de importación, exportación y almacenamiento están en esta sección.
 
 activation:
   title: Empieza a usar Clipio
   progress: "$1 de $2 completados"
-  dismiss: Cerrar lista de primeros pasos
+  dismiss: Cerrar la lista de primeros pasos
   steps:
     create: Crea tu primer fragmento
     placeholder: Usa un marcador

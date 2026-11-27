@@ -59,10 +59,10 @@ dashboard:
       body: "A new version of Clipio is available: $1"
       action: View release
   errors:
-    failedToLoad: Failed to load snippets.
-    failedToCreate: Failed to create snippet. Please try again.
-    failedToRestore: Failed to restore snippets.
-    failedToUpdate: Failed to update snippet. Please try again.
+    failedToLoad: Couldn't load snippets.
+    failedToCreate: Couldn't create the snippet. Please try again.
+    failedToRestore: Couldn't restore snippets.
+    failedToUpdate: Couldn't update the snippet. Please try again.
     # Quota explanations. $1 is the projected/actual size, $2 the limit.
     quotaExceeded: Sync storage is full, so this snippet was not saved.
     quotaPerItem: This snippet is $1 and sync allows $2 per snippet.
@@ -125,10 +125,10 @@ snippetDetail:
     refused: Storage full — changes kept locally
     conflictDetail: A newer version of this snippet was saved first
   errors:
-    failedToCopy: Failed to copy to clipboard
-    failedToSave: Failed to save snippet. Please try again.
-    failedToDelete: Failed to delete snippet. Please try again.
-    failedToDuplicate: Failed to duplicate snippet. Please try again.
+    failedToCopy: Couldn't copy to clipboard
+    failedToSave: Couldn't save the snippet. Please try again.
+    failedToDelete: Couldn't delete the snippet. Please try again.
+    failedToDuplicate: Couldn't duplicate the snippet. Please try again.
     failedToStage: The edit is saved locally but could not be queued.
     emptyLabel: A snippet needs a name before it can be saved.
     emptyShortcut: A snippet needs a shortcut before it can be saved.
@@ -296,7 +296,7 @@ options:
       errorInvalid: Enter a hostname, wildcard or regex (e.g. example.com, *.slack.com, /pattern/i).
   feedback:
     title: Feedback
-    description: Help us improve Clipio by sharing your thoughts, suggestions, or bug reports. Your feedback is valuable!
+    description: Help us improve Clipio by sharing your thoughts, suggestions or bug reports. Your feedback is valuable!
     nameLabel: Name
     nameTooltip: "Your name helps us follow up on your feedback and gives context to the Clipio team. It's optional."
     namePlaceholder: Your name (optional)
@@ -304,7 +304,7 @@ options:
     emailTooltip: "Your email allows us to contact you if we need clarification about your feedback. We won't use it for anything else. It's optional."
     emailPlaceholder: your@email.com (optional)
     messageLabel: Message
-    messageTooltip: "Detailed feedback helps us understand issues and prioritize improvements. The more specific you are, the better we can help."
+    messageTooltip: "Detailed feedback helps us understand issues and prioritise improvements. The more specific you are, the better we can help."
     messagePlaceholder: "Please provide as much detail as possible. What were you trying to do? What happened? What did you expect?"
     screenshotLabel: Screenshot
     screenshotPlaceholder: Attach a screenshot (optional)
@@ -313,7 +313,7 @@ options:
     submit: Send Feedback
     submitting: Sending...
     success: Thank you! Your feedback has been sent.
-    error: Failed to send feedback. Please try again.
+    error: Couldn't send your feedback. Please try again.
     donationAction: Support Clipio
     donationTitle: If Clipio saves you time, consider supporting its development.
     reviewBannerTitle: "Enjoying Clipio?"
@@ -341,7 +341,7 @@ options:
     restore: Restore
     fileLabel: Choose a backup file
     created: Backup downloaded
-    failedCreate: Failed to create backup.
+    failedCreate: Couldn't create the backup.
     dialogTitle: Review backup
     doneTitle: Restore complete
     cancel: Cancel
@@ -380,7 +380,7 @@ options:
       parseFailed: This file could not be read as a Clipio backup.
       restoreFailed: The backup could not be restored.
   errors:
-    failedExport: Failed to export snippets.
+    failedExport: Couldn't export snippets.
   images:
     description: Manage all images stored in your snippets.
     empty: No images stored yet. Images are added when you insert them into a snippet.
@@ -396,9 +396,9 @@ options:
     noReferences: Not used in any snippets
     dimensions: "$1 × $2"
     errors:
-      failedToLoad: Failed to load images.
-      failedToDelete: Failed to delete image. Please try again.
-      failedToSaveDescription: Failed to save description. Please try again.
+      failedToLoad: Couldn't load images.
+      failedToDelete: Couldn't delete the image. Please try again.
+      failedToSaveDescription: Couldn't save the description. Please try again.
     altText:
       label: Description
       placeholder: Add a description (used as alt text)
@@ -417,7 +417,7 @@ options:
       clearLog: Clear log
       copyLog: Copy log
       copiedLog: Copied!
-      copyFailed: Failed to copy debug log
+      copyFailed: Couldn't copy the debug log
       emptyLog: No log entries yet.
       filterLabel: Context
       allContexts: All contexts
@@ -437,13 +437,13 @@ options:
       collecting: Collecting snapshot...
       refresh: Refresh snapshot
       collected: Snapshot collected
-      collectFailed: Failed to collect diagnostics
+      collectFailed: Couldn't collect diagnostics
       copyReport: Copy report
       copiedReport: Report copied!
-      copyFailed: Failed to copy the diagnostics report
+      copyFailed: Couldn't copy the diagnostics report
       downloadReport: Download report
       downloaded: Report downloaded
-      downloadFailed: Failed to download the diagnostics report
+      downloadFailed: Couldn't download the diagnostics report
       storageMode: Storage mode
       quotaFallback: quota fallback
       snippets: Snippets
@@ -476,13 +476,13 @@ importWizard:
   upload:
     dropHere: Drop a JSON or ZIP file here
     clickToBrowse: or click to browse
-    clickToChange: Click to change file
+    clickToChange: Click to change the file
     detectedFormat: "Detected format:"
     unknownFormat: Unknown — please select below
     formatLabel: Format
     invalidJson: Invalid JSON file. Please check the file and try again.
     couldNotRead: Could not read the file.
-    failedToParse: Failed to parse file with selected format.
+    failedToParse: Couldn't parse the file with the selected format.
     foundSnippets:
       1: Found 1 snippet
       n: Found $1 snippets
@@ -522,7 +522,7 @@ importWizard:
     storageTargetSyncDesc: "Available on every signed-in device, within the browser's limit."
     storageTargetLocal: Local only
     storageTargetLocalDesc: "Stays on this device and can hold larger libraries."
-    failedToImport: Failed to save imported snippets. Please try again.
+    failedToImport: Couldn't save the imported snippets. Please try again.
     done:
       heading: Import complete
       body:
@@ -559,10 +559,10 @@ editor:
     plainText: Plain text
     copy: Copy code
     copied: Code copied
-    copyFailed: Couldn't copy code
+    copyFailed: Couldn't copy the code
   datePicker:
     label: Pick a date
-    change: "Click to change date. Current: $1"
+    change: "Click to change the date. Current: $1"
   slashMenu:
     header: Commands
     noMatches: No matching commands
@@ -603,9 +603,9 @@ gifPicker:
   loading: Loading GIFs...
   loadMore: Load more
   retry: Retry
-  error: Failed to load GIFs. Please try again.
+  error: Couldn't load GIFs. Please try again.
   poweredBy: Powered by GIPHY
-  apiKeyMissing: Giphy API key not configured. Add it in Options > Developers.
+  apiKeyMissing: Giphy API key isn't configured. Add it in Options > Developers.
 
 imagePlaceholder:
   loading: Loading image...
@@ -623,9 +623,9 @@ mediaControls:
 
 imageUpload:
   tooLarge: "Image is too large. Maximum size is $1 MB."
-  unsupportedType: "Unsupported file type. Please use JPEG, PNG, WebP, or GIF."
+  unsupportedType: "Unsupported file type. Please use JPEG, PNG, WebP or GIF."
   storageFull: "Image storage is full. Delete some images to free up space."
-  failed: Failed to save image. Please try again.
+  failed: Couldn't save the image. Please try again.
 
 imagePicker:
   searchPlaceholder: Search images...

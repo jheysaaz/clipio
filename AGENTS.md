@@ -1,7 +1,9 @@
 # AGENTS.md
 
 Notes for working on Clipio. Not a tutorial — the [README](./README.md) covers
-setup, and [`docs/architecture.md`](./docs/architecture.md) covers how it is built.
+setup, [`docs/architecture.md`](./docs/architecture.md) covers how it is built, and
+[`src/locales/README.md`](./src/locales/README.md) covers how strings are written
+and translated.
 
 ## Commands
 
@@ -25,6 +27,7 @@ src/storage/     backends (sync, local, indexeddb, media) + manager
 src/components/  React. Thin — logic belongs in lib/.
 src/pages/       page composition
 src/entrypoints/ background, content, popup, options
+src/locales/     every locale file, plus the translation guide (README.md)
 e2e/             Playwright. Only what needs a real browser.
 docs/decisions/  why things are the way they are — read before changing them
 ```
@@ -42,6 +45,12 @@ WXT owns the entrypoint layout. Don't restructure it.
   grid — for type, spacing, sizing, radii and icons. A `px` literal is allowed
   only via the explicit allowlist enforced by `pnpm check:no-px`.
 
+## Localisation
+
+**Read [`src/locales/readme.md`](./src/locales/readme.md) before adding, editing or
+reviewing any user-facing string.** It defines voice, spelling, vocabulary, the
+glossary and the review checklist. Follow it; do not improvise terms.
+
 ## Testing rules
 
 Each of these came from a real defect in this repo, not from theory.
@@ -51,7 +60,7 @@ Each of these came from a real defect in this repo, not from theory.
 2. **Every feature needs a negative test** — rejected input, thrown error, blocked
    path, or absent resource.
 3. **No conditional branches that swallow a test.** `if (guard) {…} else
-   { expect(true).toBe(true) }` hides regressions. Make the guard an assertion.
+{ expect(true).toBe(true) }` hides regressions. Make the guard an assertion.
 4. **E2E selects by `data-testid` → ARIA role + name → stable attribute.** Never by
    literal UI copy, never by `:has-text()` containers, never by position.
    Changing a copy string must not break a test.
@@ -60,7 +69,7 @@ Each of these came from a real defect in this repo, not from theory.
 7. **Comments in tests describe what the test proves**, not what you hoped it
    proves.
 8. **`retries: 0`, permanently.** A retry hides a flake instead of fixing it.
-   There is no flake-detection script — a red E2E build *is* the detection. See
+   There is no flake-detection script — a red E2E build _is_ the detection. See
    [0005](docs/decisions/0005-zero-test-retries.md).
 9. **When the app looks wrong, say so — do not adapt the test to it.** Loosening an
    assertion, adding a timeout, or switching to a stabler selector to reach green
@@ -98,10 +107,13 @@ Conventional commits, one logical change per commit. PR, not a direct push to
 
 ## Boundaries
 
-**Always** — run `pnpm verify` before calling anything done.
+**Always** — run `pnpm verify` before calling anything done · update every locale
+file together when a string changes.
 
 **Ask first** — adding a dependency · changing a coverage threshold · changing a
-documented decision in `docs/decisions/` · changing a snapshot.
+documented decision in `docs/decisions/` · changing a snapshot · adding a language.
 
 **Never** — lower a coverage threshold · add a test retry · delete a failing test
-without understanding why it fails · weaken an assertion to make a test pass.
+without understanding why it fails · weaken an assertion to make a test pass ·
+edit one locale file without the others · translate against the guide in
+`src/locales/README.md`.
