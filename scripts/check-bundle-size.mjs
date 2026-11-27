@@ -137,14 +137,21 @@ const posix = (p) => p.split(sep).join("/");
  * storage) adds lifecycle bookkeeping to the shared media store. The aggregate
  * and shared chunks grow 565 bytes each; the individual entries do not move.
  * Both sizes were measured twice from clean builds and did not vary.
+ *
+ * Raised a seventeenth time for media-placeholder reliability: one shared id
+ * grammar for imported and generated ids, dedup alias remapping after ZIP/backup
+ * restore, a visible label for missing blobs, and a link wrapper for remote
+ * GIFs. The content script grows 87 bytes, shared chunks 378, and the aggregate
+ * 465; the background, popup and options entries do not move. All three sizes
+ * were measured twice from clean builds and did not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_767_271 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_767_736 },
   { name: "background entry", pattern: "background.js", maxBytes: 226_428 },
   {
     name: "content script entry",
     pattern: "content-scripts/content.js",
-    maxBytes: 918_542,
+    maxBytes: 918_629,
   },
   {
     name: "popup entry chunk",
@@ -161,7 +168,7 @@ const BUDGETS = [
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_622_301,
+    maxBytes: 1_622_679,
   },
 ];
 

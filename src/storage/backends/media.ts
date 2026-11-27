@@ -235,12 +235,13 @@ export function isWithinFileSizeLimit(size: number): boolean {
  * under-report it and grow the store past MAX_TOTAL_SIZE.
  *
  * Deduplication: if an entry with the same hash (any ID) already exists,
- * the restore is skipped to avoid storing duplicate bytes. The dedup check
- * runs first so a re-import neither duplicates bytes nor consumes quota.
+ * the restore is skipped to avoid storing duplicate bytes. The surviving id is
+ * returned so callers can re-point snippet placeholders at it; skipping without
+ * that mapping silently orphaned every reference to the imported id.
  *
  * Throws on validation failure or IDB errors.
  */
-export async function restoreMediaEntry(entry: MediaEntry): Promise<void> {
+export async function restoreMediaEntry(entry: MediaEntry): Promise<string> {
   // Validate MIME type against the same allow-list as saveMedia.
   if (!isSupportedMediaType(entry.blob.type)) {
     captureMessage("Unsupported media type in import", "warning", {
@@ -265,7 +266,7 @@ export async function restoreMediaEntry(entry: MediaEntry): Promise<void> {
   // Skip if a same-hash entry already exists (idempotent import). Done before
   // the quota check so a re-import does not consume budget twice.
   const existing = await findByHash(hash);
-  if (existing) return;
+  if (existing) return existing.id;
 
   // Validate total quota. The blob's real size is used, never entry.size.
   const currentTotal = await getTotalSize();
@@ -296,6 +297,8 @@ export async function restoreMediaEntry(entry: MediaEntry): Promise<void> {
     captureError(err, { action: "media.restore" });
     throw err;
   }
+
+  return entry.id;
 }
 
 /**

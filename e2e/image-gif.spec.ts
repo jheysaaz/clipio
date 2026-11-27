@@ -1,25 +1,20 @@
 /**
- * Phase 7: Image / GIF Feature E2E Tests
+ * Image / GIF end-to-end coverage.
  *
- * Covers the features implemented in the image/GIF support session:
+ * Covers the browser-only seams that unit tests cannot:
  *
- * 1. Popup auto-selects the most-recently-updated snippet on open
- *    (selectNewest fix — was selecting raw storage order instead of sorted order)
- * 2. Snippet edits are staged on blur and committed by the background queue
- * 3. Media blob → data URL bridge: background validates sender origin and
- *    rejects requests from non-extension senders
- * 4. Image alt text is carried through the media:get message and
- *    injected into the <img alt="..."> attribute in contenteditable insertion
- * 5. Width-suffixed placeholder {{image:uuid:200}} is correctly recognised in
- *    the options page "Images" section (not shown as "not used in any snippets")
- * 6. Image placeholder with width suffix expands without breaking the
- *    content-script insertion flow (no "uuid:200" leaking as the media ID)
+ * 1. `media:get` refuses requests that are not in the protocol format
+ * 2. `media:get` names an unknown id rather than silently answering null
+ * 3. an imported opaque id (`media_1`) expands to a real data URL image
+ * 4. a placeholder whose blob is gone expands to a visible [image] label
+ * 5. a GIF expands to an image wrapped in a usable link when the host blocks
+ *    the remote CDN image
  *
  * Test strategy:
- * - Seed state via page.evaluate() on extension pages
- * - Use service worker for background-script assertions
- * - Directly inspect IndexedDB (clipio-backup / media store) for media entries
- * - Verify DOM output for contenteditable insertion tests
+ * - Seed snippets through the storage fixture, then reload so the content
+ *   script rebuilds its cache before typing
+ * - Seed media through the extension's IndexedDB while on an extension page
+ * - Assert on stable test ids and rendered DOM, never on debounce timings
  */
 
 import { test, expect } from "./fixtures.js";
@@ -109,6 +104,28 @@ async function seedMediaEntry(
 
 const TEST_PAGE_URL = `http://localhost:${process.env.E2E_SERVER_PORT ?? "7777"}/test-page.html`;
 
+/** Reload after seeding so the content script sees the new cached snippets. */
+async function reloadWithSnippets(
+  testPage: import("@playwright/test").Page,
+  storageHelper: import("./fixtures.js").StorageHelper,
+  snippets: import("../src/types/index.js").Snippet[]
+) {
+  await storageHelper.seedSnippets(snippets);
+  await testPage.reload();
+  await testPage.waitForLoadState("domcontentloaded");
+  await waitForContentScriptReady(testPage);
+}
+
+async function typeShortcut(
+  testPage: import("@playwright/test").Page,
+  shortcut: string
+) {
+  const field = testPage.getByTestId("contenteditable-field");
+  await field.click();
+  await testPage.keyboard.type(shortcut);
+  return field;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -189,6 +206,77 @@ test.describe("Image / GIF feature tests", () => {
   });
 
   // -------------------------------------------------------------------------
-  // 4. Alt text carried through background bridge
+  // 3. Imported opaque ids and failure fallbacks
   // -------------------------------------------------------------------------
+
+  test("expands an imported opaque image id into the stored blob", async ({
+    context,
+    extensionId,
+    testPage,
+    storageHelper,
+  }) => {
+    // ZIP imports accept ids such as `media_1`, but the placeholder grammar
+    // used to accept only UUID-style hex. The blob restored and the snippet
+    // still showed literal text; both boundaries now use one charset.
+    const mediaId = "media_1";
+    await seedMediaEntry(context, extensionId, { id: mediaId });
+    await reloadWithSnippets(testPage, storageHelper, [
+      makeSnippet({
+        id: "imported-image-snippet",
+        shortcut: "/imported-image",
+        content: `{{image:${mediaId}}}`,
+      }),
+    ]);
+
+    const field = await typeShortcut(testPage, "/imported-image");
+
+    await expect(field.locator("img")).toHaveCount(1, { timeout: 5_000 });
+    await expect(field.locator("img").first()).toHaveAttribute("src", /^data:/);
+  });
+
+  test("expands a placeholder with no stored blob to a visible label", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await reloadWithSnippets(testPage, storageHelper, [
+      makeSnippet({
+        id: "missing-image-snippet",
+        shortcut: "/missing-image",
+        content: "before {{image:missing-media-id}} after",
+      }),
+    ]);
+
+    const field = await typeShortcut(testPage, "/missing-image");
+
+    // A missing blob must not make the whole expansion disappear.
+    await expect(field).toContainText("before [image] after", {
+      timeout: 5_000,
+    });
+    await expect(field.locator("img")).toHaveCount(0);
+  });
+
+  test("expands a GIF into an image with a usable link fallback", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await reloadWithSnippets(testPage, storageHelper, [
+      makeSnippet({
+        id: "gif-fallback-snippet",
+        shortcut: "/gif-fallback",
+        content: "{{gif:abc123}}",
+      }),
+    ]);
+
+    const field = await typeShortcut(testPage, "/gif-fallback");
+
+    const link = field.locator('a[data-clipio-gif="abc123"]');
+    // The host's CSP may block the remote image. The link is what keeps the
+    // placeholder usable in that case, so it is the contract under test.
+    await expect(link).toHaveCount(1, { timeout: 5_000 });
+    await expect(link).toHaveAttribute(
+      "href",
+      "https://media.giphy.com/media/abc123/giphy.gif"
+    );
+    await expect(link.locator("img")).toHaveAttribute("alt", "GIF");
+  });
 });

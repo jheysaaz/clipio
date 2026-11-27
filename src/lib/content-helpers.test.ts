@@ -487,7 +487,10 @@ describe("processSnippetContent — image & gif placeholders", () => {
     expect(result.content).not.toContain('onload="alert(1)"');
   });
 
-  it("omits image from HTML when resolveMedia returns null", () => {
+  it("shows a visible label when resolveMedia cannot find the blob", () => {
+    // An unresolved image used to expand to an empty string. For an image-only
+    // snippet the caller then skipped the whole expansion, which read as the
+    // snippet being broken rather than its media being unavailable.
     const result = processSnippetContent(
       "before {{image:abc-123-def}} after",
       true,
@@ -496,8 +499,18 @@ describe("processSnippetContent — image & gif placeholders", () => {
     );
     expect(result.content).not.toContain("data-clipio-media");
     expect(result.content).not.toContain("<img");
-    expect(result.content).toContain("before");
-    expect(result.content).toContain("after");
+    expect(result.content).toBe("before [image] after");
+  });
+
+  it("resolves an imported opaque image id in HTML mode", () => {
+    const result = processSnippetContent(
+      "{{image:media_1}}",
+      true,
+      noClipboard,
+      (_id) => ({ src: "blob:imported" })
+    );
+    expect(result.content).toContain('src="blob:imported"');
+    expect(result.content).not.toContain("{{image:media_1}}");
   });
 
   it("keeps <img src> for GIFs in HTML mode (already resolved by markdownToHtml)", () => {

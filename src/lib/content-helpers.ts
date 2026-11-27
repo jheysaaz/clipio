@@ -13,6 +13,7 @@
 import {
   imagePlaceholderGlobal,
   gifPlaceholderGlobal,
+  MEDIA_TEXT_LABELS,
 } from "@/lib/media-placeholders";
 import { markdownToPlainText } from "./markdown";
 import { markdownToHtmlWithBlocks } from "./markdown-blocks";
@@ -286,7 +287,11 @@ export function processSnippetContent(
         /<img[^>]*data-clipio-media="([^"]+)"[^>]*>/g,
         (match, id: string) => {
           const resolved = resolveMedia(id);
-          if (!resolved) return ""; // omit unresolvable images
+          // An omitted image used to make an image-only snippet expand to an
+          // empty string, which the caller then skipped entirely. A visible
+          // label keeps the rest of the snippet and tells the user what was
+          // lost instead of making the whole expansion disappear.
+          if (!resolved) return MEDIA_TEXT_LABELS.image;
           // Preserve the style attribute (may carry width:NNNpx) from the markdown converter's output
           const styleMatch = match.match(/style="([^"]*)"/);
           const style = styleMatch

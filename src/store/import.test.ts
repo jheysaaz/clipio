@@ -25,6 +25,7 @@ import {
 } from "./import";
 
 import { captureMessage } from "@/lib/sentry";
+import { restoreMediaEntry } from "@/storage/backends/media";
 import type { Snippet } from "@/types";
 import type { MediaMetadata } from "@/storage/backends/media";
 import type { ConflictEntry, ParsedSnippet } from "@/lib/importers/types";
@@ -102,6 +103,9 @@ beforeEach(() => {
   storage.getSnippets.mockResolvedValue([]);
   storage.getStorageStatus.mockResolvedValue({ mode: "sync" });
   storage.bulkSaveSnippets.mockResolvedValue(undefined);
+  vi.mocked(restoreMediaEntry)
+    .mockReset()
+    .mockImplementation(async (entry) => entry.id);
   vi.mocked(captureMessage).mockClear();
 });
 
@@ -654,9 +658,8 @@ describe("ZIP media", () => {
    * three images are silently broken.
    */
   it("reports how many blobs were lost", async () => {
-    const { restoreMediaEntry } = await import("@/storage/backends/media");
     vi.mocked(restoreMediaEntry)
-      .mockResolvedValueOnce(undefined as never)
+      .mockResolvedValueOnce("a1b2c3d4")
       .mockRejectedValueOnce(new Error("corrupt entry") as never);
 
     const blobs = new Map([
@@ -680,8 +683,7 @@ describe("ZIP media", () => {
   });
 
   it("does not report when every blob saved", async () => {
-    const { restoreMediaEntry } = await import("@/storage/backends/media");
-    vi.mocked(restoreMediaEntry).mockResolvedValue(undefined as never);
+    vi.mocked(restoreMediaEntry).mockResolvedValue("a1b2c3d4");
 
     importStore.setState((prev) => ({
       ...prev,
@@ -695,6 +697,28 @@ describe("ZIP media", () => {
     // No warning on a clean import. A report that fires on success trains the user
     // to ignore it.
     expect(captureMessage).not.toHaveBeenCalled();
+  });
+
+  it("rewrites snippet ids when dedup kept a different blob", async () => {
+    vi.mocked(restoreMediaEntry).mockResolvedValueOnce("surviving-id");
+
+    importStore.setState((prev) => ({
+      ...prev,
+      existingSnippets: [],
+      isZipImport: true,
+      zipMediaBlobs: new Map([["a1b2c3d4", zipEntry("a1b2c3d4")]]),
+      parsedSnippets: [
+        parsed({ content: "before {{image:a1b2c3d4:200}} after" }),
+      ],
+    }));
+
+    await runImport();
+
+    expect(storage.bulkSaveSnippets).toHaveBeenCalledWith([
+      expect.objectContaining({
+        content: "before {{image:surviving-id:200}} after",
+      }),
+    ]);
   });
 
   it("still writes the snippets when a blob fails", async () => {
