@@ -38,6 +38,8 @@ export interface PreviewPosition {
   x: number;
   y: number;
   maxHeight: number;
+  /** Viewport-space caret this position was computed from, when one exists. */
+  anchor?: { x: number; y: number };
 }
 
 export interface PreviewState {
@@ -219,16 +221,80 @@ function mergeRanges(
 // Position calculation
 // ---------------------------------------------------------------------------
 
+/** Width the palette is capped at by its own inline styles, in host-page px. */
+export const PREVIEW_WIDTH = 300;
+/** Height the palette may grow to before its list scrolls. */
+export const PREVIEW_MAX_HEIGHT = 220;
+
+const PREVIEW_MARGIN = 10;
+const PREVIEW_GAP = 5;
+const MIN_PREVIEW_HEIGHT = 80;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), Math.max(min, max));
+}
+
+/**
+ * Places a panel next to a caret in viewport coordinates.
+ *
+ * The panel's *rendered* height must be passed in: using the available space on
+ * the chosen side as the height made a flipped panel start at the top of the
+ * viewport while its caret was hundreds of pixels below it. The panel keeps its
+ * own height here, so its near edge stays `PREVIEW_GAP` away from the caret.
+ *
+ * Everything the browser does not need to lay out lives in this function so the
+ * decision can be unit-tested without stubbing rects on a fake element.
+ */
+export function resolvePreviewPlacement(
+  anchor: { x: number; y: number },
+  viewport: { width: number; height: number },
+  panelHeight = PREVIEW_MAX_HEIGHT,
+  panelWidth = PREVIEW_WIDTH
+): PreviewPosition {
+  const height = clamp(panelHeight, 0, PREVIEW_MAX_HEIGHT);
+  const spaceBelow = Math.max(0, viewport.height - anchor.y);
+  const spaceAbove = Math.max(0, anchor.y);
+  const fitsBelow = height + PREVIEW_GAP + PREVIEW_MARGIN <= spaceBelow;
+  const fitsAbove = height + PREVIEW_GAP + PREVIEW_MARGIN <= spaceAbove;
+
+  // Prefer below; flip only when the panel would not fit there but does fit
+  // above. When neither side fits, take the bigger one and let the list scroll.
+  const below = fitsBelow || (!fitsAbove && spaceBelow >= spaceAbove);
+  const space = below ? spaceBelow : spaceAbove;
+  const maxHeight = Math.min(
+    height,
+    Math.max(MIN_PREVIEW_HEIGHT, space - PREVIEW_GAP - PREVIEW_MARGIN)
+  );
+  const maxY = Math.max(
+    PREVIEW_MARGIN,
+    viewport.height - maxHeight - PREVIEW_MARGIN
+  );
+  const y = clamp(
+    below ? anchor.y + PREVIEW_GAP : anchor.y - maxHeight - PREVIEW_GAP,
+    PREVIEW_MARGIN,
+    maxY
+  );
+  const x = clamp(
+    anchor.x,
+    PREVIEW_MARGIN,
+    viewport.width - panelWidth - PREVIEW_MARGIN
+  );
+
+  return { x, y, maxHeight, anchor };
+}
+
 /**
  * Calculates optimal position for the preview popup relative to cursor or target element.
  *
  * `cursorPos` is the caret offset for input/textarea. Without it there is nothing to
  * measure, and the palette falls back to the element's own bounds — which is why every
- * caller must pass it.
+ * caller must pass it. `panelHeight` is the rendered height when it is known; the
+ * UI re-resolves placement once it has measured the rendered list.
  */
 export function calculatePreviewPosition(
   targetElement: HTMLElement,
-  cursorPos?: number
+  cursorPos?: number,
+  panelHeight = PREVIEW_MAX_HEIGHT
 ): PreviewPosition {
   try {
     const isInput =
@@ -255,47 +321,11 @@ export function calculatePreviewPosition(
       cursorCoords = { x: rect.left, y: rect.bottom };
     }
 
-    // Calculate available space
-    const viewportHeight = window.innerHeight;
-    const viewportWidth = window.innerWidth;
-    const spaceBelow = viewportHeight - cursorCoords.y;
-    const spaceAbove = cursorCoords.y;
-
-    // Positioning logic
-    let finalY: number;
-    let maxHeight: number;
-
-    if (spaceBelow >= 200) {
-      // Position below cursor
-      finalY = cursorCoords.y + 5;
-      maxHeight = spaceBelow - 25;
-    } else if (spaceAbove >= 200) {
-      // Position above cursor
-      maxHeight = spaceAbove - 25;
-      finalY = cursorCoords.y - maxHeight - 5;
-    } else {
-      // Use available space, prefer below
-      if (spaceBelow >= spaceAbove) {
-        finalY = cursorCoords.y + 5;
-        maxHeight = spaceBelow - 25;
-      } else {
-        maxHeight = spaceAbove - 25;
-        finalY = cursorCoords.y - maxHeight - 5;
-      }
-    }
-
-    // Clamp horizontal position to viewport
-    const margin = 10;
-    const finalX = Math.max(
-      margin,
-      Math.min(cursorCoords.x, viewportWidth - 300 - margin)
+    return resolvePreviewPlacement(
+      cursorCoords,
+      { width: window.innerWidth, height: window.innerHeight },
+      panelHeight
     );
-
-    return {
-      x: finalX,
-      y: finalY,
-      maxHeight: Math.max(100, maxHeight),
-    };
   } catch {
     // Fallback for any errors
     return { x: 10, y: 10, maxHeight: 300 };
@@ -338,9 +368,13 @@ function getCursorCoordsInInput(
   // so the mirror's own location is irrelevant.
   css.top = "0";
   css.left = "0";
-  css.whiteSpace = "pre-wrap";
-  css.wordWrap = "break-word";
-  css.overflowWrap = "break-word";
+  // A single-line input never wraps: it scrolls horizontally. Measuring it
+  // with `pre-wrap` puts the marker on a later line once the text before the
+  // caret is wider than the field, so the palette jumps down and left.
+  const isSingleLine = element.tagName === "INPUT";
+  css.whiteSpace = isSingleLine ? "pre" : "pre-wrap";
+  css.wordWrap = isSingleLine ? "normal" : "break-word";
+  css.overflowWrap = isSingleLine ? "normal" : "break-word";
   css.boxSizing = "border-box";
   css.fontFamily = style.fontFamily;
   css.fontSize = style.fontSize;

@@ -386,6 +386,76 @@ test.describe("Content Script Expansion", () => {
     expect(palette!.y).toBeLessThan(field!.y + field!.height - 60);
   });
 
+  test("keeps the palette next to a caret in a field low on the page", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    // A field near the viewport bottom used to flip the palette using the
+    // available space *above* as its height. The panel then rendered at y=20
+    // while the caret was hundreds of pixels below it.
+    await testPage.evaluate(() => {
+      const spacer = document.createElement("div");
+      spacer.style.height = "700px";
+      document.body.appendChild(spacer);
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.dataset.testid = "low-input";
+      input.style.width = "320px";
+      document.body.appendChild(input);
+      input.scrollIntoView({ block: "end" });
+    });
+
+    const input = testPage.getByTestId("low-input");
+    await input.click();
+    await testPage.keyboard.type("/", { delay: 30 });
+
+    const host = testPage.locator("#clipio-snippet-preview-host");
+    await expect(host).toHaveAttribute("data-preview-visible", "true", {
+      timeout: 5_000,
+    });
+
+    const palette = await host.boundingBox();
+    const inputBox = await input.boundingBox();
+    expect(palette).not.toBeNull();
+    expect(inputBox).not.toBeNull();
+
+    const caretY = inputBox!.y + inputBox!.height / 2;
+    const distance = Math.min(
+      Math.abs(palette!.y - caretY),
+      Math.abs(palette!.y + palette!.height - caretY)
+    );
+    expect(distance).toBeLessThan(90);
+    expect(palette!.y).toBeGreaterThan(caretY - 200);
+  });
+
+  test("anchors a long single-line input's palette to the visible caret", async ({
+    testPage,
+    storageHelper,
+  }) => {
+    await setupTestPage(testPage, storageHelper, [helloSnippet()]);
+
+    // `<input>` scrolls horizontally; a wrapping mirror put the marker on a
+    // later line and collapsed its x to the clamped left margin.
+    const input = testPage.locator('[data-testid="text-input"]');
+    await input.fill("a long value before the shortcut ".repeat(6));
+    await input.press("End");
+    await testPage.keyboard.type("/");
+
+    const host = testPage.locator("#clipio-snippet-preview-host");
+    await expect(host).toHaveAttribute("data-preview-visible", "true", {
+      timeout: 5_000,
+    });
+
+    const palette = await host.boundingBox();
+    const field = await input.boundingBox();
+    expect(palette).not.toBeNull();
+    expect(field).not.toBeNull();
+    expect(palette!.x).toBeGreaterThan(field!.x + field!.width - 120);
+  });
+
   test("synthetic keydown does not expand a snippet in a text input", async ({
     testPage,
     storageHelper,
