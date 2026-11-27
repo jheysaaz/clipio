@@ -17,6 +17,7 @@ behaviour is how it *translates* — not just that it reads JSON.
 | File | Format detected as | What it exercises |
 |---|---|---|
 | `clipio-export.json` | `clipio` | Clipio's own v1 envelope. Markdown, `{{cursor}}`, `{{clipboard}}`, `{{date:iso}}`, tags. |
+| `clipio-520-export.json` | `clipio` | 520 generated snippets for windowing, search and the oversized-sync import choice. |
 | `textblaze-export.json` | `textblaze` | `{version, folders}`. Folder names become tags; `{cursor}`/`{clipboard}` are translated. |
 | `powertext-export.json` | `powertext` | A flat `{shortcut: text}` object. `%clip%` → `{{clipboard}}`, `%d(YYYY-MM-DD)` → `{{date:iso}}`. |
 
@@ -49,6 +50,11 @@ the wizard's review step would not have shown.
 
 ## Notes on the formats
 
+- **`clipio-520-export.json` is deliberately over sync's 512-item limit.** The
+  wizard must ask for an explicit storage target rather than silently switching
+  to local. It is the hand-testable counterpart of `e2e/performance.spec.ts`.
+- **The 5,000-snippet case is not a sample file.** Imports cap at 2,000 snippets;
+  the performance spec generates 5,000 records and seeds storage directly.
 - **Power Text labels are their shortcuts.** The format has no separate name
   field, so the object key becomes both the shortcut and the label. That is why
   those snippets are labelled `;pw` rather than "Sign-off".
