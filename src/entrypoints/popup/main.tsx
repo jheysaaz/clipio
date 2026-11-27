@@ -1,4 +1,4 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import { ErrorBoundary } from "@sentry/react";
 import "~/app.css";
@@ -11,7 +11,12 @@ import { popupHistory, popupRouteTree } from "@/routes/popup";
 import "@/store/settings";
 import { initSentry, captureError } from "@/lib/sentry";
 import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
-import { OnboardingLoader } from "@/components/onboarding/OnboardingLoader";
+// The tour is not part of opening the popup. Loading it on demand keeps its
+// chunk and styles off the critical path for every established user.
+const OnboardingLoader = lazy(async () => {
+  const module = await import("@/components/onboarding/OnboardingLoader");
+  return { default: module.OnboardingLoader };
+});
 
 initSentry("popup");
 
@@ -46,7 +51,9 @@ function App() {
         }
       >
         <RouterProvider router={router} />
-        <OnboardingLoader surface="popup" />
+        <Suspense fallback={null}>
+          <OnboardingLoader surface="popup" />
+        </Suspense>
       </ErrorBoundary>
     </FeedbackProvider>
   );

@@ -12,7 +12,6 @@ import { i18n } from "#i18n";
 import {
   Plus,
   Search,
-  Loader2,
   Settings,
   Clipboard,
   ArrowDownUp,
@@ -28,7 +27,6 @@ import {
 import { Icon } from "@/components/ui/icon";
 import { InlineAction } from "@/components/ui/inline-action";
 import { Kbd } from "@/components/ui/kbd";
-import SnippetListItem from "@/components/SnippetListItem";
 const SnippetEditor = lazy(() => import("~/components/SnippetEditor"));
 import { InlineError } from "@/components/ui/inline-error";
 
@@ -36,7 +34,8 @@ import type { Snippet, SnippetFormData } from "@/types";
 import { createSnippet } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SnippetList } from "@/pages/popup/SnippetList";
 import {
   initialiseSnippets,
   EMPTY_DRAFT,
@@ -98,6 +97,16 @@ import { openReleasePage, shouldShowUpdateAlert } from "@/lib/update-checker";
 import { NEW_ROUTE, SNIPPET_ROUTE, viewFromPath } from "@/routes/popup";
 
 const CONTEXT_MENU_DRAFT_SESSION_KEY = "__clipioContextMenuDraft__";
+
+/** Browser-side timings used by the popup performance regression test. */
+const POPUP_SHELL_MARK = "clipio:popup-shell";
+const LIBRARY_READY_MARK = "clipio:library-ready";
+
+function mark(name: string): void {
+  if (typeof performance !== "undefined" && performance.mark) {
+    performance.mark(name);
+  }
+}
 
 type DeletedSnippet = {
   snippet: Snippet;
@@ -308,8 +317,16 @@ export default function Dashboard() {
   // -------------------------------------------------------------------------
 
   useEffect(() => {
+    // The shell is interactive before any snippet has been read. Marking the
+    // first commit — rather than the end of the load — is what makes a slow
+    // library visible as a slow *list*, not a slow *popup*.
+    mark(POPUP_SHELL_MARK);
     void initialiseSnippets();
   }, []);
+
+  useEffect(() => {
+    if (!loading) mark(LIBRARY_READY_MARK);
+  }, [loading]);
 
   // Check if the popup was opened via the "Save selection" context-menu action.
   // If so, pre-fill the draft and switch to create mode.
@@ -982,108 +999,81 @@ export default function Dashboard() {
           </div>
 
           {/* Snippet List */}
-          <ScrollArea className="flex-1 min-w-0 min-h-0">
-            <div className="p-2 pb-14 overflow-hidden">
-              {loading ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-12">
-                  <Icon
-                    icon={Loader2}
-                    size="xl"
-                    className="animate-spin text-muted-foreground motion-reduce:hidden"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {i18n.t("dashboard.loadingSnippets")}
-                  </p>
-                </div>
-              ) : loadError ? (
-                <InlineError
-                  message={loadError}
-                  onDismiss={dismissLoadError}
-                  className="border border-red-200 dark:border-red-800 rounded-lg"
-                />
-              ) : filteredSnippets.length === 0 ? (
+          {loading ? (
+            <div
+              data-testid="snippet-list-skeleton"
+              role="status"
+              aria-label={i18n.t("dashboard.loadingSnippets")}
+              className="min-h-0 flex-1 space-y-1 overflow-hidden p-2"
+            >
+              {Array.from({ length: 8 }, (_, index) => (
                 <div
-                  data-testid="empty-state"
-                  className="flex flex-col items-center justify-center py-6 gap-1 px-3"
+                  key={index}
+                  className="h-12 space-y-2 rounded-lg px-2.5 py-2"
                 >
-                  {/*
-                    Message only, no buttons.
-
-                    This pane used to offer "Create snippet" and "Import" while
-                    the footer directly below offered "Add Snippet" and a
-                    settings icon that reaches the same import screen, all at
-                    once, beside a second full copy of the hero in the detail
-                    pane. Four controls for two actions.
-
-                    The actions now live in exactly one place — the detail pane's
-                    empty state, which is also what stays visible when the
-                    sidebar is collapsed. The footer is untouched: it is the
-                    persistent control bar, not part of the empty state.
-                  */}
-                  <p className="text-xs text-muted-foreground text-center">
-                    {searchQuery
-                      ? i18n.t("dashboard.noSnippetsFound")
-                      : i18n.t("dashboard.noSnippetsYet")}
-                  </p>
-                  {searchQuery ? (
-                    <p className="text-xs text-muted-foreground text-center">
-                      {i18n.t("dashboard.tryDifferentSearch")}
-                    </p>
-                  ) : null}
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-3 flex-1" />
+                    <Skeleton className="h-3 w-10" />
+                  </div>
+                  <Skeleton className="h-2.5 w-3/4" />
                 </div>
-              ) : (
-                <div
-                  data-testid="snippet-list"
-                  className="space-y-1 overflow-hidden"
-                  role="listbox"
-                  aria-label={i18n.t("dashboard.snippetListLabel")}
-                  aria-activedescendant={
-                    selectedSnippet ? `snippet-${selectedSnippet.id}` : ""
-                  }
-                >
-                  {/* Draft preview while creating */}
-                  {isCreating &&
-                    (draftSnippet.label || draftSnippet.shortcut) && (
-                      <div className="w-full text-left h-auto py-2 px-2.5 rounded-lg bg-muted border border-dashed">
-                        <div className="flex items-center gap-2 w-full min-w-0 overflow-hidden">
-                          <span className="font-medium text-xs text-foreground truncate flex-1 min-w-0">
-                            {draftSnippet.label ||
-                              i18n.t("dashboard.draftLabel")}
-                          </span>
-                          <span className="font-mono text-xs px-1.5 py-0 border rounded max-w-18 truncate shrink-0 text-muted-foreground">
-                            {draftSnippet.shortcut ||
-                              i18n.t("dashboard.draftShortcut")}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  {filteredSnippets.map((snippet) => (
-                    <SnippetListItem
-                      key={snippet.id}
-                      snippet={snippet}
-                      snippetId={`snippet-${snippet.id}`}
-                      isSelected={
-                        selectedSnippet?.id === snippet.id && !isCreating
-                      }
-                      onClick={() => {
-                        // No dirty check here on purpose. Edits are staged in
-                        // local storage, so switching snippets cannot lose them.
-                        if (isCreating) {
-                          setDraftSnippet({
-                            label: "",
-                            shortcut: "",
-                            content: "",
-                            tags: [],
-                          });
-                        }
-                        selectSnippet(snippet.id);
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
+              ))}
             </div>
-          </ScrollArea>
+          ) : loadError ? (
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              <InlineError
+                message={loadError}
+                onDismiss={dismissLoadError}
+                className="border border-red-200 dark:border-red-800 rounded-lg"
+              />
+            </div>
+          ) : filteredSnippets.length === 0 ? (
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div
+                data-testid="empty-state"
+                className="flex flex-col items-center justify-center py-6 gap-1 px-3"
+              >
+                {/*
+                  Message only, no buttons.
+
+                  This pane used to offer "Create snippet" and "Import" while
+                  the footer directly below offered "Add Snippet" and a
+                  settings icon that reaches the same import screen, all at
+                  once, beside a second full copy of the hero in the detail
+                  pane. Four controls for two actions.
+
+                  The actions now live in exactly one place — the detail pane's
+                  empty state, which is also what stays visible when the
+                  sidebar is collapsed. The footer is untouched: it is the
+                  persistent control bar, not part of the empty state.
+                */}
+                <p className="text-xs text-muted-foreground text-center">
+                  {searchQuery
+                    ? i18n.t("dashboard.noSnippetsFound")
+                    : i18n.t("dashboard.noSnippetsYet")}
+                </p>
+                {searchQuery ? (
+                  <p className="text-xs text-muted-foreground text-center">
+                    {i18n.t("dashboard.tryDifferentSearch")}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <SnippetList
+              snippets={filteredSnippets}
+              selectedId={selectedSnippet?.id ?? null}
+              isCreating={isCreating}
+              draft={draftSnippet}
+              resetKey={searchQuery}
+              onSelect={(id) => {
+                // No dirty check here on purpose. Edits are staged in local
+                // storage, so switching snippets cannot lose them.
+                if (isCreating) setDraftSnippet({ ...EMPTY_DRAFT });
+                selectSnippet(id);
+              }}
+            />
+          )}
 
           {/* Add Snippet + Settings, with a state line beneath them. */}
           <div className="px-2 py-2">
@@ -1145,6 +1135,23 @@ export default function Dashboard() {
         >
           <FeedbackBanner />
 
+          {loading && !isCreating && !deletedSnippet && (
+            <div
+              data-testid="snippet-detail-skeleton"
+              role="status"
+              aria-label={i18n.t("dashboard.loadingSnippets")}
+              className="flex flex-1 flex-col gap-4 p-4"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <Skeleton className="size-8" />
+                <Skeleton className="h-6 w-24" />
+              </div>
+              <Skeleton className="h-9 w-2/3" />
+              <Skeleton className="h-7 w-40" />
+              <Skeleton className="min-h-0 flex-1" />
+            </div>
+          )}
+
           {deletedSnippet && !isCreating && (
             <div className="flex flex-1 flex-col">
               <div className="flex h-11 items-center border-b border-border px-2">
@@ -1198,12 +1205,23 @@ export default function Dashboard() {
           {!deletedSnippet && (isCreating || selectedSnippet) && (
             <Suspense
               fallback={
-                <div className="flex items-center justify-center flex-1">
-                  <Icon
-                    icon={Loader2}
-                    size="xl"
-                    className="animate-spin text-muted-foreground"
-                  />
+                <div
+                  data-testid="editor-skeleton"
+                  role="status"
+                  aria-label={i18n.t("dashboard.loadingSnippets")}
+                  className="flex flex-1 flex-col gap-4 p-4"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <Skeleton className="size-8" />
+                    <Skeleton className="h-8 w-28" />
+                  </div>
+                  <Skeleton className="h-10 w-2/3" />
+                  <Skeleton className="h-8 w-40" />
+                  <div className="flex flex-1 flex-col gap-2">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-5/6" />
+                    <Skeleton className="h-4 w-3/4" />
+                  </div>
                 </div>
               }
             >

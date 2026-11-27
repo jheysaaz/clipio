@@ -39,6 +39,8 @@ interface SnippetListItemProps {
   snippetId: string;
   isSelected: boolean;
   onClick: () => void;
+  /** Row sizing is owned by the virtual list; callers pass a fixed height. */
+  className?: string;
 }
 
 export default function SnippetListItem({
@@ -46,6 +48,7 @@ export default function SnippetListItem({
   snippetId,
   isSelected,
   onClick,
+  className,
 }: SnippetListItemProps) {
   const liveFields = useStore(draftPreviewsStore)[snippet.id];
 
@@ -65,6 +68,7 @@ export default function SnippetListItem({
       aria-selected={isSelected}
       className={cn(
         "h-auto min-h-12 max-w-full w-full items-start justify-start overflow-hidden relative rounded-lg px-2.5 py-2 text-left transition-colors",
+        className,
         "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         // One fill, stronger than hover; no accent bar, ring or second marker.
         // The ghost variant's hover fill would otherwise repaint a selected
