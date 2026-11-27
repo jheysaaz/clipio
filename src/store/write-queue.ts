@@ -23,6 +23,7 @@ import {
   emptyQueue,
   enqueue,
   queueSummary,
+  sameSnapshot,
   type QueuedChange,
   type QueueState,
 } from "@/lib/write-queue";
@@ -181,11 +182,10 @@ async function updateQueue(
 }
 
 function publish(): void {
-  const summary = queueSummary(cachedQueue);
-  writeQueueStore.setState(() => ({
-    ...summary,
+  const nextStatus: SyncStatus = {
+    ...queueSummary(cachedQueue),
     saving: stagedDraftIds.size > 0,
-  }));
+  };
 
   const operations: Record<string, QueuedChange> = {};
   const outcomes: Record<string, QueueOutcome> = {};
@@ -200,8 +200,19 @@ function publish(): void {
       };
     }
   }
-  queueOperationsStore.setState(() => operations);
-  queueOutcomesStore.setState(() => outcomes);
+  // A refresh can re-read an unchanged queue. Publish each snapshot only when
+  // it actually differs, so a stored failure is not announced again on every
+  // storage event. Returning the previous value makes the store a no-op: its
+  // updater compares by reference before notifying subscribers.
+  writeQueueStore.setState((prev) =>
+    sameSnapshot(prev, nextStatus) ? prev : nextStatus
+  );
+  queueOperationsStore.setState((prev) =>
+    sameSnapshot(prev, operations) ? prev : operations
+  );
+  queueOutcomesStore.setState((prev) =>
+    sameSnapshot(prev, outcomes) ? prev : outcomes
+  );
 }
 
 type CommitSettlement = { outcome: QueueOutcome | null };

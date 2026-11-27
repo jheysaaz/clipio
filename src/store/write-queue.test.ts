@@ -252,6 +252,42 @@ describe("popup write queue", () => {
     expect(writeQueueStore.state.failed).toBe(0);
   });
 
+  it("does not republish a failure when a refresh re-reads the same queue", async () => {
+    state.queue = {
+      operations: [
+        {
+          id: "op-old",
+          snippetId: "s1",
+          kind: "upsert",
+          fields,
+          baseRev: 3,
+          updatedAt: "2026-01-02T00:00:00.000Z",
+          updatedBy: "writer-1",
+          reason: "edit",
+          attempts: 6,
+          nextAttemptAt: 1,
+          status: "failed",
+          error: "conflict",
+          createdAt: 1,
+        },
+      ],
+      sentAt: [],
+    };
+    await refreshSyncStatus();
+    const outcome = queueOutcomesStore.state.s1;
+    const onOutcome = vi.fn();
+    const subscription = queueOutcomesStore.subscribe(onOutcome);
+
+    // Storage reads always hand back fresh objects, even for an unchanged
+    // queue. The editor keys its failure announcement on this object.
+    state.queue = structuredClone(state.queue);
+    await refreshSyncStatus();
+
+    expect(queueOutcomesStore.state.s1).toBe(outcome);
+    expect(onOutcome).not.toHaveBeenCalled();
+    subscription.unsubscribe();
+  });
+
   it("stages a new snippet with a caller-chosen provisional id", async () => {
     const draft = await stageProvisionalDraft("new-id", {
       label: "New",

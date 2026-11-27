@@ -262,6 +262,10 @@ export default function SnippetEditor({
   }>({ fade: null, hide: null });
   const showSavedRef = useRef(false);
   const sawBusyRef = useRef(false);
+  // One failure is one report. Outcomes are rebuilt from storage on each
+  // refresh, so identity alone would replay the same error indefinitely (and
+  // twice on a StrictMode mount).
+  const reportedOutcomeRef = useRef<string | null>(null);
 
   // The prefix is configuration, so read it once rather than hardcoding "/".
   // The input handler re-applies it after every keystroke; a saved snippet
@@ -436,6 +440,11 @@ export default function SnippetEditor({
   }, [shortcutError, announceError]);
 
   useEffect(() => {
+    const key = outcome
+      ? `${outcome.opId}|${outcome.status}|${outcome.error ?? ""}`
+      : null;
+    if (reportedOutcomeRef.current === key) return;
+    reportedOutcomeRef.current = key;
     if (!outcome) return;
     const detail =
       outcome.error === "conflict"

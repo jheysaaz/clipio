@@ -887,6 +887,40 @@ describe("autosave status", () => {
     );
   });
 
+  it("reports the same failure once when storage republishes it", async () => {
+    const failed = {
+      opId: "op-2",
+      snippetId: "s1",
+      status: "failed" as const,
+      error: "conflict",
+    };
+    queueOutcomesStore.setState(() => ({ s1: failed }));
+    writeQueueStore.setState(() => ({
+      pending: 0,
+      failed: 1,
+      refused: 0,
+      saving: false,
+    }));
+    renderView();
+
+    await waitFor(() => expect(consoleErrorSpy).toHaveBeenCalledTimes(1));
+
+    // A refresh rebuilds the outcome as a fresh object with identical values.
+    // The earlier implementation replayed the error on every such publish.
+    act(() => {
+      queueOutcomesStore.setState(() => ({ s1: { ...failed } }));
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+
+    // A new operation is a new failure, not a republish of the old one.
+    act(() => {
+      queueOutcomesStore.setState(() => ({
+        s1: { ...failed, opId: "op-3" },
+      }));
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+  });
+
   it("shows a one-line storage error in the reserved slot and opens Storage settings", async () => {
     const user = userEvent.setup();
     vi.mocked((globalThis as any).browser.tabs.create).mockClear();
