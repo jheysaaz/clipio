@@ -13,7 +13,15 @@
  *   - Throws when navigator.clipboard.write rejects (caller can surface the error)
  */
 
-import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from "vitest";
 import { copyMarkdownAsRichText } from "./copy-markdown-as-rich-text";
 
 // ---------------------------------------------------------------------------
@@ -59,6 +67,16 @@ function makeEntry(options: {
 /** Captured clipboard writes. */
 let clipboardWriteCalls: ClipboardItem[][] = [];
 
+// Capture the real descriptors before any test replaces these globals.
+const originalNavigatorDescriptor = Object.getOwnPropertyDescriptor(
+  globalThis,
+  "navigator"
+);
+const originalClipboardItemDescriptor = Object.getOwnPropertyDescriptor(
+  globalThis,
+  "ClipboardItem"
+);
+
 beforeEach(() => {
   clipboardWriteCalls = [];
   vi.clearAllMocks();
@@ -88,6 +106,25 @@ beforeEach(() => {
         return this._data[type];
       }
     };
+  }
+});
+
+afterEach(() => {
+  // Restore the exact descriptors (or absence) so neither stub can leak into
+  // another test file.
+  if (originalNavigatorDescriptor) {
+    Object.defineProperty(globalThis, "navigator", originalNavigatorDescriptor);
+  } else {
+    Reflect.deleteProperty(globalThis, "navigator");
+  }
+  if (originalClipboardItemDescriptor) {
+    Object.defineProperty(
+      globalThis,
+      "ClipboardItem",
+      originalClipboardItemDescriptor
+    );
+  } else {
+    Reflect.deleteProperty(globalThis, "ClipboardItem");
   }
 });
 
