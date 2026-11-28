@@ -9,7 +9,13 @@
  * So this does the other half: find literal text in the UI. It covers
  *
  *   - JSX text nodes: the literal characters between `>` and `<`
- *   - accessibility labels:  aria-label="…", title="…", placeholder="…"
+ *   - JSX accessibility labels: aria-label, title, placeholder and alt, whether
+ *     written as `title="…"` or as a direct literal `title={"…"}`, with no
+ *     length cap on the attribute value
+ *   - DOM-writing sinks in `.ts`: textContent/innerText/innerHTML assignments
+ *     (including `value || "Fallback"`), alt/title/placeholder properties,
+ *     setAttribute for accessible attributes, and title/message properties on
+ *     browser menu and notification options
  *
  * and reports each one with file:line. Run via `pnpm check:hardcoded-text`, and
  * wired into CI alongside the locale gate.
@@ -20,25 +26,26 @@
  *
  * WHAT THIS DOES NOT SEE — read this before trusting a green run:
  *
- *   1. A string produced inside a JSX expression, such as
- *      `{enabled ? "Enabled" : "Disabled"}` or `title={someVar}`. The character
- *      class excludes braces, so those are invisible. Every case of this found
- *      while building the check was fixed by reading, not by running it.
+ *   1. Literal text in a JSX expression used as an ordinary *child*, such as
+ *      `{enabled ? "Enabled" : "Disabled"}`. Direct literals in accessibility
+ *      attributes are covered; this one still is not.
  *   2. String props on components that render them, e.g.
- *      `<EmptyState message="Delete all snippets" />`. Only the three attributes
- *      above are read.
+ *      `<EmptyState message="Delete all snippets" />`. The `title`/`message`
+ *      object properties covered above are browser API options, not component
+ *      props.
  *   3. Content set through `dangerouslySetInnerHTML` from a string literal.
- *   4. `.ts` files. Only files ending in `.tsx` under `src` are walked. A helper
- *      in `src/lib` that returns a translated-or-not string for a component to
- *      render is not seen.
- *   5. A **single word**: `<h3>Loading</h3>`. Two or more words are required, so
- *      a one-word heading is invisible. Single words are the most ambiguous
- *      shape — "OK", "New", "Save" — and flagging every button label would bury
- *      the real findings.
- *   6. **Lowercase-initial** prose: `<p>this is lowercase prose</p>`. Requires a
- *      capital, because a lowercase run between tags is usually a fragment
- *      beside an interpolation, CSS or an entity. This is a deliberate
- *      false-negative trade, not an oversight.
+ *   4. `.ts` files *outside* the sinks listed above. Pure helpers, engine
+ *      internals and the deliberately locale-neutral diagnostics report are not
+ *      scanned; this is a targeted check, not a search for every quoted string.
+ *   5. A single word in a JSX text node: `<h3>Loading</h3>`. Two or more words
+ *      are still required there, so a one-word heading is invisible. Single
+ *      words are the most ambiguous shape — "OK", "New", "Save" — and flagging
+ *      every button label would bury the real findings. DOM sinks do flag
+ *      single words, because element text is always user-visible.
+ *   6. Lowercase-initial prose in a JSX text node: `<p>this is lowercase prose</p>`.
+ *      Requires a capital, because a lowercase run between tags is usually a
+ *      fragment beside an interpolation, CSS or an entity. Attribute values and
+ *      DOM sinks do not require a capital.
  *   7. Text that shares a source line with a JSX expression container, e.g.
  *      `<p>{i18n.t("a")} Hardcoded tail</p>`. The braces exclude the whole
  *      expression, so the literal tail inside it is not seen either.
@@ -46,6 +53,9 @@
  *      visible URL is truncated at `https:`. The finding is still reported —
  *      nothing is missed — but the string shown stops there. Deciding otherwise
  *      needs a real JSX parser, which is the larger piece of work noted above.
+ *   9. Template literals with interpolation in a DOM sink are skipped. They are
+ *      the shape i18n placeholders use, and guessing which part is prose is a
+ *      job for a parser this check deliberately does not carry.
  *
  * The first version of this check was narrower still — it required a capital
  * initial and letters-and-spaces only, so "Top 5 Usage", "No usage data yet."
@@ -102,6 +112,18 @@ const ALLOWLIST = [
 ];
 
 /**
+ * Replace a range with spaces, preserving every offset and newline.
+ *
+ * Both comment blanking and call masking use this. Offsets have to stay byte-for
+ * byte identical to the original file so reported line numbers remain true.
+ */
+function blankRange(out, from, to) {
+  for (let k = from; k < to && k < out.length; k++) {
+    if (out[k] !== "\n") out[k] = " ";
+  }
+}
+
+/**
  * Replace comment content with spaces, preserving every offset and newline.
  *
  * The scan has to know whether a match sits inside a comment, and three cheaper
@@ -117,37 +139,29 @@ const ALLOWLIST = [
  *     `<a href="https://x.io">Delete all snippets</a>` lost its finding while
  *     the comment claimed the URL case was the bug being fixed.
  *
- * Blanking is the only version that answers the actual question. Comments are
- * replaced with spaces rather than removed so that byte offsets — and therefore
- * the reported line numbers — stay identical to the original file.
- *
- * String state is tracked so that a `//` or `/*` inside a quoted string or a
- * template literal is left alone.
+ * Blanking is the only version that answers the actual question. String state
+ * is tracked so that a `//` or `/*` inside a quoted string or a template literal
+ * is left alone.
  */
 function blankComments(source) {
   const out = source.split("");
   let i = 0;
   const n = source.length;
   // Stack of string states we are inside, so `"a 'b // c'"` is handled.
-  const blank = (from, to) => {
-    for (let k = from; k < to && k < n; k++) {
-      if (out[k] !== "\n") out[k] = " ";
-    }
-  };
   while (i < n) {
     const c = source[i];
     const next = source[i + 1];
     if (c === "/" && next === "/") {
       const end = source.indexOf("\n", i);
       const stop = end === -1 ? n : end;
-      blank(i, stop);
+      blankRange(out, i, stop);
       i = stop;
       continue;
     }
     if (c === "/" && next === "*") {
       const end = source.indexOf("*/", i + 2);
       const stop = end === -1 ? n : end + 2;
-      blank(i, stop);
+      blankRange(out, i, stop);
       i = stop;
       continue;
     }
@@ -172,16 +186,103 @@ function blankComments(source) {
   return out.join("");
 }
 
-function walk(dir, out = []) {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      walk(full, out);
-    } else if (/\.tsx$/.test(entry) && !/\.test\.tsx$/.test(entry)) {
-      out.push(full);
+/**
+ * Calls whose string arguments are deliberately not UI copy.
+ *
+ * `console.*` and `debugLog` are operator diagnostics. `captureMessage`,
+ * `captureError` and `captureException` are Sentry telemetry. `new Error(...)`
+ * is a fault message for developers. `i18n.t(...)` arguments are locale keys,
+ * not the text a user reads. Test fixtures never reach this function —
+ * `shouldScanFile` excludes `*.test.ts(x)` and `__mocks__` — so a fixture's
+ * deliberately hardcoded prose cannot make the gate red.
+ *
+ * These are masked *by call*, not by line: background.ts has multi-line
+ * captureMessage calls, and a line-based skip would leave their first argument
+ * visible to the scanner.
+ */
+const NON_UI_CALLS = [
+  /\bconsole\s*\.\s*[A-Za-z_$][\w$]*\s*\(/g,
+  /\bdebugLog\s*\(/g,
+  /\b(?:captureMessage|captureError|captureException)\s*\(/g,
+  /\bnew\s+(?:Error|TypeError|RangeError)\s*\(/g,
+  /\b(?:i18n|t)\s*\.\s*t\s*\(/g,
+];
+
+/** Blank one call expression from `start` through its matching `)`. */
+function maskCall(out, source, start) {
+  let open = -1;
+  for (let i = start; i < source.length && i < start + 200; i++) {
+    if (source[i] === "(") {
+      open = i;
+      break;
     }
   }
-  return out;
+  if (open === -1) return start + 1;
+
+  let depth = 1;
+  let i = open + 1;
+  let quote = null;
+  while (i < source.length && depth > 0) {
+    const c = source[i];
+    if (quote !== null) {
+      if (c === "\\") {
+        i += 2;
+        continue;
+      }
+      if (c === quote) quote = null;
+      i++;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      quote = c;
+      i++;
+      continue;
+    }
+    if (c === "(") depth++;
+    else if (c === ")") depth--;
+    i++;
+  }
+  if (depth === 0) blankRange(out, start, i);
+  return Math.max(i, start + 1);
+}
+
+function maskNonUiCalls(source) {
+  const out = source.split("");
+  for (const pattern of NON_UI_CALLS) {
+    pattern.lastIndex = 0;
+    let m;
+    while ((m = pattern.exec(source)) !== null) {
+      const end = maskCall(out, source, m.index);
+      pattern.lastIndex = Math.max(end, m.index + 1);
+    }
+  }
+  return out.join("");
+}
+
+/**
+ * Is this literal prose a user would read?
+ *
+ * JSX text keeps the old two-word and capital-initial rules: a lone identifier
+ * between tags is too ambiguous. Accessibility attributes and DOM sinks are
+ * unambiguously user-facing, so they use the looser defaults (one word, any
+ * case) and rely on the allowlist for technical tokens.
+ */
+function isProse(text, { minWords = 1, requireCapital = true } = {}) {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (!/[A-Za-z]{2,}/.test(clean)) return false;
+  if (requireCapital && !/^[A-Z]/.test(clean)) return false;
+  if (minWords > 1 && clean.split(/\s+/).length < minWords) return false;
+  if (ALLOWLIST.includes(clean)) return false;
+  // Punctuation only ever trails real prose; strip it before the allowlist
+  // lookup so "KB." matches the allowlisted "KB".
+  if (ALLOWLIST.includes(clean.replace(/[.,:;!?)]+$/, ""))) return false;
+  return true;
+}
+
+/** Only source files that can ship UI copy are scanned. */
+function shouldScanFile(name) {
+  if (/\.test\.(?:ts|tsx)$/.test(name) || /\.d\.ts$/.test(name)) return false;
+  return /\.(?:ts|tsx)$/.test(name);
 }
 
 // A JSX text node: the literal characters between `>` and `<`.
@@ -206,66 +307,117 @@ function walk(dir, out = []) {
 //
 // A line-based scan misses every one of those, which is most of them.
 const JSX_TEXT = />([^<>{}]{2,})</gs;
-// A label that is always read aloud or always shown as a placeholder.
-const ATTR = /\b(aria-label|title|placeholder)="([^"]{2,60})"/g;
+// A label that is always read aloud or always shown. No length cap: a long
+// tooltip is still an untranslated tooltip.
+const JSX_ATTR = /\b(aria-label|title|placeholder|alt)="([^"]{2,})"/g;
+// The same names with a direct string literal in braces. `i18n.t("…")`,
+// identifiers and `cn("…")` do not match, so translated and computed labels
+// stay quiet.
+const JSX_EXPR_ATTR =
+  /\b(aria-label|title|placeholder|alt)=\{\s*(?:"([^"]{2,})"|'([^']{2,})')\s*\}/g;
+// `.ts` DOM sinks. Template literals are skipped by design (see limitation 9).
+const TS_DOM_TEXT =
+  /\.(?:textContent|innerText|innerHTML)\s*=\s*(["'])([^"'`\n]{2,})\1/g;
+const TS_DOM_FALLBACK =
+  /\.(?:textContent|innerText)\s*=\s*[^;\n]*?(?:\|\||\?\?)\s*(["'])([^"'`\n]{2,})\1/g;
+const TS_DOM_PROP = /\.(?:alt|title|placeholder)\s*=\s*(["'])([^"'`\n]{2,})\1/g;
+const TS_DOM_ATTR =
+  /\.setAttribute\(\s*(["'])(aria-label|title|placeholder|alt)\1\s*,\s*(["'])([^"'`\n]{2,})\3/g;
+// Browser context-menu and notification options. Restricted to these two keys
+// so a `message` field in an unrelated data object is not mistaken for copy.
+// The lookbehind excludes `err.message : "…"` — an Error fallback, which is
+// developer diagnostics rather than a string a user reads.
+const TS_UI_PROP = /(?<!\.)\b(?:title|message)\s*:\s*(["'])([^"'`\n]{2,})\1/g;
+
+/**
+ * Find hardcoded text in one source file.
+ *
+ * Kept independent of the filesystem so the gate's own test can call the real
+ * matcher with a fixture instead of asserting on a copy of it.
+ */
+function scanSource(content, rel) {
+  // Comment and telemetry masking keep every offset, so the raw `content` can
+  // still supply the reported line number.
+  const scannable = maskNonUiCalls(blankComments(content));
+  const findings = [];
+  const lineAt = (offset) => content.slice(0, offset).split("\n").length;
+  const push = (m, text, kind, options) => {
+    if (!isProse(text, options)) return;
+    findings.push({ file: rel, line: lineAt(m.index), text, kind });
+  };
+
+  let m;
+  // JSX patterns only run on .tsx: a generic `alt="…"` or `>…<` in a .ts
+  // template string is markup generation, not JSX, and would be a false hit.
+  if (rel.endsWith(".tsx")) {
+    JSX_TEXT.lastIndex = 0;
+    while ((m = JSX_TEXT.exec(scannable)) !== null) {
+      push(m, m[1].replace(/\s+/g, " ").trim(), "text", { minWords: 2 });
+    }
+
+    JSX_ATTR.lastIndex = 0;
+    while ((m = JSX_ATTR.exec(scannable)) !== null) {
+      // m[1] is the attribute name, m[2] its value — the value is the text.
+      push(m, m[2].trim(), m[1], { requireCapital: false });
+    }
+
+    JSX_EXPR_ATTR.lastIndex = 0;
+    while ((m = JSX_EXPR_ATTR.exec(scannable)) !== null) {
+      push(m, (m[2] ?? m[3]).trim(), m[1], { requireCapital: false });
+    }
+  }
+
+  if (rel.endsWith(".ts")) {
+    for (const [pattern, group] of [
+      [TS_DOM_TEXT, 2],
+      [TS_DOM_FALLBACK, 2],
+      [TS_DOM_PROP, 2],
+    ]) {
+      pattern.lastIndex = 0;
+      while ((m = pattern.exec(scannable)) !== null) {
+        push(m, m[group].trim(), "dom");
+      }
+    }
+
+    TS_DOM_ATTR.lastIndex = 0;
+    while ((m = TS_DOM_ATTR.exec(scannable)) !== null) {
+      push(m, m[4].trim(), m[2]);
+    }
+
+    TS_UI_PROP.lastIndex = 0;
+    while ((m = TS_UI_PROP.exec(scannable)) !== null) {
+      push(m, m[2].trim(), "browser option");
+    }
+  }
+
+  return findings;
+}
+
+function walk(dir, out = []) {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      // Mock fixtures are test scaffolding, not shipped UI copy.
+      if (entry === "__mocks__") continue;
+      walk(full, out);
+    } else if (shouldScanFile(entry)) {
+      out.push(full);
+    }
+  }
+  return out;
+}
 
 const findings = [];
 
 for (const file of walk(SRC)) {
   const rel = relative(ROOT, file);
-  const content = readFileSync(file, "utf8");
-  // Scanned copy has comments blanked; `content` keeps the real text so
-  // findings report what a user would actually see.
-  const scannable = blankComments(content);
-  /** 1-indexed line number for a character offset. */
-  const lineAt = (offset) => content.slice(0, offset).split("\n").length;
-
-  // `lineFor(offset)` used to sit here — "the source line an offset falls on,
-  // for the already-localised? test" — and was never called. It predates the
-  // i18n fix in ab899f2 and was left behind as dead code. Removing it is what
-  // let `scripts/**/*.mjs` be linted at all: the file was excluded from ESLint
-  // by a blanket ignore, so nothing had flagged it since.
-
-  JSX_TEXT.lastIndex = 0;
-  let m;
-  while ((m = JSX_TEXT.exec(scannable)) !== null) {
-    const text = m[1].replace(/\s+/g, " ").trim();
-    // At least two words, so a lone identifier or unit does not trip it.
-    if (!/[A-Za-z]{2,}/.test(text)) continue;
-    if (text.split(/\s+/).length < 2) continue;
-    // Prose starts with a capital. A lowercase-initial run between tags is
-    // overwhelmingly a fragment sitting next to an interpolation, CSS or an
-    // entity, and flagging those produces noise nobody acts on.
-    if (!/^[A-Z]/.test(text)) continue;
-    if (ALLOWLIST.includes(text)) continue;
-    // Punctuation only ever trails real prose; strip it before the allowlist
-    // lookup so "KB." matches the allowlisted "KB".
-    if (ALLOWLIST.includes(text.replace(/[.,:;!?)]+$/, ""))) continue;
-    // No comment check is needed here and no `i18n.t` co-line check either.
-    // Comments are already blanked out of `scannable`, and a JSX text node
-    // cannot be an `i18n.t` call — the character class excludes braces, so
-    // `{i18n.t("…")}` never matches in the first place. Skipping on co-line
-    // presence only ever hid real strings, e.g.
-    // `<p onClick={() => t("k")}>Delete all snippets</p>`.
-    findings.push({ file: rel, line: lineAt(m.index), text, kind: "text" });
-  }
-
-  ATTR.lastIndex = 0;
-  while ((m = ATTR.exec(scannable)) !== null) {
-    // m[1] is the attribute name, m[2] its value — the value is the text.
-    const text = m[2].trim();
-    if (ALLOWLIST.includes(text)) continue;
-    // Same reasoning as the text-node pass: comments are pre-blanked, and this
-    // pattern requires `="…"`, so it cannot match `aria-label={i18n.t("…")}`.
-    findings.push({ file: rel, line: lineAt(m.index), text, kind: m[1] });
-  }
+  findings.push(...scanSource(readFileSync(file, "utf8"), rel));
 }
 
 if (findings.length === 0) {
   console.log(
-    "✅ No hardcoded text of the shapes this script recognises (JSX text nodes\n" +
-      "   and aria-label/title/placeholder) in .tsx files under src/.\n" +
-      "   It does NOT see strings inside JSX expressions, string props, or .ts files."
+    "✅ No hardcoded text of the shapes this script recognises (JSX text nodes,\n" +
+      "   accessibility attributes and .ts DOM/browser-option sinks) under src/."
   );
 } else {
   console.error(

@@ -22,6 +22,7 @@ common:
     dateFormat: Date Format
     cursorTitle: Cursor position - cursor will be placed here after insertion
     gifPickerLabel: GIF picker
+    clipboardTitle: Clipboard placeholder - will be replaced with clipboard content
 
 dashboard:
   searchPlaceholder: Search snippets...
@@ -307,6 +308,7 @@ options:
     messageTooltip: "Detailed feedback helps us understand issues and prioritise improvements. The more specific you are, the better we can help."
     messagePlaceholder: "Please provide as much detail as possible. What were you trying to do? What happened? What did you expect?"
     screenshotLabel: Screenshot
+    screenshotPreviewAlt: Screenshot preview
     screenshotPlaceholder: Attach a screenshot (optional)
     screenshotSelected: "Screenshot selected: $1"
     removeScreenshot: Remove screenshot
@@ -596,6 +598,10 @@ contextMenu:
   giveFeedback: Give feedback
   hideOnThisSite: Hide on this site
 
+preview:
+  suggestionsLabel: Snippet suggestions
+  emptyHint: Type a shortcut to create one
+
 gifPicker:
   searchPlaceholder: Search GIFs...
   trending: Trending
@@ -610,6 +616,7 @@ gifPicker:
 imagePlaceholder:
   loading: Loading image...
   error: Image not found
+  alt: Image
   tooltip: Image ($1)
 
 gifPlaceholder:

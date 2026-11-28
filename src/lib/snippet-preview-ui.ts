@@ -20,6 +20,7 @@ import {
 import interVariableUrl from "@/assets/fonts/InterVariable.woff2?url";
 import openDyslexicRegularUrl from "@/assets/fonts/OpenDyslexic-Regular.woff2?url";
 import openDyslexicBoldUrl from "@/assets/fonts/OpenDyslexic-Bold.woff2?url";
+import { i18n } from "#i18n";
 
 /**
  * @font-face blocks for the palette, one family per option.
@@ -288,7 +289,7 @@ export class SnippetPreviewUI {
     };
 
     const title = document.createElement("span");
-    title.textContent = "Snippets";
+    title.textContent = i18n.t("dashboard.snippetListLabel");
 
     header.appendChild(logo);
     header.appendChild(title);
@@ -296,7 +297,7 @@ export class SnippetPreviewUI {
     // Create snippet list
     this.list = document.createElement("div");
     this.list.setAttribute("role", "listbox");
-    this.list.setAttribute("aria-label", "Snippet suggestions");
+    this.list.setAttribute("aria-label", i18n.t("preview.suggestionsLabel"));
     // The class targets the scrollbar rules in the shadow root's <style>; inline
     // `cssText` cannot carry pseudo-elements.
     this.list.className = "clipio-preview-list";
@@ -617,10 +618,10 @@ export class SnippetPreviewUI {
       `;
       const emptyLabel = document.createElement("div");
       emptyLabel.style.cssText = `font-weight: 500; margin-bottom: 2px;`;
-      emptyLabel.textContent = "No snippets found";
+      emptyLabel.textContent = i18n.t("dashboard.noSnippetsFound");
       const emptyHint = document.createElement("div");
       emptyHint.style.cssText = `color: #9ca3af; font-style: italic;`;
-      emptyHint.textContent = "Type a shortcut to create one";
+      emptyHint.textContent = i18n.t("preview.emptyHint");
       emptyItem.appendChild(emptyLabel);
       emptyItem.appendChild(emptyHint);
       this.list.appendChild(emptyItem);
@@ -679,7 +680,8 @@ export class SnippetPreviewUI {
         text-overflow: ellipsis;
         white-space: nowrap;
       `;
-      labelDiv.textContent = snippet.snippet.label || "Untitled snippet";
+      labelDiv.textContent =
+        snippet.snippet.label || i18n.t("snippetEditor.namePlaceholder");
 
       const shortcutDiv = document.createElement("div");
       shortcutDiv.style.cssText = `
