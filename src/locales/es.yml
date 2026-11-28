@@ -336,7 +336,7 @@ options:
       title: Importar fragmentos
   backup:
     title: Copia de seguridad completa
-    description: Descarga o restaura una copia completa: fragmentos, imágenes y configuración. Nunca se incluyen secretos, registros ni datos de uso locales.
+    description: "Descarga o restaura una copia completa: fragmentos, imágenes y configuración. Nunca se incluyen secretos, registros ni datos de uso locales."
     create: Crear copia
     restore: Restaurar
     fileLabel: Elige un archivo de copia de seguridad
