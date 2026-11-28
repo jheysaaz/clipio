@@ -23,10 +23,12 @@ async function getExtPage(
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await page.waitForLoadState("domcontentloaded");
-  // Settle after the extension page loads so React has committed its first
-  // paint before a test does a one-shot read. Genuine render settle, not a
-  // stand-in for a condition: tests that wait for data poll for that data.
-  await page.waitForTimeout(400);
+  // A hydration landmark means React has committed its first paint. That is a
+  // real precondition for the one-shot reads callers make, unlike a fixed sleep.
+  await page.waitForSelector(
+    '[data-testid="snippet-list"], [data-testid="empty-state"]',
+    { timeout: 10_000 }
+  );
   return page;
 }
 
@@ -89,11 +91,8 @@ async function typeShortcut(
 
 test.describe("Image / GIF feature tests", () => {
   // -------------------------------------------------------------------------
-  // 1. selectNewest: popup auto-selects the most-recently-updated snippet
-  // -------------------------------------------------------------------------
-
-  // -------------------------------------------------------------------------
-  // 3. Imported opaque ids and failure fallbacks
+  // Imported opaque ids: the browser-only seam is the rendered <img>. The
+  // placeholder grammar and missing-blob labels are covered in src/lib/.
   // -------------------------------------------------------------------------
 
   test("expands an imported opaque image id into the stored blob", async ({
@@ -117,7 +116,10 @@ test.describe("Image / GIF feature tests", () => {
 
     const field = await typeShortcut(testPage, "/imported-image");
 
-    await expect(field.locator("img")).toHaveCount(1, { timeout: 5_000 });
-    await expect(field.locator("img").first()).toHaveAttribute("src", /^data:/);
+    // `resolveMedia` emits the image without an alt, so the stable hook here is
+    // its ARIA image role; the seeded snippet guarantees there is only one.
+    const image = field.getByRole("img");
+    await expect(image).toHaveCount(1, { timeout: 5_000 });
+    await expect(image).toHaveAttribute("src", /^data:/);
   });
 });

@@ -102,8 +102,8 @@ test.describe("Background Script", () => {
       .poll(
         () =>
           extPage
+            .getByTestId("snippet-content-editor")
             .locator('[contenteditable="true"]')
-            .first()
             .textContent()
             .catch(() => null),
         { timeout: 5_000, message: "draft was never pre-filled into the popup" }
