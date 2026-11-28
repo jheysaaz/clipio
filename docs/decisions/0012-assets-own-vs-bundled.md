@@ -69,11 +69,15 @@ parsers rather than in either consumer.
   assets" cleanup would silently break `manifest.icons`.
 - **Both call sites render these marks with `alt=""`**, because the adjacent
   text already names the format. Correct for a screen reader, and exactly why a
-  broken image is invisible: no alt text to surface, no layout shift, and the
-  options page's axe scan has nothing to complain about. So `registry.test.ts`
-  asserts the icons are not `/icon/…` paths, which would now dangle, and
-  `e2e/options.spec.ts` asserts every mark actually decodes via `naturalWidth`.
-  Without the latter the failure mode is a blank space.
+  broken image is invisible: no alt text to surface, no layout shift, and an axe
+  scan has nothing to complain about. So `registry.test.ts` asserts the icons
+  are not `/icon/…` paths, which would now dangle.
+
+  **Amendment (2026-11-27):** the companion assertion that every mark decodes
+  via `naturalWidth` lived in `e2e/options.spec.ts`, which no longer exists, and
+  no current E2E spec checks decoding. The "not a dangling `/icon/` path" unit
+  assertion still holds, but a corrupt inlined data URL would render as a blank
+  space without a test noticing. That gap is known, not a claim of coverage.
 
 ## Alternatives rejected
 

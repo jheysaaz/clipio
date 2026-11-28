@@ -32,10 +32,9 @@ export type StorageHelper = {
   /**
    * Seed ONLY browser.storage.sync, leaving the content-script cache alone.
    *
-   * This is what the browser does on its own when the user signs into a Google
-   * account or another device syncs: storage.sync is populated externally and
-   * no extension code runs. Used to reproduce the reported bug where snippets
-   * appear in the popup but will not insert on a page.
+   * No e2e spec calls this now: the external-sync decision it was added for is
+   * asserted in `src/lib/sync-change.test.ts` (`needsCacheRefresh`). It remains
+   * available for a browser test that must populate sync without extension code.
    */
   seedSyncOnly: (snippets: Snippet[]) => Promise<void>;
   /** Read all snip:* keys from sync storage. */

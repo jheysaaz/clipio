@@ -31,7 +31,7 @@ export default defineConfig({
   globalTimeout: 5 * 60 * 1_000,
   // Retries are disabled in CI as well as locally. A retry hides the flake
   // instead of fixing it, and this suite runs serially against a real browser
-  // where a flake is always a real bug (AGENTS.md Testing Standards, rule 12).
+  // where a flake is always a real bug (AGENTS.md Testing rules, rule 8).
   // If a test proves genuinely environment-dependent, fix the wait condition
   // or gate it on an explicit capability check — do not raise this number.
   retries: 0,

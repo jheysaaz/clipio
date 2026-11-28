@@ -2,7 +2,15 @@
  * Tests for src/lib/update-checker.ts
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from "vitest";
 import {
   compareVersions,
   getCurrentVersion,
@@ -104,9 +112,26 @@ function mockFetchNetworkError() {
   global.fetch = vi.fn().mockRejectedValueOnce(new TypeError("Network error"));
 }
 
-// Capture the real fetch before any test overwrites it, and restore it in
-// afterEach so mockFetch* helpers cannot leak into other test files.
-const realFetch = global.fetch;
+// Capture the real descriptor before any test overwrites fetch, so afterEach
+// can restore it exactly — including deleting the property if it was absent.
+const originalFetchDescriptor = Object.getOwnPropertyDescriptor(
+  globalThis,
+  "fetch"
+);
+
+// Every fetch spy is tracked here so afterEach restores each one rather than
+// leaving it registered after the property is overwritten.
+const fetchSpies = new Set<Mock<typeof fetch>>();
+
+function spyOnFetch(): Mock<typeof fetch> {
+  const spy = vi.spyOn(globalThis, "fetch");
+  fetchSpies.add(spy);
+  return spy;
+}
+
+// Shared so the top-level afterEach can restore the console.warn spy installed
+// by either throttling describe's beforeEach.
+let consoleWarnSpy: { mockRestore(): void } | undefined;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -120,8 +145,22 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  global.fetch = realFetch;
+  for (const spy of fetchSpies) {
+    spy.mockRestore();
+  }
+  fetchSpies.clear();
+  // Restores helper-provided vi.fn() mocks too: mockRestore() puts back whatever
+  // was there when spyOn ran, which may itself have been a helper mock.
+  if (originalFetchDescriptor) {
+    Object.defineProperty(globalThis, "fetch", originalFetchDescriptor);
+  } else {
+    Reflect.deleteProperty(globalThis, "fetch");
+  }
   vi.unstubAllEnvs();
+  // Guarantees console.warn is pristine for later tests and files; restoring
+  // the spy handle leaves the intentional vi.mock module mocks untouched.
+  consoleWarnSpy?.mockRestore();
+  consoleWarnSpy = undefined;
 });
 
 // ---------------------------------------------------------------------------
@@ -621,7 +660,7 @@ describe("checkForUpdate — throttling", () => {
     vi.mocked(browser.runtime.getManifest).mockReturnValue({
       version: "1.0.0",
     } as never);
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   it("makes NO network call when checked too recently", async () => {
@@ -629,7 +668,7 @@ describe("checkForUpdate — throttling", () => {
     mockLatestVersionCheckedAtItem.getValue.mockResolvedValue(
       new Date(Date.now() - HOUR).toISOString()
     );
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const fetchSpy = spyOnFetch();
 
     await checkForUpdate();
 
@@ -643,7 +682,7 @@ describe("checkForUpdate — throttling", () => {
         Date.now() - (UPDATE_CHECK_MIN_INTERVAL_HOURS + 1) * HOUR
       ).toISOString()
     );
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+    const fetchSpy = spyOnFetch().mockResolvedValue({
       ok: true,
       status: 200,
       json: async () => makeRelease(),
@@ -658,7 +697,7 @@ describe("checkForUpdate — throttling", () => {
     // Without this, a failing or rate-limited endpoint is retried on every
     // service-worker wake-up, which is the storm the timestamp exists to stop.
     mockLatestVersionCheckedAtItem.getValue.mockResolvedValue(null);
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+    spyOnFetch().mockRejectedValue(new Error("network down"));
 
     await checkForUpdate();
 
@@ -668,7 +707,7 @@ describe("checkForUpdate — throttling", () => {
   it("still records the timestamp when GitHub answers 403", async () => {
     // A 403 is the state that actually caused the storm.
     mockLatestVersionCheckedAtItem.getValue.mockResolvedValue(null);
-    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+    spyOnFetch().mockResolvedValue({
       ok: false,
       status: 403,
     } as never);
@@ -693,7 +732,7 @@ describe("checkForUpdate — throttle error paths", () => {
     vi.mocked(browser.runtime.getManifest).mockReturnValue({
       version: "1.0.0",
     } as never);
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   it("checks anyway when reading the timestamp fails", async () => {
@@ -702,7 +741,7 @@ describe("checkForUpdate — throttle error paths", () => {
     mockLatestVersionCheckedAtItem.getValue.mockRejectedValue(
       new Error("storage unavailable")
     );
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+    const fetchSpy = spyOnFetch().mockResolvedValue({
       ok: true,
       status: 200,
       json: async () => makeRelease(),
@@ -720,7 +759,7 @@ describe("checkForUpdate — throttle error paths", () => {
     mockLatestVersionCheckedAtItem.setValue.mockRejectedValue(
       new Error("QUOTA_BYTES exceeded")
     );
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+    spyOnFetch().mockRejectedValue(new Error("network down"));
 
     await expect(checkForUpdate()).resolves.not.toThrow();
   });
@@ -730,7 +769,7 @@ describe("checkForUpdate — throttle error paths", () => {
     mockLatestVersionCheckedAtItem.setValue.mockRejectedValue(
       new Error("QUOTA_BYTES exceeded")
     );
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+    spyOnFetch().mockRejectedValue(new Error("network down"));
 
     await checkForUpdate();
 

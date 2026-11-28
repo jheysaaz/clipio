@@ -130,7 +130,7 @@ export function ImagePlaceholderElement({
       >
         <img
           src={objectUrl}
-          alt="image"
+          alt={i18n.t("imagePlaceholder.alt")}
           title={i18n.t("imagePlaceholder.tooltip", [mediaId])}
           className={cn(
             "block w-full h-auto rounded border border-border",

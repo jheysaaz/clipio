@@ -4,6 +4,7 @@ import { Icon } from "@/components/ui/icon";
 import { ICON_STROKE } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useEditorRef } from "platejs/react";
+import { i18n } from "#i18n";
 
 interface ClipboardPlaceholderElementProps {
   children: React.ReactNode;
@@ -40,7 +41,7 @@ export function ClipboardPlaceholderElement({
         "hover:bg-accent",
         "transition-colors duration-150"
       )}
-      title="Clipboard placeholder - will be replaced with clipboard content"
+      title={i18n.t("common.editor.clipboardTitle")}
     >
       <Icon icon={Clipboard} size="xs" strokeWidth={ICON_STROKE.micro} />
       <span>clipboard</span>

@@ -2,8 +2,7 @@
  * Contracts for the relative-size refactor.
  *
  * These assertions read computed geometry, not class names: a class can stay
- * correct while the stylesheet behind it changes. Screenshots for this work are
- * captured separately into /tmp so they never enter the repository.
+ * correct while the stylesheet behind it changes.
  */
 
 import { expect, test } from "./fixtures.js";
@@ -127,12 +126,16 @@ test.describe("relative sizing and document editor", () => {
     await expect(shortcut).toBeFocused();
     await popupPage.keyboard.press("Tab");
     await expect(
-      popupPage.getByRole("textbox", { name: "Snippet content" })
+      popupPage
+        .getByTestId("snippet-content-editor")
+        .locator('[contenteditable="true"]')
     ).toBeFocused();
     await name.focus();
     await popupPage.keyboard.press("Enter");
     await expect(
-      popupPage.getByRole("textbox", { name: "Snippet content" })
+      popupPage
+        .getByTestId("snippet-content-editor")
+        .locator('[contenteditable="true"]')
     ).toBeFocused();
 
     await popupPage.evaluate(() => {

@@ -22,6 +22,7 @@ common:
     dateFormat: Formato de fecha
     cursorTitle: Posición del cursor - el cursor quedará aquí después de insertar
     gifPickerLabel: Selector de GIF
+    clipboardTitle: Marcador de portapapeles - se reemplazará con el contenido del portapapeles
 
 dashboard:
   searchPlaceholder: Buscar fragmentos...
@@ -307,6 +308,7 @@ options:
     messageTooltip: "Los comentarios detallados nos ayudan a entender los problemas y a priorizar mejoras. Entre más específico seas, mejor podremos ayudarte."
     messagePlaceholder: "Cuéntanos con el mayor detalle posible. ¿Qué intentabas hacer? ¿Qué pasó? ¿Qué esperabas que pasara?"
     screenshotLabel: Captura de pantalla
+    screenshotPreviewAlt: Vista previa de la captura de pantalla
     screenshotPlaceholder: Adjuntar una captura de pantalla (opcional)
     screenshotSelected: "Captura de pantalla seleccionada: $1"
     removeScreenshot: Quitar captura de pantalla
@@ -596,6 +598,10 @@ contextMenu:
   giveFeedback: Enviar comentarios
   hideOnThisSite: Ocultar en este sitio
 
+preview:
+  suggestionsLabel: Sugerencias de fragmentos
+  emptyHint: Ingresa un atajo para crear uno
+
 gifPicker:
   searchPlaceholder: Buscar GIFs...
   trending: Tendencias
@@ -610,6 +616,7 @@ gifPicker:
 imagePlaceholder:
   loading: Cargando imagen...
   error: Imagen no encontrada
+  alt: Imagen
   tooltip: Imagen ($1)
 
 gifPlaceholder:

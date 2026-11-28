@@ -25,19 +25,13 @@ const TOAST_SELECTOR = "[data-sonner-toaster], [data-sonner-toast]";
  * Wait for the popup's main content to be visible (React has hydrated).
  */
 async function waitForPopupReady(page: import("@playwright/test").Page) {
-  // Wait for the stable hydration landmarks added under e2e coverage
-  // (): either the snippet list or the empty state.
+  // React has hydrated once either stable landmark is in the DOM: the snippet
+  // list or the empty state. Neither depends on copy or position.
   await page.waitForSelector(
     '[data-testid="snippet-list"], [data-testid="empty-state"]',
     { timeout: 10_000 }
   );
 }
-
-/**
- * The add-tag icon must sit inside its hit target, not against its left edge.
- * The old alignment hack removed the button's horizontal padding and pushed
- * the glyph flush with the footer; this measures the actual boxes in a browser.
- */
 
 /**
  * Seed snippets and reload popup.
@@ -70,18 +64,6 @@ async function seedAndReload(
   await waitForPopupReady(page);
 }
 
-/**
- * Switch storage mode while suppressing the unrelated update banner. The badge
- * belongs to the background, so the change is made through browser storage —
- * not a React state setter — and the popup is reloaded to read it fresh.
- */
-
-/**
- * Use the narrowest sidebar the resize handle permits. The bottom bar has to
- * keep its controls on screen there; a floating state field that only fits at
- * the default width has just moved the bug to a different setting.
- */
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -113,8 +95,11 @@ test.describe("Popup (Dashboard)", () => {
     await expect(shortcutInput).toBeVisible();
     await shortcutInput.fill("/e2e");
 
-    // canSave requires non-empty content — fill the PlateJS contenteditable
-    const editor = popupPage.locator('[contenteditable="true"]').first();
+    // canSave requires non-empty content — reach the PlateJS editor through
+    // the wrapper's testid, not through locale copy or DOM order.
+    const editor = popupPage
+      .getByTestId("snippet-content-editor")
+      .locator('[contenteditable="true"]');
     await expect(editor).toBeVisible({ timeout: 5_000 });
     await editor.click();
     await popupPage.keyboard.type("Created by e2e");
@@ -205,7 +190,10 @@ test.describe("Popup (Dashboard)", () => {
     });
     await seedAndReload(popupPage, [snippet]);
     await popupPage.getByTestId("snippet-list-item").click();
-    await popupPage.locator('[contenteditable="true"]').click();
+    await popupPage
+      .getByTestId("snippet-content-editor")
+      .locator('[contenteditable="true"]')
+      .click();
 
     await popupPage.getByTestId("image-file-input").setInputFiles({
       name: "pixel.png",
@@ -236,7 +224,9 @@ test.describe("Popup (Dashboard)", () => {
     await seedAndReload(popupPage, [snippet]);
     await popupPage.getByTestId("snippet-list-item").click();
 
-    const editor = popupPage.locator('[contenteditable="true"]');
+    const editor = popupPage
+      .getByTestId("snippet-content-editor")
+      .locator('[contenteditable="true"]');
     await editor.click();
     await editor.press("Control+End");
     // A slash is only a trigger at a word boundary. Start a fresh last
@@ -366,7 +356,9 @@ async function editSelectedSnippet(
   // The URL changes before React swaps the keyed detail view. Waiting for the
   // target's content avoids clicking the outgoing editor, which React would
   // replace mid-type and drop every keystroke on the floor.
-  const editor = popupPage.locator('[contenteditable="true"]');
+  const editor = popupPage
+    .getByTestId("snippet-content-editor")
+    .locator('[contenteditable="true"]');
   await expect(editor).toHaveCount(1);
   await expect(editor).toContainText(snippet.content);
   await editor.click();
@@ -401,9 +393,11 @@ test.describe("Popup — edits autosave", () => {
       .toContain("autosaved");
 
     await popupPage.locator(`#snippet-${older.id}`).click();
-    await expect(popupPage.locator('[contenteditable="true"]')).toContainText(
-      "autosaved"
-    );
+    await expect(
+      popupPage
+        .getByTestId("snippet-content-editor")
+        .locator('[contenteditable="true"]')
+    ).toContainText("autosaved");
   });
 
   test("undo restores the committed edit through the queue", async ({
@@ -426,7 +420,9 @@ test.describe("Popup — edits autosave", () => {
       .poll(() => syncedContent(popupPage, older.id), { timeout: 10_000 })
       .toBe("older body");
     await expect(
-      popupPage.locator('[contenteditable="true"]')
+      popupPage
+        .getByTestId("snippet-content-editor")
+        .locator('[contenteditable="true"]')
     ).not.toContainText("autosaved");
   });
 

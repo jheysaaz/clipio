@@ -207,14 +207,22 @@ const posix = (p) => p.split(sep).join("/");
  * bytes to the aggregate and shared chunks. The individual entries stay below
  * their existing budgets. Sizes were measured twice from clean builds and did
  * not vary.
+ *
+ * Raised for the hardcoded-text migration: five literals in the editor
+ * placeholders, feedback modal, preview and background context menu moved into
+ * en.yml and es.yml. The generated messages and the new i18n calls reach the
+ * content script and shared chunks. The aggregate grows 1,022 bytes, the content
+ * script 1,019 and the shared chunks 14; the background, popup and options
+ * entries stay below their existing budgets. All sizes were measured three
+ * times from clean builds and did not vary.
  */
 const BUDGETS = [
-  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_941_163 },
+  { name: "all JavaScript", pattern: "**/*.js", maxBytes: 2_942_185 },
   { name: "background entry", pattern: "background.js", maxBytes: 227_257 },
   {
     name: "content script entry",
     pattern: "content-scripts/content.js",
-    maxBytes: 919_493,
+    maxBytes: 920_512,
   },
   {
     name: "popup entry chunk",
@@ -231,7 +239,7 @@ const BUDGETS = [
     // change: a rename must not be a way around the budget.
     name: "all shared chunks",
     pattern: "chunks/*.js",
-    maxBytes: 1_794_413,
+    maxBytes: 1_794_427,
   },
 ];
 

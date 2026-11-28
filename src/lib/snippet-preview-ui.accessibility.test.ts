@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { i18n } from "#i18n";
 import { SnippetPreviewUI } from "./snippet-preview-ui";
 import type { FilteredSnippet } from "./preview-helpers";
 
@@ -50,7 +51,9 @@ describe("SnippetPreviewUI Accessibility", () => {
     it("should have aria-label on the listbox", () => {
       const shadow = ui.getInternalShadowRoot()!;
       const list = shadow!.querySelector('[role="listbox"]');
-      expect(list!.getAttribute("aria-label")).toBe("Snippet suggestions");
+      expect(list!.getAttribute("aria-label")).toBe(
+        i18n.t("preview.suggestionsLabel")
+      );
     });
 
     it("should set aria-activedescendant on show", () => {

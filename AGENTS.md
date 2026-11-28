@@ -9,7 +9,7 @@ and translated.
 
 ```bash
 pnpm verify        # the gate — format, lint, types, unit+coverage, locale/i18n checks
-pnpm verify:full   # + build + e2e. What CI runs.
+pnpm verify:full   # + build + bundle size + e2e. CI runs the same steps as separate jobs.
 pnpm test:watch    # unit tests, watching
 pnpm test:e2e      # e2e only
 pnpm dev           # dev build with the QA page
@@ -47,7 +47,7 @@ WXT owns the entrypoint layout. Don't restructure it.
 
 ## Localisation
 
-**Read [`src/locales/readme.md`](./src/locales/readme.md) before adding, editing or
+**Read [`src/locales/README.md`](./src/locales/README.md) before adding, editing or
 reviewing any user-facing string.** It defines voice, spelling, vocabulary, the
 glossary and the review checklist. Follow it; do not improvise terms.
 
@@ -60,7 +60,7 @@ Each of these came from a real defect in this repo, not from theory.
 2. **Every feature needs a negative test** — rejected input, thrown error, blocked
    path, or absent resource.
 3. **No conditional branches that swallow a test.** `if (guard) {…} else
-{ expect(true).toBe(true) }` hides regressions. Make the guard an assertion.
+   { expect(true).toBe(true) }` hides regressions. Make the guard an assertion.
 4. **E2E selects by `data-testid` → ARIA role + name → stable attribute.** Never by
    literal UI copy, never by `:has-text()` containers, never by position.
    Changing a copy string must not break a test.
@@ -80,9 +80,11 @@ Each of these came from a real defect in this repo, not from theory.
 
 ## Coverage
 
-**80% across all code, enforced.** `scripts/check-coverage-integrity.mjs` fails if
-any configured file is missing from the report — that check exists because four
-components were silently dropped and the gate stayed green.
+**80% across configured code, enforced.** `scripts/check-coverage-integrity.mjs`
+fails if any configured file is missing from the report — that check exists because
+four components were silently dropped and the gate stayed green. Files excluded
+from coverage carry a written reason in `vitest.config.ts`; the exclusions are a
+documented scope decision, not invisible debt.
 
 Thresholds are a **ratchet**: they fail on regression. Raising one is deliberate;
 adjusting one to make a red build pass is not. Excluding a file needs a written

@@ -42,7 +42,9 @@ test.describe("Storage durability", () => {
     await popupPage.getByTestId("add-snippet").click();
     await popupPage.getByTestId("snippet-label-input").fill("Durability Test");
     await popupPage.getByTestId("snippet-shortcut-input").fill("/durability");
-    const editor = popupPage.locator('[contenteditable="true"]').first();
+    const editor = popupPage
+      .getByTestId("snippet-content-editor")
+      .locator('[contenteditable="true"]');
     await editor.click();
     await popupPage.keyboard.type("Survives a popup reopen");
     await expect(popupPage).toHaveURL(/#\/snippet\//, { timeout: 10_000 });
@@ -54,6 +56,10 @@ test.describe("Storage durability", () => {
 
     const rows = popupPage.getByTestId("snippet-list-item");
     await expect(rows).toHaveCount(1);
-    await expect(rows.first()).toContainText("Durability Test");
+    // The one row is addressed by its option role and the label seeded above;
+    // no positional pick, and the label is test data, not product copy.
+    await expect(
+      popupPage.getByRole("option", { name: /Durability Test/ })
+    ).toContainText("Durability Test");
   });
 });

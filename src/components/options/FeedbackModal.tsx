@@ -273,7 +273,7 @@ export function FeedbackModal({ open, onClose }: FeedbackModalProps) {
                   </div>
                   <img
                     src={URL.createObjectURL(state.screenshotFile)}
-                    alt="Screenshot preview"
+                    alt={i18n.t("options.feedback.screenshotPreviewAlt")}
                     className="max-h-40 rounded border"
                   />
                 </div>

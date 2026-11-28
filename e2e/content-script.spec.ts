@@ -344,9 +344,11 @@ test.describe("Content Script Expansion", () => {
     await installDefaultPreventedProbe(testPage);
 
     // Page-authored script creates a field it fully controls, parks the
-    // caret after a valid shortcut, and dispatches a Space keydown.
-    const value = await testPage.evaluate(async () => {
+    // caret after a valid shortcut, and dispatches a Space keydown. It stays
+    // mounted so its value can be read after the debounce has demonstrably run.
+    await testPage.evaluate(() => {
       const input = document.createElement("input");
+      input.dataset.testid = "synthetic-keydown-input";
       input.value = "/hello";
       document.body.appendChild(input);
       input.focus();
@@ -359,17 +361,34 @@ test.describe("Content Script Expansion", () => {
           cancelable: true,
         })
       );
-      // Outlive the 300ms expansion debounce before reading back.
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      const result = input.value;
-      input.remove();
-      return result;
     });
 
+    // Read the probe before any trusted keydown: a trusted expansion may
+    // legitimately call preventDefault and overwrite the shared flag.
+    const preventedAfterSyntheticKeydown = await readPreventedFlag(testPage);
+
+    // A trusted shortcut in the ordinary field is the readiness condition.
+    // Until it expands, the content script's debounce has not been observed to
+    // fire in this page, so the synthetic field has not been given a fair
+    // chance to expand. This proves the window elapsed; a sleep only guessed it.
+    const trustedInput = testPage.getByTestId("text-input");
+    await trustedInput.click();
+    await testPage.keyboard.type("/hello", { delay: 30 });
+    await expect(trustedInput).toHaveValue(/Hello, World!/, {
+      timeout: EXPANSION_TIMEOUT,
+    });
+
+    const syntheticInput = testPage.getByTestId("synthetic-keydown-input");
+    const value = await syntheticInput.inputValue();
     expect(value).toBe("/hello");
     expect(value).not.toContain("Hello, World!");
     // A page must not be able to swallow the host page's own default action.
-    expect(await readPreventedFlag(testPage)).toBe(false);
+    expect(preventedAfterSyntheticKeydown).toBe(false);
+    await testPage.evaluate(() =>
+      document
+        .querySelector('[data-testid="synthetic-keydown-input"]')
+        ?.remove()
+    );
   });
 
   test("page script cannot reach preview rows, so cannot click one", async ({
@@ -452,8 +471,8 @@ test.describe("Content Script Expansion", () => {
     await popupPage.getByTestId("snippet-label-input").fill("Live add");
     await popupPage.getByTestId("snippet-shortcut-input").fill("/live");
     await popupPage
+      .getByTestId("snippet-content-editor")
       .locator('[contenteditable="true"]')
-      .first()
       .fill("Live update content");
 
     // The first valid autosave creates the snippet; no Create button remains.
@@ -493,7 +512,9 @@ test.describe("Content Script Expansion", () => {
     await popupPage.reload();
     await expect(popupPage.getByTestId("snippet-list-item")).toBeVisible();
     await popupPage.getByTestId("snippet-list-item").click();
-    const editor = popupPage.locator('[contenteditable="true"]').first();
+    const editor = popupPage
+      .getByTestId("snippet-content-editor")
+      .locator('[contenteditable="true"]');
     await editor.fill("Updated content");
     await expect(editor).toContainText("Updated content");
 

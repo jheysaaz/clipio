@@ -96,7 +96,7 @@ async function registerContextMenus(): Promise<void> {
     await Promise.all([
       browser.contextMenus.create({
         id: CONTEXT_MENU.PARENT,
-        title: "Clipio: Snippets Manager",
+        title: i18n.t("extName"),
         contexts: ["page", "selection", "editable"],
       }),
       browser.contextMenus.create({
