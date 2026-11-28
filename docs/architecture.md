@@ -72,23 +72,39 @@ popup's step direction; the long-term record is version history. These four keys
 and the `history` store are local-only: they are not synced, exported, backed up,
 cached for the content script, or used by search and usage counts.
 
-The detail top bar has no Save control. It shows undo/redo and a compact sync
-status; sidebar, delete, copy and insert commands stay. The create form keeps its
-explicit **Create** button as the way to finish and navigate, even though its
-fields autosave too. The full reasoning is in ADR
+The detail top bar has neither a Save nor a Create control. It shows undo/redo
+and a compact sync status; sidebar, delete, copy and insert commands stay. The
+first debounced autosave creates the record; an empty draft creates nothing. The
+full reasoning is in ADR
 [0015](./decisions/0015-autosave-and-local-version-history.md).
 
 ## Code layout
 
 | Directory         | Holds                                | Test approach                       |
 | ----------------- | ------------------------------------ | ----------------------------------- |
-| `src/lib/`        | Pure logic. No DOM, no browser APIs. | Fast unit tests                     |
+| `src/lib/`        | Logic, plus the browser-bound adapters listed below. | Fast unit tests                     |
 | `src/storage/`    | The backends, manager, queue drain and local history. | Unit tests against `fake-indexeddb` |
-| `src/components/` | React. Thin — logic lives in `lib/`. | Mostly E2E                          |
+| `src/components/` | React. Thin — logic lives in `lib/`. | Colocated unit tests for logic-bearing components; E2E for browser-only paths |
 | `src/pages/`      | Page composition.                    | E2E                                 |
 
 The split is deliberate: `src/lib/` is where the logic that can break lives, so it
 is where the tests are.
+
+**Documented exceptions to "pure logic, no DOM, no browser APIs".** Some modules
+in `src/lib/` are adapters rather than pure functions, and live here because the
+decision they carry is unit-testable even though the edge is browser-bound:
+
+- `dom-text-range.ts`, `snippet-preview-ui.ts`, `preview-helpers.ts` — the injected
+  page preview builds real DOM; the caret/range decisions are unit-tested.
+- `current-site.ts`, `shortcuts.ts`, `review-prompt.ts`, `protocol/index.ts`,
+  `copy-markdown-as-rich-text.ts` — `browser.*` and clipboard adapters around
+  testable decisions.
+- `update-checker.ts`, `giphy.ts`, `sentry-relay.ts`, `sentry.ts`,
+  `sentry-content.ts` — network/SDK adapters with their logic unit-tested.
+
+New modules in `src/lib/` should still be pure. If a browser-bound adapter belongs
+here, add it to this list in the same change and keep its decision logic in a
+separate, unit-tested module.
 
 ## Internationalisation
 

@@ -37,8 +37,16 @@ What genuinely needs a browser, and why:
 | 3 × survives restart | Service worker lifecycle and storage durability across a browser restart. |
 | 5 × messaging relay | `runtime.sendMessage` between genuinely separate JS contexts. |
 
-**Result: 153 → 31 tests, ~7 min → ~52 s**, with the unit suite absorbing the
-moved work and staying under 10 s.
+**Result at the time: 153 → 31 tests, ~7 min → ~52 s**, with the unit suite
+absorbing the moved work and staying under 10 s.
+
+## Amendment (2026-11-27)
+
+A later pruning commit (`a8fe027`) cut the suite again for runtime, taking it to
+**30 tests across 8 spec files**. The boundary above is unchanged: the remaining
+tests still need a real browser (injection, storage durability, cross-context
+messaging, popup/options rendering). The current count is the one to measure
+drift against; the 31 in the original decision is historical.
 
 ## Alternatives considered
 

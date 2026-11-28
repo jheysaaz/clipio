@@ -10,7 +10,7 @@ export default defineConfig({
     //
     // `scripts/` is included because the gate scripts carry real logic — the
     // coverage-integrity glob compiler, for one — and a gate that is itself
-    // untested is exactly the kind of thing these Testing Standards exist to
+    // untested is exactly the kind of thing these Testing rules exist to
     // prevent. Scoped to `*.test.ts` so the `.mjs` gates are not swept up.
     include: [
       "src/**/*.test.ts",
@@ -38,8 +38,7 @@ export default defineConfig({
       include: ["src/**/*.ts", "src/**/*.tsx"],
 
       // Coverage exclusions — every entry carries a written reason
-      // (AGENTS.md Testing Standards rule 11: no blanket excludes without
-      // justification).
+      // (AGENTS.md Coverage: excluding a file needs a written reason).
       exclude: [
         // Entrypoint wiring: listener registration, not logic.
         //
@@ -113,8 +112,6 @@ export default defineConfig({
         "src/config/**",
         // Side-effectful Sentry SDK bootstrap (init runs on import)
         "src/lib/sentry.ts",
-        // Static manifest fields
-        "src/lib/manifest.ts",
         // Trivial class-merge helper (shadcn cn-style)
         "src/lib/utils.ts",
         // Re-export barrel / browser-API wrapper — coverage debt: unit tests

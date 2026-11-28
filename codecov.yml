@@ -1,13 +1,15 @@
 coverage:
   status:
+    # Flat 80, matching the local gate. A 1% allowance used to let 79% pass here
+    # while AGENTS.md claimed a hard floor — a lower remote bar than the local one.
     project:
       default:
         target: 80%
-        threshold: 1%
+        threshold: 0
     patch:
       default:
         target: 80%
-        threshold: 1%
+        threshold: 0
 
 comment:
   layout: "diff, flags, files"
@@ -15,15 +17,11 @@ comment:
   require_changes: false
 
 ignore:
+  # Local coverage config is the source of truth for excluded source files;
+  # this list only covers files that never appear in the uploaded report.
   - "**/*.test.ts"
   - "**/*.test.tsx"
   - "tests/**"
-  - "src/components/**/*.tsx"
-  - "src/entrypoints/**/*.tsx"
-  - "src/hooks/**"
-  - "src/pages/**"
-  - "src/lib/sentry.ts"
-  - "src/config.ts"
   - "vitest.config.ts"
   - ".wxt/**"
   - "dist/**"

@@ -49,7 +49,7 @@ jobs:
       # CI. Steps are listed in scripts/verify.mjs:
       #
       #   format · lint · types (src + e2e) · unit + coverage
-      #   coverage integrity · locale parity · hardcoded text
+      #   coverage integrity · locale parity · hardcoded text · relative units
       #
       - name: Run fast gate
         run: pnpm verify

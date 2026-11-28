@@ -155,17 +155,21 @@ describe("every glob shape actually present in vitest.config.ts", () => {
     ["src/assets/**", "src/assets/styles/fonts.css", true],
     ["src/**/*.d.ts", "src/types/index.d.ts", true],
     ["src/**/__mocks__/**", "src/lib/__mocks__/x.ts", true],
-    ["src/hooks/**", "src/hooks/FontContext.tsx", true],
     ["src/pages/**", "src/pages/Dashboard.tsx", true],
-    ["src/components/options/**", "src/components/options/a/b/c.tsx", true],
     ["src/config/**", "src/config/constants.ts", true],
+    [
+      "src/components/editor/RichTextEditor.tsx",
+      "src/components/editor/RichTextEditor.tsx",
+      true,
+    ],
+    ["src/app.css", "src/app.css", true],
     ["src/lib/sentry.ts", "src/lib/sentry.ts", true],
     ["src/lib/utils.ts", "src/lib/utils.ts", true],
     ["src/storage/index.ts", "src/storage/index.ts", true],
-    // A file that is NOT excluded by any of the above.
-    ["src/components/**", "src/components/ConfirmDialog.tsx", true],
-    ["src/lib/**", "src/lib/markdown.ts", true],
-    ["src/components/**", "src/lib/markdown.ts", false],
+    // Paths the config does NOT exclude, so an over-broad glob fails here.
+    ["src/components/ui/**", "src/components/ConfirmDialog.tsx", false],
+    ["src/lib/sentry.ts", "src/lib/markdown.ts", false],
+    ["src/pages/**", "src/lib/markdown.ts", false],
   ];
 
   it.each(patterns)("%s vs %s → %s", (pattern, path, expected) => {

@@ -19,9 +19,8 @@ export default defineConfig([
     "**/*.js",
     // `.mjs` is deliberately NOT ignored. The gate scripts under `scripts/` are
     // real code that runs on every `pnpm verify` and on every release tag, and
-    // excluding them left an entire directory of logic unlinted — which is how
-    // `check-spec-refs.mjs` came to carry a dead duplicate regex that nothing
-    // complained about.
+    // excluding them left an entire directory of logic unlinted. Keep them in
+    // the lint program so dead or duplicated logic there gets reported.
     "**/*.cjs",
   ]),
   eslint.configs.recommended,
