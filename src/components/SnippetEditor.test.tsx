@@ -18,6 +18,7 @@ import {
 } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
+import { i18n } from "#i18n";
 import { FeedbackProvider } from "@/components/feedback/FeedbackProvider";
 import SnippetEditor from "./SnippetEditor";
 import type { Snippet, SnippetFormData } from "@/types";
@@ -29,6 +30,10 @@ import {
   resetReportedOutcomeReportsForTests,
 } from "@/store/write-queue";
 import { resetSnippetsStoreForTests, snippetsStore } from "@/store/snippets";
+
+// Copy assertions resolve keys through the real en.yml stub, so rewording a
+// locale key changes the rendered copy and the expectation together. A wrong
+// key still fails: the stub echoes a missing key instead of plausible copy.
 
 const q = vi.hoisted(() => ({
   stageEdit: vi.fn<typeof import("@/store/write-queue").stageEdit>(),
@@ -224,15 +229,19 @@ function expectLandmarks() {
   expect(screen.getAllByLabelText("Snippet name")).toHaveLength(1);
   expect(screen.getAllByLabelText("Shortcut")).toHaveLength(1);
   expect(screen.getByTestId("snippet-content-editor")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /add tag/i })).toBeInTheDocument();
-  expect(screen.getByRole("group", { name: "Tags" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: i18n.t("snippetDetail.addTag") })
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("group", { name: i18n.t("snippetDetail.tags") })
+  ).toBeInTheDocument();
 }
 
 async function expectSavedFooter() {
   await waitFor(() =>
     expect(screen.getByTestId("snippet-metadata")).toHaveTextContent(/3\s*uses/)
   );
-  expect(screen.getByText("Updated")).toBeInTheDocument();
+  expect(screen.getByText(i18n.t("snippetDetail.updated"))).toBeInTheDocument();
   const time = screen.getByTestId("snippet-updated-time");
   expect(time).toHaveAttribute("datetime", snippet.updatedAt);
   expect(time).toHaveAttribute(
@@ -242,7 +251,9 @@ async function expectSavedFooter() {
 }
 
 function expectDraftFooter() {
-  expect(screen.getByTestId("snippet-draft")).toHaveTextContent("Draft");
+  expect(screen.getByTestId("snippet-draft")).toHaveTextContent(
+    i18n.t("snippetDetail.draft")
+  );
   expect(screen.queryByTestId("snippet-metadata")).toBeNull();
 }
 
@@ -370,7 +381,10 @@ describe("one editor, two data states", () => {
     expect(name.className).toContain("text-base!");
     expect(name.className).toContain("font-medium!");
     expect(name.className).toContain("bg-transparent");
-    expect(name).toHaveAttribute("placeholder", "Untitled snippet");
+    expect(name).toHaveAttribute(
+      "placeholder",
+      i18n.t("snippetEditor.namePlaceholder")
+    );
     // The shortcut has no pill, underline or error border; its hint is a
     // native title, so validation never repaints the field.
     expect(shortcut.className).toContain("border-0");
@@ -394,7 +408,9 @@ describe("one editor, two data states", () => {
     renderView();
     const name = screen.getByTestId("snippet-label-input");
     const shortcut = screen.getByTestId("snippet-shortcut-input");
-    const content = screen.getByRole("textbox", { name: "Snippet content" });
+    const content = screen.getByRole("textbox", {
+      name: i18n.t("snippetEditor.content"),
+    });
 
     name.focus();
     await user.tab();
@@ -465,7 +481,7 @@ describe("one editor, two data states", () => {
     const button = screen.getByTestId("snippet-add-tag");
 
     expect(button).toHaveAccessibleName("Add tag");
-    expect(button).toHaveTextContent("New Tag");
+    expect(button).toHaveTextContent(i18n.t("snippetDetail.newTag"));
 
     await user.click(button);
     await user.type(screen.getByPlaceholderText(/tag name/i), "work{Enter}");
@@ -520,7 +536,9 @@ describe("draft creation", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderDraft();
 
-    await user.click(screen.getByRole("textbox", { name: /content/i }));
+    await user.click(
+      screen.getByRole("textbox", { name: i18n.t("snippetEditor.content") })
+    );
     await user.keyboard("hello");
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
 
@@ -550,7 +568,9 @@ describe("saved snippet autosave", () => {
       shortcut: snippet.shortcut,
     });
 
-    await user.click(screen.getByRole("button", { name: /add tag/i }));
+    await user.click(
+      screen.getByRole("button", { name: i18n.t("snippetDetail.addTag") })
+    );
     await user.type(screen.getByPlaceholderText(/tag name/i), "work{Enter}");
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY);
 
@@ -622,7 +642,9 @@ describe("saved snippet autosave", () => {
     const { unmount } = renderView();
 
     await user.click(
-      screen.getByRole("button", { name: /remove personal tag/i })
+      screen.getByRole("button", {
+        name: i18n.t("snippetEditor.removeTag", ["personal"]),
+      })
     );
     expect(q.flushDraft).not.toHaveBeenCalled();
     unmount();
@@ -637,12 +659,14 @@ describe("saved snippet autosave", () => {
     renderView();
 
     await user.click(
-      screen.getByRole("button", { name: /remove personal tag/i })
+      screen.getByRole("button", {
+        name: i18n.t("snippetEditor.removeTag", ["personal"]),
+      })
     );
     window.dispatchEvent(new Event("pagehide"));
 
     expect(
-      await screen.findByText("A snippet needs content before it can be saved.")
+      await screen.findByText(i18n.t("snippetDetail.errors.emptyContent"))
     ).toBeInTheDocument();
     expect(captureError).not.toHaveBeenCalled();
   });
@@ -653,7 +677,9 @@ describe("saved snippet autosave", () => {
     renderView();
 
     await user.click(
-      screen.getByRole("button", { name: /remove personal tag/i })
+      screen.getByRole("button", {
+        name: i18n.t("snippetEditor.removeTag", ["personal"]),
+      })
     );
     const originalVisibility = Object.getOwnPropertyDescriptor(
       document,
@@ -705,9 +731,9 @@ describe("saved snippet autosave", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: /content/i })).toHaveValue(
-        "other body"
-      )
+      expect(
+        screen.getByRole("textbox", { name: i18n.t("snippetEditor.content") })
+      ).toHaveValue("other body")
     );
     expect(screen.getByTestId("snippet-label-input")).toHaveValue("Other");
   });
@@ -827,12 +853,14 @@ describe("autosave status", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(399);
     });
-    expect(status).not.toHaveTextContent("Saving");
+    expect(status).not.toHaveTextContent(
+      i18n.t("snippetDetail.syncStatus.saving")
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2);
     });
-    expect(status).toHaveTextContent("Saving…");
+    expect(status).toHaveTextContent(i18n.t("snippetDetail.syncStatus.saving"));
   });
 
   it("shows one Saved check after the queue settles, then leaves the slot", async () => {
@@ -850,7 +878,7 @@ describe("autosave status", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(401);
     });
-    expect(status).toHaveTextContent("Saving…");
+    expect(status).toHaveTextContent(i18n.t("snippetDetail.syncStatus.saving"));
 
     await act(async () => {
       writeQueueStore.setState(() => ({
@@ -861,9 +889,11 @@ describe("autosave status", () => {
       }));
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(status).toHaveTextContent("Saved");
+    expect(status).toHaveTextContent(i18n.t("snippetDetail.syncStatus.saved"));
     expect(status.querySelectorAll("svg")).toHaveLength(1);
-    expect(screen.getByRole("status")).toHaveTextContent("Saved");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      i18n.t("snippetDetail.syncStatus.saved")
+    );
     // The footer follows the completed write, not the record's original date.
     expect(screen.getByTestId("snippet-updated-time")).toHaveTextContent(
       "just now"
@@ -893,7 +923,7 @@ describe("autosave status", () => {
     renderView();
 
     const status = screen.getByTestId("snippet-sync-status");
-    expect(status).toHaveTextContent("Couldn't save · Retry");
+    expect(status).toHaveTextContent(i18n.t("snippetDetail.syncStatus.failed"));
     expect(status.querySelector("button")?.getAttribute("title")).toMatch(
       /Storage is full/
     );
@@ -931,7 +961,7 @@ describe("autosave status", () => {
 
     expect(screen.queryByTestId("inline-error")).toBeNull();
     const retry = await screen.findByRole("button", {
-      name: "Couldn't save · Retry",
+      name: i18n.t("snippetDetail.syncStatus.failed"),
     });
     expect(retry.getAttribute("title")).toMatch(/A newer version/);
     expect(consoleErrorSpy).toHaveBeenCalledWith(
@@ -1010,9 +1040,7 @@ describe("autosave status", () => {
     renderView();
 
     const status = screen.getByTestId("snippet-sync-status");
-    expect(status).toHaveTextContent(
-      "Sync storage full — snippets saved on this device only."
-    );
+    expect(status).toHaveTextContent(i18n.t("dashboard.storageError.message"));
     // One foreground colour for copy, icon and action, and no wrapping: the
     // status slot must stay one line in the toolbar.
     expect(status.className).toContain("text-destructive");
@@ -1046,7 +1074,9 @@ describe("autosave status", () => {
     renderView();
 
     await user.click(
-      screen.getByRole("button", { name: "Couldn't save · Retry" })
+      screen.getByRole("button", {
+        name: i18n.t("snippetDetail.syncStatus.failed"),
+      })
     );
 
     expect(q.flushDraft).toHaveBeenCalled();
@@ -1108,7 +1138,7 @@ describe("toolbar actions", () => {
     await user.click(screen.getByTestId("snippet-delete"));
 
     expect(await screen.findByTestId("inline-error")).toHaveTextContent(
-      "Failed to delete snippet. Please try again."
+      i18n.t("snippetDetail.errors.failedToDelete")
     );
     expect(captureError).toHaveBeenCalled();
   });
@@ -1148,9 +1178,9 @@ describe("toolbar actions", () => {
     await user.click(screen.getByTestId("snippet-undo"));
 
     await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: /content/i })).toHaveValue(
-        "before"
-      )
+      expect(
+        screen.getByRole("textbox", { name: i18n.t("snippetEditor.content") })
+      ).toHaveValue("before")
     );
     expect(q.discardUnflushedDraft).toHaveBeenCalledWith("s1");
   });
@@ -1194,9 +1224,9 @@ describe("toolbar actions", () => {
     await user.click(screen.getByTestId("snippet-redo"));
 
     await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: /content/i })).toHaveValue(
-        "after"
-      )
+      expect(
+        screen.getByRole("textbox", { name: i18n.t("snippetEditor.content") })
+      ).toHaveValue("after")
     );
     expect(q.redoLastEdit).toHaveBeenCalledTimes(1);
   });
@@ -1214,7 +1244,9 @@ describe("toolbar actions", () => {
     });
     renderView();
 
-    await user.click(screen.getByRole("textbox", { name: /content/i }));
+    await user.click(
+      screen.getByRole("textbox", { name: i18n.t("snippetEditor.content") })
+    );
     await user.keyboard("{Control>}z{/Control}");
 
     await waitFor(() => expect(q.undoLastEdit).toHaveBeenCalledTimes(1));
@@ -1233,7 +1265,9 @@ describe("toolbar actions", () => {
     });
     renderView();
 
-    await user.click(screen.getByRole("textbox", { name: /content/i }));
+    await user.click(
+      screen.getByRole("textbox", { name: i18n.t("snippetEditor.content") })
+    );
     await user.keyboard("{Control>}{Shift>}z{/Shift}{/Control}");
 
     await waitFor(() => expect(q.redoLastEdit).toHaveBeenCalledTimes(1));
@@ -1263,10 +1297,12 @@ describe("toolbar actions", () => {
 
     await user.click(screen.getByTestId("snippet-copy"));
     expect(await screen.findByTestId("inline-error")).toHaveTextContent(
-      "Failed to copy to clipboard"
+      i18n.t("snippetDetail.errors.failedToCopy")
     );
 
-    await user.click(screen.getByRole("button", { name: "Dismiss error" }));
+    await user.click(
+      screen.getByRole("button", { name: i18n.t("common.dismissError") })
+    );
     expect(screen.queryByTestId("inline-error")).toBeNull();
   });
 
@@ -1279,7 +1315,7 @@ describe("toolbar actions", () => {
     );
 
     expect(await screen.findByTestId("inline-error")).toHaveTextContent(
-      "Failed to copy to clipboard"
+      i18n.t("snippetDetail.errors.failedToCopy")
     );
   });
 
@@ -1295,11 +1331,15 @@ describe("toolbar actions", () => {
     const user = userEvent.setup();
     renderView();
 
-    await user.click(screen.getByRole("button", { name: /add tag/i }));
+    await user.click(
+      screen.getByRole("button", { name: i18n.t("snippetDetail.addTag") })
+    );
     await user.type(screen.getByPlaceholderText(/tag name/i), "Work{Enter}");
     expect(await screen.findByText("work")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /add tag/i }));
+    await user.click(
+      screen.getByRole("button", { name: i18n.t("snippetDetail.addTag") })
+    );
     await user.type(screen.getByPlaceholderText(/tag name/i), "work{Enter}");
     expect(screen.getAllByText("work")).toHaveLength(1);
   });
@@ -1308,7 +1348,9 @@ describe("toolbar actions", () => {
     const user = userEvent.setup();
     renderView();
 
-    await user.click(screen.getByRole("button", { name: /add tag/i }));
+    await user.click(
+      screen.getByRole("button", { name: i18n.t("snippetDetail.addTag") })
+    );
     await user.type(
       screen.getByPlaceholderText(/tag name/i),
       "discarded{Escape}"
@@ -1321,7 +1363,9 @@ describe("toolbar actions", () => {
     const user = userEvent.setup();
     renderView();
 
-    await user.click(screen.getByRole("button", { name: /add tag/i }));
+    await user.click(
+      screen.getByRole("button", { name: i18n.t("snippetDetail.addTag") })
+    );
     await user.type(screen.getByPlaceholderText(/tag name/i), "Work");
     await user.tab();
 
@@ -1340,7 +1384,9 @@ describe("toolbar actions", () => {
       expect(overflow).toHaveTextContent("+3");
 
       await user.click(overflow);
-      const popover = screen.getByRole("dialog", { name: "Hidden tags" });
+      const popover = screen.getByRole("dialog", {
+        name: i18n.t("snippetDetail.hiddenTags"),
+      });
       for (const tag of tags.slice(1)) {
         expect(within(popover).getByText(tag)).toBeInTheDocument();
       }
